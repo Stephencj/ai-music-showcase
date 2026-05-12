@@ -1,0 +1,68 @@
+# Keep the build context small + avoid leaking local state into the
+# image. Mirrors .gitignore where possible, plus a few build-only
+# exclusions.
+
+# Python / virtualenv
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+build/
+dist/
+
+# Local state
+.git/
+.gitignore
+.github/
+.openclaude/
+.claude/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Editor noise
+.vscode/
+.idea/
+.DS_Store
+
+# User content — re-mounted at runtime via compose.yaml, not baked in
+data/blocks/
+data/outputs/
+data/songs/
+data/song_specs/
+data/presets/
+data/raw/
+data/processed/
+data/samples/
+data/models/
+logs/
+
+# Generated media (anything that slipped past gitignore)
+*.wav
+*.mp3
+*.flac
+*.aiff
+*.mid
+*.midi
+
+# iOS sources — not needed in the Linux container
+ios/
+
+# Local env files (the container reads env from compose, not a file)
+.env
+.env.local
+
+# Container files referencing each other shouldn't recurse into the
+# build context.
+Dockerfile
+compose.yaml
+.dockerignore
+
+# Notebooks + docs are dev-only
+notebooks/
+docs/
+*.ipynb
+*.md
+!README.md

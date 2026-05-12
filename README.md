@@ -1,279 +1,142 @@
-# AI Music Generation Toolkit
+# AI Music Studio
 
-A comprehensive toolkit for AI-powered music generation, processing, and DAW integration.
+A personal AI-powered music generation toolkit: Gradio web app for composing
+MIDI (chords, bass, melody, drums), a bar-by-bar Melody Studio, a song-builder
+that arranges blocks on a timeline, and audio rendering via FluidSynth +
+SoundFont. Optional MusicGen integration generates audio from text prompts.
 
-## Features
+Includes an iOS wrapper app and a portable Docker image so you can run the
+Studio from your iPhone — at home over Wi-Fi or anywhere via Tailscale.
 
-- **Multiple AI Model Support**: MusicGen, AudioCraft, Riffusion, Stable Audio, and custom models
-- **Audio Processing Pipeline**: Preprocessing, postprocessing, effects, and analysis
-- **DAW Integration**: Ardour, Reaper, and generic MIDI/OSC support
-- **Flexible Workflow Orchestration**: Pipeline-based generation with automation
-- **Extensible Architecture**: Plugin system for adding new models and processors
-- **Comprehensive Testing**: Unit, integration, and audio quality tests
-- **Documentation**: Setup guides, API reference, and workflow examples
+## Architecture
 
-## Project Structure
+```
+  iPhone (ios/AiMusic)              Mac / Linux host
+  ┌──────────────────────┐         ┌──────────────────────────────┐
+  │ SwiftUI app          │         │ Gradio Blocks                │
+  │ ├ WKWebView ─────────┼ HTTP ──┼─► FastAPI (gr.mount_gradio_app)│
+  │ ├ NWBrowser (mDNS)   │         │   ├ /healthz                  │
+  │ └ Keychain (token)   │         │   ├ TokenMiddleware           │
+  └──────────────────────┘         │   └ Gradio UI + WebSockets    │
+                                   │ + Zeroconf (_ai-music._tcp)   │
+                                   └──────────────────────────────┘
+```
+
+The Mac advertises itself on the LAN; the iOS app discovers it via
+Bonjour/mDNS and loads the Gradio UI in a WebView. Off-LAN access goes
+through Tailscale (Mac and iPhone both on your tailnet).
+
+## Quickstart — Mac native (recommended for daily use)
+
+Native Python keeps MusicGen on Metal/MPS for full speed.
+
+```bash
+# clone, set up venv, install
+git clone https://github.com/stephencjuliano/ai-music.git
+cd ai-music
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+
+# optional: copy + edit env (auth token, host, port)
+cp .env.example .env
+
+# launch — opens on http://0.0.0.0:7860 by default
+./run.command
+```
+
+A startup banner prints the LAN URLs the iPhone can reach.
+
+## Quickstart — Docker (portable / non-Mac hosts)
+
+```bash
+cp .env.example .env
+# edit .env, especially AI_MUSIC_AUTH_TOKEN if exposing beyond LAN
+docker compose up --build
+```
+
+On Apple Silicon Macs, Docker can't pass Metal/MPS through to the
+container, so MusicGen falls back to CPU (5–10× slower). MIDI compose,
+Studio, FluidSynth rendering, and the rest of the app run at full speed
+either way. The native path is recommended on Mac; the container is for
+Linux boxes, cloud VMs, or as a clean-room reproducer.
+
+## Environment variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AI_MUSIC_HOST` | `0.0.0.0` | Bind address. `127.0.0.1` for localhost-only. |
+| `AI_MUSIC_PORT` | `7860` | Port for the Gradio server. |
+| `AI_MUSIC_AUTH_TOKEN` | _empty_ | Optional shared secret. Gates the UI with HTTP Basic Auth and `/healthz` with `X-AI-Music-Token` header. |
+| `AI_MUSIC_SHARE` | `false` | When `true`, exposes a `gradio.live` public URL. Tailscale is the preferred remote-access option. |
+| `AI_MUSIC_SOUNDFONT` | _auto_ | Override the SoundFont path. Defaults to `data/soundfonts/MuseScore_General.sf3`. |
+
+See `.env.example` for the full list (HuggingFace tokens, MusicGen cache
+dirs, audio settings, etc.).
+
+## iOS app
+
+The Xcode project lives under `ios/AiMusic.xcodeproj`. iOS 17+, iPhone +
+iPad, SwiftUI.
+
+```bash
+open ios/AiMusic.xcodeproj
+```
+
+In Xcode, set the development team to your Apple ID (free account is
+fine for personal sideloading), pick your iPhone as the target, and
+hit Run. On first launch the app browses for `_ai-music._tcp.local`
+services — the Mac running the Studio appears within a couple of
+seconds when both devices are on the same Wi-Fi.
+
+For off-LAN access, install Tailscale on both Mac and iPhone, then
+paste the Mac's MagicDNS hostname (e.g. `http://my-mac:7860`) as
+the remote URL in the iOS Settings.
+
+## Remote access via Tailscale
+
+1. Install Tailscale: <https://tailscale.com/download> (Mac app, iOS
+   from the App Store). Sign in with the same account on both.
+2. Note the Mac's MagicDNS name from the Tailscale menu bar (something
+   like `my-mac.your-tailnet.ts.net`, or just `my-mac` if
+   MagicDNS is enabled).
+3. In the iOS app Settings, set the remote URL to
+   `http://my-mac:7860` (or use the longer ts.net hostname).
+4. Set `AI_MUSIC_AUTH_TOKEN` in `.env` on the Mac and the matching
+   token in the iOS Settings. The Tailnet is already private, but the
+   token adds defence-in-depth against accidentally enabling Funnel.
+
+## Testing
+
+```bash
+.venv/bin/python -m unittest discover -s tests
+```
+
+Tests cover music-theory primitives, the Studio UI wiring, the launcher
++ auth middleware, and the block/song stores. Live UI testing happens
+in a browser against `http://127.0.0.1:7860` or via the iOS app.
+
+## Project layout
 
 ```
 ai-music/
-├── src/                    # Source code
-│   ├── models/            # AI model implementations
-│   ├── audio_processing/  # Audio processing utilities
-│   ├── daw_integration/   # DAW integration modules
-│   ├── api/               # API integrations
-│   ├── workflow/          # Workflow orchestration
-│   └── utils/             # Utility functions
-├── config/                # Configuration files
-├── data/                  # Data storage
-├── tests/                 # Test suite
-├── docs/                  # Documentation
-├── scripts/               # Utility scripts
-├── notebooks/             # Jupyter notebooks
-└── logs/                  # Application logs
+├── app.py                         # Gradio entry — the entire UI lives here
+├── src/
+│   ├── audio_processing/render/   # FluidSynth + mix pipeline
+│   ├── daw_integration/generic/   # MIDI exporter, blocks, songs, melody plan
+│   ├── models/                    # MusicGen + other audio-model wrappers
+│   └── serve/                     # Launcher, auth, mDNS, /healthz
+├── data/
+│   ├── blocks/                    # Saved composition blocks (yaml + mid + wav)
+│   ├── songs/                     # Saved song specs (timeline of blocks)
+│   ├── song_specs/                # Curated example songs
+│   └── soundfonts/                # MuseScore_General.sf3 (downloaded on demand)
+├── ios/                           # SwiftUI wrapper app
+├── tests/unit/                    # Test suite
+├── Dockerfile                     # Portable container
+└── compose.yaml                   # `docker compose up` to run
 ```
-
-## Quick Start
-
-### 1. Prerequisites
-
-- Python 3.10 or higher
-- Conda or venv for virtual environment management
-- Git for version control
-- Audio tools: FFmpeg, SoX (optional but recommended)
-
-### 2. Installation
-
-```bash
-# Clone repository
-git clone https://github.com/stephencjuliano/ai-music.git
-cd ai-music
-
-# Create and activate conda environment
-conda create -n ai-music python=3.10
-conda activate ai-music
-
-# Or using venv
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install package in development mode
-pip install -e ".[dev,musicgen]"  # Install with dev tools and MusicGen support
-
-# Set up environment
-cp .env.example .env
-# Edit .env with your API keys and settings
-```
-
-### 3. Basic Usage
-
-```python
-from src.workflow.pipelines.basic_generation import BasicGenerationPipeline
-
-# Initialize pipeline
-pipeline = BasicGenerationPipeline()
-
-# Generate music
-output_path = pipeline.run(
-    prompt="A relaxing ambient track with piano and strings",
-    duration=60.0
-)
-
-print(f"Generated audio saved to: {output_path}")
-```
-
-### 4. Running Examples
-
-```bash
-# Run basic generation example
-python scripts/examples/basic_generation.py
-
-# Run with specific model
-python scripts/examples/musicgen_generation.py --prompt "upbeat electronic dance music"
-
-# Process existing audio
-python scripts/examples/audio_processing.py --input audio.wav
-```
-
-## Model Support
-
-### Currently Supported Models
-
-| Model | Type | Requirements | Notes |
-|-------|------|--------------|-------|
-| **MusicGen** | Text-to-music | `pip install -e ".[musicgen]"` | Facebook's music generation model |
-| **AudioCraft** | Text-to-music | `pip install audiocraft` | Meta's audio generation framework |
-| **Riffusion** | Text-to-audio | `pip install -e ".[riffusion]"` | Stable Diffusion for audio |
-| **Stable Audio** | Text-to-audio | `pip install diffusers` | Stability AI's audio model |
-| **Custom Models** | Various | Custom installation | Support for custom model implementations |
-
-### Adding New Models
-
-1. Create model directory in `src/models/`
-2. Implement base interface from `src/models/base.py`
-3. Add configuration in `config/models/`
-4. Register model in `src/models/__init__.py`
-
-## DAW Integration
-
-### Ardour Integration
-
-```python
-from src.daw_integration.ardour.client import ArdourClient
-
-# Connect to Ardour
-ardour = ArdourClient(host="localhost", port=3819)
-
-# Create track and import audio
-ardour.create_track("AI_Generated", "audio")
-ardour.import_audio("generated.wav", "AI_Generated")
-```
-
-### Reaper Integration
-
-```python
-from src.daw_integration.reaper.client import ReaperClient
-
-# Connect to Reaper
-reaper = ReaperClient(host="localhost", port=8080)
-
-# Send MIDI data
-reaper.send_midi(note=60, velocity=100, duration=1.0)
-```
-
-## Configuration
-
-### Environment Variables
-
-Copy `.env.example` to `.env` and configure:
-
-```bash
-# API Keys
-OPENAI_API_KEY=your_key_here
-ANTHROPIC_API_KEY=your_key_here
-
-# Audio Settings
-SAMPLE_RATE=44100
-BIT_DEPTH=24
-
-# DAW Settings
-ARDOUR_HOST=localhost
-ARDOUR_PORT=3819
-```
-
-### Model Configuration
-
-Model-specific settings in `config/models/`:
-
-```yaml
-# config/models/musicgen.yaml
-model_size: "medium"
-duration: 30.0
-temperature: 1.0
-top_p: 0.9
-```
-
-## Development
-
-### Setting Up Development Environment
-
-```bash
-# Install development dependencies
-pip install -e ".[dev]"
-
-# Set up pre-commit hooks
-pre-commit install
-
-# Run tests
-pytest
-
-# Run with coverage
-pytest --cov=src tests/
-
-# Type checking
-mypy src/
-
-# Code formatting
-black src/ tests/
-```
-
-### Testing
-
-```bash
-# Run all tests
-pytest
-
-# Run specific test category
-pytest tests/unit/
-pytest tests/integration/
-pytest tests/audio/
-
-# Run with verbose output
-pytest -v
-
-# Run with coverage report
-pytest --cov=src --cov-report=html
-```
-
-### Code Quality
-
-- **Formatting**: Black (line length: 88)
-- **Linting**: Flake8
-- **Type Checking**: MyPy
-- **Import Sorting**: isort (via pre-commit)
-
-## Workflow Examples
-
-### Basic Generation Pipeline
-
-```python
-from src.workflow.pipelines.basic_generation import BasicGenerationPipeline
-
-pipeline = BasicGenerationPipeline()
-output = pipeline.run("upbeat electronic music", duration=45.0)
-```
-
-### Batch Processing
-
-```python
-from src.workflow.automation.batch_processor import BatchProcessor
-
-processor = BatchProcessor()
-prompts = ["ambient drone", "jazz fusion", "techno beat"]
-results = processor.process_batch(prompts, duration=30.0)
-```
-
-### DAW Automation
-
-```python
-from src.workflow.automation.daw_automation import DawAutomation
-
-automation = DawAutomation()
-automation.create_session("My AI Album", tracks=8)
-automation.generate_and_import_tracks(prompts, durations=[60, 90, 120])
-```
-
-## Documentation
-
-- [Setup Guide](docs/setup/README.md): Detailed installation and configuration
-- [API Reference](docs/api/README.md): Complete API documentation
-- [Workflow Examples](docs/workflows/README.md): Step-by-step workflow guides
-- [Troubleshooting](docs/troubleshooting/README.md): Common issues and solutions
-- [Contributing](CONTRIBUTING.md): How to contribute to the project
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Facebook Research for MusicGen and AudioCraft
-- Stability AI for Stable Audio
-- Riffusion team for Riffusion
-- Ardour and Reaper teams for DAW software
-- All open-source audio libraries used in this project
-
-## Support
-
-- [GitHub Issues](https://github.com/stephencjuliano/ai-music/issues): Bug reports and feature requests
-- [Documentation](docs/): Comprehensive guides and references
-- [Examples](scripts/examples/): Ready-to-run example scripts
+Private use. See LICENSE if/when added.

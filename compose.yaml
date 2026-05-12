@@ -1,0 +1,45 @@
+# AI Music Studio — local container orchestration.
+#
+# Usage:
+#   cp .env.example .env
+#   # edit .env (especially AI_MUSIC_AUTH_TOKEN if exposing beyond LAN)
+#   docker compose up --build
+#
+# On Apple Silicon Macs you usually skip this — run `./run.command`
+# natively to keep MusicGen on the Metal/MPS GPU. The container is for
+# Linux hosts (cloud VM, home server) or as a portable fallback.
+
+services:
+  aimusic:
+    build:
+      context: .
+      args:
+        # Override at build time to bundle heavyweight extras into the
+        # image, e.g. `docker compose build --build-arg INSTALL_EXTRAS=musicgen`.
+        INSTALL_EXTRAS: ${INSTALL_EXTRAS:-base}
+    image: ai-music-studio:latest
+    container_name: ai-music-studio
+    restart: unless-stopped
+    ports:
+      - "${AI_MUSIC_PORT:-7860}:7860"
+    environment:
+      AI_MUSIC_HOST: "0.0.0.0"
+      AI_MUSIC_PORT: "7860"
+      AI_MUSIC_AUTH_TOKEN: "${AI_MUSIC_AUTH_TOKEN:-}"
+      AI_MUSIC_SHARE: "${AI_MUSIC_SHARE:-false}"
+      HF_HOME: "/root/.cache/huggingface"
+    volumes:
+      # User content — keep blocks/outputs/logs/songs on the host so
+      # they survive image rebuilds.
+      - ./data/blocks:/app/data/blocks
+      - ./data/outputs:/app/data/outputs
+      - ./data/song_specs:/app/data/song_specs
+      - ./data/songs:/app/data/songs
+      - ./data/presets:/app/data/presets
+      - ./logs:/app/logs
+      # HuggingFace model cache — first MusicGen run downloads weights
+      # (~300MB-3GB depending on size); persist them across rebuilds.
+      - hf-cache:/root/.cache/huggingface
+
+volumes:
+  hf-cache:
