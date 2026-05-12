@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchAgent template for the AI Music Studio.
+
+  Placeholders @PROJECT_ROOT@, @PYTHON@, @AUTH_TOKEN@, @HOST@, and
+  @PORT@ are replaced by install_launch_agent.sh before the plist is
+  written to ~/Library/LaunchAgents.
+
+  ProcessType is Interactive so macOS keeps the process responsive
+  instead of throttling it like a background daemon — the iPhone
+  WebView clicks are user-interactive use.
+
+  KeepAlive SuccessfulExit=false makes launchd respawn on crashes or
+  signals (the /admin/restart endpoint relies on this), and
+  NetworkState=true prevents thrashing during network outages.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.stephencjuliano.aimusic</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>@PYTHON@</string>
+        <string>app.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>@PROJECT_ROOT@</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>AI_MUSIC_HOST</key>
+        <string>@HOST@</string>
+        <key>AI_MUSIC_PORT</key>
+        <string>@PORT@</string>
+        <key>AI_MUSIC_AUTH_TOKEN</key>
+        <string>@AUTH_TOKEN@</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>NetworkState</key>
+        <true/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <key>StandardOutPath</key>
+    <string>@PROJECT_ROOT@/logs/launchd.out</string>
+
+    <key>StandardErrorPath</key>
+    <string>@PROJECT_ROOT@/logs/launchd.err</string>
+</dict>
+</plist>

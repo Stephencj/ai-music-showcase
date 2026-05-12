@@ -15,6 +15,7 @@
 		84F2D1F57920A2279E5C7143 /* NetworkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F01239DB8EC8E5BB18851036 /* NetworkManager.swift */; };
 		A54A2C11FCDA8569A9654DDC /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4903C7233E01B2C3DB95B93 /* AppSettings.swift */; };
 		B918A3E782750C7B741E9550 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8E6D530010C30EAA0D36B23F /* Preview Assets.xcassets */; };
+		E30497904D0600B428B5D1A3 /* AdminClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4766C63EC8FA37317CB47CA /* AdminClient.swift */; };
 		E83E3B26AF66315CE506CEB3 /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AB55F6B93463A5210032B92 /* ConnectionView.swift */; };
 		E9AFCF214FDA481C04C0894D /* AiMusicApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0A015293735E7B418FF97D /* AiMusicApp.swift */; };
 		F090D37D770DDC302AFF4AA4 /* DiscoveryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53FE0A360E152AAAE223A0F7 /* DiscoveryManager.swift */; };
@@ -30,6 +31,7 @@
 		5717EFB79588F59CD62FE31A /* AiMusic.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AiMusic.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7ACE7DD4A827611531A7D402 /* HealthCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthCheck.swift; sourceTree = "<group>"; };
 		8E6D530010C30EAA0D36B23F /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		B4766C63EC8FA37317CB47CA /* AdminClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminClient.swift; sourceTree = "<group>"; };
 		C1952BC9DFC675BB4076EB50 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D4903C7233E01B2C3DB95B93 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		F01239DB8EC8E5BB18851036 /* NetworkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkManager.swift; sourceTree = "<group>"; };
@@ -97,6 +99,7 @@
 		EB56B9F5BEF9B0FC069044F8 /* Networking */ = {
 			isa = PBXGroup;
 			children = (
+				B4766C63EC8FA37317CB47CA /* AdminClient.swift */,
 				53FE0A360E152AAAE223A0F7 /* DiscoveryManager.swift */,
 				7ACE7DD4A827611531A7D402 /* HealthCheck.swift */,
 				F01239DB8EC8E5BB18851036 /* NetworkManager.swift */,
@@ -176,6 +179,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E30497904D0600B428B5D1A3 /* AdminClient.swift in Sources */,
 				E9AFCF214FDA481C04C0894D /* AiMusicApp.swift in Sources */,
 				A54A2C11FCDA8569A9654DDC /* AppSettings.swift in Sources */,
 				E83E3B26AF66315CE506CEB3 /* ConnectionView.swift in Sources */,

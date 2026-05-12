@@ -17,7 +17,8 @@ from typing import Callable, Optional
 
 import gradio as gr
 
-from .auth import TokenMiddleware, get_token, gradio_auth_callable
+from .admin import register_admin
+from .auth import IPAwareAuthMiddleware, get_token, gradio_auth_callable
 from .discovery import MdnsAdvertiser
 from .health import VERSION, print_banner, register_healthz
 
@@ -70,10 +71,14 @@ def launch(blocks: gr.Blocks, *,
 
     api = FastAPI(title="AI Music Studio")
     register_healthz(api)
+    register_admin(api, token=token)
     if token:
-        api.add_middleware(TokenMiddleware, token=token)
+        # The middleware is the SOLE auth gate now — it handles HTTP +
+        # WebSocket and skips trusted IPs. Gradio's own `auth=` is
+        # only used by the `share=True` fallback path above.
+        api.add_middleware(IPAwareAuthMiddleware, token=token)
 
-    gr.mount_gradio_app(api, blocks, path="/", auth=auth)
+    gr.mount_gradio_app(api, blocks, path="/")
 
     advertiser = MdnsAdvertiser()
     advertiser.start(port=port, version=VERSION)

@@ -18,6 +18,16 @@ struct SettingsView: View {
     @State private var probeIsOK: Bool = false
     @State private var isProbing: Bool = false
     @State private var showingClearConfirm = false
+    @State private var showingRestartConfirm = false
+    @State private var restartState: RestartState = .idle
+
+    enum RestartState: Equatable {
+        case idle
+        case sending
+        case waitingForRecovery
+        case recovered
+        case failed(String)
+    }
 
     var body: some View {
         NavigationStack {
@@ -84,6 +94,51 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("Server control") {
+                    Button {
+                        showingRestartConfirm = true
+                    } label: {
+                        HStack {
+                            switch restartState {
+                            case .sending:
+                                ProgressView().controlSize(.small)
+                                Text("Sending restart…")
+                            case .waitingForRecovery:
+                                ProgressView().controlSize(.small)
+                                Text("Waiting for server…")
+                            case .recovered:
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                Text("Server back online")
+                            case .failed(let msg):
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.red)
+                                Text(msg).font(.callout)
+                            case .idle:
+                                Image(systemName: "arrow.clockwise.circle")
+                                Text("Restart Studio server")
+                            }
+                        }
+                    }
+                    .disabled(restartState == .sending || restartState == .waitingForRecovery)
+                    .confirmationDialog(
+                        "Restart the Studio server?",
+                        isPresented: $showingRestartConfirm,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Restart", role: .destructive) {
+                            Task { await restart() }
+                        }
+                    } message: {
+                        Text("The Studio will be unreachable for a few seconds while the server respawns.")
+                    }
+                    if settings.authToken.isEmpty {
+                        Text("Restart requires an auth token. Set one in the field above and on the Mac (`AI_MUSIC_AUTH_TOKEN` in `.env`).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Section {
                     Button("Clear all and reconnect…", role: .destructive) {
                         showingClearConfirm = true
@@ -108,6 +163,31 @@ struct SettingsView: View {
             }
             .onAppear { discovery.start() }
             .onDisappear { discovery.stop() }
+        }
+    }
+
+    private func restart() async {
+        guard let url = settings.currentURL else {
+            restartState = .failed("No server configured.")
+            return
+        }
+        restartState = .sending
+        let result = await AdminClient.restart(
+            baseURL: url.absoluteString,
+            token: settings.authToken,
+        )
+        switch result {
+        case .success:
+            restartState = .waitingForRecovery
+            let recovered = await AdminClient.waitForRecovery(
+                baseURL: url.absoluteString,
+                token: settings.authToken,
+            )
+            restartState = recovered
+                ? .recovered
+                : .failed("Server didn't come back within 10s.")
+        case .failure(let err):
+            restartState = .failed(err.localizedDescription)
         }
     }
 
