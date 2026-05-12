@@ -131,6 +131,28 @@ struct StudioWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
+        // Send a mobile content mode so Gradio's responsive CSS picks
+        // the phone layout instead of trying to squeeze the desktop
+        // grid into 390pt of width.
+        let pagePrefs = WKWebpagePreferences()
+        pagePrefs.preferredContentMode = .mobile
+        config.defaultWebpagePreferences = pagePrefs
+        // Force a sane mobile viewport before the page's own CSS
+        // touches it — without this Gradio sometimes renders at
+        // 1024pt logical width and the user sees micro-text.
+        let viewport = WKUserScript(
+            source: """
+            var m = document.createElement('meta');
+            m.name = 'viewport';
+            m.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+            document.head.appendChild(m);
+            """,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        )
+        config.userContentController.addUserScript(viewport)
+
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
