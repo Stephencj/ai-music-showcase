@@ -326,6 +326,8 @@ def _render_extras(midi: MidiExporter, extras: list[dict], *,
                 program=int(tr.get("program", 82)),
                 track_name=name, seed=eff_seed,
                 density=float(tr.get("density", 1.0)),
+                follow_source=tr.get("follow_source") or None,
+                follow_mode=tr.get("follow_mode") or "independent",
             )
         elif ttype == "theme":
             theme_name = tr.get("theme") or "hit_the_sack"
@@ -1043,6 +1045,11 @@ def _default_extra_track(ttype: str, name: str = "", style_key: str = "pop") -> 
         "track_name": (name or ttype.title()).strip(),
         "progression": "",
         "progression_locked": True,
+        # Counter-melody defaults — only used by lead extras today.
+        # "independent" preserves the per-pattern riff behavior; the
+        # other modes make the lead respond to the Melody track.
+        "follow_source": "",
+        "follow_mode": "independent",
     }
     base.update(_default_track_for_type(ttype, style_key))
     return base
@@ -1162,12 +1169,37 @@ def _render_extra_track_row(idx: int, tr: dict, extras_state: gr.State) -> None:
                 program_in = gr.Number(value=int(tr.get("program", 82)),
                                        label="GM program", precision=0,
                                        key=k("program"))
+                follow_dd = gr.Dropdown(
+                    [
+                        ("Independent line", "independent"),
+                        ("Parallel 3rd above Melody", "parallel_third"),
+                        ("Parallel 6th above Melody", "parallel_sixth"),
+                        ("Contrary motion vs Melody", "contrary_motion"),
+                        ("Call / response with Melody", "call_response"),
+                    ],
+                    value=tr.get("follow_mode", "independent"),
+                    label="Follow primary",
+                    info=("'Independent' uses the pattern above. Other "
+                          "modes make this lead respond to the Melody track."),
+                    key=k("follow_mode"),
+                    allow_custom_value=True,
+                )
                 pat_dd.change(lambda s, v: _set(s, pattern=v),
                               [extras_state, pat_dd], extras_state)
                 octave_in.change(lambda s, v: _set(s, octave=int(v)),
                                  [extras_state, octave_in], extras_state)
                 program_in.change(lambda s, v: _set(s, program=int(v)),
                                   [extras_state, program_in], extras_state)
+
+                def _on_follow_change(s, v):
+                    # follow_source is implicitly "Melody" when the
+                    # mode is anything other than "independent".
+                    src = "Melody" if (v and v != "independent") else ""
+                    return _set(s, follow_mode=v or "independent",
+                                follow_source=src)
+
+                follow_dd.change(_on_follow_change,
+                                 [extras_state, follow_dd], extras_state)
             elif ttype == "theme":
                 theme_dd = gr.Dropdown(list(THEMES.keys()) or ["hit_the_sack"],
                                        value=tr.get("theme", "hit_the_sack"),

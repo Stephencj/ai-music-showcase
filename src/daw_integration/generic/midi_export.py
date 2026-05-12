@@ -2610,26 +2610,54 @@ class MidiExporter:
         density: float = 1.0,
         seed: Optional[int] = None,
         swing: float = 0.0,
+        follow_source: Optional[str] = None,
+        follow_mode: str = "independent",
     ) -> "MidiExporter":
         """Add a lead-instrument line (guitar/synth) playing a stylized riff.
 
-        Patterns:
+        Patterns (used when ``follow_mode == "independent"``):
           - ``clinton_synth`` — bubbly syncopated 16ths, octave jumps + b7
             (George Clinton / P-Funk synth lead vibe).
           - ``van_halen_riff`` — palm-muted 8ths on power-chord pitches +
             bend-like chromatic lift at the end of every 2 bars.
 
-        The line follows the chord progression, emphasizing chord tones on
-        strong beats. Default GM program is Synth Lead; set ``program`` to
-        29/30 for distorted guitar.
+        Counter-melody modes (require ``follow_source``, the name of an
+        existing track to read — typically ``"Melody"``):
+          - ``parallel_third`` / ``parallel_sixth``: emit a harmony note
+            a scale-step third / sixth above each source note.
+          - ``contrary_motion``: when source ascends, the lead descends
+            (mirror around source's first-note pitch).
+          - ``call_response``: only play during source's rests
+            (gaps > 0.5 beats). Emits chord-tone hits in those gaps.
+
+        When ``follow_source`` is set, the pattern dispatch is bypassed
+        and the lead becomes a deliberate counter-line responding to
+        the source.
+
+        The independent line follows the chord progression, emphasizing
+        chord tones on strong beats. Default GM program is Synth Lead;
+        set ``program`` to 29/30 for distorted guitar.
         """
         if progression is None:
             progression = ["I", "V", "vi", "IV"]
 
-        rng = np.random.default_rng(seed)
         root_midi = note_name_to_midi(key, octave)
         track = self._track_for(track_name, program=program)
         beat = self.pulse_unit
+
+        # Counter-melody mode short-circuits the pattern dispatch. The
+        # follower reads ``follow_source`` and emits a responsive line
+        # rather than its own riff.
+        if follow_source and follow_mode and follow_mode != "independent":
+            self._emit_follow_line(
+                target=track, source_name=follow_source, mode=follow_mode,
+                key=key, scale_name=scale_name,
+                progression=progression, bars=bars, bar_offset=bar_offset,
+                octave=octave, velocity=velocity,
+            )
+            return self
+
+        rng = np.random.default_rng(seed)
 
         # Event-driven task list — see add_bass_line for the same pattern.
         import math
@@ -2845,6 +2873,136 @@ class MidiExporter:
             max(1, min(127, crash_vel))
         ))
         return self
+
+    def _emit_follow_line(
+        self,
+        *,
+        target: "Track",
+        source_name: str,
+        mode: str,
+        key: str,
+        scale_name: str,
+        progression: Optional[list[str]],
+        bars: int,
+        bar_offset: int,
+        octave: int,
+        velocity: int,
+    ) -> None:
+        """Emit a counter-line onto ``target`` that responds to the
+        notes of an existing source track. Used by :meth:`add_lead_line`
+        when ``follow_mode`` is something other than ``"independent"``.
+
+        ``mode``:
+          - ``parallel_third`` / ``parallel_sixth``: scale-step third
+            (or sixth) above each source note.
+          - ``contrary_motion``: when source rises, target falls; when
+            source falls, target rises. Mirror around the source's
+            first-note pitch.
+          - ``call_response``: emit chord-tone hits only during
+            source's rests (gaps > 0.5 beats long).
+
+        Bails silently when the source track is missing or empty —
+        keeps the run clean if the user enables follow_mode before
+        the source track exists.
+        """
+        source: Optional[Track] = next(
+            (t for t in self.tracks if t.name == source_name), None,
+        )
+        if source is None or not source.notes:
+            return
+
+        root_midi = note_name_to_midi(key, octave)
+        scale_ints = SCALES.get(scale_name, SCALES["major"])
+        scale_pitches = sorted({
+            root_midi + iv + 12 * o
+            for iv in scale_ints
+            for o in range(-1, 3)
+        })
+
+        def _scale_step_above(p: int, steps: int) -> int:
+            """Return the in-scale pitch ``steps`` scale-degrees above
+            ``p``. Falls back to chromatic shift if ``p`` isn't in the
+            scale."""
+            nearest = min(scale_pitches, key=lambda q: abs(q - p))
+            idx = scale_pitches.index(nearest)
+            idx = min(len(scale_pitches) - 1, max(0, idx + steps))
+            return scale_pitches[idx]
+
+        sorted_src = sorted(source.notes, key=lambda n: n.start)
+
+        if mode == "parallel_third":
+            for n in sorted_src:
+                target.notes.append(NoteEvent(
+                    pitch=_scale_step_above(n.pitch, 2),
+                    start=n.start, end=n.end,
+                    velocity=max(1, min(127, int(velocity * 0.85))),
+                ))
+            return
+
+        if mode == "parallel_sixth":
+            for n in sorted_src:
+                target.notes.append(NoteEvent(
+                    pitch=_scale_step_above(n.pitch, 5),
+                    start=n.start, end=n.end,
+                    velocity=max(1, min(127, int(velocity * 0.85))),
+                ))
+            return
+
+        if mode == "contrary_motion":
+            if not sorted_src:
+                return
+            mirror = sorted_src[0].pitch
+            for n in sorted_src:
+                # Reflect around the first source pitch: new = mirror - (n - mirror)
+                target_pitch = mirror - (n.pitch - mirror)
+                # Snap to nearest scale tone so it stays in key.
+                target.notes.append(NoteEvent(
+                    pitch=min(scale_pitches, key=lambda p: abs(p - target_pitch)),
+                    start=n.start, end=n.end,
+                    velocity=max(1, min(127, int(velocity * 0.85))),
+                ))
+            return
+
+        if mode == "call_response":
+            # Build the list of "rest windows" — gaps between
+            # consecutive source notes longer than 0.5 beats.
+            if progression:
+                events = expand_progression_plan(progression, bars)
+            else:
+                events = []
+            beat = self.pulse_unit
+            min_gap = 0.5 * beat
+            base_t = bar_offset * self.bar_duration
+            end_t = base_t + bars * self.bar_duration
+            gaps: list[tuple[float, float]] = []
+            prev_end = base_t
+            for n in sorted_src:
+                if n.start - prev_end > min_gap:
+                    gaps.append((prev_end, n.start))
+                prev_end = max(prev_end, n.end)
+            if end_t - prev_end > min_gap:
+                gaps.append((prev_end, end_t))
+
+            for gap_start, gap_end in gaps:
+                # Pick the chord active at gap_start; emit a chord-tone
+                # note covering most of the gap (leaves room for the
+                # next source note's onset).
+                bar_pos = gap_start / self.bar_duration
+                symbol = chord_at_position(events, bar_pos) or "I"
+                chord_off, quality = roman_to_semitone_offset(
+                    symbol, scale_name,
+                )
+                chord_root = root_midi + chord_off
+                # Use the chord's 3rd as a sweet-spot pitch (lead-line
+                # ear-friendly default).
+                third = 4 if quality not in ("min", "dim", "min7") else 3
+                pitch = chord_root + third
+                target.notes.append(NoteEvent(
+                    pitch=pitch, start=gap_start,
+                    end=min(gap_start + (gap_end - gap_start) * 0.85, gap_end),
+                    velocity=max(1, min(127, int(velocity * 0.85))),
+                ))
+            return
 
     def add_harmony(
         self,
