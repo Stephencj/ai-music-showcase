@@ -1,0 +1,65 @@
+# Slingshot — chill surf-rock backing. Spacious clean-guitar pads.
+# No lead melody. Theme motif appears briefly in ONE section.
+
+title: "Pull and Pop"
+style: surf_rock
+key: E
+tempo: 122
+seed: 3
+include_melody: false
+
+sections:
+  - name: intro
+    bars: 4
+    scale: major
+    progression: [I, vi, IV, V]
+    voicing: seventh
+    chord_rhythm: pad
+    bass_pattern: walking
+    drum_pattern: basic_rock
+    density: 0.4
+
+  - name: verse                          # ONE brief twangy-lead theme
+    bars: 8
+    scale: major
+    progression: [I, vi, IV, V]
+    voicing: seventh
+    chord_rhythm: charleston             # gentle two-hit feel keeps the surf vibe
+    bass_pattern: walking
+    drum_pattern: basic_rock
+    density: 0.5
+    theme: hit_the_sack
+    theme_octave: 5
+    theme_program: 29                    # Overdriven Guitar
+    theme_track_name: Surf Lead
+
+  - name: chorus
+    bars: 8
+    scale: major
+    progression: [IV, V, I, vi]
+    voicing: seventh
+    chord_rhythm: pad
+    bass_pattern: walking
+    drum_pattern: basic_rock
+    density: 0.65
+
+  - name: verse
+    bars: 8
+    scale: major
+    progression: [I, vi, IV, V]
+    voicing: seventh
+    chord_rhythm: charleston
+    bass_pattern: walking
+    drum_pattern: basic_rock
+    density: 0.5
+
+  - name: outro
+    bars: 4
+    scale: major
+    progression: [I, V, I, I]
+    voicing: seventh
+    chord_rhythm: pad
+    bass_pattern: walking
+    drum_pattern: basic_rock
+    density: 0.4
+    fade: true

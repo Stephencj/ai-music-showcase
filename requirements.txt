@@ -1,0 +1,54 @@
+# Core ML Framework
+torch>=2.11.0
+torchaudio>=2.11.0
+
+# Audio Processing
+librosa>=0.11.0
+pretty_midi>=0.2.11
+pydub>=0.25.1
+soundfile>=0.13.1
+
+# Numerical Computing
+numpy>=2.4.4
+scipy>=1.17.1
+pandas>=2.0.0
+
+# Visualization
+matplotlib>=3.7.0
+
+# Jupyter
+jupyter>=1.0.0
+
+# Utilities
+python-dotenv>=1.0.0
+click>=8.1.0
+tqdm>=4.65.0
+pyyaml>=6.0
+
+# Optional: MusicGen support
+# transformers>=4.30.0
+# accelerate>=0.20.0
+
+# Optional: AudioCraft support
+# audiocraft
+
+# Optional: Riffusion support
+# diffusers>=0.19.0
+# transformers>=4.30.0
+
+# Optional: DAW Integration
+# python-osc>=1.8.0
+
+# Optional: API Integrations
+# openai>=1.0.0
+# anthropic>=0.7.0
+# requests>=2.31.0
+
+# Development dependencies
+# pytest>=7.0.0
+# pytest-cov>=4.0.0
+# black>=23.0.0
+# flake8>=6.0.0
+# mypy>=1.0.0
+# pre-commit>=3.0.0
+# ipython>=8.0.0

@@ -1,0 +1,50 @@
+# Jazz fusion head-solo-head form with a half-time bridge and a modulation
+# to the relative major. Swing is inherited from the jazz_fusion preset (0.33).
+#
+#   python scripts/examples/render_song.py --spec data/song_specs/jazz_fusion_head.yaml
+
+title: "Nightshift"
+style: jazz_fusion
+key: D
+tempo: 112
+seed: 23
+
+sections:
+  - name: head
+    bars: 16
+    density: 0.9
+    fill_at: end
+
+  - name: solo_1
+    bars: 16
+    density: 0.75
+    progression: [ii7, V7, Imaj7, Imaj7]   # classic ii-V-I-I
+    melody_octave: 6                        # solo sits higher
+
+  - name: solo_2
+    bars: 16
+    density: 0.85
+    progression: [Imaj7, vi7, ii7, V7]
+    melody_octave: 6
+    fill_at: end
+
+  - name: bridge
+    bars: 8
+    key: F                                  # up a minor third — relative major of D minor
+    scale: major
+    density: 0.6
+    drum_pattern: halftime
+    progression: [Imaj7, IV7, iii7, vi7]
+    fill_at: end
+
+  - name: head_out
+    bars: 16
+    density: 0.9
+    progression: [ii7, V7, Imaj7, vi7]
+    fill_at: end
+
+  - name: outro
+    bars: 4
+    density: 0.5
+    tracks: [chords, bass]
+    fade: true

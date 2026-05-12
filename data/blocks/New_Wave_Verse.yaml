@@ -1,0 +1,26 @@
+name: New_Wave_Verse
+tempo: 130.0
+time_signature:
+- 4
+- 4
+bars: 8
+duration_seconds: 14.769215999999998
+created: '2026-05-10T15:09:15'
+instruments:
+- name: Chords
+  program: 0
+  is_drum: false
+  n_notes: 64
+- name: Bass
+  program: 33
+  is_drum: false
+  n_notes: 32
+- name: Melody
+  program: 0
+  is_drum: false
+  n_notes: 36
+- name: Drums
+  program: 0
+  is_drum: true
+  n_notes: 120
+n_notes: 252

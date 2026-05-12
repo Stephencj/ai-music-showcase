@@ -1,0 +1,14 @@
+name: J-poppin
+tempo: 130.0
+time_signature:
+- 4
+- 4
+bars: 12
+duration_seconds: 7.925
+created: '2026-05-10T22:31:39'
+instruments:
+- name: Bass
+  program: 33
+  is_drum: false
+  n_notes: 52
+n_notes: 52

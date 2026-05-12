@@ -1,0 +1,65 @@
+# MafiaKarts — chill synthwave backing. Pad synths drive everything.
+# No lead melody. One brief saw-lead motif statement on a verse.
+
+title: "Mafia Mile"
+style: synthwave
+key: A
+tempo: 132
+seed: 4
+include_melody: false
+
+sections:
+  - name: intro
+    bars: 4
+    scale: minor
+    progression: [i, VI, III, VII]
+    voicing: add9
+    chord_rhythm: pad
+    bass_pattern: offbeat
+    drum_pattern: dance_house
+    density: 0.5
+
+  - name: verse                          # ONE brief saw-lead motif
+    bars: 8
+    scale: minor
+    progression: [i, VI, III, VII]
+    voicing: add9
+    chord_rhythm: pad
+    bass_pattern: offbeat
+    drum_pattern: dance_house
+    density: 0.55
+    theme: hit_the_sack
+    theme_octave: 5
+    theme_program: 81                    # Synth Lead 2 (sawtooth)
+    theme_track_name: Saw Lead
+
+  - name: chorus
+    bars: 8
+    scale: minor
+    progression: [VI, VII, i, VII]
+    voicing: add9
+    chord_rhythm: pad
+    bass_pattern: offbeat
+    drum_pattern: dance_house
+    density: 0.7
+
+  - name: verse
+    bars: 8
+    scale: minor
+    progression: [i, VI, III, VII]
+    voicing: add9
+    chord_rhythm: pad
+    bass_pattern: offbeat
+    drum_pattern: dance_house
+    density: 0.55
+
+  - name: outro
+    bars: 4
+    scale: minor
+    progression: [i, VI, III, VII]
+    voicing: add9
+    chord_rhythm: pad
+    bass_pattern: offbeat
+    drum_pattern: dance_house
+    density: 0.45
+    fade: true

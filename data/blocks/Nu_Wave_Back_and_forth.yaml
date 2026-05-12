@@ -1,0 +1,30 @@
+name: Nu_Wave_Back_and_forth
+tempo: 132.0
+time_signature:
+- 4
+- 4
+bars: 12
+duration_seconds: 21.81816
+created: '2026-05-10T22:24:32'
+instruments:
+- name: Chords
+  program: 0
+  is_drum: false
+  n_notes: 192
+- name: Bass
+  program: 33
+  is_drum: false
+  n_notes: 48
+- name: Melody
+  program: 0
+  is_drum: false
+  n_notes: 60
+- name: Drums
+  program: 0
+  is_drum: true
+  n_notes: 132
+- name: Chord
+  program: 1
+  is_drum: false
+  n_notes: 144
+n_notes: 576

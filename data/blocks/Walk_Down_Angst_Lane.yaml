@@ -1,0 +1,22 @@
+name: Walk_Down_Angst_Lane
+tempo: 91.0
+time_signature:
+- 4
+- 4
+bars: 8
+duration_seconds: 21.116862
+created: '2026-05-10T14:15:14'
+instruments:
+- name: Chords
+  program: 0
+  is_drum: false
+  n_notes: 120
+- name: Bass
+  program: 33
+  is_drum: false
+  n_notes: 48
+- name: Drums
+  program: 0
+  is_drum: true
+  n_notes: 200
+n_notes: 368

@@ -1,0 +1,3 @@
+# Soundfont binaries are not source — exclude from git.
+*.sf2
+*.sf3

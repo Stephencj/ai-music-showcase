@@ -1,0 +1,26 @@
+name: Schmaltzy_Cinema
+tempo: 90.0
+time_signature:
+- 4
+- 4
+bars: 8
+duration_seconds: 21.333312
+created: '2026-05-10T15:10:41'
+instruments:
+- name: Chords
+  program: 0
+  is_drum: false
+  n_notes: 128
+- name: Bass
+  program: 33
+  is_drum: false
+  n_notes: 64
+- name: Melody
+  program: 0
+  is_drum: false
+  n_notes: 28
+- name: Drums
+  program: 0
+  is_drum: true
+  n_notes: 80
+n_notes: 300

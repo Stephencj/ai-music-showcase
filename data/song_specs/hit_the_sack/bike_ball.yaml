@@ -1,0 +1,70 @@
+# Bike Ball — chill funk backing. Late-night-jazz-funk vibe.
+# No lead melody. One brief brass motif statement.
+
+title: "Toss and Go"
+style: funk
+key: C
+tempo: 108
+seed: 5
+include_melody: false
+
+sections:
+  - name: intro
+    bars: 4
+    scale: dorian
+    progression: [i7, IV7, i7, V7]
+    voicing: ninth
+    chord_rhythm: pad
+    bass_pattern: funk_16ths
+    drum_pattern: funk
+    density: 0.45
+    swing: 0.15
+
+  - name: verse                          # ONE brief brass motif
+    bars: 8
+    scale: dorian
+    progression: [i7, IV7, i7, V7]
+    voicing: ninth
+    chord_rhythm: charleston             # subtle pulse, not the busy funk_comp
+    bass_pattern: funk_16ths
+    drum_pattern: funk
+    density: 0.55
+    swing: 0.15
+    theme: hit_the_sack
+    theme_octave: 5
+    theme_program: 56                    # Trumpet
+    theme_track_name: Brass Theme
+
+  - name: chorus
+    bars: 8
+    scale: dorian
+    progression: [IV7, V7, i7, VI7]
+    voicing: ninth
+    chord_rhythm: pad
+    bass_pattern: funk_16ths
+    drum_pattern: funk
+    density: 0.65
+    swing: 0.15
+
+  - name: verse
+    bars: 8
+    scale: dorian
+    progression: [i7, IV7, i7, V7]
+    voicing: ninth
+    chord_rhythm: charleston
+    bass_pattern: funk_16ths
+    drum_pattern: funk
+    density: 0.55
+    swing: 0.15
+
+  - name: outro
+    bars: 4
+    scale: dorian
+    progression: [i7, IV7, i7, i7]
+    voicing: ninth
+    chord_rhythm: pad
+    bass_pattern: funk_16ths
+    drum_pattern: funk
+    density: 0.4
+    swing: 0.15
+    fade: true

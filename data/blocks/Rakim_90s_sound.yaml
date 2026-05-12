@@ -1,0 +1,14 @@
+name: Rakim_90s_sound
+tempo: 90.0
+time_signature:
+- 4
+- 4
+bars: 12
+duration_seconds: 8.084736600000001
+created: '2026-05-10T22:28:16'
+instruments:
+- name: MyStrings
+  program: 0
+  is_drum: false
+  n_notes: 48
+n_notes: 48

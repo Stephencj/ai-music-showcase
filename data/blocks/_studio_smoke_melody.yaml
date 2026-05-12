@@ -1,0 +1,83 @@
+bars: 4
+time_signature:
+- 4
+- 4
+key: C
+scale: major
+tempo: 120
+notes:
+- bar: 0
+  beat: 0.0
+  pitch: 72
+  duration: 0.95
+  velocity: 98
+  scale_degree: null
+- bar: 0
+  beat: 1.0
+  pitch: 72
+  duration: 0.95
+  velocity: 79
+  scale_degree: null
+- bar: 0
+  beat: 2.0
+  pitch: 72
+  duration: 0.95
+  velocity: 104
+  scale_degree: null
+- bar: 0
+  beat: 3.0
+  pitch: 76
+  duration: 0.95
+  velocity: 84
+  scale_degree: null
+- bar: 1
+  beat: 0.0
+  pitch: 74
+  duration: 1.425
+  velocity: 90
+  scale_degree: null
+- bar: 1
+  beat: 2.5
+  pitch: 77
+  duration: 1.425
+  velocity: 81
+  scale_degree: null
+- bar: 2
+  beat: 0.0
+  pitch: 76
+  duration: 0.95
+  velocity: 83
+  scale_degree: null
+- bar: 2
+  beat: 1.0
+  pitch: 72
+  duration: 0.95
+  velocity: 68
+  scale_degree: null
+- bar: 2
+  beat: 2.0
+  pitch: 72
+  duration: 0.95
+  velocity: 94
+  scale_degree: null
+- bar: 2
+  beat: 3.0
+  pitch: 76
+  duration: 0.95
+  velocity: 96
+  scale_degree: null
+- bar: 3
+  beat: 0.0
+  pitch: 77
+  duration: 1.425
+  velocity: 77
+  scale_degree: null
+- bar: 3
+  beat: 2.5
+  pitch: 81
+  duration: 1.425
+  velocity: 95
+  scale_degree: null
+section_overrides: []
+harmonies: []
+generation_seed: null

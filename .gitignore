@@ -1,0 +1,154 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual Environment
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+pythonenv*
+
+# Conda
+*.conda
+conda-env/
+.miniconda/
+.conda/
+conda/
+
+# PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VSCode
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Data Files
+data/raw/
+data/processed/
+data/outputs/
+data/models/
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.aiff
+*.aif
+*.mid
+*.midi
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+*.cover
+
+# Profiling
+.prof
+*.prof
+
+# Documentation
+docs/_build/
+docs/_static/
+docs/_templates/
+
+# Package specific
+*.h5
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.bin
+*.onnx
+
+# Pre-commit
+.pre-commit-config.yaml
+
+# Docker
+docker-compose.override.yml
+
+# IDE specific
+.ropeproject
+
+# Local agent state (Claude Code / OpenClaude session files)
+.claude/
+.openclaude/
+
+# Soundfonts (ship via build-time download — see src/audio_processing/render/soundfont_resolver.py)
+*.sf2
+*.sf3
+
+# Xcode build artifacts (kept out of the ios/ subtree)
+ios/**/xcuserdata/
+ios/**/*.xcuserstate
+ios/**/DerivedData/
+ios/build/
+
+# macOS resource forks
+._.DS_Store

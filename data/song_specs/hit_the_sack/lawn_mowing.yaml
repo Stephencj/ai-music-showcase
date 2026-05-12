@@ -1,0 +1,64 @@
+# Lawn Mowing — chill country backing pads. No lead melody.
+# Theme motif appears briefly in ONE section.
+
+title: "Backyard Bermuda"
+style: country
+key: G
+tempo: 88
+seed: 2
+include_melody: false
+
+sections:
+  - name: intro
+    bars: 4
+    scale: major
+    progression: [I, IV, I, V]
+    voicing: sixth
+    chord_rhythm: arpeggio_up            # gentle picked feel
+    tracks: [chords]
+    density: 0.5
+
+  - name: verse                          # ONE brief steel-guitar theme statement
+    bars: 8
+    scale: major
+    progression: [I, IV, I, V]
+    voicing: sixth
+    chord_rhythm: pad
+    bass_pattern: walking
+    drum_pattern: basic_rock
+    density: 0.55
+    theme: hit_the_sack
+    theme_octave: 4
+    theme_program: 25                    # Acoustic Guitar (steel)
+    theme_track_name: Steel Guitar Theme
+
+  - name: chorus
+    bars: 8
+    scale: major
+    progression: [I, vi, IV, V]
+    voicing: sixth
+    chord_rhythm: arpeggio_up
+    bass_pattern: walking
+    drum_pattern: basic_rock
+    density: 0.65
+
+  - name: verse
+    bars: 8
+    scale: major
+    progression: [I, IV, I, V]
+    voicing: sixth
+    chord_rhythm: pad
+    bass_pattern: walking
+    drum_pattern: basic_rock
+    density: 0.55
+
+  - name: outro
+    bars: 4
+    scale: major
+    progression: [I, IV, I, V]
+    voicing: sixth
+    chord_rhythm: pad
+    tracks: [chords, bass]
+    bass_pattern: root
+    density: 0.4
+    fade: true

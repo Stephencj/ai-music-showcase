@@ -1,0 +1,52 @@
+# Main Theme — chill pad backing for the menu hub.
+# No lead melody. The hit_the_sack motif appears briefly in ONE verse only.
+
+title: "Hit the Sack Main Theme"
+style: pop
+key: D
+tempo: 110
+seed: 1
+include_melody: false
+
+sections:
+  - name: intro
+    bars: 8
+    scale: major
+    progression: [I, vi, IV, V]
+    voicing: add9
+    chord_rhythm: pad
+    tracks: [chords]
+    density: 0.4
+
+  - name: verse                          # ONE brief theme statement here
+    bars: 8
+    scale: major
+    progression: [I, vi, IV, V]
+    voicing: add9
+    chord_rhythm: pad
+    bass_pattern: root_fifth
+    drum_pattern: basic_rock
+    density: 0.5
+    theme: hit_the_sack
+    theme_octave: 5
+    theme_program: 0
+
+  - name: chorus
+    bars: 8
+    scale: major
+    progression: [IV, V, I, vi]
+    voicing: add9
+    chord_rhythm: arpeggio_up
+    bass_pattern: root_fifth
+    drum_pattern: basic_rock
+    density: 0.65
+
+  - name: outro
+    bars: 4
+    scale: major
+    progression: [I, vi, IV, V]
+    voicing: add9
+    chord_rhythm: pad
+    tracks: [chords]
+    density: 0.4
+    fade: true

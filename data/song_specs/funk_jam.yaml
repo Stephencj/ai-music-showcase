@@ -1,0 +1,58 @@
+# Funk jam with a bridge modulation up a minor third (C dorian → Eb dorian)
+# and a fade-out outro. Structure: intro / verse / chorus / verse / bridge /
+# chorus / outro.
+#
+# Edit any section's bars/progression/density/fill_at and re-run:
+#   python scripts/examples/render_song.py --spec data/song_specs/funk_jam.yaml
+
+title: "Moonshine Funk"
+style: funk
+key: C
+tempo: 100
+seed: 42
+
+sections:
+  - name: intro
+    bars: 4
+    density: 0.35         # sparse — kick + snare mostly alone
+    tracks: [drums, bass]
+    fill_at: end          # pickup into verse
+
+  - name: verse
+    bars: 16
+    density: 0.85
+
+  - name: chorus
+    bars: 8
+    density: 1.0
+    progression: [IV7, V7, i7, VI7]   # push off the tonic for lift
+    voicing: ninth
+    melody_octave: 6
+    fill_at: end
+
+  - name: verse
+    bars: 16
+    density: 0.85
+    fill_at: end
+
+  - name: bridge
+    bars: 8
+    key: Eb               # modulate up a minor third
+    scale: dorian
+    density: 0.7
+    progression: [i7, V7, Imaj7, vi7]
+    drum_pattern: halftime
+    fill_at: end
+
+  - name: chorus
+    bars: 8
+    density: 1.0
+    progression: [IV7, V7, i7, VI7]
+    voicing: ninth
+    melody_octave: 6
+
+  - name: outro
+    bars: 8
+    density: 0.5
+    tracks: [chords, bass, drums]
+    fade: true

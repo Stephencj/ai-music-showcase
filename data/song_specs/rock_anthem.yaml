@@ -1,0 +1,71 @@
+# Rock anthem in E minor with a pre-chorus build and a bridge halftime section.
+# Structure mirrors a classic verse/pre-chorus/chorus/bridge/outro form.
+#
+#   python scripts/examples/render_song.py --spec data/song_specs/rock_anthem.yaml
+
+title: "Last Light"
+style: rock
+key: E
+tempo: 124
+seed: 7
+
+sections:
+  - name: intro
+    bars: 4
+    density: 0.5
+    tracks: [drums, chords]    # guitar chords + drums — no bass/melody yet
+    fill_at: end
+
+  - name: verse
+    bars: 8
+    density: 0.7
+    tracks: [chords, bass, drums]   # melody sits out; vocals would go here
+
+  - name: pre_chorus
+    bars: 4
+    density: 0.85
+    progression: [VI, VII, i, i]    # tension build on flat-6 → flat-7 → i
+    fill_at: end
+
+  - name: chorus
+    bars: 8
+    density: 1.0
+    progression: [i, VII, VI, VII]
+    voicing: power
+    melody_octave: 5
+
+  - name: verse
+    bars: 8
+    density: 0.7
+    tracks: [chords, bass, drums]
+    fill_at: end
+
+  - name: chorus
+    bars: 8
+    density: 1.0
+    progression: [i, VII, VI, VII]
+    voicing: power
+    melody_octave: 5
+    fill_at: end
+
+  - name: bridge
+    bars: 8
+    key: C                     # flat-6 modulation (E minor → C minor feels)
+    scale: minor
+    density: 0.6
+    drum_pattern: halftime
+    voicing: triad
+    fill_at: end
+
+  - name: chorus
+    bars: 8
+    density: 1.0
+    progression: [i, VII, VI, VII]
+    voicing: power
+    melody_octave: 5
+
+  - name: outro
+    bars: 4
+    density: 0.5
+    tracks: [chords, drums]
+    fade: true

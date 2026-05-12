@@ -1,0 +1,22 @@
+name: hip_chord_vibe_taking_a_walk
+tempo: 90.0
+time_signature:
+- 4
+- 4
+bars: 16
+duration_seconds: 42.6817755
+created: '2026-05-10T22:47:20'
+instruments:
+- name: Chords
+  program: 0
+  is_drum: false
+  n_notes: 120
+- name: Bass
+  program: 33
+  is_drum: false
+  n_notes: 40
+- name: Drums
+  program: 0
+  is_drum: true
+  n_notes: 400
+n_notes: 560

@@ -1,0 +1,149 @@
+# Pop song with split personality:
+#   Intro       — sparse, colorful add9 voicings, halftime drums, very quiet
+#   Verses      — A minor, funky / syncopated, "Fame"-style hubris; big
+#                 crash+kick accent on the downbeat
+#   Pre-chorus  — pivot to major, tension build
+#   Choruses    — A major, I-V-vi-IV, ABBA 9th voicings + 3-part vocal
+#                 harmonies; 16th-note disco hi-hats with opens
+#   Bridge      — key lift to B major, four-on-floor dance feel
+#   Outro       — fade
+#
+#   python scripts/examples/render_song.py --spec data/song_specs/strut.yaml
+
+title: "Strut"
+style: pop
+key: A
+tempo: 116
+seed: 88
+
+sections:
+  - name: intro                          # Fame-style: chord-only intro, Elton John piano feel
+    bars: 4
+    scale: minor                         # stay in the song's dark world
+    progression: [i, VI, III, VII]       # Am → F → C → G — circular, dark, open
+    voicing: add9
+    chord_rhythm: elton_octaves          # sustained chord on 1/3 + gospel triplet pickup
+    tracks: [chords]                     # NO drums, NO bass, NO melody
+    fill_at: end                         # ONLY drums are the snare pickup + crash into verse
+
+  - name: verse                          # Bowie "Fame" hubris
+    bars: 8
+    scale: minor
+    progression: [i7, iv7, V7, i7]
+    voicing: ninth
+    bass_pattern: funk_16ths
+    drum_pattern: funk
+    chord_rhythm: funk_comp
+    melody_style: riff
+    swing: 0.15
+    melody_octave: 4
+    density: 0.85
+    accent_in: true                      # crash + kick + snare punch on bar 1
+    fill_at: end
+
+  - name: pre_chorus                     # TRANSITION: sustain V7 to drive into chorus
+    bars: 4
+    scale: minor                         # stay in verse's harmonic world
+    progression: [iv, V, V7, V7]         # iv lifts; V→V7 builds; held V7 drives home
+    voicing: sus4                        # suspended tension — resolves on chorus downbeat
+    chord_rhythm: pulse_quarter          # steady pulse (shed verse syncopation)
+    bass_pattern: walking                # ascending walking bass pulls into chorus
+    drum_pattern: basic_rock
+    swing: 0.0                           # drop the verse swing
+    density: 0.9
+    fill_at: end
+
+  - name: chorus                         # Chorus 1 — ABBA-style trio on accents
+    bars: 8
+    scale: minor
+    progression: [VI, VII, i, VII]       # all diatonic A natural minor
+    voicing: add9
+    bass_pattern: root_fifth
+    drum_pattern: pop_disco
+    chord_rhythm: arpeggio_up
+    melody_style: motif
+    melody_octave: 4
+    density: 1.0
+    harmony: 3
+    harmony_style: abba                  # tight 3-part on strong beats
+    fill_at: end
+
+  - name: verse                          # Verse 2 — Flea is the ONLY bass this time
+    bars: 8
+    scale: minor
+    progression: [i7, iv7, V7, i7]
+    voicing: ninth
+    bass_pattern: root_fifth             # declared but excluded via tracks list below
+    drum_pattern: chad_smith              # RHCP-style tight funk-rock pocket
+    chord_rhythm: funk_comp
+    melody_style: riff
+    swing: 0.15
+    melody_octave: 4
+    density: 0.85
+    accent_in: true
+    fill_at: end
+    tracks: [chords, melody, drums]      # no primary Bass — Flea carries it all
+    extra_basses:
+      - pattern: flea_slap
+        track_name: Flea
+        program: 37                      # Slap Bass 2
+
+  - name: chorus                         # Chorus 2 — Chicago horn-style harmony variation
+    bars: 8
+    scale: minor
+    progression: [VI, VII, i, VII]
+    voicing: add9
+    bass_pattern: root_fifth
+    drum_pattern: pop_disco
+    chord_rhythm: arpeggio_up
+    melody_octave: 4
+    density: 1.0
+    harmony: 3
+    harmony_style: chicago               # close-voiced horn-style every note
+    fill_at: end
+
+  - name: bridge                         # key lift ↑ whole step → B MINOR (keep dark)
+    bars: 8
+    key: B
+    scale: minor                         # parallel minor of B major — matches song's dark tone
+    progression: [VImaj7, VII7, i, VII]  # Gmaj7 → A7 → Bm → A — jazz-dance colors
+    voicing: add9                        # add9 on top of the qualities for extra openness
+    bass_pattern: offbeat
+    drum_pattern: dance_house
+    chord_rhythm: disco_stabs
+    swing: 0.0
+    melody_octave: 4
+    density: 1.0
+    # No fill_at here — let the interlude come in softly after the bridge
+
+  - name: interlude                      # Breath moment — echoes the intro exactly
+    bars: 4
+    scale: minor
+    progression: [i, VI, III, VII]       # same progression as the intro
+    voicing: add9
+    chord_rhythm: elton_octaves          # same Elton piano feel
+    tracks: [chords]                     # chords only — pure reference to the intro
+    fill_at: end                         # snare pickup + crash into the final chorus
+
+  - name: chorus                         # Final chorus — Boston-style 4-part stack
+    bars: 8
+    scale: minor
+    progression: [VI, VII, i, VII]
+    voicing: add9
+    bass_pattern: root_fifth
+    drum_pattern: pop_disco
+    chord_rhythm: arpeggio_up
+    melody_octave: 4
+    density: 1.0
+    harmony: 3
+    harmony_style: boston                # dense 4-part parallel stack — biggest sound
+
+  - name: outro                          # Bookend — same progression + piano feel as intro
+    bars: 4
+    scale: minor
+    progression: [i, VI, III, VII]       # matches intro for a full-circle close
+    voicing: add9
+    chord_rhythm: elton_octaves
+    tracks: [chords, bass, drums]
+    density: 0.5
+    fade: true

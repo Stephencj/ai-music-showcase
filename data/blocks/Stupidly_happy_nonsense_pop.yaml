@@ -1,0 +1,26 @@
+name: Stupidly_happy_nonsense_pop
+tempo: 118.0
+time_signature:
+- 4
+- 4
+bars: 8
+duration_seconds: 16.271168
+created: '2026-05-09T23:01:20'
+instruments:
+- name: Chords
+  program: 0
+  is_drum: false
+  n_notes: 96
+- name: Bass
+  program: 33
+  is_drum: false
+  n_notes: 16
+- name: Melody
+  program: 0
+  is_drum: false
+  n_notes: 20
+- name: Drums
+  program: 0
+  is_drum: true
+  n_notes: 96
+n_notes: 228

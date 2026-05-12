@@ -1,0 +1,63 @@
+# Snow Ball Fight — chill holiday cinematic backing. String pads
+# and light bell percussion. No lead melody. One brief bell motif.
+
+title: "Snowdown"
+style: holiday_cinematic
+key: F
+tempo: 124
+seed: 6
+include_melody: false
+
+sections:
+  - name: intro
+    bars: 4
+    scale: major
+    progression: [IV, I, V, vi]
+    voicing: sus2
+    chord_rhythm: pad
+    tracks: [chords]
+    density: 0.5
+
+  - name: verse                          # ONE brief bell motif statement
+    bars: 8
+    scale: major
+    progression: [IV, I, V, vi]
+    voicing: sus2
+    chord_rhythm: pad
+    bass_pattern: root_fifth
+    drum_pattern: basic_rock
+    density: 0.55
+    theme: hit_the_sack
+    theme_octave: 5
+    theme_program: 14                    # Tubular Bells
+    theme_track_name: Bell Theme
+
+  - name: chorus
+    bars: 8
+    scale: major
+    progression: [I, V, vi, IV]
+    voicing: add9
+    chord_rhythm: pad
+    bass_pattern: root_fifth
+    drum_pattern: basic_rock
+    density: 0.7
+
+  - name: verse
+    bars: 8
+    scale: major
+    progression: [IV, I, V, vi]
+    voicing: sus2
+    chord_rhythm: pad
+    bass_pattern: root_fifth
+    drum_pattern: basic_rock
+    density: 0.55
+
+  - name: outro
+    bars: 4
+    scale: major
+    progression: [IV, I, V, I]
+    voicing: sus2
+    chord_rhythm: pad
+    tracks: [chords]
+    density: 0.4
+    fade: true
