@@ -17,47 +17,94 @@ struct MainView: View {
     @State private var probeState: ProbeState = .idle
     @State private var probedHealth: HealthResponse?
 
+    /// Result of probing the configured candidate URLs. Holds the
+    /// resolved-working URL on success, or all attempted URLs + the
+    /// error each one returned on failure.
     enum ProbeState: Equatable {
         case idle
-        case probing
-        case ok
-        case failed(String)
+        case probing(currentlyTrying: String)
+        case ok(URL)
+        case failed(attempts: [(url: String, error: String)])
+
+        static func == (lhs: ProbeState, rhs: ProbeState) -> Bool {
+            switch (lhs, rhs) {
+            case (.idle, .idle): return true
+            case (.probing(let a), .probing(let b)): return a == b
+            case (.ok(let a), .ok(let b)): return a == b
+            case (.failed(let a), .failed(let b)):
+                return a.map { $0.url + $0.error } == b.map { $0.url + $0.error }
+            default: return false
+            }
+        }
+    }
+
+    /// Probe-key identity used by `.task(id:)` — re-run when the user
+    /// changes either URL or the prefer-LAN toggle in Settings.
+    private var probeKey: String {
+        [settings.lanURL, settings.remoteURL,
+         settings.preferLAN ? "LAN" : "REMOTE"].joined(separator: "|")
+    }
+
+    /// Candidate URLs in the order we should probe them. Prefer-LAN
+    /// puts LAN first then Remote; the inverse otherwise. Blank /
+    /// malformed entries are dropped.
+    private func candidates() -> [URL] {
+        let urls: [String] = settings.preferLAN
+            ? [settings.lanURL, settings.remoteURL]
+            : [settings.remoteURL, settings.lanURL]
+        return urls.compactMap { raw in
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  let url = URL(string: trimmed),
+                  url.host != nil else { return nil }
+            return url
+        }
     }
 
     var body: some View {
         NavigationStack {
             Group {
-                if let url = settings.currentURL {
-                    switch probeState {
-                    case .idle, .probing:
-                        VStack(spacing: 12) {
-                            ProgressView()
-                            Text("Connecting to \(url.host ?? "server")…")
-                                .foregroundStyle(.secondary)
-                        }
-                    case .failed(let msg):
-                        ContentUnavailableView {
-                            Label("Can't reach the server", systemImage: "wifi.exclamationmark")
-                        } description: {
-                            VStack(spacing: 6) {
-                                Text(msg).multilineTextAlignment(.center)
-                                Text(url.absoluteString).font(.caption).foregroundStyle(.secondary)
-                            }
-                        } actions: {
-                            Button("Retry") { Task { await probe(url) } }
-                            Button("Settings") { showSettings = true }
-                        }
-                    case .ok:
-                        StudioWebView(url: url, token: settings.authToken, reloadToken: reloadToken)
-                            .ignoresSafeArea(edges: .bottom)
-                    }
-                } else {
+                if candidates().isEmpty {
                     ContentUnavailableView {
                         Label("No server configured", systemImage: "wifi.exclamationmark")
                     } description: {
                         Text("Open Settings to connect to your Mac.")
                     } actions: {
                         Button("Settings") { showSettings = true }
+                    }
+                } else {
+                    switch probeState {
+                    case .idle:
+                        ProgressView()
+                    case .probing(let trying):
+                        VStack(spacing: 12) {
+                            ProgressView()
+                            Text("Connecting to \(URL(string: trying)?.host ?? trying)…")
+                                .foregroundStyle(.secondary)
+                        }
+                    case .failed(let attempts):
+                        ContentUnavailableView {
+                            Label("Can't reach the server", systemImage: "wifi.exclamationmark")
+                        } description: {
+                            VStack(spacing: 6) {
+                                ForEach(attempts.indices, id: \.self) { idx in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(attempts[idx].url)
+                                            .font(.caption.monospaced())
+                                            .foregroundStyle(.primary)
+                                        Text(attempts[idx].error)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        } actions: {
+                            Button("Retry") { Task { await probeAll() } }
+                            Button("Settings") { showSettings = true }
+                        }
+                    case .ok(let url):
+                        StudioWebView(url: url, token: settings.authToken, reloadToken: reloadToken)
+                            .ignoresSafeArea(edges: .bottom)
                     }
                 }
             }
@@ -66,9 +113,7 @@ struct MainView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        if let url = settings.currentURL {
-                            Task { await probe(url) }
-                        }
+                        Task { await probeAll() }
                         reloadToken = UUID()
                     } label: {
                         Image(systemName: "arrow.clockwise")
@@ -83,39 +128,44 @@ struct MainView: View {
                 }
             }
             .sheet(isPresented: $showSettings, onDismiss: {
-                if let url = settings.currentURL {
-                    Task { await probe(url) }
-                }
+                Task { await probeAll() }
             }) {
                 SettingsView()
             }
-            .onChange(of: settings.currentURL) { _, newURL in
-                if let newURL { Task { await probe(newURL) } }
-            }
-            .task(id: settings.currentURL?.absoluteString ?? "") {
-                // Bound to the NavigationStack body, so it isn't
-                // cancelled by inner view transitions (e.g. .idle →
-                // .probing). The `id` triggers a re-run when the
-                // resolved URL changes.
-                if let url = settings.currentURL, probeState != .ok {
-                    await probe(url)
-                }
+            .task(id: probeKey) {
+                // Re-probe whenever URLs or LAN-preference change.
+                // Skip when we already have a winning URL.
+                if case .ok = probeState { return }
+                await probeAll()
             }
         }
     }
 
-    private func probe(_ url: URL) async {
-        probeState = .probing
-        let result = await HealthCheck.probe(baseURL: url.absoluteString,
-                                              token: settings.authToken,
-                                              timeout: 4)
-        switch result {
-        case .success(let health):
-            probedHealth = health
-            probeState = .ok
-        case .failure(let err):
-            probeState = .failed(err.localizedDescription)
+    /// Walk candidate URLs in order. Use a short timeout on the
+    /// first attempt (LAN should be ~50ms) so an unreachable LAN URL
+    /// off-Wi-Fi fails fast and we move to Remote/Tailscale.
+    private func probeAll() async {
+        let urls = candidates()
+        guard !urls.isEmpty else { return }
+        var failures: [(url: String, error: String)] = []
+        for (idx, url) in urls.enumerated() {
+            let timeout: TimeInterval = idx == 0 ? 2 : 5
+            probeState = .probing(currentlyTrying: url.absoluteString)
+            let result = await HealthCheck.probe(
+                baseURL: url.absoluteString,
+                token: settings.authToken,
+                timeout: timeout,
+            )
+            switch result {
+            case .success(let health):
+                probedHealth = health
+                probeState = .ok(url)
+                return
+            case .failure(let err):
+                failures.append((url.absoluteString, err.localizedDescription))
+            }
         }
+        probeState = .failed(attempts: failures)
     }
 }
 
