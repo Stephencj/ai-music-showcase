@@ -35,8 +35,6 @@ from src.daw_integration.generic.midi_export import (
     grid_subdivs_for_meter, note_name_to_midi,
     CADENCES, MELODIC_LICKS, TENSION_OPS, HARMONY_OPS,
     PHRASE_CONTOURS, MOTIF_DEVELOPMENT_OPS,
-    ChordEvent, InstrumentProgression, expand_progression_plan,
-    progression_cells, resolve_instrument_plan, sync_from_master,
 )
 from src.daw_integration.generic.styles import STYLES, list_styles
 from src.daw_integration.generic.song_spec import (
@@ -574,35 +572,41 @@ def get_suggestions_for_row(row_idx):
 # ---------------------------------------------------------------------------
 # Per-instrument progression override helpers
 # ---------------------------------------------------------------------------
-# Gradio state holds plain dicts (so they JSON-serialise across the Gradio
-# wire boundary). The dataclass lives in midi_export.py; these two helpers
-# convert between the dict and dataclass shapes at the UI boundary.
+# Each instrument carries a small ``{"text": str, "locked": bool}`` dict
+# in its own gr.State. When ``locked`` is True (the default), the
+# instrument follows the master textbox 1:1 — editing the master also
+# updates this instrument's stored text. When the user toggles the
+# lock open and types something different, this instrument is sealed
+# from subsequent master changes until they lock it again.
+#
+# Same shape is used per-extra (the extras_state dicts gain
+# ``progression`` + ``progression_locked`` keys, surfaced via the
+# per-instrument panel).
 
 
-def _instrument_progression_to_dict(ip: InstrumentProgression) -> dict:
-    return {"symbols": list(ip.symbols), "manual": list(ip.manual)}
+def _default_instrument_progression_dict(master_text: str = "") -> dict:
+    """Default state for a fresh instrument: locked to the master."""
+    return {"text": master_text, "locked": True}
 
 
-def _dict_to_instrument_progression(d: dict | None) -> InstrumentProgression:
-    if not d:
-        return InstrumentProgression()
-    syms = list(d.get("symbols") or [])
-    mans = list(d.get("manual") or [])
-    # Pad/truncate manual to symbols' length defensively (a malformed
-    # legacy state shouldn't crash compose).
-    if len(mans) < len(syms):
-        mans = mans + [False] * (len(syms) - len(mans))
-    elif len(mans) > len(syms):
-        mans = mans[:len(syms)]
-    return InstrumentProgression(
-        symbols=[str(s) for s in syms],
-        manual=[bool(m) for m in mans],
-    )
+def _resolve_instrument_progression(
+    override: dict | None, master_text: str,
+):
+    """Return the :data:`ProgressionPlan` this instrument should
+    actually play.
 
-
-def _default_instrument_progression_dict() -> dict:
-    """Empty override → instrument inherits the master entirely."""
-    return {"symbols": [], "manual": []}
+    Locked OR missing override → master. Unlocked + filled → that text
+    parsed as a progression. Unlocked + empty → master (graceful
+    fallback so a user who unlocks-then-clears doesn't end up with
+    a silent generator).
+    """
+    master_plan = _parse_progression_text(master_text)
+    if not override or override.get("locked", True):
+        return master_plan
+    text = (override.get("text") or "").strip()
+    if not text:
+        return master_plan
+    return _parse_progression_text(text) or master_plan
 
 
 def compose_midi(
@@ -654,27 +658,21 @@ def compose_midi(
             progression = (_parse_progression_text(progression_text)
                            or (preset.progression if preset else None))
 
-        # Per-instrument overrides: resolve each instrument's effective
-        # progression by reconciling the master against any locked cells
-        # the user pinned in the Compose tab. Cells mirror master
-        # *entries* (logical chords, pre-tile) so a "I V vi IV" master
-        # is 4 cells regardless of bar count. The generator handles
-        # tiling internally. None / empty dict → that instrument
-        # inherits the master 1:1 (preserves today's behaviour for
-        # users who haven't opened the override editor).
-        master_cells = progression_cells(progression)
-        chords_progression = resolve_instrument_plan(
-            _dict_to_instrument_progression(chords_progression_override),
-            master_cells,
-        )
-        bass_progression = resolve_instrument_plan(
-            _dict_to_instrument_progression(bass_progression_override),
-            master_cells,
-        )
-        melody_progression = resolve_instrument_plan(
-            _dict_to_instrument_progression(melody_progression_override),
-            master_cells,
-        )
+        # Per-instrument overrides: each override is a tiny
+        # {"text": str, "locked": bool} dict carried in a gr.State.
+        # Locked or empty → inherit master. Unlocked + non-empty →
+        # parse the instrument's text as a full progression and use
+        # that. Falls back to the master if the text fails to parse,
+        # so an in-progress edit never silently produces no chords.
+        chords_progression = _resolve_instrument_progression(
+            chords_progression_override, progression_text,
+        ) or progression
+        bass_progression = _resolve_instrument_progression(
+            bass_progression_override, progression_text,
+        ) or progression
+        melody_progression = _resolve_instrument_progression(
+            melody_progression_override, progression_text,
+        ) or progression
 
         if enable_chords:
             midi.add_chord_progression(
@@ -1019,8 +1017,17 @@ def _default_track(name: str, ttype: str, style_key: str = "pop") -> dict:
 def _default_extra_track(ttype: str, name: str = "", style_key: str = "pop") -> dict:
     """Starter dict for the MIDI Compose Extra Tracks accordion. Flat shape:
     {type, track_name, ...per-type params}. Distinct from the song-level
-    track shape used in Compose Song (which has nested `defaults`)."""
-    base = {"type": ttype, "track_name": (name or ttype.title()).strip()}
+    track shape used in Compose Song (which has nested `defaults`).
+
+    Includes per-extra ``progression`` / ``progression_locked`` so the new
+    consolidated "Per-instrument progressions" panel can manage this
+    extra's chord progression alongside the fixed instruments."""
+    base = {
+        "type": ttype,
+        "track_name": (name or ttype.title()).strip(),
+        "progression": "",
+        "progression_locked": True,
+    }
     base.update(_default_track_for_type(ttype, style_key))
     return base
 
@@ -1162,10 +1169,9 @@ def _render_extra_track_row(idx: int, tr: dict, extras_state: gr.State) -> None:
                 program_in.change(lambda s, v: _set(s, program=int(v)),
                                   [extras_state, program_in], extras_state)
 
-        # Shared override row: per-extra swing / seed / progression. Blank = inherit
-        # from the main Compose values. Lets a Latin-percussion extra carry its
-        # own swing without forcing the whole song to share it (and similar for
-        # an extra melody that should walk a different progression).
+        # Shared override row: per-extra swing / seed. Blank = inherit from
+        # the main Compose values. (Per-extra progression now lives in the
+        # consolidated "Per-instrument progressions" panel above.)
         with gr.Row():
             swing_override = gr.Number(
                 value=tr.get("swing", None), precision=2, minimum=0.0, maximum=0.5,
@@ -1177,19 +1183,10 @@ def _render_extra_track_row(idx: int, tr: dict, extras_state: gr.State) -> None:
                 label="Seed override", info="Blank = inherit main seed",
                 key=k("seed_override"),
             )
-            prog_override = gr.Textbox(
-                value=tr.get("progression", ""),
-                label="Progression override",
-                placeholder="Blank = inherit. Accepts pacing syntax (I:2 V:1 …)",
-                scale=2,
-                key=k("prog_override"),
-            )
         swing_override.change(lambda s, v: _set(s, swing=v if v not in (None, "") else None),
                               [extras_state, swing_override], extras_state)
         seed_override.change(lambda s, v: _set(s, seed=v if v not in (None, "", 0) else None),
                              [extras_state, seed_override], extras_state)
-        prog_override.change(lambda s, v: _set(s, progression=v or ""),
-                             [extras_state, prog_override], extras_state)
 
         def _remove(state):
             return [t for i, t in enumerate(state) if i != idx]
@@ -2184,160 +2181,129 @@ def _render_harmony_row(idx: int, hm: dict, harmony_state: gr.State) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Per-instrument progression override grid
+# Per-instrument progression panel — one textbox + lock per instrument
 # ---------------------------------------------------------------------------
 
-# A reasonable starter set of chord symbols for the per-cell dropdowns.
-# Diatonic triads + common borrowed / secondary chords + a few slash
-# voicings. The dropdowns set allow_custom_value=True so users can
-# type anything (Neapolitan, altered, etc.) without us cataloguing
-# every option.
-ROMAN_NUMERAL_OPTIONS: list[str] = [
-    # Major-mode diatonic
-    "I", "ii", "iii", "IV", "V", "vi", "vii°",
-    # Minor-mode diatonic
-    "i", "ii°", "III", "iv", "v", "VI", "VII",
-    # Secondary dominants
-    "V/ii", "V/iii", "V/IV", "V/V", "V/vi",
-    # Borrowed / modal
-    "bVII", "bVI", "bIII", "iv",
-    # Common slash voicings (inversions)
-    "I/3", "I/5", "IV/1", "V/2", "V/7", "vi/1",
-]
-
-
-def _render_instrument_progression_section(
-    *, label: str, instrument_key: str,
-    instrument_state: gr.State, master_state: gr.State,
+def _render_instrument_progression_row(
+    *, label: str, state: gr.State, master_in: gr.Textbox,
+    key_prefix: str,
 ) -> None:
-    """Render one instrument's per-chord override row.
+    """Render one row of the per-instrument progression panel.
 
-    Lays out one cell per master entry (driven by ``master_state``).
-    Each cell is a Group with a chord dropdown + a lock button + an
-    optional conflict pill. Stable per-cell keys keep the click wiring
-    alive across @gr.render rebuilds — same pattern as the override
-    rows in the Melody Studio.
+    Layout: ``[label] [🔒/🔓 lock toggle] [progression textbox]``.
+    Locked = textbox value mirrors the master, greyed out. Unlocked
+    = textbox is editable; subsequent master changes leave this row
+    alone (until the user locks it again).
     """
-    k = lambda field, i: f"prog_{instrument_key}_{i}_{field}"
+
+    def _toggle_lock(s: dict, master_text: str) -> dict:
+        s = dict(s or {})
+        was_locked = bool(s.get("locked", True))
+        new_locked = not was_locked
+        # Closing the lock re-syncs from the master, so the field
+        # immediately shows what the user is now following.
+        if new_locked:
+            s["text"] = master_text
+        s["locked"] = new_locked
+        return s
+
+    def _set_text(s: dict, value: str) -> dict:
+        s = dict(s or {})
+        # Editing the textbox implicitly unlocks — the user is
+        # asserting "I want this one specifically."
+        s["text"] = value or ""
+        s["locked"] = False
+        return s
 
     with gr.Row():
         gr.Markdown(f"**{label}**")
-        accept_all_btn = gr.Button(
-            "↻ Accept all from master", size="sm", scale=0,
+
+        @gr.render(inputs=[state, master_in])
+        def _row(st: dict, master_text: str):
+            st = dict(st or {})
+            locked = bool(st.get("locked", True))
+            shown = (master_text if locked else st.get("text", "")) or ""
+            with gr.Row():
+                lock_btn = gr.Button(
+                    "🔒" if locked else "🔓",
+                    size="sm", scale=0,
+                    key=f"{key_prefix}_lock",
+                )
+                tb = gr.Textbox(
+                    value=shown,
+                    show_label=False,
+                    interactive=not locked,
+                    placeholder=("Locked to master" if locked
+                                 else "Customize this instrument's progression"),
+                    scale=4,
+                    key=f"{key_prefix}_text",
+                )
+                lock_btn.click(
+                    _toggle_lock,
+                    [state, master_in],
+                    state,
+                )
+                tb.change(
+                    _set_text,
+                    [state, tb],
+                    state,
+                )
+
+
+def _render_extras_progression_row(
+    idx: int, tr: dict, master_text: str,
+    extras_state: gr.State, master_in: gr.Textbox,
+) -> None:
+    """One per-instrument progression row for an Extra track.
+
+    Mirrors the fixed-instrument row shape (label + lock + textbox)
+    but writes back into the indexed entry of ``extras_state``. Each
+    extra carries its own ``progression`` (text) and
+    ``progression_locked`` (bool) — the same shape compose_midi's
+    ``_resolve_instrument_progression`` expects.
+    """
+    locked = bool(tr.get("progression_locked", True))
+    name = tr.get("track_name") or (tr.get("type") or "extra").title()
+    text = tr.get("progression", "") or ""
+    shown = master_text if locked else text
+
+    def _toggle(state: list, master_text_now: str) -> list:
+        out = list(state)
+        e = dict(out[idx])
+        was_locked = bool(e.get("progression_locked", True))
+        new_locked = not was_locked
+        if new_locked:
+            e["progression"] = master_text_now
+        e["progression_locked"] = new_locked
+        out[idx] = e
+        return out
+
+    def _set_text(state: list, value: str) -> list:
+        out = list(state)
+        e = dict(out[idx])
+        e["progression"] = value or ""
+        e["progression_locked"] = False
+        out[idx] = e
+        return out
+
+    with gr.Row():
+        gr.Markdown(f"**{name}** &nbsp; `{tr.get('type', 'extra')}`")
+        lock_btn = gr.Button(
+            "🔒" if locked else "🔓",
+            size="sm", scale=0,
+            key=f"prog_extra_{idx}_lock",
         )
-
-    @gr.render(inputs=[instrument_state, master_state])
-    def _cells(state: dict, master: list[dict]):
-        symbols: list[str] = list((state or {}).get("symbols") or [])
-        manual: list[bool] = list((state or {}).get("manual") or [])
-        n = len(master)
-        # Pad state to master length so the render is robust on first
-        # boot / before sync runs.
-        while len(symbols) < n:
-            symbols.append(master[len(symbols)]["symbol"])
-            manual.append(False)
-        symbols = symbols[:n]
-        manual = manual[:n]
-
-        if n == 0:
-            gr.Markdown("_No master progression yet._")
-            return
-
-        with gr.Row():
-            for i in range(n):
-                with gr.Group():
-                    cell_dd = gr.Dropdown(
-                        choices=ROMAN_NUMERAL_OPTIONS,
-                        value=symbols[i],
-                        label=None,
-                        show_label=False,
-                        allow_custom_value=True,
-                        interactive=manual[i],  # locked = greyed out
-                        key=k("dd", i), scale=2,
-                    )
-                    lock_btn = gr.Button(
-                        "🔓" if manual[i] else "🔒",
-                        size="sm", scale=0,
-                        key=k("lock", i),
-                    )
-                    conflict = manual[i] and symbols[i] != master[i]["symbol"]
-                    if conflict:
-                        pill = gr.Button(
-                            f"⚠ master: {master[i]['symbol']} — accept",
-                            size="sm", variant="secondary",
-                            key=k("accept", i),
-                        )
-                        pill.click(
-                            _make_accept_one(i),
-                            [instrument_state, master_state],
-                            instrument_state,
-                        )
-
-                    cell_dd.change(
-                        _make_set_symbol(i),
-                        [instrument_state, cell_dd],
-                        instrument_state,
-                    )
-                    lock_btn.click(
-                        _make_toggle_lock(i),
-                        [instrument_state, master_state],
-                        instrument_state,
-                    )
-
-    accept_all_btn.click(
-        _accept_all_from_master,
-        [instrument_state, master_state],
-        instrument_state,
-    )
-
-
-# Per-index helpers — closed over the cell index so @gr.render's
-# rebuild keeps each cell's click handler wired correctly.
-
-def _make_set_symbol(idx: int):
-    def _set(state: dict, value: str) -> dict:
-        symbols = list((state or {}).get("symbols") or [])
-        manual = list((state or {}).get("manual") or [])
-        if idx >= len(symbols):
-            return state
-        symbols[idx] = value or symbols[idx]
-        # Editing the dropdown implicitly locks the cell — the user is
-        # asserting "I want this one specifically."
-        manual[idx] = True
-        return {"symbols": symbols, "manual": manual}
-    return _set
-
-
-def _make_toggle_lock(idx: int):
-    def _toggle(state: dict, master: list[dict]) -> dict:
-        symbols = list((state or {}).get("symbols") or [])
-        manual = list((state or {}).get("manual") or [])
-        if idx >= len(manual):
-            return state
-        was_locked = bool(manual[idx])
-        manual[idx] = not was_locked
-        # Closing the lock re-syncs the cell to the master value.
-        if not manual[idx] and idx < len(master):
-            symbols[idx] = master[idx]["symbol"]
-        return {"symbols": symbols, "manual": manual}
-    return _toggle
-
-
-def _make_accept_one(idx: int):
-    def _accept(state: dict, master: list[dict]) -> dict:
-        symbols = list((state or {}).get("symbols") or [])
-        manual = list((state or {}).get("manual") or [])
-        if idx < len(symbols) and idx < len(master):
-            symbols[idx] = master[idx]["symbol"]
-            manual[idx] = False
-        return {"symbols": symbols, "manual": manual}
-    return _accept
-
-
-def _accept_all_from_master(state: dict, master: list[dict]) -> dict:
-    """Reset the instrument to mirror the master — clear all locks."""
-    syms = [m["symbol"] for m in master]
-    return {"symbols": syms, "manual": [False] * len(syms)}
+        tb = gr.Textbox(
+            value=shown,
+            show_label=False,
+            interactive=not locked,
+            placeholder=("Locked to master" if locked
+                         else "Customize this extra's progression"),
+            scale=4,
+            key=f"prog_extra_{idx}_text",
+        )
+        lock_btn.click(_toggle, [extras_state, master_in], extras_state)
+        tb.change(_set_text, [extras_state, tb], extras_state)
 
 
 # ---------- Top-level Melody Studio handlers ---------------------------
@@ -3109,66 +3075,77 @@ def build_app() -> gr.Blocks:
                         )
                         progression_refresh = gr.Button("🔄 Refresh from style", scale=1)
 
-                    # Per-instrument chord overrides — one cell per master
-                    # entry. Each instrument starts fully synced (all locks
-                    # closed). Tapping a lock open lets the user pick a
-                    # different chord for that cell on that instrument;
-                    # subsequent master edits propagate to clean cells and
-                    # surface an inline pill on locked cells that now
-                    # disagree with the master.
-                    _pop_cells = progression_cells(STYLES["pop"].progression)
-                    _pop_syms = [ev.symbol for ev in _pop_cells]
-                    chords_prog_state = gr.State({
-                        "symbols": list(_pop_syms),
-                        "manual": [False] * len(_pop_syms),
-                    })
-                    bass_prog_state = gr.State({
-                        "symbols": list(_pop_syms),
-                        "manual": [False] * len(_pop_syms),
-                    })
-                    melody_prog_state = gr.State({
-                        "symbols": list(_pop_syms),
-                        "manual": [False] * len(_pop_syms),
-                    })
-                    # Mirror of the master's resolved cell list, so each
-                    # @gr.render knows the current master symbols + bar
-                    # ranges without re-parsing the textbox.
-                    master_cells_state = gr.State([
-                        {"symbol": ev.symbol,
-                         "start_bar": ev.start_bar,
-                         "end_bar": ev.end_bar}
-                        for ev in _pop_cells
-                    ])
+                    # Declared early so the per-instrument accordion
+                    # below can render a row per extra. Populated by
+                    # the Extra Tracks accordion further down.
+                    extras_state = gr.State([])
 
-                    with gr.Accordion("Per-instrument chord overrides", open=False):
+                    # Per-instrument progression overrides — one textbox
+                    # per instrument with a single lock toggle. Locked
+                    # (🔒) means follow the master 1:1; unlocked (🔓)
+                    # means the user has typed a progression for THIS
+                    # instrument that differs from the master and
+                    # subsequent master edits should not overwrite it.
+                    _initial_master_text = _progression_plan_to_text(
+                        STYLES["pop"].progression,
+                    )
+                    chords_prog_state = gr.State(
+                        _default_instrument_progression_dict(_initial_master_text),
+                    )
+                    bass_prog_state = gr.State(
+                        _default_instrument_progression_dict(_initial_master_text),
+                    )
+                    melody_prog_state = gr.State(
+                        _default_instrument_progression_dict(_initial_master_text),
+                    )
+
+                    with gr.Accordion("Per-instrument progressions", open=False):
                         gr.Markdown(
-                            "Override individual chords for **Chords / Bass / "
-                            "Melody** independently. 🔒 = follows master, "
-                            "🔓 = manually locked. Edit the master above and "
-                            "clean cells auto-update; locked cells stay put "
-                            "and show a ⚠ pill if the master now disagrees."
+                            "Each instrument can either follow the master "
+                            "progression above (🔒) or carry its own. "
+                            "Tap the lock to customise — useful for "
+                            "walking bass lines, counter-melodies, "
+                            "extended/altered chord pads, etc."
                         )
-                        _render_instrument_progression_section(
+                        _render_instrument_progression_row(
                             label="Chords",
-                            instrument_key="chords",
-                            instrument_state=chords_prog_state,
-                            master_state=master_cells_state,
+                            state=chords_prog_state,
+                            master_in=progression_in,
+                            key_prefix="prog_chords",
                         )
-                        _render_instrument_progression_section(
+                        _render_instrument_progression_row(
                             label="Bass",
-                            instrument_key="bass",
-                            instrument_state=bass_prog_state,
-                            master_state=master_cells_state,
+                            state=bass_prog_state,
+                            master_in=progression_in,
+                            key_prefix="prog_bass",
                         )
-                        _render_instrument_progression_section(
+                        _render_instrument_progression_row(
                             label="Melody",
-                            instrument_key="melody",
-                            instrument_state=melody_prog_state,
-                            master_state=master_cells_state,
+                            state=melody_prog_state,
+                            master_in=progression_in,
+                            key_prefix="prog_melody",
                         )
+
+                        # One row per extra, rendered dynamically when
+                        # the user adds Extra tracks below. Same lock +
+                        # textbox shape — the state is the existing
+                        # `progression` + `progression_locked` keys on
+                        # each extras_state entry.
+                        @gr.render(inputs=[extras_state, progression_in])
+                        def _render_extras_progressions(extras, master_text):
+                            if not extras:
+                                return
+                            gr.Markdown("---")
+                            gr.Markdown("**Extras**")
+                            for idx, tr in enumerate(extras):
+                                _render_extras_progression_row(
+                                    idx, tr, master_text,
+                                    extras_state, progression_in,
+                                )
 
                     # Extra Tracks — dynamic list of additional tracks beyond the 4.
-                    extras_state = gr.State([])
+                    # extras_state was declared earlier so the per-instrument
+                    # progression panel can render a row per extra.
                     with gr.Accordion("Extra tracks (optional)", open=False):
                         with gr.Row():
                             new_extra_type = gr.Dropdown(
@@ -3375,36 +3352,39 @@ def build_app() -> gr.Blocks:
                 [progression_in],
             )
 
-            def _on_master_progression_change(text, chords_st, bass_st, melody_st):
-                """Re-derive the master cell list when the user edits
-                the progression textbox, then run sync_from_master on
-                each instrument's override state. Locked cells survive;
-                clean cells re-sync to the new master."""
-                plan = _parse_progression_text(text) or None
-                cells = progression_cells(plan)
-                new_master = [
-                    {"symbol": ev.symbol,
-                     "start_bar": ev.start_bar,
-                     "end_bar": ev.end_bar}
-                    for ev in cells
-                ]
+            def _on_master_progression_change(text, chords_st, bass_st, melody_st, extras_st):
+                """When the master textbox changes, sync the stored
+                ``text`` of any *locked* instrument (and locked extra)
+                to the new master. Unlocked rows are sealed — they
+                keep their own text until the user re-locks them.
+                """
+                def _sync_simple(state):
+                    s = dict(state or {})
+                    if s.get("locked", True):
+                        s["text"] = text or ""
+                    return s
 
-                def _sync_one(state):
-                    ip = _dict_to_instrument_progression(state)
-                    updated, _ = sync_from_master(ip, cells)
-                    return _instrument_progression_to_dict(updated)
+                def _sync_extras(extras):
+                    out = []
+                    for e in extras or []:
+                        e2 = dict(e)
+                        if e2.get("progression_locked", True):
+                            e2["progression"] = text or ""
+                        out.append(e2)
+                    return out
 
                 return (
-                    new_master,
-                    _sync_one(chords_st),
-                    _sync_one(bass_st),
-                    _sync_one(melody_st),
+                    _sync_simple(chords_st),
+                    _sync_simple(bass_st),
+                    _sync_simple(melody_st),
+                    _sync_extras(extras_st),
                 )
 
             progression_in.change(
                 _on_master_progression_change,
-                [progression_in, chords_prog_state, bass_prog_state, melody_prog_state],
-                [master_cells_state, chords_prog_state, bass_prog_state, melody_prog_state],
+                [progression_in, chords_prog_state, bass_prog_state,
+                 melody_prog_state, extras_state],
+                [chords_prog_state, bass_prog_state, melody_prog_state, extras_state],
             )
 
             compose_btn.click(
