@@ -62,6 +62,21 @@ class StylePreset:
     time_signature: tuple[int, int] = (4, 4)  # (4,4), (3,4), or (6,8)
     progression_variants: list[ProgressionVariation] = field(default_factory=list)
 
+    # Per-instrument idiom variants — each is a flat dict of
+    # ``{generator_kwarg: value}`` that flows into the matching
+    # generator call when this preset is active. Empty dict / None
+    # means no override (= today's behavior). compose_midi merges these
+    # in after user-explicit kwargs take precedence.
+    #
+    # Examples:
+    #   chord_variant = {"voice_leading": "common_tone",
+    #                    "avoid_melody_track": "Melody"}
+    #   bass_variant  = {"approach_tones": True}
+    #   melody_variant = {"phrase_shape": "arc"}
+    chord_variant: Optional[dict] = None
+    bass_variant: Optional[dict] = None
+    melody_variant: Optional[dict] = None
+
     def __post_init__(self):
         # Synthesise a Default entry if no variants were declared so every
         # preset uniformly exposes a non-empty list.
@@ -89,6 +104,14 @@ STYLES: dict[str, StylePreset] = {
         chord_octave=4, bass_octave=2, swing=0.15,
         chord_program=4,  # Electric Piano 1
         melody_program=26,  # Electric Guitar (jazz)
+        # Funk's 9th-chord voicings sing when they share common tones,
+        # and the melody usually carves single-line stabs — keep the
+        # chord pad out of its way.
+        chord_variant={
+            "voice_leading": "common_tone",
+            "avoid_melody_track": "Melody",
+        },
+        melody_variant={"phrase_shape": "call_response"},
         progression_variants=[
             ("Long form (2-bar)", [("i7", 2.0), ("IV7", 2.0), ("i7", 2.0), ("V7", 2.0)]),
             ("Sub-bar stabs", [("i7", 0.5), ("IV7", 0.5), ("i7", 0.5), ("V7", 0.5)]),
@@ -102,6 +125,10 @@ STYLES: dict[str, StylePreset] = {
         chord_rhythm="pulse_quarter", melody_style="chord_tone",
         chord_octave=3, bass_octave=3,   # bass sits at A3 register (user preference)
         chord_program=0,  # Acoustic Grand
+        # Pop triads benefit from smooth voice leading + a clear melody
+        # line. The melody arc keeps a hook contour audible.
+        chord_variant={"voice_leading": "common_tone"},
+        melody_variant={"phrase_shape": "arc"},
         progression_variants=[
             ("Pachelbel", ["vi", "IV", "I", "V"]),
             ("Long form (2-bar)", [("I", 2.0), ("V", 2.0), ("vi", 2.0), ("IV", 2.0)]),
@@ -131,6 +158,15 @@ STYLES: dict[str, StylePreset] = {
         chord_octave=3, bass_octave=2, swing=0.33,
         chord_program=4,   # Electric Piano 1
         melody_program=66, # Alto Sax
+        # Headline jazz idiom: walking bass with chromatic leading-tone
+        # approach into each new chord, drop-2 voicings connected by
+        # common tones, and the alto sax line arcs over the form.
+        bass_variant={"approach_tones": True},
+        chord_variant={
+            "voice_leading": "common_tone",
+            "avoid_melody_track": "Melody",
+        },
+        melody_variant={"phrase_shape": "arc"},
         progression_variants=[
             ("Classic ii-V-I turnaround", ["ii7", "V7", "Imaj7", "Imaj7"]),
             ("Long form (2-bar)", [("ii7", 2.0), ("V7", 2.0), ("Imaj7", 2.0), ("vi7", 2.0)]),
@@ -187,6 +223,11 @@ STYLES: dict[str, StylePreset] = {
         chord_program=24,  # Acoustic Guitar (nylon)
         bass_program=32,   # Acoustic Bass
         melody_program=25, # Acoustic Guitar (steel) — lead
+        # Country bass is built on the leading-tone "5-and-a-half" walk
+        # into the next chord; the steel-guitar melody rises through
+        # the form.
+        bass_variant={"approach_tones": True},
+        melody_variant={"phrase_shape": "rise"},
         progression_variants=[
             ("Long form (2-bar)", [("I", 2.0), ("IV", 2.0), ("I", 2.0), ("V", 2.0)]),
             ("Nashville I-IV-V-I", ["I", "IV", "V", "I"]),
@@ -439,6 +480,10 @@ STYLES: dict[str, StylePreset] = {
         chord_program=24,  # Nylon-string guitar
         bass_program=32,   # Acoustic Bass
         melody_program=66, # Alto Sax
+        # Bossa is defined by smooth, conversational chord voicings; the
+        # sax melody breathes in call-and-response phrases over the form.
+        chord_variant={"voice_leading": "common_tone"},
+        melody_variant={"phrase_shape": "call_response"},
         progression_variants=[
             ("Elongated", [("ii7", 2.0), ("V7", 2.0), ("Imaj7", 4.0)]),
             ("Short-long", [("ii7", 0.5), ("V7", 0.5), ("Imaj7", 1.0), ("Imaj7", 1.0)]),

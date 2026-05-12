@@ -674,6 +674,14 @@ def compose_midi(
             melody_progression_override, progression_text,
         ) or progression
 
+        # Per-style idiom variants — flat dicts of {kwarg: value} that
+        # each generator picks up. Loaded from the active StylePreset
+        # if any. Empty dicts when the style declared no variants
+        # (preserving today's behavior).
+        chord_variant = (preset.chord_variant or {}) if preset else {}
+        bass_variant = (preset.bass_variant or {}) if preset else {}
+        melody_variant = (preset.melody_variant or {}) if preset else {}
+
         # Generation order: melody → chords → bass. Putting the melody
         # first lets the chord generator read it (via avoid_melody_track)
         # for collision avoidance when a per-style variant enables it.
@@ -685,6 +693,7 @@ def compose_midi(
                 octave=int(melody_octave),
                 seed=seed, swing=swing,
                 progression=melody_progression, melody_style=melody_style,
+                **melody_variant,
             )
         if enable_chords:
             midi.add_chord_progression(
@@ -692,6 +701,7 @@ def compose_midi(
                 octave=int(chord_octave),
                 scale_name=scale, voicing=voicing,
                 rhythm=chord_rhythm, swing=swing,
+                **chord_variant,
             )
         if enable_bass:
             midi.add_bass_line(
@@ -699,6 +709,7 @@ def compose_midi(
                 pattern=bass_pattern,
                 octave=int(bass_octave),
                 scale_name=scale, swing=swing, seed=seed,
+                **bass_variant,
             )
         if enable_drums:
             # The drum grid is the source of truth — it always reflects the
