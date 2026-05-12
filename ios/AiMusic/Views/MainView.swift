@@ -14,19 +14,51 @@ struct MainView: View {
     @EnvironmentObject private var settings: AppSettings
     @State private var showSettings = false
     @State private var reloadToken = UUID()
+    @State private var probeState: ProbeState = .idle
+    @State private var probedHealth: HealthResponse?
+
+    enum ProbeState: Equatable {
+        case idle
+        case probing
+        case ok
+        case failed(String)
+    }
 
     var body: some View {
         NavigationStack {
             Group {
                 if let url = settings.currentURL {
-                    StudioWebView(url: url, token: settings.authToken, reloadToken: reloadToken)
-                        .ignoresSafeArea(edges: .bottom)
+                    switch probeState {
+                    case .idle, .probing:
+                        VStack(spacing: 12) {
+                            ProgressView()
+                            Text("Connecting to \(url.host ?? "server")…")
+                                .foregroundStyle(.secondary)
+                        }
+                    case .failed(let msg):
+                        ContentUnavailableView {
+                            Label("Can't reach the server", systemImage: "wifi.exclamationmark")
+                        } description: {
+                            VStack(spacing: 6) {
+                                Text(msg).multilineTextAlignment(.center)
+                                Text(url.absoluteString).font(.caption).foregroundStyle(.secondary)
+                            }
+                        } actions: {
+                            Button("Retry") { Task { await probe(url) } }
+                            Button("Settings") { showSettings = true }
+                        }
+                    case .ok:
+                        StudioWebView(url: url, token: settings.authToken, reloadToken: reloadToken)
+                            .ignoresSafeArea(edges: .bottom)
+                    }
                 } else {
-                    ContentUnavailableView(
-                        "No server configured",
-                        systemImage: "wifi.exclamationmark",
-                        description: Text("Open Settings to connect to your Mac.")
-                    )
+                    ContentUnavailableView {
+                        Label("No server configured", systemImage: "wifi.exclamationmark")
+                    } description: {
+                        Text("Open Settings to connect to your Mac.")
+                    } actions: {
+                        Button("Settings") { showSettings = true }
+                    }
                 }
             }
             .navigationTitle("AI Music Studio")
@@ -34,6 +66,9 @@ struct MainView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
+                        if let url = settings.currentURL {
+                            Task { await probe(url) }
+                        }
                         reloadToken = UUID()
                     } label: {
                         Image(systemName: "arrow.clockwise")
@@ -47,9 +82,39 @@ struct MainView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showSettings) {
+            .sheet(isPresented: $showSettings, onDismiss: {
+                if let url = settings.currentURL {
+                    Task { await probe(url) }
+                }
+            }) {
                 SettingsView()
             }
+            .onChange(of: settings.currentURL) { _, newURL in
+                if let newURL { Task { await probe(newURL) } }
+            }
+            .task(id: settings.currentURL?.absoluteString ?? "") {
+                // Bound to the NavigationStack body, so it isn't
+                // cancelled by inner view transitions (e.g. .idle →
+                // .probing). The `id` triggers a re-run when the
+                // resolved URL changes.
+                if let url = settings.currentURL, probeState != .ok {
+                    await probe(url)
+                }
+            }
+        }
+    }
+
+    private func probe(_ url: URL) async {
+        probeState = .probing
+        let result = await HealthCheck.probe(baseURL: url.absoluteString,
+                                              token: settings.authToken,
+                                              timeout: 4)
+        switch result {
+        case .success(let health):
+            probedHealth = health
+            probeState = .ok
+        case .failure(let err):
+            probeState = .failed(err.localizedDescription)
         }
     }
 }
@@ -94,11 +159,8 @@ struct StudioWebView: UIViewRepresentable {
     private func makeRefreshControl(webView: WKWebView, coordinator: Coordinator) -> UIRefreshControl {
         let rc = UIRefreshControl()
         coordinator.refreshControl = rc
-        rc.addAction(UIAction { [weak webView, weak rc] _ in
+        rc.addAction(UIAction { [weak webView] _ in
             webView?.reload()
-            // The navigation delegate ends the refresh state when the
-            // page finishes loading.
-            _ = rc // silence unused-capture warning when nil
         }, for: .valueChanged)
         return rc
     }
@@ -113,11 +175,6 @@ struct StudioWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView,
                      decidePolicyFor navigationAction: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            // Append the auth header on outgoing top-level navigations
-            // when not already present. Sub-resource requests (XHR /
-            // WebSocket) inherit the cookie/credential from the initial
-            // Basic Auth handshake; iOS's WKWebView surfaces 401 via
-            // `didReceive challenge` below.
             decisionHandler(.allow)
         }
 

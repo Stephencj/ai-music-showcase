@@ -86,18 +86,35 @@ final class DiscoveryManager: ObservableObject {
         for result in results {
             guard case let .service(name, _, _, _) = result.endpoint else { continue }
             var version: String?
+            var hostnameTXT: String?
             if case let .bonjour(txt) = result.metadata {
                 version = txt.dictionary["version"]
+                hostnameTXT = txt.dictionary["hostname"]
             }
-            // We can't get a usable host:port directly from a `.service`
-            // endpoint without resolving it through a connection. As a
-            // pragmatic fallback, use the Bonjour name as the hostname
-            // (resolves on the LAN as `<name>.local`).
-            let safe = name.replacingOccurrences(of: " ", with: "-")
+            // The mDNS-resolvable hostname is the Mac's short name +
+            // ".local" — NOT the Bonjour service instance name (which
+            // can contain spaces and doesn't resolve via the OS DNS
+            // resolver). The server publishes the actual hostname in
+            // a TXT record specifically so we can construct a working
+            // URL here.
+            let host: String
+            if let hostnameTXT, !hostnameTXT.isEmpty {
+                // Strip a trailing ".local" if present, then re-append
+                // so callers always get the FQDN.
+                let bare = hostnameTXT.hasSuffix(".local")
+                    ? String(hostnameTXT.dropLast(".local".count))
+                    : hostnameTXT
+                host = "\(bare).local"
+            } else {
+                // No TXT hostname — fall back to the instance name,
+                // sanitized. Works on small Bonjour-friendly names,
+                // breaks on names with spaces.
+                host = "\(name.replacingOccurrences(of: " ", with: "-")).local"
+            }
             resolved.append(DiscoveredService(
                 id: name,
                 name: name,
-                host: "\(safe).local",
+                host: host,
                 port: 7860,
                 version: version
             ))
