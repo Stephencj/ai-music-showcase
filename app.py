@@ -674,6 +674,18 @@ def compose_midi(
             melody_progression_override, progression_text,
         ) or progression
 
+        # Generation order: melody → chords → bass. Putting the melody
+        # first lets the chord generator read it (via avoid_melody_track)
+        # for collision avoidance when a per-style variant enables it.
+        # Bass goes last so future approach-tone-with-melody-context
+        # logic can also peek; nothing else cross-reads today.
+        if enable_melody:
+            midi.add_melody(
+                key=key, scale_name=scale, bars=bars,
+                octave=int(melody_octave),
+                seed=seed, swing=swing,
+                progression=melody_progression, melody_style=melody_style,
+            )
         if enable_chords:
             midi.add_chord_progression(
                 key=key, progression=chords_progression, bars=bars,
@@ -687,13 +699,6 @@ def compose_midi(
                 pattern=bass_pattern,
                 octave=int(bass_octave),
                 scale_name=scale, swing=swing, seed=seed,
-            )
-        if enable_melody:
-            midi.add_melody(
-                key=key, scale_name=scale, bars=bars,
-                octave=int(melody_octave),
-                seed=seed, swing=swing,
-                progression=melody_progression, melody_style=melody_style,
             )
         if enable_drums:
             # The drum grid is the source of truth — it always reflects the

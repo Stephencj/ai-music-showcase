@@ -48,6 +48,7 @@ from .midi_export import (
     NoteEvent,
     SCALES,
     STRUM_RHYTHMS,
+    TENSION_OPS,
     Track,
     apply_swing,
     chord_at_position,
@@ -405,6 +406,87 @@ def _emit_lick_notes(
         melody_track.notes.append(NoteEvent(pitch, t, end, 95))
 
 
+def _nearest_pitch_with_pc(start_pitch: int, target_pc: int) -> int:
+    """Return the pitch within ±6 semitones of ``start_pitch`` whose
+    pitch class equals ``target_pc``. Used by tension-op helpers to
+    nudge an existing note onto a target scale degree without making
+    huge jumps."""
+    candidates = [start_pitch + s for s in range(-6, 7)
+                  if (start_pitch + s) % 12 == target_pc]
+    if not candidates:
+        return start_pitch
+    return min(candidates, key=lambda p: abs(p - start_pitch))
+
+
+def _apply_tension_op(
+    track: Track, ov: "SectionOverride", plan: "MelodyPlan",
+    base_t: float, bar_dur: float,
+) -> None:
+    """Apply ``ov.tension_op`` as a post-pass transformation on the
+    melody notes within the override's bar range. Implements three of
+    the catalog entries today (suspension_4_3, pedal_tone,
+    anticipation); the others round-trip but currently no-op."""
+    if not ov.tension_op or ov.tension_op not in TENSION_OPS:
+        return
+    spec = TENSION_OPS[ov.tension_op]
+    op_type = spec.get("type")
+
+    seg_start = base_t + ov.start_bar * bar_dur
+    seg_end = base_t + ov.end_bar * bar_dur
+    in_range = sorted(
+        (n for n in track.notes if seg_start - 1e-6 <= n.start < seg_end),
+        key=lambda n: n.start,
+    )
+    if not in_range:
+        return
+
+    scale_ints = SCALES.get(plan.scale, SCALES["major"])
+    tonic_pc = note_name_to_midi(plan.key, 0) % 12
+    beats_per_bar = max(1, plan.time_signature[0])
+    beat_dur = bar_dur / beats_per_bar
+
+    def deg_to_pc(deg: int) -> int:
+        d = (deg - 1) % len(scale_ints)
+        return (tonic_pc + scale_ints[d]) % 12
+
+    if op_type == "pedal":
+        held_deg = int(spec.get("held_degree", 1))
+        target_pc = deg_to_pc(held_deg)
+        for n in in_range:
+            beat_in_bar = (n.start - seg_start) / beat_dur
+            is_strong = abs(beat_in_bar - round(beat_in_bar)) < 0.1
+            if is_strong:
+                n.pitch = _nearest_pitch_with_pc(n.pitch, target_pc)
+
+    elif op_type == "suspension":
+        first = in_range[0]
+        hold_deg = int(spec.get("hold_degree", 4))
+        resolve_deg = int(spec.get("resolve_degree", 3))
+        hold_dur_beats = float(spec.get("hold_duration", 0.5))
+        first.pitch = _nearest_pitch_with_pc(first.pitch, deg_to_pc(hold_deg))
+        nxt_start = in_range[1].start if len(in_range) > 1 else seg_end
+        resolve_start = first.start + hold_dur_beats * beat_dur
+        # Only inject the resolution note if there's room before the
+        # next melody note (otherwise the suspension just hangs).
+        if resolve_start + 0.05 < nxt_start:
+            resolve_pitch = _nearest_pitch_with_pc(
+                first.pitch, deg_to_pc(resolve_deg),
+            )
+            resolve_end = min(resolve_start + 0.4 * beat_dur, nxt_start)
+            track.notes.append(NoteEvent(
+                pitch=resolve_pitch, start=resolve_start, end=resolve_end,
+                velocity=first.velocity,
+            ))
+
+    elif op_type == "anticipation":
+        early = float(spec.get("early_beats", 0.5))
+        last = in_range[-1]
+        # Pull the last note's onset earlier — capped at the previous
+        # note's end so we don't overlap.
+        prev_end = in_range[-2].end if len(in_range) > 1 else seg_start
+        last.start = max(prev_end, last.start - early * beat_dur)
+
+
 def _apply_cadence_to_last_in_range(
     melody_track: Track, cadence_name: str,
     bar_start_time: float, bar_end_time: float, plan: MelodyPlan,
@@ -579,6 +661,17 @@ def render_melody_plan(
         _apply_cadence_to_last_in_range(
             melody_track, ov.cadence, seg_start, seg_end, plan,
         )
+
+    # Per-override tension operators — same post-pass shape as the
+    # cadence forcing. suspension_4_3 / pedal_tone / anticipation are
+    # the three implemented today; the rest of TENSION_OPS round-trips
+    # the field but no-ops in the renderer.
+    for ov in plan.section_overrides:
+        if ov.tension_op:
+            _apply_tension_op(
+                melody_track, ov, plan,
+                base_t=base_t, bar_dur=bar_dur,
+            )
 
     # Harmonies — delegate to MidiExporter.add_harmony per HarmonyTag
     harmony_track: Optional[Track] = None

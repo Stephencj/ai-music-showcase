@@ -1267,6 +1267,89 @@ def chord_at_position(
     return None
 
 
+def _voicing_with_minimal_motion(
+    candidate: list[int], previous: list[int],
+) -> list[int]:
+    """Return a re-spelling of ``candidate`` that minimises total
+    semitone motion from ``previous``. Used for chord voice leading
+    so successive chords share common tones / move smoothly rather
+    than respawning fresh each time.
+
+    Candidates: the natural voicing plus four octave-related variants
+    (whole voicing +12, whole -12, top voice -12, bottom voice +12).
+    Each scored by ``sum(min(|p - q| for q in previous))`` across the
+    candidate's pitches. Lowest score wins.
+    """
+    if not previous or not candidate:
+        return candidate
+
+    base = list(candidate)
+    variants: list[list[int]] = [base]
+    variants.append([p + 12 for p in base])
+    variants.append([p - 12 for p in base])
+    if len(base) >= 2:
+        variants.append(sorted(base[:-1] + [base[-1] - 12]))
+        variants.append(sorted([base[0] + 12] + base[1:]))
+
+    def motion(voicing: list[int]) -> int:
+        return sum(min(abs(p - q) for q in previous) for p in voicing)
+
+    return min(variants, key=motion)
+
+
+def _melody_pitches_in_window(
+    melody_track, start_t: float, end_t: float,
+) -> set:
+    """Pitches the melody plays at any point overlapping
+    ``[start_t, end_t)``. Used for chord-melody collision avoidance."""
+    out: set = set()
+    for n in melody_track.notes:
+        if n.end <= start_t + 1e-9:
+            continue
+        if n.start >= end_t - 1e-9:
+            continue
+        out.add(n.pitch)
+    return out
+
+
+def _avoid_collisions(
+    chord_pitches: list[int], collisions: set,
+    root: int, quality: str,
+) -> list[int]:
+    """For each pitch in ``chord_pitches`` that overlaps the melody at
+    this segment, swap to the nearest chord tone of the same chord
+    that doesn't collide. If every nearby chord tone is colliding,
+    drop the pitch. Input is not mutated.
+    """
+    if not collisions:
+        return list(chord_pitches)
+    third = 4 if quality not in ("min", "dim", "min7") else 3
+    intervals = [0, third, 7]
+    if quality in ("dom7", "maj7", "min7"):
+        intervals.append(11 if quality == "maj7" else 10)
+
+    out: list[int] = []
+    for p in chord_pitches:
+        if p not in collisions:
+            out.append(p)
+            continue
+        # Find the nearest non-colliding chord tone in any octave
+        # within ±18 semitones of the original.
+        candidates = []
+        for oct_shift in (0, -12, 12, -24, 24):
+            for i in intervals:
+                cand = root + i + oct_shift
+                if abs(cand - p) > 18:
+                    continue
+                if cand in collisions:
+                    continue
+                candidates.append(cand)
+        if candidates:
+            out.append(min(candidates, key=lambda c: abs(c - p)))
+        # else: drop the pitch — every nearby chord tone collides.
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Per-instrument progression overrides
 # ---------------------------------------------------------------------------
@@ -1392,6 +1475,8 @@ class MidiExporter:
         bar_offset: int = 0,
         rhythm: str = "pad",
         swing: float = 0.0,
+        voice_leading: str = "fresh",
+        avoid_melody_track: Optional[str] = None,
     ) -> "MidiExporter":
         """Add a chord progression using Roman numerals.
 
@@ -1423,6 +1508,16 @@ class MidiExporter:
         strum_hits = self._resolve_strum_hits(rhythm)
 
         events = expand_progression_plan(progression, bars)
+        prev_voicing: Optional[list[int]] = None
+        # Pre-load melody track pitches (per overlap window) if we're
+        # asked to avoid collisions. Cached once because the melody
+        # track is immutable by the time we run.
+        melody_track: Optional[Track] = None
+        if avoid_melody_track:
+            for t in self.tracks:
+                if t.name == avoid_melody_track:
+                    melody_track = t
+                    break
         for event in events:
             offset, quality = roman_to_semitone_offset(event.symbol, scale_name)
             root = root_midi + offset
@@ -1430,6 +1525,24 @@ class MidiExporter:
             seg_start_time = base_t + event.start_bar * self.bar_duration
             seg_end_time = base_t + event.end_bar * self.bar_duration
             seg_duration_beats = event.duration_bars * bpb
+
+            # Voice leading: pick the closest re-spelling of this chord
+            # to the previous one. Tries the natural voicing plus a few
+            # octave-shifted candidates; the root stays put (lowest
+            # voice = chord root), the upper voices may invert.
+            if voice_leading == "common_tone" and prev_voicing:
+                pitches = _voicing_with_minimal_motion(pitches, prev_voicing)
+            prev_voicing = list(pitches)
+
+            # Collision avoidance: if any chord pitch matches a melody
+            # pitch active during this segment, substitute the nearest
+            # chord tone that doesn't collide.
+            if melody_track is not None:
+                colliding = _melody_pitches_in_window(
+                    melody_track, seg_start_time, seg_end_time,
+                )
+                if colliding:
+                    pitches = _avoid_collisions(pitches, colliding, root, quality)
 
             if is_arpeggio:
                 arp = ARPEGGIO_PATTERNS[rhythm]
@@ -1692,22 +1805,95 @@ class MidiExporter:
             return dev_plan[block_idx % len(dev_plan)] if dev_plan else "repeat"
 
         def _dev_step_shift(op: str) -> int:
-            """Extra scale-step shift introduced by the motif-development op."""
+            """Extra scale-step shift introduced by the motif-development op.
+
+            Only the sequence ops carry a pure step-shift. Other ops
+            (inversion, retrograde, augmentation) reshape the motif's
+            rhythm + contour rather than transposing it — those are
+            applied via :func:`_apply_motif_op` below."""
             if op == "sequence_up":
                 return 2     # up one diatonic step (~2 semitones)
             if op == "sequence_down":
                 return -2
             return 0
 
+        def _apply_motif_op(rh, cn, op: str):
+            """Reshape the per-event ``rhythm`` and ``contour`` lists
+            according to the motif-development operator.
+
+            - ``inversion``: mirror the contour around 0 — each up-step
+              becomes a down-step. Pitches now move opposite to the
+              base motif.
+            - ``retrograde``: play the motif's events back-to-front.
+            - ``augmentation``: take every other event and double its
+              duration — same total bar length, half as many notes,
+              twice as long each (slower, more deliberate feel).
+            - everything else (``repeat`` / ``sequence_up/down`` /
+              ``cadence``): no rhythmic or contour reshape.
+
+            Returns ``(rhythm', contour')`` — both fresh lists, never
+            mutates the input.
+            """
+            if op == "inversion":
+                return list(rh), [-s for s in cn]
+            if op == "retrograde":
+                return list(reversed(rh)), list(reversed(cn))
+            if op == "augmentation":
+                # Halve event density, double each survivor's duration.
+                new_rh = []
+                for ev in rh[::2]:
+                    new_rh.append({**ev, "duration": ev["duration"] * 2.0})
+                return new_rh, list(cn[:len(new_rh)])
+            return list(rh), list(cn)
+
         # Expand the progression plan once so each melody note can look up
         # the chord at its exact fractional bar position. Sub-bar chord
         # changes therefore affect strong-beat anchor selection naturally.
         _events = expand_progression_plan(progression, bars)
 
-        def _emit_block(block_bar_idx: int, variation: int, local_bars: int):
-            """Emit one motif block starting at bar block_bar_idx."""
+        def _intra_note_bias(note_pos: float, shape: str) -> int:
+            """Small ±1 nudge added to the per-note random step so the
+            contour reads as that shape WITHIN each block, not just
+            block-to-block. ``note_pos`` is the note's position in
+            [0, 1] across the whole phrase.
+            """
+            s = (shape or "arc").lower()
+            if s == "rise":
+                return 1 if note_pos > 0.4 else 0
+            if s == "fall":
+                return -1 if note_pos > 0.4 else 0
+            if s == "arc":
+                if 0.3 < note_pos < 0.7:
+                    return 1
+                if note_pos >= 0.7:
+                    return -1
+                return 0
+            if s == "valley":
+                if 0.3 < note_pos < 0.7:
+                    return -1
+                if note_pos >= 0.7:
+                    return 1
+                return 0
+            if s == "call_response":
+                # Alternating high/low halves within each block.
+                return 1 if (note_pos * 4) % 1 < 0.5 else -1
+            return 0  # plateau
+
+        def _emit_block(block_bar_idx: int, variation: int, local_bars: int,
+                        block_idx: int = 0,
+                        block_rhythm: Optional[list] = None,
+                        block_contour: Optional[list[int]] = None):
+            """Emit one motif block starting at bar block_bar_idx.
+
+            ``block_rhythm`` / ``block_contour`` override the outer
+            ``rhythm`` / ``contour`` lists when a motif-development op
+            (inversion / retrograde / augmentation) has reshaped them
+            for this block. Default = outer lists (no-op for ``repeat``)."""
             nonlocal anchor
-            for i, ev in enumerate(rhythm):
+            rh = block_rhythm if block_rhythm is not None else rhythm
+            cn = block_contour if block_contour is not None else contour
+            denom = max(1, total_motifs * len(rh))
+            for i, ev in enumerate(rh):
                 # Which bar within the block this event falls in
                 bar_within = min(local_bars - 1, int(ev["beat"] // self.beats_per_bar))
                 beat_in_bar = ev["beat"] - self.beats_per_bar * bar_within
@@ -1724,9 +1910,14 @@ class MidiExporter:
                 chord_root = root_midi + chord_off  # stay in the melody's vocal octave
                 chord_pitches = voice_chord(chord_root, quality, "triad")
 
-                step = contour[i]
+                step = cn[i] if i < len(cn) else 0
                 # Subtle variation across motif repeats (transpose contour ±1 step)
                 step += variation
+                # Intra-block phrase-shape bias: nudge each note in the
+                # direction the macro contour expects at this position
+                # in the phrase. Arc peaks mid-phrase, rise climbs, etc.
+                note_pos = (block_idx * len(rh) + i) / denom
+                step += _intra_note_bias(note_pos, phrase_shape)
 
                 if ev["accent"]:
                     # Strong beat → chord tone near the anchor
@@ -1778,11 +1969,15 @@ class MidiExporter:
         for block in range(total_motifs):
             op = _dev_op_for_block(block)
             variation = _phrase_shift(block) + _dev_step_shift(op)
-            _emit_block(block * motif_bars, variation, motif_bars)
+            block_rh, block_cn = _apply_motif_op(rhythm, contour, op)
+            _emit_block(block * motif_bars, variation, motif_bars,
+                        block_idx=block,
+                        block_rhythm=block_rh, block_contour=block_cn)
 
         # Handle odd leftover (e.g. 7 bars with motif_bars=2)
         if extra_bars > 0:
-            _emit_block(total_motifs * motif_bars, 0, extra_bars)
+            _emit_block(total_motifs * motif_bars, 0, extra_bars,
+                        block_idx=total_motifs)
 
         # ----- Cadence resolution -------------------------------------
         # Replace the no-op phrase-resolution loop that used to live here.
@@ -1857,6 +2052,7 @@ class MidiExporter:
         bar_offset: int = 0,
         density: float = 1.0,
         seed: Optional[int] = None,
+        approach_tones: bool = False,
     ) -> "MidiExporter":
         """Add a bass line that follows the chord progression.
 
@@ -1871,6 +2067,14 @@ class MidiExporter:
           - ``palm_mute_8ths`` — short root 8ths (metal chug)
           - ``flea_slap`` — Flea-style: thumb slaps + octave pops + ghost notes
           - ``geddy_lee`` — Geddy Lee-style: melodic chord-tone 8ths + 16th-note runs
+
+        ``approach_tones=True`` (walking / walking_swing only): on the
+        last beat of a bar that's the last bar of a chord segment, the
+        chromatic-passing-tone-within-current-chord (``root + 5``) is
+        replaced by a chromatic neighbour of the NEXT segment's root.
+        Picks the leading-tone (half-step below) by default — the
+        classic jazz walking-bass setup that pulls strongly into the
+        new chord. No effect on the final segment (there's no "next").
         """
         if progression is None:
             progression = ["I", "V", "vi", "IV"]
@@ -1938,8 +2142,34 @@ class MidiExporter:
                 sw = swing if pattern == "walking_swing" else 0.0
                 _, quality = roman_to_semitone_offset(symbol, scale_name)
                 third = root + (3 if quality in ("min", "dim", "min7") else 4)
-                # Quarter-note walk: root, 3rd, 5th, chromatic passing tone
-                walk = [root, third, fifth, root + 5]
+                # Quarter-note walk: root, 3rd, 5th, chromatic passing tone.
+                # With approach_tones=True, the 4th beat targets the NEXT
+                # segment's root via a leading-tone (half-step below) when
+                # this is the final bar of the current chord segment.
+                approach_note = root + 5
+                if approach_tones:
+                    # Find the next chord whose symbol differs from this one.
+                    next_root: Optional[int] = None
+                    for nxt_idx in range(bar_idx + 1, len(loop_tasks)):
+                        _, nxt_symbol, _ = loop_tasks[nxt_idx]
+                        if nxt_symbol != symbol:
+                            nxt_offset, _ = roman_to_semitone_offset(
+                                nxt_symbol, scale_name,
+                            )
+                            next_root = root_midi + nxt_offset
+                            break
+                    # Only swap when the NEXT bar is a different chord —
+                    # mid-segment beats keep the safe within-chord
+                    # passing tone, which sounds more natural than
+                    # constantly reaching forward.
+                    is_last_in_segment = (
+                        next_root is not None
+                        and bar_idx + 1 < len(loop_tasks)
+                        and loop_tasks[bar_idx + 1][1] != symbol
+                    )
+                    if is_last_in_segment:
+                        approach_note = next_root - 1  # leading tone
+                walk = [root, third, fifth, approach_note]
                 for i, note in enumerate(walk):
                     if i > 0 and rng.random() > density:
                         continue  # thin passing tones first
@@ -2713,12 +2943,45 @@ class MidiExporter:
             extended = sorted({t + 12 * o for t in tones for o in range(-2, 3)})
             return extended
 
+        def _chord_root_quality_at(n_start: float) -> tuple[int, str]:
+            """Root MIDI pitch + chord-quality string ('maj' / 'min' /
+            'maj7' / 'dom7' / 'min7' / 'dim') at time n_start. Used by
+            the shell-voicing harmony rule to pick the 3rd and 7th."""
+            bar_pos = n_start / self.bar_duration
+            symbol = chord_at_position(events, bar_pos) or "I"
+            chord_off, quality = roman_to_semitone_offset(symbol, scale_name)
+            return root_midi + chord_off, quality
+
+        # Diatonic scale pitches across a ~3-octave window for the
+        # parallel_thirds rule (lookup is by nearest absolute pitch).
+        scale_ints_local = SCALES.get(scale_name, SCALES["major"])
+        scale_pitches = sorted({
+            root_midi + iv + 12 * o
+            for iv in scale_ints_local
+            for o in range(-1, 3)
+        })
+
         # Voice-leading smoothing is on by default — Bach-level baseline.
         # When the naive parallel-chord-tone pick would move >2 semitones
         # from the previous harmony pitch, search the chord-tone palette
         # for a closer alternative that preserves the role above/below.
         smooth_vl = (harmony_rule == "voice_leading_smooth")
         contrary = (harmony_rule == "contrary_motion")
+        rule_common_tone = (harmony_rule == "common_tone")
+        rule_shell = (harmony_rule == "shell_voicing")
+        rule_whisper = (harmony_rule == "whisper_voicing")
+        rule_parallel_thirds = (harmony_rule == "parallel_thirds")
+
+        def _shell_filter(chord_tones: list[int],
+                          chord_root: int, quality: str) -> list[int]:
+            """Keep only 3rd and 7th of the chord — the "shell" voicing
+            that jazz pianists use for comping. Filters by pitch class so
+            it works across octave-spread chord-tone palettes."""
+            third = 4 if quality not in ("min", "dim", "min7") else 3
+            seventh = 11 if quality == "maj7" else 10
+            keep_pcs = {(chord_root + third) % 12, (chord_root + seventh) % 12}
+            shell = [p for p in chord_tones if p % 12 in keep_pcs]
+            return shell or chord_tones   # fall back if filter empties
 
         for i, steps in enumerate(intervals_steps):
             harm_name = f"{source_track} Harm {i + 1}"
@@ -2739,12 +3002,42 @@ class MidiExporter:
                     if not is_strong:
                         continue
                 chord_tones = _chord_tones_at(n.start)
-                # Nearest chord tone to the melody note
-                nearest = min(chord_tones, key=lambda p: abs(p - n.pitch))
-                idx = chord_tones.index(nearest)
-                harm_idx = idx + steps  # steps can be negative for below-melody
-                harm_idx = max(0, min(len(chord_tones) - 1, harm_idx))
-                harm_pitch = chord_tones[harm_idx]
+
+                # ----- parallel_thirds: lock to a scale-third above ----
+                if rule_parallel_thirds:
+                    # Find the scale-step a third above the melody pitch.
+                    nearest_scale = min(scale_pitches,
+                                        key=lambda p: abs(p - n.pitch))
+                    s_idx = scale_pitches.index(nearest_scale)
+                    s_idx = min(len(scale_pitches) - 1, s_idx + 2)
+                    harm_pitch = scale_pitches[s_idx]
+                else:
+                    # ----- shell_voicing: pre-filter chord tones -------
+                    if rule_shell:
+                        chord_root, _ct_quality = _chord_root_quality_at(n.start)
+                        chord_tones = _shell_filter(
+                            chord_tones, chord_root, _ct_quality,
+                        )
+
+                    # Nearest chord tone to the melody note
+                    nearest = min(chord_tones, key=lambda p: abs(p - n.pitch))
+                    idx = chord_tones.index(nearest)
+                    harm_idx = idx + steps  # steps can be negative for below-melody
+                    harm_idx = max(0, min(len(chord_tones) - 1, harm_idx))
+                    harm_pitch = chord_tones[harm_idx]
+
+                    # ----- common_tone: hold over from prior when avail -
+                    if rule_common_tone and prev_harm_pitch is not None:
+                        if prev_harm_pitch in chord_tones:
+                            harm_pitch = prev_harm_pitch
+
+                    # ----- whisper_voicing: push above melody octave ---
+                    if rule_whisper:
+                        # Stay strictly above the melody by at least an
+                        # octave so it sits as a glow rather than
+                        # collision with the lead voice.
+                        while harm_pitch <= n.pitch + 11:
+                            harm_pitch += 12
 
                 # ----- harmony_rule smoothing pass --------------------
                 if smooth_vl and prev_harm_pitch is not None:
@@ -2796,6 +3089,10 @@ class MidiExporter:
                             )
 
                 harm_vel = max(1, min(127, int(n.velocity * velocity_scale)))
+                if rule_whisper:
+                    # Whisper sits as a glow under the melody — reduce
+                    # velocity further so it never competes for focus.
+                    harm_vel = max(1, int(harm_vel * 0.5))
                 harm_track.notes.append(NoteEvent(
                     pitch=harm_pitch, start=n.start, end=n.end, velocity=harm_vel,
                 ))
