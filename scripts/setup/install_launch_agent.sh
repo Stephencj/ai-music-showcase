@@ -75,9 +75,23 @@ sed \
 # Restart any prior instance so the new plist takes effect. ``bootout``
 # fails with status 36 (No such process) when the agent isn't loaded —
 # that's fine, we ignore it and proceed to bootstrap.
+#
+# launchd occasionally still has the label cached when bootstrap runs
+# right after bootout — it returns "5: Input/output error". Retry a
+# few times with a short sleep; usually one extra attempt is enough.
 DOMAIN="gui/$(id -u)"
 launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
-launchctl bootstrap "${DOMAIN}" "${TARGET}"
+for attempt in 1 2 3 4 5; do
+    if launchctl bootstrap "${DOMAIN}" "${TARGET}" 2>/tmp/aimusic-bootstrap.err; then
+        break
+    fi
+    if [ "${attempt}" -eq 5 ]; then
+        echo "ERROR: launchctl bootstrap kept failing." >&2
+        cat /tmp/aimusic-bootstrap.err >&2
+        exit 1
+    fi
+    sleep 1
+done
 launchctl enable "${DOMAIN}/${LABEL}"
 launchctl kickstart -k "${DOMAIN}/${LABEL}"
 
