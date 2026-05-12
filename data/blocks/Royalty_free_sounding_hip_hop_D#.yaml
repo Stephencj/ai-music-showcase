@@ -1,0 +1,22 @@
+name: Royalty_free_sounding_hip_hop_D#
+tempo: 78.0
+time_signature:
+- 4
+- 4
+bars: 8
+duration_seconds: 24.636339
+created: '2026-05-12T17:14:57'
+instruments:
+- name: Chords
+  program: 0
+  is_drum: false
+  n_notes: 168
+- name: Bass
+  program: 33
+  is_drum: false
+  n_notes: 32
+- name: Drums
+  program: 0
+  is_drum: true
+  n_notes: 168
+n_notes: 368
