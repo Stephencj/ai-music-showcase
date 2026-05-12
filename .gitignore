@@ -144,9 +144,9 @@ docker-compose.override.yml
 *.sf2
 *.sf3
 
-# Xcode artifacts. The .xcodeproj is regenerated from ios/project.yml
-# via XcodeGen — see ios/README.md.
-ios/AiMusic.xcodeproj/
+# Xcode personal state — the .xcodeproj itself IS tracked so `git
+# pull` produces a buildable project (project.yml + xcodegen
+# regenerate it, but we commit the result too).
 ios/**/xcuserdata/
 ios/**/*.xcuserstate
 ios/**/DerivedData/

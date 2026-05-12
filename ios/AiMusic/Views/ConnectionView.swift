@@ -25,12 +25,21 @@ struct ConnectionView: View {
             Form {
                 Section("Discovered on Wi-Fi") {
                     if discovery.services.isEmpty {
-                        HStack {
-                            ProgressView()
-                            Text(discovery.isBrowsing
-                                 ? "Looking for AI Music Studio on your network…"
-                                 : "Not browsing")
-                                .foregroundStyle(.secondary)
+                        if !discovery.hasSettled {
+                            HStack {
+                                ProgressView()
+                                Text("Looking for AI Music Studio on your network…")
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Label("No servers found on this Wi-Fi.",
+                                      systemImage: "wifi.exclamationmark")
+                                    .foregroundStyle(.secondary)
+                                Text("Check that the Mac is running the Studio (`./run.command` or `python app.py`), and that **Local Network** access is enabled for this app in iOS *Settings → Privacy & Security → Local Network*. You can also paste the Mac's URL manually below.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     } else {
                         ForEach(discovery.services) { service in

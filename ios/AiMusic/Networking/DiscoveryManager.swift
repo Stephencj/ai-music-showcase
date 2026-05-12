@@ -32,12 +32,28 @@ final class DiscoveryManager: ObservableObject {
     @Published private(set) var services: [DiscoveredService] = []
     @Published private(set) var isBrowsing = false
     @Published private(set) var lastError: String?
+    /// `true` once the first browse result lands, or browse fails — used
+    /// by the UI to differentiate "still discovering" from "discovery
+    /// finished, nothing here" (most likely Local Network permission
+    /// was denied or the server isn't running).
+    @Published private(set) var hasSettled = false
 
     private var browser: NWBrowser?
+    private var primerConnection: NWConnection?
+    private var settleTimer: Task<Void, Never>?
 
     /// Start browsing. Idempotent — safe to call from `.onAppear`.
     func start() {
         guard browser == nil else { return }
+
+        // On a physical device, NWBrowser by itself doesn't trigger
+        // the Local Network permission prompt — only an attempted
+        // *connection* does. Without permission the browser silently
+        // reports zero results, which used to read as "still looking"
+        // in the UI. Open a tiny throwaway multicast connection to
+        // 224.0.0.251:5353 (mDNS) so iOS surfaces the permission
+        // alert. The connection is cancelled immediately after.
+        primeLocalNetworkPermission()
 
         let params = NWParameters()
         params.includePeerToPeer = false
@@ -57,6 +73,7 @@ final class DiscoveryManager: ObservableObject {
                 case .failed(let error):
                     self.isBrowsing = false
                     self.lastError = error.localizedDescription
+                    self.hasSettled = true
                 case .cancelled:
                     self.isBrowsing = false
                 default:
@@ -73,12 +90,48 @@ final class DiscoveryManager: ObservableObject {
 
         browser.start(queue: .main)
         self.browser = browser
+
+        // "Settled" after a few seconds: either we found services or
+        // we didn't. The UI uses this to stop showing the spinner.
+        settleTimer?.cancel()
+        settleTimer = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 3_500_000_000)
+            await MainActor.run { self?.hasSettled = true }
+        }
     }
 
     func stop() {
         browser?.cancel()
         browser = nil
+        primerConnection?.cancel()
+        primerConnection = nil
+        settleTimer?.cancel()
+        settleTimer = nil
         isBrowsing = false
+    }
+
+    /// Open a tiny UDP connection toward the mDNS multicast group so
+    /// iOS prompts the user for Local Network permission. Without
+    /// this, NWBrowser silently returns no results on physical
+    /// devices that have never granted permission.
+    private func primeLocalNetworkPermission() {
+        let host = NWEndpoint.Host("224.0.0.251")
+        let port = NWEndpoint.Port(rawValue: 5353)!
+        let params = NWParameters.udp
+        let connection = NWConnection(host: host, port: port, using: params)
+        connection.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .ready, .failed, .cancelled:
+                Task { @MainActor in
+                    self?.primerConnection?.cancel()
+                    self?.primerConnection = nil
+                }
+            default:
+                break
+            }
+        }
+        connection.start(queue: .main)
+        self.primerConnection = connection
     }
 
     private func handle(results: Set<NWBrowser.Result>) {
@@ -124,5 +177,8 @@ final class DiscoveryManager: ObservableObject {
         services = resolved
             .filter { seen.insert($0.id).inserted }
             .sorted { $0.name < $1.name }
+        if !services.isEmpty {
+            hasSettled = true
+        }
     }
 }
