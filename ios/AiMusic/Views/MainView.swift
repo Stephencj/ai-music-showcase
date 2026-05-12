@@ -250,6 +250,123 @@ struct StudioWebView: UIViewRepresentable {
             decisionHandler(.allow)
         }
 
+        // File-download interception: Gradio surfaces "Download MIDI"
+        // / "Download mix" by linking to URLs ending in .mid / .wav /
+        // .mp3 / .zip etc. (or by returning a Content-Disposition:
+        // attachment header). WKWebView's default behaviour is to
+        // navigate AWAY from the Studio UI and try to render the file
+        // inline — which wipes the user's work mid-session. We
+        // intercept here, cancel that navigation, pull the file down
+        // ourselves, then surface an iOS share sheet so the user can
+        // pop it into Files / Music / AirDrop.
+        func webView(_ webView: WKWebView,
+                     decidePolicyFor navigationResponse: WKNavigationResponse,
+                     decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+            guard let http = navigationResponse.response as? HTTPURLResponse,
+                  let url = http.url else {
+                decisionHandler(.allow)
+                return
+            }
+            let disposition = (http.allHeaderFields["Content-Disposition"] as? String)
+                ?? (http.allHeaderFields["content-disposition"] as? String)
+                ?? ""
+            let isAttachment = disposition.lowercased().contains("attachment")
+            let downloadable = Coordinator.downloadableExtensions
+            let urlExt = url.pathExtension.lowercased()
+            let extLooksLikeDownload = downloadable.contains(urlExt)
+
+            // Some Gradio downloads are MIME-typed but lack the
+            // Content-Disposition header. Fall back to the extension
+            // check so we still catch them.
+            guard isAttachment || extLooksLikeDownload else {
+                decisionHandler(.allow)
+                return
+            }
+
+            decisionHandler(.cancel)
+            self.downloadAndShare(
+                from: url,
+                suggestedFilename: Coordinator.filename(
+                    from: disposition, fallback: url.lastPathComponent,
+                ),
+            )
+        }
+
+        static let downloadableExtensions: Set<String> = [
+            "mid", "midi", "wav", "mp3", "flac", "ogg", "aiff", "aif",
+            "zip", "pdf",
+        ]
+
+        static func filename(from disposition: String, fallback: String) -> String {
+            // Pull "filename=foo.mid" out of a Content-Disposition
+            // header. Falls back to the URL's last path component when
+            // the header is missing / malformed.
+            if let range = disposition.range(
+                of: "filename\\*?=\"?([^\";]+)",
+                options: [.regularExpression, .caseInsensitive]
+            ) {
+                let raw = String(disposition[range])
+                if let eq = raw.firstIndex(of: "=") {
+                    let name = raw[raw.index(after: eq)...]
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                    if !name.isEmpty { return String(name) }
+                }
+            }
+            return fallback.isEmpty ? "download.bin" : fallback
+        }
+
+        private func downloadAndShare(from url: URL, suggestedFilename: String) {
+            var request = URLRequest(url: url)
+            request = NetworkManager.shared.authorized(request, token: token)
+            let task = NetworkManager.shared.session.downloadTask(
+                with: request
+            ) { [weak self] tempURL, _, error in
+                guard let tempURL = tempURL, error == nil else { return }
+                // Move the file to a stable temp location with the
+                // suggested filename so the share sheet shows a sensible
+                // title and the recipient app picks the right extension.
+                let dest = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(suggestedFilename)
+                try? FileManager.default.removeItem(at: dest)
+                do {
+                    try FileManager.default.moveItem(at: tempURL, to: dest)
+                } catch {
+                    return
+                }
+                Task { @MainActor in self?.presentShareSheet(for: dest) }
+            }
+            task.resume()
+        }
+
+        @MainActor
+        private func presentShareSheet(for fileURL: URL) {
+            guard let presenter = Coordinator.topMostViewController() else { return }
+            let av = UIActivityViewController(
+                activityItems: [fileURL],
+                applicationActivities: nil,
+            )
+            // iPad needs the popover anchor; harmless on iPhone.
+            av.popoverPresentationController?.sourceView = presenter.view
+            av.popoverPresentationController?.sourceRect = CGRect(
+                x: presenter.view.bounds.midX,
+                y: presenter.view.bounds.midY,
+                width: 0, height: 0,
+            )
+            presenter.present(av, animated: true)
+        }
+
+        @MainActor
+        static func topMostViewController() -> UIViewController? {
+            guard let scene = UIApplication.shared.connectedScenes
+                    .compactMap({ $0 as? UIWindowScene }).first,
+                  var top = scene.windows.first(where: \.isKeyWindow)?
+                                .rootViewController else {
+                return nil
+            }
+            while let presented = top.presentedViewController { top = presented }
+            return top
+        }
+
         func webView(_ webView: WKWebView,
                      didReceive challenge: URLAuthenticationChallenge,
                      completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {

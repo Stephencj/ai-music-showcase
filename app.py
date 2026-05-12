@@ -1090,10 +1090,12 @@ def _render_extra_track_row(idx: int, tr: dict, extras_state: gr.State) -> None:
         with gr.Row():
             if ttype == "chord":
                 voicing_dd = gr.Dropdown(VOICINGS, value=tr.get("voicing", "triad"),
-                                         label="Voicing", key=k("voicing"))
+                                         label="Voicing", key=k("voicing"),
+                                         allow_custom_value=True)
                 rhythm_dd = gr.Dropdown(CHORD_RHYTHMS,
                                         value=tr.get("chord_rhythm", "pulse_quarter"),
-                                        label="Rhythm", key=k("rhythm"))
+                                        label="Rhythm", key=k("rhythm"),
+                                        allow_custom_value=True)
                 octave_in = gr.Number(value=int(tr.get("octave", 3)),
                                       label="Octave", precision=0,
                                       key=k("octave"))
@@ -1111,7 +1113,8 @@ def _render_extra_track_row(idx: int, tr: dict, extras_state: gr.State) -> None:
             elif ttype == "bass":
                 pat_dd = gr.Dropdown(BASS_PATTERNS,
                                      value=tr.get("pattern", "root_fifth"),
-                                     label="Pattern", key=k("pattern"))
+                                     label="Pattern", key=k("pattern"),
+                                     allow_custom_value=True)
                 octave_in = gr.Number(value=int(tr.get("octave", 2)),
                                       label="Octave", precision=0,
                                       key=k("octave"))
@@ -1127,7 +1130,8 @@ def _render_extra_track_row(idx: int, tr: dict, extras_state: gr.State) -> None:
             elif ttype == "melody":
                 style_dd_m = gr.Dropdown(MELODY_STYLES,
                                          value=tr.get("melody_style", "motif"),
-                                         label="Style", key=k("style"))
+                                         label="Style", key=k("style"),
+                                         allow_custom_value=True)
                 octave_in = gr.Number(value=int(tr.get("octave", 5)),
                                       label="Octave", precision=0,
                                       key=k("octave"))
@@ -1149,7 +1153,8 @@ def _render_extra_track_row(idx: int, tr: dict, extras_state: gr.State) -> None:
             elif ttype == "drums":
                 pat_dd = gr.Dropdown(DRUM_PATTERNS,
                                      value=tr.get("pattern", "basic_rock"),
-                                     label="Pattern", key=k("pattern"))
+                                     label="Pattern", key=k("pattern"),
+                                     allow_custom_value=True)
                 density_in = gr.Slider(0.0, 1.0,
                                        value=float(tr.get("density", 1.0)),
                                        step=0.05, label="Density",
@@ -1162,7 +1167,8 @@ def _render_extra_track_row(idx: int, tr: dict, extras_state: gr.State) -> None:
             elif ttype == "lead":
                 pat_dd = gr.Dropdown(LEAD_PATTERNS,
                                      value=tr.get("pattern", "clinton_synth"),
-                                     label="Pattern", key=k("pattern"))
+                                     label="Pattern", key=k("pattern"),
+                                     allow_custom_value=True)
                 octave_in = gr.Number(value=int(tr.get("octave", 4)),
                                       label="Octave", precision=0,
                                       key=k("octave"))
@@ -1203,7 +1209,8 @@ def _render_extra_track_row(idx: int, tr: dict, extras_state: gr.State) -> None:
             elif ttype == "theme":
                 theme_dd = gr.Dropdown(list(THEMES.keys()) or ["hit_the_sack"],
                                        value=tr.get("theme", "hit_the_sack"),
-                                       label="Theme", key=k("theme"))
+                                       label="Theme", key=k("theme"),
+                                       allow_custom_value=True)
                 octave_in = gr.Number(value=int(tr.get("octave", 5)),
                                       label="Octave", precision=0,
                                       key=k("octave"))

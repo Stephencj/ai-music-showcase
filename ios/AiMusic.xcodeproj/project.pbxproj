@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -28,7 +28,7 @@
 		521116CF4E5594434F0E4A8F /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		53FE0A360E152AAAE223A0F7 /* DiscoveryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryManager.swift; sourceTree = "<group>"; };
 		5517534A45B1B1A78A742503 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		5717EFB79588F59CD62FE31A /* AiMusic.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AiMusic.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5717EFB79588F59CD62FE31A /* AiMusic.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AiMusic.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7ACE7DD4A827611531A7D402 /* HealthCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthCheck.swift; sourceTree = "<group>"; };
 		8E6D530010C30EAA0D36B23F /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		B4766C63EC8FA37317CB47CA /* AdminClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminClient.swift; sourceTree = "<group>"; };
@@ -138,6 +138,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					19860ED415E3EFB349152F3F = {
+						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -152,6 +153,7 @@
 			);
 			mainGroup = 25560F1A759A462C697A7BB8;
 			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -270,7 +272,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"AiMusic/Preview Content\"";
-				DEVELOPMENT_TEAM = PJV7U329Q6;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = AiMusic/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -357,7 +358,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_ASSET_PATHS = "\"AiMusic/Preview Content\"";
-				DEVELOPMENT_TEAM = PJV7U329Q6;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = AiMusic/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
