@@ -2724,7 +2724,8 @@ def _build_melody_studio_tab(library_trigger: gr.State) -> None:
 
 
 def build_app() -> gr.Blocks:
-    with gr.Blocks(title="AI Music Studio") as app:
+    theme = gr.themes.Soft(primary_hue="blue", secondary_hue="emerald")
+    with gr.Blocks(title="AI Music Studio", theme=theme) as app:
         gr.Markdown(
             "# AI Music Studio\n"
             "**Primary workflow: MIDI → DAW.** Use the **MIDI Compose** tab to "
@@ -3269,8 +3270,7 @@ def build_app() -> gr.Blocks:
 
 
 if __name__ == "__main__":
+    from src.serve.launcher import launch as _serve_launch
+
     app = build_app()
-    try:
-        app.launch(theme=gr.themes.Soft(primary_hue="blue", secondary_hue="emerald"))
-    finally:
-        _shutdown()
+    _serve_launch(app, on_shutdown=_shutdown)
