@@ -144,7 +144,9 @@ docker-compose.override.yml
 *.sf2
 *.sf3
 
-# Xcode build artifacts (kept out of the ios/ subtree)
+# Xcode artifacts. The .xcodeproj is regenerated from ios/project.yml
+# via XcodeGen — see ios/README.md.
+ios/AiMusic.xcodeproj/
 ios/**/xcuserdata/
 ios/**/*.xcuserstate
 ios/**/DerivedData/
