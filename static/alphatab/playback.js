@@ -1,24 +1,19 @@
 /* AI Music Studio — Playback tab bridge for AlphaTab.
  *
- * Loaded once from <head>. The Playback tab is built lazily by Gradio
- * (the #alphaTab div doesn't exist on initial page load — only when the
- * user switches to the Playback tab), so we use a MutationObserver to
- * wait for it to appear and then boot AlphaTab against it.
+ * Loaded from <head>. The Playback tab is rendered lazily by Gradio
+ * (the #alphaTab div doesn't exist on initial page load — only when
+ * the user switches to the Playback tab), so we use a MutationObserver
+ * to wait for it to appear, then boot AlphaTab against it.
  *
- * Responsibilities:
- *   1. Boot AlphaTab against `#alphaTab` with the vendored soundfont + font.
- *   2. Watch the hidden `#pb_midi_payload` textarea (Gradio writes to it
- *      from the server) and re-load AlphaTab with the new MIDI bytes —
- *      no full re-init, soundfont stays cached.
- *   3. Watch `#pb_hq_wav_url`; when set + the "Use HQ mix" checkbox is
- *      on, mute AlphaTab's synth and play the WAV through a hidden
- *      <audio> element while AlphaTab still drives the cursor (master
- *      clock, no drift).
- *   4. On note click, write JSON into `#pb_note_event` and click the
- *      hidden `#pb_note_trigger` button so the server-side handler can
- *      format the pitch/duration/bar markdown.
- *   5. Gate the first Play tap behind `audioContext.resume()` so iOS
- *      Safari unlocks audio.
+ * The audio engine is the pre-rendered WAV that the compose / block /
+ * song pipelines already produce. AlphaTab runs in
+ * PlayerMode.EnabledExternalMedia: its cursor follows our <audio>
+ * element's currentTime, but it does NOT synthesise any audio in
+ * the browser. That single fix:
+ *
+ *   - kills the iOS playback latency / choppiness (no AudioWorklet),
+ *   - makes drums sound right (real channel-10 FluidSynth samples
+ *     instead of AlphaTab pitch-shifting our percussion rewrites).
  */
 (function () {
   "use strict";
@@ -38,8 +33,6 @@
   function $(id) { return document.getElementById(id); }
 
   function findHiddenInput(elemId) {
-    // Gradio renders a hidden Textbox as a wrapping element with elem_id
-    // on the wrapper; the actual <textarea> is inside.
     const wrapper = document.getElementById(elemId);
     if (!wrapper) return null;
     if (wrapper.tagName === "TEXTAREA" || wrapper.tagName === "INPUT") return wrapper;
@@ -58,7 +51,38 @@
     if (el) el.textContent = msg;
   }
 
-  // Track the currently-booted AlphaTab so re-boots can dispose old.
+  // ----- External-media handler -----------------------------------------
+  // AlphaTab calls our handler's play/pause/seekTo, and we call its
+  // output.updatePosition(ms) to advance the cursor.
+  function makeExternalAudioHandler(audioEl, output) {
+    function pushPosition() {
+      if (audioEl && typeof output.updatePosition === "function") {
+        output.updatePosition(audioEl.currentTime * 1000);
+      }
+    }
+    audioEl.addEventListener("timeupdate", pushPosition);
+    audioEl.addEventListener("seeked", pushPosition);
+    audioEl.addEventListener("loadedmetadata", () => {
+      // AlphaTab queries backingTrackDuration before play; fire once
+      // so the cursor scale is correct from frame 1.
+      pushPosition();
+    });
+    return {
+      audioEl,
+      get backingTrackDuration() {
+        return (audioEl.duration && isFinite(audioEl.duration))
+          ? audioEl.duration * 1000 : 0;
+      },
+      get playbackRate() { return audioEl.playbackRate || 1; },
+      set playbackRate(v) { audioEl.playbackRate = v || 1; },
+      get masterVolume() { return audioEl.volume; },
+      set masterVolume(v) { audioEl.volume = v; },
+      play() { audioEl.play().catch((e) => console.warn("[playback] audio.play() rejected:", e)); },
+      pause() { audioEl.pause(); },
+      seekTo(timeMs) { audioEl.currentTime = (timeMs || 0) / 1000; },
+    };
+  }
+
   let currentApi = null;
   let currentRoot = null;
 
@@ -67,34 +91,28 @@
       log("alphaTab not yet loaded; retrying");
       return setTimeout(() => bootAlphaTab(root), 200);
     }
-    if (currentApi && currentRoot === root) {
-      return currentApi;
-    }
+    if (currentApi && currentRoot === root) return currentApi;
     if (currentApi) {
       try { currentApi.destroy(); } catch (_) {}
       currentApi = null;
     }
 
     log("booting AlphaTab against", root);
+    // PlayerMode.EnabledExternalMedia = 4 — we drive the cursor from
+    // an <audio> element instead of AlphaTab's WebAudio synth.
     const settings = {
       core: {
         fontDirectory: "/static/alphatab/font/",
       },
       player: {
         enablePlayer: true,
-        soundFont: "/static/alphatab/soundfont/sonivox.sf2",
-        scrollMode: 1,           // 0=off, 1=continuous, 2=offscreen-only
+        playerMode: 4,  // PlayerMode.EnabledExternalMedia
+        enableCursor: true,
+        scrollMode: 1,
         scrollElement: root,
       },
       display: {
-        // Page mode wraps lines like real sheet music. Horizontal
-        // mode (1) renders the whole piece on one infinitely-wide
-        // line, which overflows the score container.
-        layoutMode: 0,
-        // Use the container width — AlphaTab otherwise defaults to a
-        // page width that the iPhone WebView can't display without
-        // horizontal scrolling.
-        scale: 1.0,
+        layoutMode: 0,  // page mode — lines wrap like sheet music
       },
     };
 
@@ -110,8 +128,19 @@
     currentApi = api;
     currentRoot = root;
 
-    api.scoreLoaded.on((score) => {
-      log("score loaded", score && score.title);
+    // Attach the external-media handler once the player is constructed.
+    const audioEl = $("pb-audio");
+    if (audioEl && api.player && api.player.output) {
+      try {
+        api.player.output.handler = makeExternalAudioHandler(audioEl, api.player.output);
+        log("external media handler attached");
+      } catch (e) {
+        console.error("[playback] handler attach failed:", e);
+      }
+    }
+
+    api.scoreLoaded.on((s) => {
+      log("score loaded", s && s.title);
       setStatus("ready");
     });
     api.error.on((err) => {
@@ -123,11 +152,8 @@
 
     const initial = root.getAttribute("data-initial-midi") || "";
     if (initial) {
-      try {
-        api.load(base64ToBytes(initial));
-      } catch (e) {
-        console.error("[playback] initial load failed:", e);
-      }
+      try { api.load(base64ToBytes(initial)); }
+      catch (e) { console.error("[playback] initial load failed:", e); }
     } else {
       setStatus("pick a source above");
     }
@@ -140,99 +166,63 @@
   // ----- Controls --------------------------------------------------------
 
   function wireControls(api) {
-    let unlocked = false;
-    function unlock() {
-      if (unlocked) return;
-      try {
-        const ctx = api.player && api.player.audioContext;
-        if (ctx && ctx.state === "suspended") ctx.resume();
-      } catch (_) {}
-      unlocked = true;
-    }
-
+    const audioEl = $("pb-audio");
     const playBtn = $("pb-play");
     const pauseBtn = $("pb-pause");
     const stopBtn = $("pb-stop");
-    const hqAudio = $("pb-hq-audio");
-    const hqCheckboxRef = $("pb-use-hq");
 
     if (playBtn && !playBtn.__pbWired) {
       playBtn.addEventListener("click", () => {
-        unlock();
-        api.play();
-        // Kick the HQ audio in the same user-gesture turn so autoplay
-        // policy doesn't block it — browsers only allow .play() when
-        // it's a direct descendant of a user interaction.
-        if (hqCheckboxRef && hqCheckboxRef.checked
-            && hqAudio && hqAudio.src) {
-          hqAudio.play().catch((e) =>
-            console.warn("[playback] HQ audio play() rejected:", e));
+        // First-tap iOS unlock — call audio.play() from the user-gesture
+        // turn so Safari's autoplay policy doesn't reject the call we
+        // route through AlphaTab below.
+        if (audioEl && audioEl.src) {
+          audioEl.play().catch((e) =>
+            console.warn("[playback] audio.play() rejected:", e));
         }
+        try { api.play(); } catch (_) {}
       });
       playBtn.__pbWired = true;
     }
     if (pauseBtn && !pauseBtn.__pbWired) {
       pauseBtn.addEventListener("click", () => {
-        api.pause();
-        if (hqAudio) hqAudio.pause();
+        try { api.pause(); } catch (_) {}
+        if (audioEl) audioEl.pause();
       });
       pauseBtn.__pbWired = true;
     }
     if (stopBtn && !stopBtn.__pbWired) {
       stopBtn.addEventListener("click", () => {
-        api.stop();
-        if (hqAudio) { hqAudio.pause(); hqAudio.currentTime = 0; }
+        try { api.stop(); } catch (_) {}
+        if (audioEl) { audioEl.pause(); audioEl.currentTime = 0; }
       });
       stopBtn.__pbWired = true;
     }
 
-    const tempoSlider = $("pb-tempo");
-    const tempoVal = $("pb-tempo-val");
-    if (tempoSlider && !tempoSlider.__pbWired) {
-      tempoSlider.addEventListener("input", () => {
-        const bpm = parseInt(tempoSlider.value, 10) || 120;
-        if (tempoVal) tempoVal.textContent = String(bpm);
-        try { api.playbackSpeed = bpm / 120.0; } catch (_) {}
+    const speedSlider = $("pb-tempo");
+    const speedVal = $("pb-tempo-val");
+    if (speedSlider && !speedSlider.__pbWired) {
+      speedSlider.addEventListener("input", () => {
+        const pct = parseInt(speedSlider.value, 10) || 100;
+        if (speedVal) speedVal.textContent = String(pct);
+        const rate = pct / 100;
+        if (audioEl) {
+          audioEl.playbackRate = rate;
+          // preservesPitch keeps the pitch the same when speed changes.
+          if ("preservesPitch" in audioEl) audioEl.preservesPitch = true;
+        }
+        try { api.playbackSpeed = rate; } catch (_) {}
       });
-      tempoSlider.__pbWired = true;
+      speedSlider.__pbWired = true;
     }
-
-    const hqCheckbox = $("pb-use-hq");
-    if (hqCheckbox && !hqCheckbox.__pbWired) {
-      hqCheckbox.addEventListener("change", () => {
-        const url = window.__aiMusicHqWavUrl || "";
-        if (hqCheckbox.checked && url) enableHqMix(api, url);
-        else disableHqMix(api);
-      });
-      hqCheckbox.__pbWired = true;
-    }
-  }
-
-  // ----- HQ-WAV master-clock sync ---------------------------------------
-
-  function enableHqMix(api, url) {
-    const audio = $("pb-hq-audio");
-    if (!audio) return;
-    audio.src = url;
-    audio.load();
-    try { api.player.outputGain = 0; } catch (_) {}
-    setStatus("HQ mix on");
-    audio.play().catch(() => {});
-  }
-  function disableHqMix(api) {
-    const audio = $("pb-hq-audio");
-    if (audio) {
-      audio.pause();
-      audio.removeAttribute("src");
-    }
-    try { api.player.outputGain = 1; } catch (_) {}
-    setStatus("synth on");
   }
 
   // ----- Gradio↔JS bridges -----------------------------------------------
 
   function wireBridges(api) {
-    // MIDI payload — server writes new base64 MIDI when source changes.
+    const audioEl = $("pb-audio");
+
+    // MIDI/MusicXML payload — server writes new bytes when source changes.
     const midiInput = findHiddenInput("pb_midi_payload");
     if (midiInput && !midiInput.__pbWired) {
       let last = midiInput.value;
@@ -241,60 +231,36 @@
         if (!b64 || b64 === last) return;
         last = b64;
         try { api.load(base64ToBytes(b64)); setStatus("loading…"); }
-        catch (e) { console.error("[playback] reload failed:", e); }
+        catch (e) { console.error("[playback] score reload failed:", e); }
       };
       midiInput.addEventListener("input", reload);
-      // Poll because Gradio updates the value without firing input.
       setInterval(reload, 400);
       midiInput.__pbWired = true;
     }
 
-    // HQ-WAV URL — server writes when the HQ render finishes.
-    const hqInput = findHiddenInput("pb_hq_wav_url");
-    const hqCheckbox = $("pb-use-hq");
-    if (hqInput && !hqInput.__pbWired) {
-      let lastUrl = hqInput.value;
-      const onHqChange = () => {
-        const url = hqInput.value || "";
+    // Audio URL — server writes when source changes OR when an HQ render
+    // finishes. We swap the <audio> element's src in-place.
+    const audioInput = findHiddenInput("pb_audio_url");
+    if (audioInput && audioEl && !audioInput.__pbWired) {
+      let lastUrl = audioEl.src || audioInput.value;
+      const onAudioUrl = () => {
+        const url = audioInput.value || "";
         if (url === lastUrl) return;
         lastUrl = url;
-        window.__aiMusicHqWavUrl = url;
-        if (!hqCheckbox) return;
         if (url) {
-          hqCheckbox.disabled = false;
-          setStatus("HQ ready — toggle to use");
-        } else {
-          hqCheckbox.disabled = true;
-          hqCheckbox.checked = false;
-          disableHqMix(api);
+          const wasPlaying = !audioEl.paused;
+          audioEl.src = url;
+          audioEl.load();
+          if (wasPlaying) audioEl.play().catch(() => {});
         }
       };
-      hqInput.addEventListener("input", onHqChange);
-      setInterval(onHqChange, 400);
-      hqInput.__pbWired = true;
+      audioInput.addEventListener("input", onAudioUrl);
+      setInterval(onAudioUrl, 400);
+      audioInput.__pbWired = true;
     }
 
-    // HQ-WAV clock-sync: AlphaTab is master; we nudge audio.currentTime
-    // only when it drifts > 50 ms.
-    api.playerPositionChanged.on((args) => {
-      if (!hqCheckbox || !hqCheckbox.checked) return;
-      const audio = $("pb-hq-audio");
-      if (!audio || !audio.src) return;
-      const target = args.currentTime / 1000.0;
-      if (Math.abs(audio.currentTime - target) > 0.05) {
-        audio.currentTime = target;
-      }
-    });
-    api.playerStateChanged.on((args) => {
-      if (!hqCheckbox || !hqCheckbox.checked) return;
-      const audio = $("pb-hq-audio");
-      if (!audio || !audio.src) return;
-      const playing = args.state === 1;
-      if (playing) audio.play().catch(() => {});
-      else audio.pause();
-    });
-
-    // Note clicks — push JSON into the hidden textbox, click trigger.
+    // Note clicks — push JSON into the hidden textbox, click trigger
+    // button so the server-side handler fires immediately.
     const noteInput = findHiddenInput("pb_note_event");
     const noteBtn = findGradioButton("pb_note_trigger");
     api.noteMouseDown.on((note) => {
@@ -313,8 +279,6 @@
           trackName: (bar && bar.staff && bar.staff.track && bar.staff.track.name) || "",
           ts: Date.now(),
         };
-        // Use the React/Svelte-aware value setter so the framework sees
-        // the change.
         const proto = Object.getPrototypeOf(noteInput);
         const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
         setter.call(noteInput, JSON.stringify(payload));
@@ -331,10 +295,9 @@
   function checkForRoot() {
     const root = $("alphaTab");
     if (root && root !== currentRoot) {
-      // tab just rendered — boot or rebind
       bootAlphaTab(root);
     } else if (root && currentApi) {
-      // root re-rendered but we already have an api — re-wire controls.
+      // Re-wire controls in case Gradio re-rendered the toolbar.
       wireControls(currentApi);
       wireBridges(currentApi);
     }

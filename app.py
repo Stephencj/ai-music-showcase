@@ -1154,6 +1154,32 @@ def _resolve_playback_source(source_id: str) -> Optional[Path]:
     return None
 
 
+def _resolve_playback_wav(source_id: str) -> Optional[Path]:
+    """source_id → pre-rendered WAV path used as the AlphaTab external
+    media source. Each MIDI source already has a paired WAV that the
+    compose / block-save / song-render pipelines produce; this lets
+    AlphaTab play real audio instead of synthesising in the browser
+    (which is choppy on iOS and uses the wrong patch for drums)."""
+    if not source_id:
+        return None
+    if source_id == "compose":
+        p = _state.get("midi_wav_path")
+        return Path(p) if p and Path(p).exists() else None
+    if source_id == "song":
+        p = OUTPUT_DIR / "last_song.wav"
+        return p if p.exists() else None
+    if source_id.startswith("block:"):
+        name = source_id.split(":", 1)[1]
+        p = block_store.BLOCKS_DIR / f"{name}.wav"
+        return p if p.exists() else None
+    return None
+
+
+def _gradio_file_url(path: Path) -> str:
+    """Build the URL Gradio serves a whitelisted file at."""
+    return f"/gradio_api/file={Path(path).resolve()}"
+
+
 def _load_midi_for_playback(source_id: str) -> str:
     """Resolve the source → return base64 MusicXML for the AlphaTab
     bridge. AlphaTab doesn't have a MIDI importer, so we convert via
@@ -1165,6 +1191,13 @@ def _load_midi_for_playback(source_id: str) -> str:
         return _midi_to_musicxml_b64(path)
     except Exception as e:
         raise _logged_error("Load score for playback", e) from e
+
+
+def _load_audio_for_playback(source_id: str) -> str:
+    """Resolve the source → return a Gradio-served URL for its
+    pre-rendered WAV. Empty string when no WAV exists yet."""
+    path = _resolve_playback_wav(source_id)
+    return _gradio_file_url(path) if path else ""
 
 
 def _render_hq_for_playback(source_id: str) -> str:
@@ -1841,14 +1874,17 @@ def _build_playback_tab() -> None:
 
     hq_status = gr.Markdown("")
 
-    # Initial base64 MIDI (loads the first source on tab build).
+    # Initial base64 MIDI + audio URL (loads on tab build).
     initial_b64 = (
         _load_midi_for_playback(initial_value) if initial_value else ""
     )
-    score_html = gr.HTML(value=build_playback_html(initial_b64))
+    initial_audio = (
+        _load_audio_for_playback(initial_value) if initial_value else ""
+    )
+    score_html = gr.HTML(value=build_playback_html(initial_b64, initial_audio))
 
     # ---- Gradio↔JS bridges (rendered but visually hidden) ----
-    # JS polls these textboxes for new MIDI / HQ-WAV URLs; JS writes
+    # JS polls these textboxes for new MIDI + audio URLs; JS writes
     # note-click JSON into pb_note_event and clicks pb_note_trigger.
     # `visible=False` removes them from the DOM entirely in Gradio 6,
     # so we render them visible and hide via CSS in the playback HTML.
@@ -1856,8 +1892,8 @@ def _build_playback_tab() -> None:
         midi_payload = gr.Textbox(
             value="", elem_id="pb_midi_payload", show_label=False,
         )
-        hq_wav_url = gr.Textbox(
-            value="", elem_id="pb_hq_wav_url", show_label=False,
+        audio_url = gr.Textbox(
+            value="", elem_id="pb_audio_url", show_label=False,
         )
         note_event = gr.Textbox(
             value="", elem_id="pb_note_event", show_label=False,
@@ -1868,7 +1904,9 @@ def _build_playback_tab() -> None:
 
     note_info = gr.Markdown("Click a note in the score.")
 
+    # Source change → push new MusicXML + WAV URL to the JS bridge.
     source_dd.change(_load_midi_for_playback, [source_dd], [midi_payload])
+    source_dd.change(_load_audio_for_playback, [source_dd], [audio_url])
 
     def _reload_sources():
         choices = _list_playback_sources()
@@ -1879,13 +1917,16 @@ def _build_playback_tab() -> None:
     def _do_render_hq(source_id, progress=gr.Progress(track_tqdm=True)):
         try:
             url = _render_hq_for_playback(source_id)
-            return url, "✓ HQ mix rendered — toggle 'Use HQ mix' to hear it."
+            return url, "✓ HQ mix ready — playback now uses the FluidSynth mix."
         except gr.Error:
             raise
         except Exception as e:
             raise _logged_error("Render HQ for playback", e) from e
 
-    hq_render_btn.click(_do_render_hq, [source_dd], [hq_wav_url, hq_status])
+    # HQ render output goes to the SAME audio_url bridge — the JS just
+    # swaps the <audio> source. No checkbox needed: AlphaTab is always
+    # in external-media mode and follows whatever URL we set last.
+    hq_render_btn.click(_do_render_hq, [source_dd], [audio_url, hq_status])
 
     note_trigger.click(_on_playback_note_event, [note_event], [note_info])
 

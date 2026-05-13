@@ -179,11 +179,12 @@ class BuildPlaybackHtmlTests(unittest.TestCase):
         self.assertNotIn("<script", html.lower())
 
     def test_html_contains_required_anchors(self):
-        html = build_playback_html("ABCDEF==")
+        html = build_playback_html("ABCDEF==", "/some/url.wav")
         self.assertIn('data-initial-midi="ABCDEF=="', html)
+        self.assertIn('src="/some/url.wav"', html)
         for el in (
             'id="alphaTab"', "pb-play", "pb-pause", "pb-stop",
-            "pb-tempo", "pb-use-hq", "pb-hq-audio",
+            "pb-tempo", "pb-audio",
         ):
             self.assertIn(el, html, f"missing {el!r} in playback HTML")
 

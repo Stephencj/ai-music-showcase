@@ -37,13 +37,20 @@ def build_playback_head() -> str:
     )
 
 
-def build_playback_html(initial_b64_midi: str = "") -> str:
+def build_playback_html(
+    initial_b64_midi: str = "",
+    initial_audio_url: str = "",
+) -> str:
     """Markup for the Playback tab.
 
     Uses Gradio CSS custom properties (e.g. ``--button-secondary-background-fill``,
     ``--body-text-color``) so the toolbar matches whatever theme is
     active. The dark-mode bug in the first attempt was a forest of
     hardcoded ``#fff`` / ``#000``.
+
+    ``initial_audio_url`` is the pre-rendered WAV URL AlphaTab will
+    use in external-media mode — no in-browser synth, no choppy
+    playback on iOS, drums hit the correct GM channel-10 samples.
     """
     return f"""
 <style>
@@ -124,16 +131,13 @@ def build_playback_html(initial_b64_midi: str = "") -> str:
   <button id="pb-pause" type="button">⏸ Pause</button>
   <button id="pb-stop" type="button">⏹ Stop</button>
   <span class="pb-tempo">
-    Tempo:
-    <input id="pb-tempo" type="range" min="40" max="220" value="120" step="1">
-    <span id="pb-tempo-val">120</span> BPM
+    Speed:
+    <input id="pb-tempo" type="range" min="50" max="200" value="100" step="5">
+    <span id="pb-tempo-val">100</span>%
   </span>
-  <label class="pb-hq">
-    <input id="pb-use-hq" type="checkbox" disabled> Use HQ mix
-  </label>
   <span id="pb-status">loading…</span>
 </div>
 
 <div id="alphaTab" data-initial-midi="{initial_b64_midi}"></div>
-<audio id="pb-hq-audio" preload="auto" style="display:none;"></audio>
+<audio id="pb-audio" preload="auto" playsinline src="{initial_audio_url}" style="display:none;"></audio>
 """
