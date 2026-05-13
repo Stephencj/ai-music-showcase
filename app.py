@@ -337,6 +337,35 @@ def _render_extras(midi: MidiExporter, extras: list[dict], *,
                 program=int(tr.get("program", 0)),
                 track_name=name, swing=eff_swing,
             )
+        elif ttype == "harmony":
+            # Vocal-style harmony layered over the source track
+            # (default Melody). The preset name flows through
+            # add_harmony.style — the method internally maps it to
+            # the right intervals_steps + follow/accents mode. Voices
+            # truncates or pads the preset's natural voice count.
+            # Each voice writes a separate track (``Melody Harm 1``,
+            # ``Melody Harm 2``, …) so the user can mute / edit /
+            # re-program each one independently.
+            intervals_raw = (tr.get("intervals") or "").strip()
+            intervals_override = None
+            if intervals_raw:
+                try:
+                    intervals_override = [
+                        int(x.strip()) for x in intervals_raw.split(",")
+                        if x.strip()
+                    ]
+                except ValueError:
+                    intervals_override = None
+            midi.add_harmony(
+                source_track=tr.get("source_track") or "Melody",
+                intervals_steps=intervals_override,
+                style=tr.get("preset", "queen"),
+                voices=int(tr.get("voices", 2)),
+                key=key, scale_name=scale,
+                progression=eff_prog,
+                harmony_rule=tr.get("harmony_rule") or "voice_leading_smooth",
+                program=int(tr.get("program", 0)),
+            )
 
 
 # ===================================================================
@@ -957,7 +986,7 @@ MELODY_STYLES = ["motif", "riff", "chord_tone", "pentatonic", "blues",
                  "gamelan_slendro", "hirajoshi",
                  "random"]
 LEAD_PATTERNS = ["clinton_synth", "van_halen_riff"]
-TRACK_TYPES = ["chord", "bass", "melody", "drums", "lead", "theme"]
+TRACK_TYPES = ["chord", "bass", "melody", "drums", "lead", "theme", "harmony"]
 FILL_AT_OPTIONS = ["none", "start", "end", "both"]
 HARMONY_STYLES = ["follow", "accents", "oohs",
                   "abba", "queen", "boston", "journey", "elton", "chicago"]
@@ -1020,6 +1049,19 @@ def _default_track_for_type(ttype: str, preset_key: str = "pop") -> dict:
         first_theme = next(iter(THEMES.keys()), "hit_the_sack")
         return {"theme": first_theme,
                 "octave": preset.melody_octave, "program": preset.melody_program}
+    if ttype == "harmony":
+        # Vocal-style harmony layered above the Melody track. Defaults
+        # to 2-voice queen-style ([2,4] intervals above), smooth
+        # voice-leading rule, no intervals override. The preset list
+        # is the same one Melody Studio's HarmonyTag uses.
+        return {
+            "preset": "queen",
+            "voices": 2,
+            "harmony_rule": "voice_leading_smooth",
+            "intervals": "",
+            "source_track": "Melody",
+            "program": int(preset.melody_program),
+        }
     return {}
 
 
@@ -1221,6 +1263,64 @@ def _render_extra_track_row(idx: int, tr: dict, extras_state: gr.State) -> None:
                                 [extras_state, theme_dd], extras_state)
                 octave_in.change(lambda s, v: _set(s, octave=int(v)),
                                  [extras_state, octave_in], extras_state)
+                program_in.change(lambda s, v: _set(s, program=int(v)),
+                                  [extras_state, program_in], extras_state)
+            elif ttype == "harmony":
+                # Vocal-style harmony layered above (or below) the
+                # Melody track. Preset picks the interval shape;
+                # voices picks how many of those intervals to render.
+                # Each voice lands on its own MIDI track ("Melody Harm
+                # 1", "Melody Harm 2", …) so they're editable
+                # independently in any DAW.
+                voices_radio = gr.Radio(
+                    [1, 2, 3],
+                    value=int(tr.get("voices", 2)),
+                    label="Voices",
+                    info="How many harmony lines to layer.",
+                    key=k("voices"),
+                )
+                preset_dd = gr.Dropdown(
+                    HARMONY_PRESETS,
+                    value=tr.get("preset", "queen"),
+                    label="Preset",
+                    info="Band-style interval shape.",
+                    allow_custom_value=True,
+                    key=k("preset"),
+                )
+                rule_dd = gr.Dropdown(
+                    ["", *sorted(HARMONY_OPS)],
+                    value=tr.get("harmony_rule", "voice_leading_smooth"),
+                    label="Voice-leading rule",
+                    info="Blank = smooth default.",
+                    allow_custom_value=True,
+                    key=k("harmony_rule"),
+                )
+                intervals_in = gr.Textbox(
+                    value=tr.get("intervals", ""),
+                    label="Intervals override (CSV)",
+                    placeholder="Blank = use preset. e.g. '1,2,4'",
+                    key=k("intervals"),
+                )
+                source_in = gr.Textbox(
+                    value=tr.get("source_track", "Melody"),
+                    label="Source track",
+                    info="Track name to harmonise (default Melody).",
+                    key=k("source"),
+                )
+                program_in = gr.Number(
+                    value=int(tr.get("program", 0)), label="GM program",
+                    precision=0, key=k("program"),
+                )
+                voices_radio.change(lambda s, v: _set(s, voices=int(v)),
+                                    [extras_state, voices_radio], extras_state)
+                preset_dd.change(lambda s, v: _set(s, preset=v or "queen"),
+                                 [extras_state, preset_dd], extras_state)
+                rule_dd.change(lambda s, v: _set(s, harmony_rule=v or ""),
+                               [extras_state, rule_dd], extras_state)
+                intervals_in.change(lambda s, v: _set(s, intervals=v or ""),
+                                    [extras_state, intervals_in], extras_state)
+                source_in.change(lambda s, v: _set(s, source_track=v or "Melody"),
+                                 [extras_state, source_in], extras_state)
                 program_in.change(lambda s, v: _set(s, program=int(v)),
                                   [extras_state, program_in], extras_state)
 

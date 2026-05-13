@@ -3277,6 +3277,7 @@ class MidiExporter:
         style: str = "follow",
         progression: Optional[list[str]] = None,
         harmony_rule: Optional[str] = "voice_leading_smooth",
+        voices: Optional[int] = None,
     ) -> "MidiExporter":
         """Layer parallel CHORD-TONE harmony lines on top of an existing melody.
 
@@ -3317,6 +3318,20 @@ class MidiExporter:
             intervals_steps, style = _HARMONY_PRESETS[style]
         elif intervals_steps is None:
             intervals_steps = [1]
+
+        # Voices control — truncate or pad the resolved interval stack
+        # to match the caller's 1/2/3 selection. Lets the new "harmony"
+        # extras track type dial voice count independently of the
+        # preset's natural size (queen=2, boston=3, journey=1, …).
+        if voices is not None and voices >= 1 and intervals_steps:
+            if voices <= len(intervals_steps):
+                intervals_steps = list(intervals_steps[:voices])
+            else:
+                # Pad upward from the top voice — most preset shapes
+                # extend up (queen 2,4 → 2,4,5; journey 1 → 1,2,3).
+                top = max(intervals_steps)
+                extras = [top + i for i in range(1, voices - len(intervals_steps) + 1)]
+                intervals_steps = list(intervals_steps) + extras
 
         if style == "oohs":
             return self._add_harmony_oohs(

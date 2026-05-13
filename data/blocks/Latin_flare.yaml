@@ -1,0 +1,26 @@
+name: Latin_flare
+tempo: 128.0
+time_signature:
+- 4
+- 4
+bars: 8
+duration_seconds: 14.999968000000003
+created: '2026-05-12T21:10:26'
+instruments:
+- name: Melody
+  program: 0
+  is_drum: false
+  n_notes: 28
+- name: Chords
+  program: 0
+  is_drum: false
+  n_notes: 192
+- name: Bass
+  program: 33
+  is_drum: false
+  n_notes: 24
+- name: Drums
+  program: 0
+  is_drum: true
+  n_notes: 120
+n_notes: 364
