@@ -100,7 +100,22 @@ def launch(blocks: gr.Blocks, *,
         logger.exception("could not assemble playback head — playback will be inert")
         playback_head = ""
 
-    gr.mount_gradio_app(api, blocks, path="/", head=playback_head)
+    # Whitelist data/outputs so the Playback tab can iframe the
+    # FluidSynth-rendered HQ WAV (the Gradio default allowlist
+    # only auto-passes files it handed out as component outputs,
+    # but the audio URL is generated server-side and returned as
+    # a plain string into a hidden Textbox).
+    _project_root = _Path(__file__).resolve().parents[2]
+    allowed_paths = [
+        str(_project_root / "data" / "outputs"),
+        str(_project_root / "data" / "blocks"),
+    ]
+
+    gr.mount_gradio_app(
+        api, blocks, path="/",
+        head=playback_head,
+        allowed_paths=allowed_paths,
+    )
 
     advertiser = MdnsAdvertiser()
     advertiser.start(port=port, version=VERSION)

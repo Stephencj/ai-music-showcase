@@ -83,6 +83,9 @@ def build_playback_html(initial_b64_midi: str = "") -> str:
     font-size: 0.85rem;
     margin-left: auto;
   }}
+  /* The score area always stays white — engraved notation is black on
+     white paper, and the Gradio dark theme would otherwise wash out
+     stems / accidentals against a dark background. */
   #alphaTab {{
     width: 100%;
     min-height: 55vh;
@@ -90,15 +93,29 @@ def build_playback_html(initial_b64_midi: str = "") -> str:
     overflow: auto;
     border: 1px solid var(--border-color-primary, #888);
     border-radius: 6px;
-    background: var(--background-fill-primary, #fafafa);
-    color: var(--body-text-color, inherit);
+    background: #ffffff;
+    color: #111;
   }}
+  /* Force AlphaTab's own SVG/canvas styling to render dark on white
+     regardless of the user's theme. */
+  #alphaTab svg, #alphaTab .at-surface {{ background: #ffffff; }}
   #alphaTab .at-cursor-bar {{
     background: rgba(0, 122, 255, 0.15);
   }}
   #alphaTab .at-cursor-beat {{
     background: rgba(0, 122, 255, 0.55);
     width: 3px;
+  }}
+  /* Hide the JS↔Gradio bridge row. We can't use `visible=False` on
+     the textbox components themselves because that strips them from
+     the DOM in Gradio 6 and the JS bridge has nothing to attach to. */
+  .pb-hidden-bridges {{
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    clip: rect(0 0 0 0) !important;
+    margin: -1px !important;
   }}
 </style>
 

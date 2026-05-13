@@ -1847,21 +1847,24 @@ def _build_playback_tab() -> None:
     )
     score_html = gr.HTML(value=build_playback_html(initial_b64))
 
-    # ---- Hidden Gradio↔JS bridges ----
+    # ---- Gradio↔JS bridges (rendered but visually hidden) ----
     # JS polls these textboxes for new MIDI / HQ-WAV URLs; JS writes
     # note-click JSON into pb_note_event and clicks pb_note_trigger.
-    midi_payload = gr.Textbox(
-        value="", visible=False, elem_id="pb_midi_payload",
-    )
-    hq_wav_url = gr.Textbox(
-        value="", visible=False, elem_id="pb_hq_wav_url",
-    )
-    note_event = gr.Textbox(
-        value="", visible=False, elem_id="pb_note_event",
-    )
-    note_trigger = gr.Button(
-        "trigger", visible=False, elem_id="pb_note_trigger",
-    )
+    # `visible=False` removes them from the DOM entirely in Gradio 6,
+    # so we render them visible and hide via CSS in the playback HTML.
+    with gr.Row(elem_classes=["pb-hidden-bridges"]):
+        midi_payload = gr.Textbox(
+            value="", elem_id="pb_midi_payload", show_label=False,
+        )
+        hq_wav_url = gr.Textbox(
+            value="", elem_id="pb_hq_wav_url", show_label=False,
+        )
+        note_event = gr.Textbox(
+            value="", elem_id="pb_note_event", show_label=False,
+        )
+        note_trigger = gr.Button(
+            "trigger", elem_id="pb_note_trigger",
+        )
 
     note_info = gr.Markdown("Click a note in the score.")
 

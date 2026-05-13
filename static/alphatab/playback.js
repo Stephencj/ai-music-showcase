@@ -87,7 +87,14 @@
         scrollElement: root,
       },
       display: {
-        layoutMode: 1,           // 0=page, 1=horizontal (Guitar-Pro feel)
+        // Page mode wraps lines like real sheet music. Horizontal
+        // mode (1) renders the whole piece on one infinitely-wide
+        // line, which overflows the score container.
+        layoutMode: 0,
+        // Use the container width — AlphaTab otherwise defaults to a
+        // page width that the iPhone WebView can't display without
+        // horizontal scrolling.
+        scale: 1.0,
       },
     };
 
@@ -146,16 +153,36 @@
     const playBtn = $("pb-play");
     const pauseBtn = $("pb-pause");
     const stopBtn = $("pb-stop");
+    const hqAudio = $("pb-hq-audio");
+    const hqCheckboxRef = $("pb-use-hq");
+
     if (playBtn && !playBtn.__pbWired) {
-      playBtn.addEventListener("click", () => { unlock(); api.play(); });
+      playBtn.addEventListener("click", () => {
+        unlock();
+        api.play();
+        // Kick the HQ audio in the same user-gesture turn so autoplay
+        // policy doesn't block it — browsers only allow .play() when
+        // it's a direct descendant of a user interaction.
+        if (hqCheckboxRef && hqCheckboxRef.checked
+            && hqAudio && hqAudio.src) {
+          hqAudio.play().catch((e) =>
+            console.warn("[playback] HQ audio play() rejected:", e));
+        }
+      });
       playBtn.__pbWired = true;
     }
     if (pauseBtn && !pauseBtn.__pbWired) {
-      pauseBtn.addEventListener("click", () => api.pause());
+      pauseBtn.addEventListener("click", () => {
+        api.pause();
+        if (hqAudio) hqAudio.pause();
+      });
       pauseBtn.__pbWired = true;
     }
     if (stopBtn && !stopBtn.__pbWired) {
-      stopBtn.addEventListener("click", () => api.stop());
+      stopBtn.addEventListener("click", () => {
+        api.stop();
+        if (hqAudio) { hqAudio.pause(); hqAudio.currentTime = 0; }
+      });
       stopBtn.__pbWired = true;
     }
 
