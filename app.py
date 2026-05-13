@@ -1095,6 +1095,27 @@ def _read_midi_b64(path: Path) -> str:
     return base64.b64encode(Path(path).read_bytes()).decode()
 
 
+def _midi_to_musicxml_b64(midi_path: Path) -> str:
+    """Convert a MIDI file to base64-encoded MusicXML for AlphaTab.
+
+    AlphaTab doesn't ship a MIDI importer — only Guitar Pro / MusicXML /
+    Capella / AlphaTex. We route MIDI through music21 → MusicXML so the
+    score still uses the latest compose's drum normalization + key sig
+    injection (same pipeline ``pdf_export.midi_to_score`` uses).
+    """
+    import base64
+    from src.scoring.pdf_export import midi_to_score
+    meta = _state.get("compose_meta") or {}
+    score = midi_to_score(
+        midi_path,
+        key=str(meta.get("key", "C")),
+        scale=str(meta.get("scale", "major")),
+        title=str(meta.get("title", "Composition")),
+    )
+    out_path = score.write("musicxml")
+    return base64.b64encode(Path(str(out_path)).read_bytes()).decode()
+
+
 def _list_playback_sources() -> list:
     """Build the Playback-tab source dropdown choices.
 
@@ -1134,14 +1155,16 @@ def _resolve_playback_source(source_id: str) -> Optional[Path]:
 
 
 def _load_midi_for_playback(source_id: str) -> str:
-    """Resolve the source → return base64 MIDI bytes for the JS bridge."""
+    """Resolve the source → return base64 MusicXML for the AlphaTab
+    bridge. AlphaTab doesn't have a MIDI importer, so we convert via
+    music21 first."""
     path = _resolve_playback_source(source_id)
     if not path:
         return ""
     try:
-        return _read_midi_b64(path)
+        return _midi_to_musicxml_b64(path)
     except Exception as e:
-        raise _logged_error("Load MIDI for playback", e) from e
+        raise _logged_error("Load score for playback", e) from e
 
 
 def _render_hq_for_playback(source_id: str) -> str:

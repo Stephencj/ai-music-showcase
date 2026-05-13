@@ -17,7 +17,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import pretty_midi
 
 import app
-from src.playback.playback_html import build_playback_html
+from src.playback.playback_html import build_playback_head, build_playback_html
 
 
 def _tiny_midi(out: Path) -> Path:
@@ -100,13 +100,21 @@ class LoadMidiForPlaybackTests(unittest.TestCase):
         app._state.clear()
         app._state.update(self.prior_state)
 
-    def test_compose_returns_b64(self):
+    def test_compose_returns_musicxml(self):
+        """AlphaTab has no MIDI importer — the server-side handler
+        converts MIDI → MusicXML via music21 and returns base64 of that."""
         with tempfile.TemporaryDirectory() as td:
             mid = _tiny_midi(Path(td) / "x.mid")
             app._state["midi_path"] = mid
             b64 = app._load_midi_for_playback("compose")
             self.assertGreater(len(b64), 100)
-            self.assertEqual(base64.b64decode(b64), mid.read_bytes())
+            decoded = base64.b64decode(b64).decode("utf-8", "replace")
+            # MusicXML files start with the XML declaration.
+            self.assertTrue(
+                decoded.startswith("<?xml"),
+                f"expected MusicXML head, got: {decoded[:80]!r}",
+            )
+            self.assertIn("score-partwise", decoded)
 
     def test_unknown_source_returns_empty(self):
         self.assertEqual(app._load_midi_for_playback("nonsense"), "")
@@ -146,19 +154,46 @@ class OnNoteEventTests(unittest.TestCase):
         self.assertIn("Click a note", out)
 
 
+class BuildPlaybackHeadTests(unittest.TestCase):
+    """The AlphaTab + playback bridge scripts live in <head> because
+    scripts injected via innerHTML (which is what gr.HTML ends up
+    doing) are spec-ignored by browsers. This was the show-stopper
+    behind the original 'nothing loads in the score area' bug."""
+
+    def test_head_loads_alphatab_full_bundle(self):
+        head = build_playback_head()
+        # Must be the non-minified bundle — alphaTab.min.js strips
+        # MusicXmlImporter, which we depend on.
+        self.assertIn("/static/alphatab/alphaTab.js", head)
+        self.assertNotIn("alphaTab.min.js", head)
+        self.assertIn("/static/alphatab/playback.js", head)
+
+
 class BuildPlaybackHtmlTests(unittest.TestCase):
 
-    def test_contains_alphatab_script_and_initial_midi(self):
+    def test_html_does_not_embed_script_tags(self):
+        """If a <script> tag appeared in the HTML payload it would be
+        silently dropped by the browser — leaving the user with a
+        broken Playback tab. The scripts must come via build_playback_head."""
         html = build_playback_html("ABCDEF==")
-        self.assertIn("/static/alphatab/alphaTab.min.js", html)
-        self.assertIn("/static/alphatab/playback.js", html)
+        self.assertNotIn("<script", html.lower())
+
+    def test_html_contains_required_anchors(self):
+        html = build_playback_html("ABCDEF==")
         self.assertIn('data-initial-midi="ABCDEF=="', html)
-        # The hidden-bridge element ids the JS expects:
         for el in (
             'id="alphaTab"', "pb-play", "pb-pause", "pb-stop",
             "pb-tempo", "pb-use-hq", "pb-hq-audio",
         ):
             self.assertIn(el, html, f"missing {el!r} in playback HTML")
+
+    def test_html_uses_css_variables_for_dark_mode(self):
+        """The toolbar must use Gradio CSS custom properties so it
+        readable in dark theme — hardcoded #fff was the second bug
+        the user surfaced."""
+        html = build_playback_html("")
+        self.assertIn("var(--body-text-color", html)
+        self.assertIn("var(--button-secondary-background-fill", html)
 
     def test_empty_initial_midi_is_valid(self):
         html = build_playback_html("")

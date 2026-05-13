@@ -89,7 +89,18 @@ def launch(blocks: gr.Blocks, *,
         api.mount("/static", StaticFiles(directory=str(_static_dir)),
                   name="static")
 
-    gr.mount_gradio_app(api, blocks, path="/")
+    # AlphaTab + the Playback bridge must load in <head>; the browser
+    # spec says scripts injected via innerHTML (which is how gr.HTML
+    # ends up rendering) are silently ignored, so script tags inside
+    # the Playback tab's HTML payload never executed before this fix.
+    try:
+        from src.playback.playback_html import build_playback_head
+        playback_head = build_playback_head()
+    except Exception:
+        logger.exception("could not assemble playback head — playback will be inert")
+        playback_head = ""
+
+    gr.mount_gradio_app(api, blocks, path="/", head=playback_head)
 
     advertiser = MdnsAdvertiser()
     advertiser.start(port=port, version=VERSION)
