@@ -80,8 +80,15 @@ def build_playback_html(
     color: var(--body-text-color, inherit);
   }}
   #pb-toolbar #pb-tempo-val {{ min-width: 2.5em; text-align: right; font-variant-numeric: tabular-nums; }}
-  #pb-toolbar label.pb-hq {{
+  #pb-toolbar label.pb-tracks {{
     display: flex; align-items: center; gap: 0.3rem;
+    color: var(--body-text-color, inherit);
+  }}
+  #pb-toolbar #pb-track-select {{
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--border-color-primary, #888);
+    border-radius: 5px;
+    background: var(--button-secondary-background-fill, transparent);
     color: var(--body-text-color, inherit);
   }}
   #pb-status {{
@@ -130,6 +137,10 @@ def build_playback_html(
   <button id="pb-play" type="button">▶ Play</button>
   <button id="pb-pause" type="button">⏸ Pause</button>
   <button id="pb-stop" type="button">⏹ Stop</button>
+  <label class="pb-tracks">
+    View:
+    <select id="pb-track-select"><option value="all">Full score</option></select>
+  </label>
   <span class="pb-tempo">
     Speed:
     <input id="pb-tempo" type="range" min="50" max="200" value="100" step="5">

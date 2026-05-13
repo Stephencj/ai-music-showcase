@@ -142,6 +142,16 @@
     api.scoreLoaded.on((s) => {
       log("score loaded", s && s.title);
       setStatus("ready");
+      // AlphaTab defaults to rendering only the first track. Force all
+      // tracks so the user sees a real conductor score by default.
+      try {
+        if (s && s.tracks && s.tracks.length) {
+          api.renderTracks(s.tracks);
+          populateTrackSelector(api, s.tracks);
+        }
+      } catch (e) {
+        console.warn("[playback] renderTracks failed:", e);
+      }
     });
     api.error.on((err) => {
       console.error("[playback] alphaTab error:", err);
@@ -161,6 +171,44 @@
     wireControls(api);
     wireBridges(api);
     return api;
+  }
+
+  // ----- Track selector --------------------------------------------------
+
+  function populateTrackSelector(api, tracks) {
+    const sel = $("pb-track-select");
+    if (!sel) return;
+    // Wipe existing options (other than "all") and rebuild.
+    sel.innerHTML = "";
+    const allOpt = document.createElement("option");
+    allOpt.value = "all";
+    allOpt.textContent = `Full score (${tracks.length} parts)`;
+    sel.appendChild(allOpt);
+    tracks.forEach((t) => {
+      const opt = document.createElement("option");
+      opt.value = String(t.index);
+      opt.textContent = t.name || `Part ${t.index + 1}`;
+      sel.appendChild(opt);
+    });
+    if (!sel.__pbWired) {
+      sel.addEventListener("change", () => {
+        const v = sel.value;
+        const score = api.score;
+        if (!score) return;
+        try {
+          if (v === "all") {
+            api.renderTracks(score.tracks);
+          } else {
+            const idx = parseInt(v, 10);
+            const target = score.tracks.find((t) => t.index === idx);
+            if (target) api.renderTracks([target]);
+          }
+        } catch (e) {
+          console.warn("[playback] renderTracks (select) failed:", e);
+        }
+      });
+      sel.__pbWired = true;
+    }
   }
 
   // ----- Controls --------------------------------------------------------
