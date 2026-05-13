@@ -182,6 +182,12 @@ struct StudioWebView: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
+        // iOS 16.4+ exposes the JS `Element.requestFullscreen()` API
+        // through WKPreferences. The Playback tab uses this to go
+        // full-bleed; without the flag the request silently fails.
+        if #available(iOS 16.4, *) {
+            config.preferences.isElementFullscreenEnabled = true
+        }
         // Send a mobile content mode so Gradio's responsive CSS picks
         // the phone layout instead of trying to squeeze the desktop
         // grid into 390pt of width.

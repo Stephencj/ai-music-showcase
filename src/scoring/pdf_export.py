@@ -64,49 +64,61 @@ def _safe_filename(name: str) -> str:
     return cleaned or "Part"
 
 
-# Map each General-MIDI percussion family to (treble-clef staff
-# position, LilyPond drum-mode name). The staff position is used
-# when we engrave drums as a regular treble staff (fallback); the
-# drum-mode name is used when we emit a proper LilyPond DrumStaff
-# (which carries authentic noteheads — x for closed hi-hat, circled-x
-# for open hi-hat, normal for kick/snare/toms, etc.).
+# Map each General-MIDI percussion family to (treble pitch position,
+# LilyPond drum-mode name, MusicXML notehead style). The pitch tells
+# music21 where to draw the notehead on a treble staff; the drum-mode
+# name maps to LilyPond's percussion glyph (used for the PDF DrumStaff
+# post-process); the notehead style controls the symbol so the in-app
+# AlphaTab playback and the PDF both draw X for cymbals/hat, circled-X
+# for open hat, normal for kick/snare/toms.
+#
+# notehead values that music21 emits unchanged to MusicXML:
+#   "normal" / "x" / "circle-x" / "diamond" / "slash" / "triangle"
 _DRUM_INFO_BY_INSTRUMENT_NAME = {
-    # name: (treble pitch, lily drum-mode name)
-    "Bass Drum":         ("F4", "bd"),
-    "Acoustic Bass Drum":("F4", "bda"),
-    "Snare Drum":        ("C5", "sn"),
-    "Electric Snare":    ("C5", "sne"),
-    "Side Stick":        ("C5", "ss"),
-    "Hi-Hat Cymbal":     ("G5", "hh"),
-    "Open Hi-Hat Cymbal":("G5", "hho"),
-    "Pedal Hi-Hat":      ("D4", "hhp"),
-    "Low Tom":           ("A4", "tomfl"),
-    "Low-Mid Tom":       ("B4", "toml"),
-    "Mid Tom":           ("B4", "tomml"),
-    "Hi-Mid Tom":        ("D5", "tommh"),
-    "High Tom":          ("E5", "tomh"),
-    "Crash Cymbals":     ("A5", "cymc"),
-    "Ride Cymbals":      ("F5", "cymr"),
-    "Ride Bell":         ("F5", "rb"),
-    "Splash Cymbal":     ("A5", "cyms"),
-    "China Cymbal":      ("A5", "cymch"),
-    "Tambourine":        ("E5", "tamb"),
-    "Cowbell":           ("D5", "cb"),
+    # name: (pitch, drum-mode, notehead)
+    "Bass Drum":          ("F4", "bd",    "normal"),
+    "Acoustic Bass Drum": ("F4", "bda",   "normal"),
+    "Snare Drum":         ("C5", "sn",    "normal"),
+    "Electric Snare":     ("C5", "sne",   "normal"),
+    "Side Stick":         ("C5", "ss",    "x"),
+    "Hi-Hat Cymbal":      ("G5", "hh",    "x"),
+    "Open Hi-Hat Cymbal": ("G5", "hho",   "circle-x"),
+    "Pedal Hi-Hat":       ("D4", "hhp",   "x"),
+    "Low Tom":            ("A4", "tomfl", "normal"),
+    "Low-Mid Tom":        ("B4", "toml",  "normal"),
+    "Mid Tom":            ("B4", "tomml", "normal"),
+    "Hi-Mid Tom":         ("D5", "tommh", "normal"),
+    "High Tom":           ("E5", "tomh",  "normal"),
+    "Crash Cymbals":      ("A5", "cymc",  "x"),
+    "Ride Cymbals":       ("F5", "cymr",  "x"),
+    "Ride Bell":          ("F5", "rb",    "diamond"),
+    "Splash Cymbal":      ("A5", "cyms",  "x"),
+    "China Cymbal":       ("A5", "cymch", "x"),
+    "Tambourine":         ("E5", "tamb",  "x"),
+    "Cowbell":            ("D5", "cb",    "triangle"),
 }
 
 
-def _drum_pitch_for(unpitched) -> str:
-    """Pick a staff position for a single Unpitched drum hit."""
+_DRUM_DEFAULT = ("B4", "hh", "x")
+
+
+def _drum_info_for(unpitched) -> tuple:
+    """Return (pitch, drum-mode-name, notehead) for an Unpitched."""
     inst = getattr(unpitched, "storedInstrument", None)
     name = getattr(inst, "instrumentName", None) if inst else None
-    return _DRUM_INFO_BY_INSTRUMENT_NAME.get(name or "", ("B4", "hh"))[0]
+    return _DRUM_INFO_BY_INSTRUMENT_NAME.get(name or "", _DRUM_DEFAULT)
+
+
+def _drum_pitch_for(unpitched) -> str:
+    return _drum_info_for(unpitched)[0]
 
 
 def _drum_lily_name_for(unpitched) -> str:
-    """LilyPond drum-mode name for an Unpitched (e.g. "hh", "bd")."""
-    inst = getattr(unpitched, "storedInstrument", None)
-    name = getattr(inst, "instrumentName", None) if inst else None
-    return _DRUM_INFO_BY_INSTRUMENT_NAME.get(name or "", ("B4", "hh"))[1]
+    return _drum_info_for(unpitched)[1]
+
+
+def _drum_notehead_for(unpitched) -> str:
+    return _drum_info_for(unpitched)[2]
 
 
 def _ql_to_lily_duration(ql: float) -> str:
@@ -177,6 +189,31 @@ def _drum_part_to_drummode(part) -> Optional[str]:
     return " ".join(tokens)
 
 
+def _force_binary_grid(part, grid: float = 0.25) -> None:
+    """Snap every notesAndRest in ``part`` to a binary grid and strip
+    any leftover tuplet markings.
+
+    music21's ``quantize`` rounds offsets but keeps triplet groupings
+    intact for notes whose original duration was 1/3 quarter etc.
+    For drum charts the user wants standard binary rhythms (no
+    triplet brackets) regardless of swing — this guarantees it.
+    """
+    import music21
+    for el in list(part.recurse().notesAndRests):
+        try:
+            new_offset = round(el.offset / grid) * grid
+            new_qlen = max(grid, round(el.duration.quarterLength / grid) * grid)
+            el.offset = new_offset
+            el.duration = music21.duration.Duration(new_qlen)
+            # Wipe any tuplet markings the quantizer left behind.
+            try:
+                el.duration.tuplets = ()
+            except Exception:
+                pass
+        except Exception:
+            continue
+
+
 def _normalize_percussion(score) -> int:
     """Convert music21's drum elements into engravable notes.
 
@@ -212,29 +249,39 @@ def _normalize_percussion(score) -> int:
             continue
         children = [c for c in (el.notes if hasattr(el, "notes") else [])
                     if isinstance(c, music21.note.Unpitched)]
-        pitches = [music21.pitch.Pitch(_drum_pitch_for(c)) for c in children]
-        drum_names = [_drum_lily_name_for(c) for c in children]
+        info = [_drum_info_for(c) for c in children]
+        pitches = [music21.pitch.Pitch(p) for p, _, _ in info]
+        drum_names = [d for _, d, _ in info]
+        noteheads = [h for _, _, h in info]
         ql = el.duration.quarterLength
         if pitches:
             replacement = music21.chord.Chord(pitches, quarterLength=ql)
+            # If every notehead in the chord agrees, set it on the chord
+            # itself; otherwise apply per-pitch via notehead per-note.
+            unique_heads = set(noteheads)
+            if len(unique_heads) == 1:
+                replacement.notehead = noteheads[0]
+            else:
+                for chord_note, head in zip(replacement.notes, noteheads):
+                    chord_note.notehead = head
         else:
             replacement = music21.note.Note("B4", quarterLength=ql)
+            replacement.notehead = "x"
             drum_names = ["hh"]
-        # Stash drum-mode names so we can later emit a proper LilyPond
-        # DrumStaff (authentic noteheads per family).
         replacement._drum_lily_names = drum_names
         site.replace(el, replacement)
         n += 1
 
-    # Standalone Unpitched (i.e. not inside a PercussionChord) — these
-    # were the off-beat hi-hats etc. in the debug trace.
+    # Standalone Unpitched (off-beat hi-hats / cymbals / etc.).
     for el in list(score.recurse().getElementsByClass(music21.note.Unpitched)):
         site = el.activeSite
         if site is None:
             continue
-        new_note = music21.note.Note(_drum_pitch_for(el))
+        pitch_name, drum_name, notehead = _drum_info_for(el)
+        new_note = music21.note.Note(pitch_name)
         new_note.duration = el.duration
-        new_note._drum_lily_name = _drum_lily_name_for(el)
+        new_note.notehead = notehead
+        new_note._drum_lily_name = drum_name
         site.replace(el, new_note)
         n += 1
 
@@ -266,15 +313,40 @@ def midi_to_score(
     except Exception:
         logger.warning("could not inject key %r %r — skipping", key, mode)
 
-    try:
-        score.quantize(
-            [4, 8, 12, 16],
-            processOffsets=True,
-            processDurations=True,
-            inPlace=True,
-        )
-    except Exception:
-        logger.exception("quantize failed — score will engrave with raw rhythms")
+    # Quantize melodic parts with the triplet grid so swung 8ths
+    # show as actual triplet 8ths; FORCE drum parts onto a straight
+    # 16th-note grid so the engraved drum line stays the standard
+    # "rock chart" eighth/sixteenth notation regardless of the
+    # swing setting on the MIDI side. (Stephen: "the midi side is
+    # perfect, we have a swing setting on the drums causing odd
+    # notation instead of standard eighth-note notation.")
+    def _is_drum_part(part) -> bool:
+        name = str(getattr(part, "partName", "") or "")
+        return "drum" in name.lower() or "perc" in name.lower()
+
+    for part in score.parts:
+        try:
+            if _is_drum_part(part):
+                # music21's quantize keeps tuplet markings on triplet
+                # durations even when the divisor list is binary, so
+                # we additionally walk the part and snap every note's
+                # offset + duration onto a 16th-note grid and strip
+                # tuplets explicitly.
+                part.quantize(
+                    [4, 8, 16],
+                    processOffsets=True, processDurations=True, inPlace=True,
+                )
+                _force_binary_grid(part)
+            else:
+                part.quantize(
+                    [4, 8, 12, 16],
+                    processOffsets=True, processDurations=True, inPlace=True,
+                )
+        except Exception:
+            logger.exception(
+                "quantize failed on part %r — engraving raw rhythms",
+                getattr(part, "partName", "?"),
+            )
 
     md = music21.metadata.Metadata()
     md.title = title or "Composition"

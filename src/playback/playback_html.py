@@ -120,6 +120,11 @@ def build_playback_html(
     background: rgba(0, 122, 255, 0.55);
     width: 3px;
   }}
+  /* Hide AlphaTab's "rendered by alphaTab" annotation. The watermark
+     is rendered as the final SVG partial (~12 px tall vs. ~230 px
+     for real score systems). AlphaTab sets the partial's height via
+     inline `style`, so display:none has to win via `!important`. */
+  #alphaTab .at-surface > div:last-child {{ display: none !important; }}
   /* Hide the JS↔Gradio bridge row. We can't use `visible=False` on
      the textbox components themselves because that strips them from
      the DOM in Gradio 6 and the JS bridge has nothing to attach to. */
