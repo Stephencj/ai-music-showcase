@@ -432,21 +432,19 @@ def _postprocess_ly(
         flags=re.MULTILINE,
     )
 
+    # Page setup goes in the `\paper { }` block music21 emits at the
+    # bottom of the .ly. Both `set-paper-size` and `set-default-paper-size`
+    # are silently ignored on bare-\score documents in LilyPond 2.26,
+    # so we have to set paper-width/paper-height explicitly to get
+    # landscape letter (11×8.5in).
+    paper_directives: list = [
+        "paper-width = 11\\in",
+        "paper-height = 8.5\\in",
+    ]
     if suppress_tagline:
-        out = out.replace(
-            "\\paper { }",
-            "\\paper { tagline = ##f }",
-        )
-    # Landscape must be at the top level *before* any \score block.
-    # Inject right after the \version line so LilyPond parses it
-    # before any layout decisions. Plain (non-raw) string + lambda so
-    # the apostrophe in `'landscape` doesn't get escaped.
-    out = re.sub(
-        r'(\\version\s+"[^"]+"\s*\n)',
-        lambda m: m.group(1) + "#(set-default-paper-size \"letter\" 'landscape)\n",
-        out,
-        count=1,
-    )
+        paper_directives.append("tagline = ##f")
+    paper_block = "\\paper {\n  " + "\n  ".join(paper_directives) + "\n}"
+    out = out.replace("\\paper { }", paper_block)
 
     if instrument_names:
         # Add an instrumentName setter into each ``\new Staff = X {``

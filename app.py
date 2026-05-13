@@ -978,15 +978,40 @@ def _export_pdf_zip(
         raise _logged_error("Export PDF", e) from e
 
 
-def _export_compose_pdf() -> str:
-    """Wired to the Export PDF button on the MIDI Compose tab. Reads
-    the latest composition's MIDI + key/scale/tempo/progression."""
+def _pdf_preview_html(pdf_path: Path) -> str:
+    """Embed a PDF inside the Gradio UI via an ``<iframe>`` with a
+    base64 data-URI source.
+
+    Going through Gradio's ``/gradio_api/file=`` route runs into the
+    allowlist — only files Gradio handed out as component outputs in
+    this session are servable. Embedding the bytes inline sidesteps
+    that and also means the iPhone WKWebView gets the latest
+    composition without a separate fetch.
+    """
+    import base64
+    data = Path(pdf_path).read_bytes()
+    b64 = base64.b64encode(data).decode()
+    return (
+        f'<iframe src="data:application/pdf;base64,{b64}#toolbar=0" '
+        'style="width: 100%; height: 75vh; border: 1px solid #ccc;" '
+        'title="Score preview"></iframe>'
+    )
+
+
+def _export_compose_pdf():
+    """Wired to the Export PDF button on the MIDI Compose tab.
+
+    Returns ``(zip_path, preview_html)``. The ZIP holds the full score
+    plus per-instrument PDFs; the HTML iframe embeds the full score
+    directly in the tab so the user doesn't have to download + open
+    in a separate app.
+    """
     mid_path = _state.get("midi_path")
     meta = _state.get("compose_meta") or {}
     if not mid_path or not Path(mid_path).exists():
         raise gr.Error("Compose something first, then click Export PDF.")
     out = OUTPUT_DIR / "compose_score.zip"
-    return _export_pdf_zip(
+    zip_path = _export_pdf_zip(
         Path(mid_path), out,
         key=str(meta.get("key", "C")),
         scale=str(meta.get("scale", "major")),
@@ -995,6 +1020,14 @@ def _export_compose_pdf() -> str:
         progression=meta.get("progression"),
         bars=meta.get("bars"),
     )
+    # Pull the full_score.pdf out of the ZIP into a stable location
+    # so we can iframe it.
+    import zipfile as _zf
+    preview_pdf = OUTPUT_DIR / "compose_score_preview.pdf"
+    with _zf.ZipFile(zip_path) as zf:
+        with zf.open("full_score.pdf") as src, open(preview_pdf, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+    return zip_path, _pdf_preview_html(preview_pdf)
 
 
 def _export_block_pdf(block_name: str) -> str:
@@ -3717,8 +3750,13 @@ def build_app() -> gr.Blocks:
                             variant="secondary",
                         )
                     compose_pdf_file = gr.File(label="Download PDFs (.zip)")
+                    compose_pdf_preview = gr.HTML(
+                        label="Score preview",
+                        value="",
+                    )
                     compose_pdf_btn.click(
-                        _export_compose_pdf, [], [compose_pdf_file],
+                        _export_compose_pdf, [],
+                        [compose_pdf_file, compose_pdf_preview],
                     )
 
                     with gr.Accordion("🎯 Key-safety audit", open=False):

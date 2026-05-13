@@ -250,15 +250,19 @@ class TaglineAndChordSymbolTests(unittest.TestCase):
         out = pdf_export._postprocess_ly(
             '\\version "2.26"\n\\paper { }\nfoo', chordmode=None,
         )
-        self.assertIn("\\paper { tagline = ##f }", out)
-        self.assertNotIn("\\paper { }\nfoo", out)
+        self.assertIn("tagline = ##f", out)
+        # The original empty paper block should be gone.
+        self.assertNotIn("\\paper { }", out)
 
-    def test_postprocess_injects_landscape(self):
+    def test_postprocess_sets_landscape_via_paper_dimensions(self):
+        """Use explicit ``paper-width = 11\\in / paper-height = 8.5\\in``
+        because LilyPond 2.26 silently ignores the more-common
+        ``set-paper-size`` directives on bare ``\\score`` documents."""
         out = pdf_export._postprocess_ly(
             '\\version "2.26"\n\\paper { }\n', chordmode=None,
         )
-        self.assertIn("set-default-paper-size", out)
-        self.assertIn("'landscape", out)
+        self.assertIn("paper-width = 11", out)
+        self.assertIn("paper-height = 8.5", out)
 
     def test_postprocess_injects_chord_names(self):
         ly = (
