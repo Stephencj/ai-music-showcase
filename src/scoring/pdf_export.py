@@ -64,33 +64,34 @@ def _safe_filename(name: str) -> str:
     return cleaned or "Part"
 
 
-# Drum-kit shorthand: map each General-MIDI percussion family to a
-# distinct staff position on a treble-clef "drum line". This is the
-# convention most rock/pop charts follow — kick at the bottom space,
-# snare on the middle line, hat above the staff, etc. music21 leaves
-# every Unpitched at B4 by default, which would collapse all drums
-# onto one line.
-_DRUM_PITCH_BY_INSTRUMENT_NAME = {
-    "Bass Drum": "F4",
-    "Acoustic Bass Drum": "F4",
-    "Snare Drum": "C5",
-    "Electric Snare": "C5",
-    "Side Stick": "C5",
-    "Hi-Hat Cymbal": "G5",
-    "Open Hi-Hat Cymbal": "G5",
-    "Pedal Hi-Hat": "D4",
-    "Low Tom": "A4",
-    "Low-Mid Tom": "B4",
-    "Mid Tom": "B4",
-    "Hi-Mid Tom": "D5",
-    "High Tom": "E5",
-    "Crash Cymbals": "A5",
-    "Ride Cymbals": "F5",
-    "Ride Bell": "F5",
-    "Splash Cymbal": "A5",
-    "China Cymbal": "A5",
-    "Tambourine": "E5",
-    "Cowbell": "D5",
+# Map each General-MIDI percussion family to (treble-clef staff
+# position, LilyPond drum-mode name). The staff position is used
+# when we engrave drums as a regular treble staff (fallback); the
+# drum-mode name is used when we emit a proper LilyPond DrumStaff
+# (which carries authentic noteheads — x for closed hi-hat, circled-x
+# for open hi-hat, normal for kick/snare/toms, etc.).
+_DRUM_INFO_BY_INSTRUMENT_NAME = {
+    # name: (treble pitch, lily drum-mode name)
+    "Bass Drum":         ("F4", "bd"),
+    "Acoustic Bass Drum":("F4", "bda"),
+    "Snare Drum":        ("C5", "sn"),
+    "Electric Snare":    ("C5", "sne"),
+    "Side Stick":        ("C5", "ss"),
+    "Hi-Hat Cymbal":     ("G5", "hh"),
+    "Open Hi-Hat Cymbal":("G5", "hho"),
+    "Pedal Hi-Hat":      ("D4", "hhp"),
+    "Low Tom":           ("A4", "tomfl"),
+    "Low-Mid Tom":       ("B4", "toml"),
+    "Mid Tom":           ("B4", "tomml"),
+    "Hi-Mid Tom":        ("D5", "tommh"),
+    "High Tom":          ("E5", "tomh"),
+    "Crash Cymbals":     ("A5", "cymc"),
+    "Ride Cymbals":      ("F5", "cymr"),
+    "Ride Bell":         ("F5", "rb"),
+    "Splash Cymbal":     ("A5", "cyms"),
+    "China Cymbal":      ("A5", "cymch"),
+    "Tambourine":        ("E5", "tamb"),
+    "Cowbell":           ("D5", "cb"),
 }
 
 
@@ -98,7 +99,82 @@ def _drum_pitch_for(unpitched) -> str:
     """Pick a staff position for a single Unpitched drum hit."""
     inst = getattr(unpitched, "storedInstrument", None)
     name = getattr(inst, "instrumentName", None) if inst else None
-    return _DRUM_PITCH_BY_INSTRUMENT_NAME.get(name or "", "B4")
+    return _DRUM_INFO_BY_INSTRUMENT_NAME.get(name or "", ("B4", "hh"))[0]
+
+
+def _drum_lily_name_for(unpitched) -> str:
+    """LilyPond drum-mode name for an Unpitched (e.g. "hh", "bd")."""
+    inst = getattr(unpitched, "storedInstrument", None)
+    name = getattr(inst, "instrumentName", None) if inst else None
+    return _DRUM_INFO_BY_INSTRUMENT_NAME.get(name or "", ("B4", "hh"))[1]
+
+
+def _ql_to_lily_duration(ql: float) -> str:
+    """quarter-length → LilyPond duration token: 1.0 → "4", 0.5 → "8"…"""
+    if ql >= 4.0:
+        return "1"
+    if ql >= 3.0:
+        return "2."
+    if ql >= 2.0:
+        return "2"
+    if ql >= 1.5:
+        return "4."
+    if ql >= 1.0:
+        return "4"
+    if ql >= 0.75:
+        return "8."
+    if ql >= 0.5:
+        return "8"
+    if ql >= 0.25:
+        return "16"
+    if ql >= 0.125:
+        return "32"
+    return "8"
+
+
+def _drum_part_to_drummode(part) -> Optional[str]:
+    """Build a LilyPond ``\\drummode`` body from a drum part.
+
+    Walks the part's notes/chords/rests in order. Each note records
+    the originating drum-mode name (``bd``, ``sn``, ``hh``, ``hho``,
+    ``cymc`` …) on a custom attribute during ``_normalize_percussion``.
+    The drum-mode body engraves with authentic drum-set noteheads —
+    closed hi-hat as ``x``, open hi-hat with a circle around the
+    ``x``, snare/kick/toms with normal noteheads, etc.
+
+    Returns ``None`` if no drum data was captured (e.g. the part isn't
+    actually a drum part).
+    """
+    import music21
+
+    tokens: list = []
+    found_any = False
+    for el in part.recurse().notesAndRests:
+        ql = el.duration.quarterLength
+        if ql <= 0:
+            continue
+        dur = _ql_to_lily_duration(ql)
+        if isinstance(el, music21.note.Rest):
+            tokens.append(f"r{dur}")
+            continue
+        names: list = []
+        if isinstance(el, music21.chord.Chord):
+            names = list(getattr(el, "_drum_lily_names", None) or [])
+        elif isinstance(el, music21.note.Note):
+            single = getattr(el, "_drum_lily_name", None)
+            if single:
+                names = [single]
+        if not names:
+            # No drum-mode metadata — skip (not a drum-source note).
+            continue
+        found_any = True
+        if len(names) == 1:
+            tokens.append(f"{names[0]}{dur}")
+        else:
+            tokens.append("<" + " ".join(names) + ">" + dur)
+    if not found_any:
+        return None
+    return " ".join(tokens)
 
 
 def _normalize_percussion(score) -> int:
@@ -134,18 +210,19 @@ def _normalize_percussion(score) -> int:
         site = el.activeSite
         if site is None:
             continue
-        children = list(el.notes) if hasattr(el, "notes") else []
-        pitches = [
-            music21.pitch.Pitch(_drum_pitch_for(c))
-            for c in children
-            if isinstance(c, music21.note.Unpitched)
-        ]
+        children = [c for c in (el.notes if hasattr(el, "notes") else [])
+                    if isinstance(c, music21.note.Unpitched)]
+        pitches = [music21.pitch.Pitch(_drum_pitch_for(c)) for c in children]
+        drum_names = [_drum_lily_name_for(c) for c in children]
         ql = el.duration.quarterLength
         if pitches:
             replacement = music21.chord.Chord(pitches, quarterLength=ql)
         else:
-            # No drum-kit children — collapse to a single beat at B4.
             replacement = music21.note.Note("B4", quarterLength=ql)
+            drum_names = ["hh"]
+        # Stash drum-mode names so we can later emit a proper LilyPond
+        # DrumStaff (authentic noteheads per family).
+        replacement._drum_lily_names = drum_names
         site.replace(el, replacement)
         n += 1
 
@@ -157,6 +234,7 @@ def _normalize_percussion(score) -> int:
             continue
         new_note = music21.note.Note(_drum_pitch_for(el))
         new_note.duration = el.duration
+        new_note._drum_lily_name = _drum_lily_name_for(el)
         site.replace(el, new_note)
         n += 1
 
@@ -238,18 +316,47 @@ _LILY_QUALITY_BY_COMMON_NAME = {
 }
 
 
+def _lily_duration_for_bars(bars: float) -> str:
+    """Convert a bar-count to a LilyPond chord-mode duration token.
+
+    1 bar → ``1`` (whole note), 2 bars → ``1*2``, 0.5 bar → ``2``
+    (half note), etc.  Anything that doesn't fit a power-of-two grid
+    falls back to ``1*<fraction>``.
+    """
+    if bars == 1.0:
+        return "1"
+    if bars == 0.5:
+        return "2"
+    if bars == 0.25:
+        return "4"
+    if bars == 2.0:
+        return "1*2"
+    if bars == 4.0:
+        return "1*4"
+    # Generic fallback: scaled whole notes.
+    if bars == int(bars):
+        return f"1*{int(bars)}"
+    return f"1*{bars:.4f}"
+
+
 def _progression_to_chordmode(
-    progression: "list[str] | None",
+    progression: "list | None",
     key: str,
     total_bars: int,
 ) -> Optional[str]:
-    """Build a LilyPond ``\\chordmode`` string from a roman-numeral list.
+    """Build a LilyPond ``\\chordmode`` string from a progression list.
 
-    ``["I", "V", "vi", "IV"]`` in G major and ``total_bars=4`` →
-    ``"g1 d1 e1:m c1"``.  When the progression is shorter than the
-    bar count it loops; longer progressions are truncated.
+    Accepts either:
+
+    - ``["I", "V", "vi", "IV"]`` — bare roman symbols, each 1 bar.
+    - ``[("I", 1.0), ("V", 1.0), ("vi", 1.0), ("IV", 1.0)]`` — the
+      ``(symbol, duration_in_bars)`` tuple format ``compose_midi``
+      stashes into ``_state["compose_meta"]``.
+
+    Loops the progression to fill ``total_bars``; truncates if longer.
+    ``["I","V","vi","IV"]`` over 8 bars → ``"g1 d1 e1:m c1 g1 d1 e1:m c1"``.
     """
-    if not progression:
+    if not progression or total_bars <= 0:
         return None
     try:
         import music21
@@ -259,30 +366,36 @@ def _progression_to_chordmode(
         return None
 
     tokens: list = []
-    bars_per_chord = max(1, total_bars // max(1, len(progression)))
-    # If progression is longer than total_bars, give each at least 1 bar.
-    if len(progression) > total_bars:
-        progression = progression[:total_bars]
-        bars_per_chord = 1
-
-    used_bars = 0
-    for raw in progression:
-        if used_bars >= total_bars:
+    used_bars = 0.0
+    epsilon = 1e-6
+    # Loop the progression to fill all bars so the chord-name layer
+    # spans the full piece, not just the first cycle.
+    while used_bars + epsilon < total_bars:
+        any_appended = False
+        for raw in progression:
+            if used_bars + epsilon >= total_bars:
+                break
+            if isinstance(raw, (tuple, list)) and len(raw) >= 2:
+                sym, dur_bars = raw[0], float(raw[1])
+            else:
+                sym, dur_bars = raw, 1.0
+            try:
+                rn = music21.roman.RomanNumeral(sym, k)
+            except Exception:
+                logger.warning("could not parse roman %r in key %r", sym, key)
+                used_bars += dur_bars
+                continue
+            # Truncate the last chord's duration so the chordmode stops
+            # exactly at total_bars (LilyPond errors if the ChordNames
+            # context runs longer than the music staff).
+            chord_dur = min(dur_bars, max(0.0, total_bars - used_bars))
+            root = _to_lily_pitch(rn.root().name)
+            suffix = _LILY_QUALITY_BY_COMMON_NAME.get(rn.commonName, "")
+            tokens.append(f"{root}{_lily_duration_for_bars(chord_dur)}{suffix}")
+            used_bars += chord_dur
+            any_appended = True
+        if not any_appended:
             break
-        # compose_midi stores progression as a list of (symbol, beats)
-        # tuples; the public helper also accepts plain strings.
-        sym = raw[0] if isinstance(raw, (tuple, list)) else raw
-        try:
-            rn = music21.roman.RomanNumeral(sym, k)
-        except Exception:
-            logger.warning("could not parse roman %r in key %r", sym, key)
-            continue
-        root = _to_lily_pitch(rn.root().name)
-        suffix = _LILY_QUALITY_BY_COMMON_NAME.get(rn.commonName, "")
-        # 1 bar at any time-signature == one whole note ("1") in chordmode;
-        # LilyPond syncs the ChordNames context to the music staff length.
-        tokens.append(f"{root}1{suffix}")
-        used_bars += bars_per_chord
     if not tokens:
         return None
     return " ".join(tokens)
@@ -292,23 +405,118 @@ def _postprocess_ly(
     ly_src: str,
     *,
     chordmode: Optional[str],
+    instrument_names: "list[str] | None" = None,
+    drum_indices_and_modes: "list[tuple[int, str]] | None" = None,
     suppress_tagline: bool = True,
 ) -> str:
     """Surgical edits on music21's emitted ``.ly`` source:
 
-    1. Replace ``\\paper { }`` with a paper block that disables the
-       "Music engraving by LilyPond X.Y" tagline LilyPond appends by
-       default.
-    2. If ``chordmode`` is provided, inject a ``\\new ChordNames
+    1. Strip the ``\\include "lilypond-book-preamble.ly"`` line.
+       music21 emits this for embedded-EPS book-mode rendering — it
+       blows up the layout on a stand-alone page.
+    2. Replace ``\\paper { }`` with ``\\paper { tagline = ##f }`` so
+       LilyPond stops appending its "Music engraving by …" footer.
+    3. Inject ``\\set Staff.instrumentName = "Foo"`` into each
+       ``\\new Staff`` block, using ``instrument_names`` in part order.
+       music21 doesn't emit instrument names for LilyPond, so the
+       staves are otherwise anonymous.
+    4. If ``chordmode`` is provided, inject a ``\\new ChordNames
        \\chordmode { ... }`` block at the top of the score's parallel
        ``<<`` expression so chord symbols engrave above the top staff.
     """
     out = ly_src
+    out = re.sub(
+        r'^\s*\\include\s+"lilypond-book-preamble\.ly".*?\n',
+        "",
+        out,
+        flags=re.MULTILINE,
+    )
+
     if suppress_tagline:
         out = out.replace(
             "\\paper { }",
             "\\paper { tagline = ##f }",
         )
+    # Landscape must be at the top level *before* any \score block.
+    # Inject right after the \version line so LilyPond parses it
+    # before any layout decisions. Plain (non-raw) string + lambda so
+    # the apostrophe in `'landscape` doesn't get escaped.
+    out = re.sub(
+        r'(\\version\s+"[^"]+"\s*\n)',
+        lambda m: m.group(1) + "#(set-default-paper-size \"letter\" 'landscape)\n",
+        out,
+        count=1,
+    )
+
+    if instrument_names:
+        # Add an instrumentName setter into each ``\new Staff = X {``
+        # opening, walking the list in part order.
+        names_iter = iter(instrument_names)
+
+        def _label_staff(match: re.Match) -> str:
+            try:
+                name = next(names_iter)
+            except StopIteration:
+                return match.group(0)
+            safe = name.replace('"', "'")
+            return (
+                f'{match.group(1)}\\with {{ '
+                f'instrumentName = #"{safe}" '
+                f'shortInstrumentName = #"{safe[:4]}" '
+                f'}} {{ {match.group(2)}'
+            )
+
+        out = re.sub(
+            r"(\\new\s+Staff\s+=\s+\S+\s+)\{(\s*\\clef)",
+            _label_staff,
+            out,
+        )
+
+    if drum_indices_and_modes:
+        # Walk staff blocks with brace counting so LilyPond ``%{ ... %}``
+        # comments don't fool a non-greedy regex into closing early.
+        staff_header_re = re.compile(
+            r"\\new\s+Staff\s+=\s+\S+\s+"
+            r"(?P<withclause>\\with\s*\{[^{}]*\}\s+)?"
+            r"\{"
+        )
+        matches: list = []
+        for hm in staff_header_re.finditer(out):
+            body_start = hm.end()
+            depth = 1
+            i = body_start
+            while i < len(out) and depth > 0:
+                if out[i:i + 2] == "%{":
+                    end = out.find("%}", i + 2)
+                    i = end + 2 if end != -1 else len(out)
+                    continue
+                ch = out[i]
+                if ch == "%":  # line comment
+                    eol = out.find("\n", i)
+                    i = eol + 1 if eol != -1 else len(out)
+                    continue
+                if ch == '"':
+                    end = out.find('"', i + 1)
+                    i = end + 1 if end != -1 else len(out)
+                    continue
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                i += 1
+            matches.append((hm.start(), i, hm.group("withclause") or ""))
+
+        replacements: list = []
+        for idx, drum_body in drum_indices_and_modes:
+            if 0 <= idx < len(matches):
+                start, end, with_clause = matches[idx]
+                replacement = (
+                    "\\new DrumStaff " + with_clause
+                    + "{ \\drummode { " + drum_body + " } }"
+                )
+                replacements.append((start, end, replacement))
+        for start, end, rep in sorted(replacements, key=lambda x: -x[0]):
+            out = out[:start] + rep + out[end:]
 
     if chordmode:
         # The Score body starts with a ``<<`` opening the parallel music
@@ -329,6 +537,29 @@ def _postprocess_ly(
                 inject_at = m.end() + idx + len("<<")
                 out = out[:inject_at] + chord_block + out[inject_at:]
     return out
+
+
+def _staff_names_for(score) -> "list[str]":
+    """Return the partName for each part, in order."""
+    names: list = []
+    for idx, part in enumerate(score.parts):
+        name = (getattr(part, "partName", None)
+                or getattr(part, "id", None)
+                or f"Part {idx + 1}")
+        names.append(str(name))
+    return names
+
+
+def _drum_indices_and_modes(score) -> "list[tuple[int, str]]":
+    """For each part whose notes carry drum-mode metadata, return
+    ``(part_index, drummode_body)``. Used to swap the regular Staff
+    block for a DrumStaff in the .ly post-processor."""
+    result: list = []
+    for idx, part in enumerate(score.parts):
+        body = _drum_part_to_drummode(part)
+        if body:
+            result.append((idx, body))
+    return result
 
 
 def score_to_full_pdf(
@@ -357,7 +588,11 @@ def score_to_full_pdf(
     stem = str(out.with_suffix(""))
     ly_src_path = Path(str(score.write("lily.ly", fp=stem)))
     src = ly_src_path.read_text()
-    src = _postprocess_ly(src, chordmode=chordmode)
+    src = _postprocess_ly(
+        src, chordmode=chordmode,
+        instrument_names=_staff_names_for(score),
+        drum_indices_and_modes=_drum_indices_and_modes(score),
+    )
     ly_src_path.write_text(src)
 
     # Run LilyPond ourselves. ``--output=<stem>`` makes lilypond write

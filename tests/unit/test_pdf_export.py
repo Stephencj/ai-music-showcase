@@ -248,10 +248,17 @@ class TaglineAndChordSymbolTests(unittest.TestCase):
 
     def test_postprocess_suppresses_tagline(self):
         out = pdf_export._postprocess_ly(
-            "\\paper { }\nfoo", chordmode=None,
+            '\\version "2.26"\n\\paper { }\nfoo', chordmode=None,
         )
         self.assertIn("\\paper { tagline = ##f }", out)
-        self.assertNotIn("\\paper { }", out)
+        self.assertNotIn("\\paper { }\nfoo", out)
+
+    def test_postprocess_injects_landscape(self):
+        out = pdf_export._postprocess_ly(
+            '\\version "2.26"\n\\paper { }\n', chordmode=None,
+        )
+        self.assertIn("set-default-paper-size", out)
+        self.assertIn("'landscape", out)
 
     def test_postprocess_injects_chord_names(self):
         ly = (
@@ -304,12 +311,21 @@ class DrumStaffPositionTests(unittest.TestCase):
 
     def test_kick_snare_hat_map_to_distinct_pitches(self):
         positions = {
-            "Bass Drum": pdf_export._DRUM_PITCH_BY_INSTRUMENT_NAME["Bass Drum"],
-            "Snare Drum": pdf_export._DRUM_PITCH_BY_INSTRUMENT_NAME["Snare Drum"],
-            "Hi-Hat Cymbal": pdf_export._DRUM_PITCH_BY_INSTRUMENT_NAME["Hi-Hat Cymbal"],
+            name: pdf_export._DRUM_INFO_BY_INSTRUMENT_NAME[name][0]
+            for name in ("Bass Drum", "Snare Drum", "Hi-Hat Cymbal")
         }
-        # Three drum types → three distinct positions.
+        # Three drum types → three distinct staff positions.
         self.assertEqual(len(set(positions.values())), 3)
+
+    def test_drum_mode_names_distinct_per_family(self):
+        names = {
+            n: pdf_export._DRUM_INFO_BY_INSTRUMENT_NAME[n][1]
+            for n in ("Bass Drum", "Snare Drum", "Hi-Hat Cymbal",
+                      "Open Hi-Hat Cymbal", "Crash Cymbals", "Ride Cymbals")
+        }
+        # All distinct LilyPond drum-mode tokens so each engraves
+        # with the correct notehead style.
+        self.assertEqual(len(set(names.values())), len(names))
 
 
 class IntermediateFilenameRegressionTests(unittest.TestCase):
