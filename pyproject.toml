@@ -39,6 +39,7 @@ dependencies = [
     "pyyaml>=6.0",
     "gradio>=6.0",
     "zeroconf>=0.130",
+    "music21>=9.1",
 ]
 
 [project.optional-dependencies]

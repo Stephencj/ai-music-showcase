@@ -47,6 +47,10 @@ from src.daw_integration.generic import songs as song_store
 from src.daw_integration.generic import validation as audit
 from src.daw_integration.generic import melody_plan as mp
 from src.models import ModelConfig, get_model
+from src.scoring.pdf_export import (
+    export_zip as _pdf_export_zip,
+    is_lilypond_available,
+)
 
 # ---------------------------------------------------------------------------
 # Logging — writes structured runtime events to logs/app.log so we can
@@ -815,6 +819,14 @@ def compose_midi(
             "time_signature": (int(ts[0]), int(ts[1])),
             "bars": int(bars),
         }
+        # PDF export needs key/scale/tempo/title to inject the key sig
+        # and title the engraved score.
+        _state["compose_meta"] = {
+            "key": str(key),
+            "scale": str(scale),
+            "tempo": float(tempo),
+            "title": f"{style.title()} in {key} {scale}",
+        }
 
         # Pin the live MidiExporter + audit issues so the Key-safety panel can
         # play individual bars and rewrite suggested notes without re-running
@@ -929,6 +941,109 @@ def download_soundfont():
         return f"✓ Downloaded {path.name} ({path.stat().st_size / 1e6:.1f} MB) to {path.parent}"
     except Exception as e:
         raise _logged_error("Download soundfont", e) from e
+
+
+def _export_pdf_zip(
+    midi_path: Path,
+    out_zip: Path,
+    *,
+    key: str,
+    scale: str,
+    tempo: float,
+    title: str,
+) -> str:
+    """All three Export-PDF buttons funnel through here so the
+    LilyPond-missing error is uniform across MIDI Compose / Library /
+    Compose Song."""
+    if not is_lilypond_available():
+        raise gr.Error(
+            "LilyPond isn't installed. Run `brew install lilypond` on "
+            "your Mac (one-time setup, ~50 MB) then click Export PDF again."
+        )
+    try:
+        path = _pdf_export_zip(
+            midi_path, out_zip,
+            key=key, scale=scale, tempo=tempo, title=title,
+        )
+        return str(path)
+    except gr.Error:
+        raise
+    except Exception as e:
+        raise _logged_error("Export PDF", e) from e
+
+
+def _export_compose_pdf() -> str:
+    """Wired to the Export PDF button on the MIDI Compose tab. Reads
+    the latest composition's MIDI + key/scale/tempo metadata."""
+    mid_path = _state.get("midi_path")
+    meta = _state.get("compose_meta") or {}
+    if not mid_path or not Path(mid_path).exists():
+        raise gr.Error("Compose something first, then click Export PDF.")
+    out = OUTPUT_DIR / "compose_score.zip"
+    return _export_pdf_zip(
+        Path(mid_path), out,
+        key=str(meta.get("key", "C")),
+        scale=str(meta.get("scale", "major")),
+        tempo=float(meta.get("tempo", 120.0)),
+        title=str(meta.get("title", "Composition")),
+    )
+
+
+def _export_block_pdf(block_name: str) -> str:
+    """Wired to every block-library card's PDF button. Reads the
+    block's saved .mid + YAML metadata."""
+    try:
+        pm, meta = block_store.load_block(block_name)
+    except Exception as e:
+        raise _logged_error("Load block for PDF export", e) from e
+    out = block_store.BLOCKS_DIR / f"{block_name}.zip"
+    mid_path = block_store.BLOCKS_DIR / f"{block_name}.mid"
+    if not mid_path.exists():
+        with tempfile.NamedTemporaryFile(
+            suffix=".mid", delete=False,
+        ) as tf:
+            mid_path = Path(tf.name)
+        pm.write(str(mid_path))
+    return _export_pdf_zip(
+        Path(mid_path), out,
+        key=str(meta.get("key", "C")),
+        scale=str(meta.get("scale", "major")),
+        tempo=float(meta.get("tempo", 120.0)),
+        title=block_name,
+    )
+
+
+def _export_song_pdf(state: dict) -> str:
+    """Wired to the Compose Song HQ render's Export PDF button.
+    Re-runs concat_blocks on the live timeline (the same path the HQ
+    render uses) so the score is always in sync with what was just
+    rendered."""
+    timeline = (state or {}).get("timeline") or []
+    if not timeline:
+        raise gr.Error("Add at least one block to the timeline first.")
+    try:
+        pm, _info = block_concat.concat_blocks(timeline)
+    except Exception as e:
+        raise _logged_error("Concat blocks for PDF export", e) from e
+    title = str((state or {}).get("title") or "Song")
+    mid_path = OUTPUT_DIR / "last_song.mid"
+    pm.write(str(mid_path))
+    # Best-effort: pull tempo/key from the first block on the timeline.
+    first_name = timeline[0].get("block_name")
+    key, scale, tempo = "C", "major", 120.0
+    try:
+        lib = {b["name"]: b for b in block_store.list_blocks()}
+        first = lib.get(first_name, {})
+        key = str(first.get("key", key))
+        scale = str(first.get("scale", scale))
+        tempo = float(first.get("tempo", tempo))
+    except Exception:
+        pass
+    out = OUTPUT_DIR / "song_score.zip"
+    return _export_pdf_zip(
+        Path(mid_path), out,
+        key=key, scale=scale, tempo=tempo, title=title,
+    )
 
 
 def save_current_as_block(name: str):
@@ -1697,6 +1812,11 @@ def _build_compose_song_tab(library_trigger: gr.State) -> None:
             song_hq_audio = gr.Audio(label="High-quality mix", type="filepath")
             song_hq_stems = gr.File(label="Download stems (.zip)")
             song_hq_info = gr.Textbox(label="Render info", interactive=False)
+            song_pdf_btn = gr.Button("🎼 Export PDF (full score + parts)",
+                                     variant="secondary")
+            song_pdf_file = gr.File(label="Download PDFs (.zip)")
+            song_pdf_btn.click(_export_song_pdf, [song_state],
+                               [song_pdf_file])
 
     def _render_song_hq(master, with_stems, sf_path):
         # Re-run the timeline render so _state["midi_path"] is up to date.
@@ -1781,8 +1901,11 @@ def _render_library_card(blk: dict, song_state: gr.State,
         with gr.Row():
             add_btn = gr.Button("+ Timeline", size="sm",
                                 variant="primary", scale=2, key=k("add"))
+            pdf_btn = gr.Button("🎼 PDF", size="sm", scale=0,
+                                key=k("pdf"))
             del_btn = gr.Button("⛌", size="sm", variant="stop", scale=0,
                                 key=k("del"))
+        pdf_file = gr.File(label="PDFs (.zip)", key=k("pdf_file"))
 
         def _add_to_timeline(state, name=name):
             timeline = list(state.get("timeline", []))
@@ -1790,6 +1913,11 @@ def _render_library_card(blk: dict, song_state: gr.State,
             return {**state, "timeline": timeline}
 
         add_btn.click(_add_to_timeline, [song_state], song_state)
+
+        def _block_pdf(name=name):
+            return _export_block_pdf(name)
+
+        pdf_btn.click(_block_pdf, None, pdf_file)
 
         def _delete_block(trigger, name=name):
             block_store.delete_block(name)
@@ -3574,6 +3702,16 @@ def build_app() -> gr.Blocks:
                     midi_file = gr.File(label="Download .mid (drag into Ardour)")
                     compose_info = gr.Textbox(label="Info", interactive=False)
                     midi_audio = gr.Audio(label="Preview (synth render)", type="filepath")
+
+                    with gr.Row():
+                        compose_pdf_btn = gr.Button(
+                            "🎼 Export PDF (full score + parts)",
+                            variant="secondary",
+                        )
+                    compose_pdf_file = gr.File(label="Download PDFs (.zip)")
+                    compose_pdf_btn.click(
+                        _export_compose_pdf, [], [compose_pdf_file],
+                    )
 
                     with gr.Accordion("🎯 Key-safety audit", open=False):
                         gr.Markdown(

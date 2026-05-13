@@ -197,6 +197,32 @@ iOS app polls `/healthz` and reports "Server back online" when it
 recovers. Restart requires a token even from LAN (it's too dangerous
 to let unauthenticated clients trigger).
 
+## PDF sheet music export
+
+Every composition can be exported as a ZIP of engraved PDFs — a full
+score plus one part per instrument. Buttons live in three places:
+
+- **MIDI Compose** → "Export PDF (full score + parts)" next to the
+  `.mid` download.
+- **Block library** → "PDF" button on every saved block card.
+- **Compose Song → HQ render** → "Export PDF" on the rendered song.
+
+The pipeline uses [music21](https://web.mit.edu/music21/) to convert
+MIDI → score (injecting the key signature from the compose context and
+quantizing fractional rhythms to readable values) and
+[LilyPond](https://lilypond.org) as the engraver.
+
+One-time setup for the LilyPond binary:
+
+```bash
+brew install lilypond          # Mac (~50 MB)
+# apt-get install lilypond     # Linux
+```
+
+`music21` auto-discovers the binary on `$PATH`. If it isn't installed,
+the Export PDF buttons surface a friendly error pointing at this
+command.
+
 ## Testing
 
 ```bash
