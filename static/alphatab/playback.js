@@ -106,13 +106,21 @@
       },
       player: {
         enablePlayer: true,
-        playerMode: 4,  // PlayerMode.EnabledExternalMedia
+        playerMode: 4,             // EnabledExternalMedia
         enableCursor: true,
-        scrollMode: 1,
+        enableElementHighlighting: true,
+        // ScrollMode.Smooth (3) — smooth animated scrolling.
+        // Continuous (1) "centers" the cursor but only scrolls in
+        // big chunks; Smooth keeps it visually tracking.
+        scrollMode: 3,
+        scrollSpeed: 300,
+        // Pull the cursor toward the upper third of the viewport so
+        // the user gets a beat or two of lookahead.
+        scrollOffsetY: -120,
         scrollElement: root,
       },
       display: {
-        layoutMode: 0,  // page mode — lines wrap like sheet music
+        layoutMode: 0,             // page mode — lines wrap like sheet music
       },
     };
 
@@ -176,39 +184,45 @@
   // ----- Track selector --------------------------------------------------
 
   function populateTrackSelector(api, tracks) {
-    const sel = $("pb-track-select");
-    if (!sel) return;
-    // Wipe existing options (other than "all") and rebuild.
-    sel.innerHTML = "";
-    const allOpt = document.createElement("option");
-    allOpt.value = "all";
-    allOpt.textContent = `Full score (${tracks.length} parts)`;
-    sel.appendChild(allOpt);
-    tracks.forEach((t) => {
-      const opt = document.createElement("option");
-      opt.value = String(t.index);
-      opt.textContent = t.name || `Part ${t.index + 1}`;
-      sel.appendChild(opt);
-    });
-    if (!sel.__pbWired) {
-      sel.addEventListener("change", () => {
-        const v = sel.value;
-        const score = api.score;
-        if (!score) return;
-        try {
-          if (v === "all") {
-            api.renderTracks(score.tracks);
-          } else {
-            const idx = parseInt(v, 10);
-            const target = score.tracks.find((t) => t.index === idx);
-            if (target) api.renderTracks([target]);
-          }
-        } catch (e) {
-          console.warn("[playback] renderTracks (select) failed:", e);
-        }
+    const selectors = ["pb-track-select", "pb-overlay-track-select"]
+      .map((id) => $(id))
+      .filter(Boolean);
+    selectors.forEach((sel) => {
+      sel.innerHTML = "";
+      const allOpt = document.createElement("option");
+      allOpt.value = "all";
+      allOpt.textContent = `Full score (${tracks.length} parts)`;
+      sel.appendChild(allOpt);
+      tracks.forEach((t) => {
+        const opt = document.createElement("option");
+        opt.value = String(t.index);
+        opt.textContent = t.name || `Part ${t.index + 1}`;
+        sel.appendChild(opt);
       });
-      sel.__pbWired = true;
+    });
+    function applyTrackSelection(v) {
+      const score = api.score;
+      if (!score) return;
+      try {
+        if (v === "all") {
+          api.renderTracks(score.tracks);
+        } else {
+          const idx = parseInt(v, 10);
+          const target = score.tracks.find((t) => t.index === idx);
+          if (target) api.renderTracks([target]);
+        }
+      } catch (e) {
+        console.warn("[playback] renderTracks (select) failed:", e);
+      }
+      // Keep both selectors in sync.
+      selectors.forEach((s) => { if (s.value !== v) s.value = v; });
     }
+    selectors.forEach((sel) => {
+      if (!sel.__pbWired) {
+        sel.addEventListener("change", () => applyTrackSelection(sel.value));
+        sel.__pbWired = true;
+      }
+    });
   }
 
   // ----- Controls --------------------------------------------------------
@@ -249,19 +263,81 @@
 
     const speedSlider = $("pb-tempo");
     const speedVal = $("pb-tempo-val");
+    const ovSpeed = $("pb-overlay-tempo");
+    const ovSpeedVal = $("pb-overlay-tempo-val");
+    function applySpeed(pct) {
+      pct = Math.max(50, Math.min(200, parseInt(pct, 10) || 100));
+      if (speedVal) speedVal.textContent = String(pct);
+      if (speedSlider) speedSlider.value = String(pct);
+      if (ovSpeed) ovSpeed.value = String(pct);
+      if (ovSpeedVal) ovSpeedVal.textContent = `${pct}%`;
+      const rate = pct / 100;
+      if (audioEl) {
+        audioEl.playbackRate = rate;
+        if ("preservesPitch" in audioEl) audioEl.preservesPitch = true;
+      }
+      try { api.playbackSpeed = rate; } catch (_) {}
+    }
     if (speedSlider && !speedSlider.__pbWired) {
-      speedSlider.addEventListener("input", () => {
-        const pct = parseInt(speedSlider.value, 10) || 100;
-        if (speedVal) speedVal.textContent = String(pct);
-        const rate = pct / 100;
-        if (audioEl) {
-          audioEl.playbackRate = rate;
-          // preservesPitch keeps the pitch the same when speed changes.
-          if ("preservesPitch" in audioEl) audioEl.preservesPitch = true;
-        }
-        try { api.playbackSpeed = rate; } catch (_) {}
-      });
+      speedSlider.addEventListener("input", () => applySpeed(speedSlider.value));
       speedSlider.__pbWired = true;
+    }
+    if (ovSpeed && !ovSpeed.__pbWired) {
+      ovSpeed.addEventListener("input", () => applySpeed(ovSpeed.value));
+      ovSpeed.__pbWired = true;
+    }
+
+    // ---- Fullscreen ----
+    const wrap = $("pb-wrap");
+    const fsBtn = $("pb-fullscreen");
+    const exitBtn = $("pb-overlay-exit");
+    function toggleFullscreen() {
+      if (!wrap) return;
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      } else {
+        // iOS Safari uses webkitRequestFullscreen / webkitEnterFullscreen.
+        const req = wrap.requestFullscreen
+                 || wrap.webkitRequestFullscreen
+                 || wrap.webkitEnterFullscreen;
+        if (req) {
+          try { req.call(wrap); } catch (e) {
+            console.warn("[playback] fullscreen rejected:", e);
+          }
+        }
+      }
+    }
+    if (fsBtn && !fsBtn.__pbWired) {
+      fsBtn.addEventListener("click", toggleFullscreen);
+      fsBtn.__pbWired = true;
+    }
+    if (exitBtn && !exitBtn.__pbWired) {
+      exitBtn.addEventListener("click", toggleFullscreen);
+      exitBtn.__pbWired = true;
+    }
+
+    // ---- Mirror overlay buttons to main controls ----
+    function mirror(ovId, mainId) {
+      const ov = $(ovId);
+      const main = $(mainId);
+      if (ov && main && !ov.__pbWired) {
+        ov.addEventListener("click", () => main.click());
+        ov.__pbWired = true;
+      }
+    }
+    mirror("pb-overlay-play", "pb-play");
+    mirror("pb-overlay-pause", "pb-pause");
+    mirror("pb-overlay-stop", "pb-stop");
+
+    // Re-trigger an AlphaTab layout pass on fullscreen state change so
+    // the score uses the new viewport width.
+    if (!document.__pbFsHook) {
+      const onFs = () => {
+        try { api.render(); } catch (_) {}
+      };
+      document.addEventListener("fullscreenchange", onFs);
+      document.addEventListener("webkitfullscreenchange", onFs);
+      document.__pbFsHook = true;
     }
   }
 

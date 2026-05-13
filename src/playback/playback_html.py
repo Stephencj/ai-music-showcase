@@ -131,24 +131,104 @@ def build_playback_html(
     clip: rect(0 0 0 0) !important;
     margin: -1px !important;
   }}
+
+  /* Fullscreen wrapper + floating overlay. The overlay is hidden in
+     normal mode and floats over the score when #pb-wrap is in
+     fullscreen, with a low default opacity so it doesn't obstruct
+     the music — fades to opaque on hover/tap. */
+  #pb-wrap {{
+    position: relative;
+  }}
+  #pb-overlay {{
+    display: none;
+  }}
+  #pb-wrap:fullscreen {{
+    background: #ffffff;
+    width: 100vw;
+    height: 100vh;
+    padding: 0;
+  }}
+  #pb-wrap:fullscreen #pb-toolbar {{ display: none; }}
+  #pb-wrap:fullscreen #alphaTab {{
+    height: 100vh !important;
+    max-height: 100vh !important;
+    min-height: 100vh !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }}
+  #pb-wrap:fullscreen #pb-overlay {{
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    position: fixed;
+    bottom: 1.25rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(20, 20, 24, 0.78);
+    color: #fff;
+    padding: 0.4rem 0.8rem;
+    border-radius: 999px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+    opacity: 0.35;
+    transition: opacity 0.18s;
+    z-index: 9999;
+  }}
+  #pb-wrap:fullscreen #pb-overlay:hover,
+  #pb-wrap:fullscreen #pb-overlay:focus-within {{ opacity: 1; }}
+  #pb-overlay button {{
+    padding: 0.3rem 0.7rem;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }}
+  #pb-overlay button:hover {{ background: rgba(255,255,255,0.18); }}
+  #pb-overlay select {{
+    padding: 0.3rem 0.5rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+  }}
+  #pb-overlay input[type="range"] {{
+    width: 110px;
+  }}
 </style>
 
-<div id="pb-toolbar">
-  <button id="pb-play" type="button">▶ Play</button>
-  <button id="pb-pause" type="button">⏸ Pause</button>
-  <button id="pb-stop" type="button">⏹ Stop</button>
-  <label class="pb-tracks">
-    View:
-    <select id="pb-track-select"><option value="all">Full score</option></select>
-  </label>
-  <span class="pb-tempo">
-    Speed:
-    <input id="pb-tempo" type="range" min="50" max="200" value="100" step="5">
-    <span id="pb-tempo-val">100</span>%
-  </span>
-  <span id="pb-status">loading…</span>
-</div>
+<div id="pb-wrap">
+  <div id="pb-toolbar">
+    <button id="pb-play" type="button">▶ Play</button>
+    <button id="pb-pause" type="button">⏸ Pause</button>
+    <button id="pb-stop" type="button">⏹ Stop</button>
+    <label class="pb-tracks">
+      View:
+      <select id="pb-track-select"><option value="all">Full score</option></select>
+    </label>
+    <span class="pb-tempo">
+      Speed:
+      <input id="pb-tempo" type="range" min="50" max="200" value="100" step="5">
+      <span id="pb-tempo-val">100</span>%
+    </span>
+    <button id="pb-fullscreen" type="button" title="Toggle fullscreen">⛶ Fullscreen</button>
+    <span id="pb-status">loading…</span>
+  </div>
 
-<div id="alphaTab" data-initial-midi="{initial_b64_midi}"></div>
+  <div id="alphaTab" data-initial-midi="{initial_b64_midi}"></div>
+
+  <!-- Floating overlay only visible in fullscreen. Mirrors the key
+       controls and stays semi-transparent so it doesn't obstruct
+       the music. -->
+  <div id="pb-overlay">
+    <button id="pb-overlay-play" type="button">▶</button>
+    <button id="pb-overlay-pause" type="button">⏸</button>
+    <button id="pb-overlay-stop" type="button">⏹</button>
+    <select id="pb-overlay-track-select"><option value="all">Full score</option></select>
+    <input id="pb-overlay-tempo" type="range" min="50" max="200" value="100" step="5">
+    <span id="pb-overlay-tempo-val">100%</span>
+    <button id="pb-overlay-exit" type="button">✕ Exit</button>
+  </div>
+</div>
 <audio id="pb-audio" preload="auto" playsinline src="{initial_audio_url}" style="display:none;"></audio>
 """

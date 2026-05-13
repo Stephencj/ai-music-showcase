@@ -183,8 +183,10 @@ class BuildPlaybackHtmlTests(unittest.TestCase):
         self.assertIn('data-initial-midi="ABCDEF=="', html)
         self.assertIn('src="/some/url.wav"', html)
         for el in (
-            'id="alphaTab"', "pb-play", "pb-pause", "pb-stop",
-            "pb-tempo", "pb-audio",
+            'id="pb-wrap"', 'id="alphaTab"', "pb-play", "pb-pause", "pb-stop",
+            "pb-tempo", "pb-audio", "pb-fullscreen",
+            "pb-overlay", "pb-overlay-play", "pb-overlay-exit",
+            "pb-track-select", "pb-overlay-track-select",
         ):
             self.assertIn(el, html, f"missing {el!r} in playback HTML")
 
