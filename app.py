@@ -2270,6 +2270,91 @@ def _render_harmony_row(idx: int, hm: dict, harmony_state: gr.State) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Studio section timeline — visual bands for overrides + harmonies
+# ---------------------------------------------------------------------------
+
+def _section_timeline_html(
+    overrides: list[dict] | None,
+    harmonies: list[dict] | None,
+    bars: int,
+) -> str:
+    """Return a Markdown string (with embedded HTML) showing horizontal
+    coloured bands for each section override + harmony tag across the
+    plan's bar count. Lightweight, no JS — just inline-styled <div>s.
+
+    Empty plans render a one-line hint so the strip is never blank
+    when the user hasn't tagged anything yet.
+    """
+    bars = max(1, int(bars or 8))
+    overrides = list(overrides or [])
+    harmonies = list(harmonies or [])
+    if not overrides and not harmonies:
+        return (
+            "<div style='margin: 4px 0; color: var(--body-text-color-subdued, "
+            "#888); font-size: 0.85em;'>"
+            "<em>No sections or harmonies yet. Add them below to see bar "
+            "ranges highlighted here.</em></div>"
+        )
+
+    def _label(ov: dict) -> str:
+        parts = []
+        for key in ("voicing", "rhythm", "cadence", "lick", "tension_op"):
+            v = ov.get(key)
+            if v:
+                parts.append(f"{key}={v}")
+        return ", ".join(parts) or (ov.get("mode") or "section")
+
+    def _band(start_bar: int, end_bar: int, label: str, color: str,
+              row_label: str) -> str:
+        start_pct = max(0.0, min(100.0, (start_bar / bars) * 100.0))
+        end_pct = max(0.0, min(100.0, (end_bar / bars) * 100.0))
+        width = max(0.5, end_pct - start_pct)
+        return (
+            f"<div style='display: flex; align-items: center; "
+            f"margin: 2px 0; font-size: 0.78em;'>"
+            f"<span style='display: inline-block; width: 70px; "
+            f"color: var(--body-text-color-subdued, #888);'>{row_label}</span>"
+            f"<div style='flex: 1; position: relative; height: 14px; "
+            f"background: var(--background-fill-secondary, #f0f0f0); "
+            f"border-radius: 3px;'>"
+            f"<div title='{label}' style='position: absolute; "
+            f"left: {start_pct:.1f}%; width: {width:.1f}%; height: 100%; "
+            f"background: {color}; border-radius: 3px; padding: 0 4px; "
+            f"color: white; overflow: hidden; white-space: nowrap; "
+            f"text-overflow: ellipsis; line-height: 14px;'>{label}</div>"
+            f"</div></div>"
+        )
+
+    parts = [
+        f"<div style='margin: 8px 0;'>"
+        f"<div style='font-size: 0.8em; color: var(--body-text-color-subdued, "
+        f"#888); margin-bottom: 4px;'>Bars 1 → {bars}</div>"
+    ]
+    # Sections first (orange), then harmonies (teal). Each gets its own row.
+    for i, ov in enumerate(overrides):
+        parts.append(_band(
+            int(ov.get("start_bar", 0)),
+            int(ov.get("end_bar", 1)),
+            _label(ov), "#e07b3c",
+            f"Section {i + 1}",
+        ))
+    for i, hm in enumerate(harmonies):
+        label = hm.get("preset") or "queen"
+        if hm.get("intervals"):
+            label += f" ({hm['intervals']})"
+        if hm.get("harmony_rule"):
+            label += f" · {hm['harmony_rule']}"
+        parts.append(_band(
+            int(hm.get("start_bar", 0)),
+            int(hm.get("end_bar", 1)),
+            label, "#2e9b8f",
+            f"Harmony {i + 1}",
+        ))
+    parts.append("</div>")
+    return "".join(parts)
+
+
+# ---------------------------------------------------------------------------
 # Per-instrument progression panel — one textbox + lock per instrument
 # ---------------------------------------------------------------------------
 
@@ -2718,62 +2803,79 @@ def _build_melody_studio_tab(library_trigger: gr.State) -> None:
 
     header_md = gr.Markdown("_No plan loaded._")
 
-    view_radio = gr.Radio(
-        MELODY_VIEW_MODES, value="Note list", label="View",
-    )
-
-    # Three dataframes — exactly one visible at a time
-    with gr.Group(visible=True) as note_view:
-        gr.Markdown("**Note list** — edit each note's pitch / duration / "
-                    "velocity. Add rows for new notes; delete rows to "
-                    "remove notes. `scale_deg` is optional.")
-        note_df = gr.Dataframe(
-            headers=NOTE_LIST_HEADERS,
-            datatype=["number", "number", "number", "number",
-                      "number", "str"],
-            value=[],
-            interactive=True,
-            row_count=(0, "dynamic"),
-            column_count=(len(NOTE_LIST_HEADERS), "fixed"),
-        )
-
-    with gr.Group(visible=False) as degree_view:
-        gr.Markdown("**Scale-degree grid** — rows are 1..7 of the key's "
-                    "scale plus a second octave (primes); cells 0..3 "
-                    "= silent/ghost/normal/accent. Stays in-key by design.")
-        degree_df = gr.Dataframe(
-            headers=["Degree"],
-            value=[],
-            interactive=True,
-            row_count=(0, "dynamic"),
-            column_count=(1, "dynamic"),
-        )
-
-    with gr.Group(visible=False) as pianoroll_view:
-        gr.Markdown("**Piano-roll** — chromatic, ±1 octave around the "
-                    "key tonic. Use for deliberate dissonance / chromatic "
-                    "moves outside the diatonic set.")
-        pianoroll_df = gr.Dataframe(
-            headers=["Pitch"],
-            value=[],
-            interactive=True,
-            row_count=(0, "dynamic"),
-            column_count=(1, "dynamic"),
-        )
-
     override_state = gr.State([])
     harmony_state = gr.State([])
+    # Plan-bars cache for the timeline strip (parsed once from plan_state).
+    plan_bars_state = gr.State(8)
 
-    with gr.Accordion("Plan settings", open=False):
+    # --- Visual timeline strip ----------------------------------------
+    # @gr.render-driven Markdown showing colored bands for each section
+    # override + harmony tag. Re-renders whenever the underlying state
+    # changes — gives the user a glance-able map of "what affects what".
+    @gr.render(inputs=[override_state, harmony_state, plan_bars_state])
+    def _render_section_timeline(overrides, harmonies, bars):
+        gr.Markdown(_section_timeline_html(overrides, harmonies, bars))
+
+    # --- Primary view (Note list) -------------------------------------
+    note_df = gr.Dataframe(
+        headers=NOTE_LIST_HEADERS,
+        datatype=["number", "number", "number", "number",
+                  "number", "str"],
+        value=[],
+        interactive=True,
+        row_count=(0, "dynamic"),
+        column_count=(len(NOTE_LIST_HEADERS), "fixed"),
+        label="Note list",
+    )
+
+    # --- Alternate views (collapsed) ----------------------------------
+    with gr.Accordion("Advanced views (scale-degree grid + piano-roll)",
+                      open=False):
+        # The view radio survives so power users can still switch which
+        # advanced dataframe is shown.
+        view_radio = gr.Radio(
+            MELODY_VIEW_MODES, value="Note list", label="Active view",
+            info="Note list is always shown above. This toggle picks "
+                 "which alternate editor is visible here.",
+        )
+
+        with gr.Group(visible=False) as note_view:
+            # Note list also appears here for legacy wiring compat; only
+            # the primary version above is interactive.
+            pass
+
+        with gr.Group(visible=False) as degree_view:
+            gr.Markdown("**Scale-degree grid** — rows are 1..7 of the key's "
+                        "scale plus a second octave (primes); cells 0..3 "
+                        "= silent/ghost/normal/accent. Stays in-key by design.")
+            degree_df = gr.Dataframe(
+                headers=["Degree"],
+                value=[],
+                interactive=True,
+                row_count=(0, "dynamic"),
+                column_count=(1, "dynamic"),
+            )
+
+        with gr.Group(visible=False) as pianoroll_view:
+            gr.Markdown("**Piano-roll** — chromatic, ±1 octave around the "
+                        "key tonic. Use for deliberate dissonance / chromatic "
+                        "moves outside the diatonic set.")
+            pianoroll_df = gr.Dataframe(
+                headers=["Pitch"],
+                value=[],
+                interactive=True,
+                row_count=(0, "dynamic"),
+                column_count=(1, "dynamic"),
+            )
+
+    # --- Editing accordion (Plan defaults + Sections + Harmonies) -----
+    with gr.Accordion("Editing — plan defaults, sections, harmonies",
+                      open=True):
+        # Plan defaults ----------------------------------------------------
         gr.Markdown(
-            "Plan-wide melody shape. **Phrase shape** controls the pitch "
-            "contour over the full phrase (arc rises to a peak in the "
-            "middle; rise/fall climb or descend monotonically). "
-            "**Default cadence** snaps the very last note to a chord "
-            "tone of the target — overridden per-section by the cadence "
-            "field on a section override. **Motif development** is a "
-            "comma-separated list of per-block transforms "
-            "(e.g. `repeat, sequence_up, inversion, cadence`)."
+            "#### Plan defaults\n"
+            "Phrase-wide melody shape. Per-section settings below override "
+            "these for their bar range."
         )
         with gr.Row():
             phrase_shape_radio = gr.Radio(
@@ -2792,45 +2894,48 @@ def _build_melody_studio_tab(library_trigger: gr.State) -> None:
         motif_dev_in = gr.Textbox(
             value="",
             label="Motif development (comma-separated)",
-            placeholder="repeat, sequence_up, inversion, cadence",
+            placeholder="repeat, sequence_up, inversion, restate",
             key="plan_motif_development",
         )
 
-    with gr.Accordion("Section overrides", open=False):
+        gr.Markdown("---")
+
+        # Section overrides ----------------------------------------------
         gr.Markdown(
-            "Per-bar-range overlays. **Voicing** / **Rhythm** dropdowns "
-            "filter as you type (e.g. type 'ni' → 'ninth'). Leave blank "
-            "to skip that axis. **Mode**: `stack` keeps melody as bass + "
-            "voicing above; `replace` discards melody pitches and fires "
-            "chord stacks at the rhythm; `decoration` keeps melody and "
-            "adds rhythm-driven grace notes between."
+            "#### Sections\n"
+            "Per-bar-range overlays. **Voicing** / **Rhythm** filter as "
+            "you type. **Mode**: `stack` (melody + voicing above), "
+            "`replace` (chord stacks instead of melody), `decoration` "
+            "(melody + grace notes between)."
         )
 
         @gr.render(inputs=[override_state])
         def _render_overrides_list(overrides):
             if not overrides:
-                gr.Markdown("_No overrides yet. Click **+ Add override** below._")
+                gr.Markdown("_No section overrides. Click **+ Add section** to add one._")
             else:
                 for idx, ov in enumerate(overrides):
                     _render_override_row(idx, ov, override_state)
 
         add_override_btn = gr.Button(
-            "+ Add override", variant="secondary", size="sm",
+            "+ Add section", variant="secondary", size="sm",
         )
 
-    with gr.Accordion("Harmonies", open=False):
+        gr.Markdown("---")
+
+        # Harmonies ------------------------------------------------------
         gr.Markdown(
-            "Per-bar-range harmony presets — auto-generated from the "
-            "edited melody. Type in the **Preset** dropdown to filter "
-            "(queen / abba / boston / journey / elton / chicago). Leave "
-            "`intervals` blank for preset defaults; otherwise comma-"
-            "separated integers (e.g. `1,2,4`) override."
+            "#### Harmonies\n"
+            "Per-bar-range harmony presets (queen / abba / boston / "
+            "journey / elton / chicago). Leave `intervals` blank for the "
+            "preset's defaults; otherwise comma-separated integers "
+            "override."
         )
 
         @gr.render(inputs=[harmony_state])
         def _render_harmonies_list(harmonies):
             if not harmonies:
-                gr.Markdown("_No harmonies yet. Click **+ Add harmony** below._")
+                gr.Markdown("_No harmonies. Click **+ Add harmony** to add one._")
             else:
                 for idx, hm in enumerate(harmonies):
                     _render_harmony_row(idx, hm, harmony_state)
@@ -2874,15 +2979,7 @@ def _build_melody_studio_tab(library_trigger: gr.State) -> None:
             label="Plan preview", type="filepath", scale=3,
         )
 
-    gr.Markdown(
-        "---\n"
-        "**Save the result.** *Save as new block* is the headline action: "
-        "it bakes the melody + harmony + the accompaniment bed (chords / "
-        "bass / drums) into a complete block that shows up in the "
-        "**Compose Song** library. *Save plan only* writes just the "
-        "melody-edit sidecar — use it when you're attaching an edited "
-        "melody to a block you've already saved from MIDI Compose."
-    )
+    gr.Markdown("---")
     with gr.Row():
         save_name_in = gr.Textbox(
             value="", label="Save as (block name)",
@@ -2891,23 +2988,38 @@ def _build_melody_studio_tab(library_trigger: gr.State) -> None:
         save_as_block_btn = gr.Button(
             "💾 Save as new block", variant="primary", scale=1,
         )
-        save_btn = gr.Button(
-            "💾 Save plan only (sidecar)", variant="secondary", scale=1,
-        )
         save_status = gr.Markdown("")
+    gr.Markdown(
+        "_Saving as a new block bakes the melody + harmony + bed "
+        "(chords / bass / drums) into a complete block that shows up "
+        "in the **Compose Song** library._",
+    )
+
+    with gr.Accordion("Advanced save options…", open=False):
+        gr.Markdown(
+            "**Save plan only (sidecar)** writes just the melody-edit "
+            "sidecar — use it when you're attaching an edited melody to "
+            "a block you've already saved from MIDI Compose. The next "
+            "**Load block** with the same name will pick up your edits."
+        )
+        save_btn = gr.Button(
+            "💾 Save plan only (sidecar)", variant="secondary",
+        )
 
     # ---------- Wiring ---------------------------------------------------
 
     def _on_view_change(view: str):
+        # Note list lives at top level now — always visible. The radio
+        # only toggles the two alternate views inside the Advanced
+        # accordion.
         return (
-            gr.update(visible=view == "Note list"),
             gr.update(visible=view == "Scale-degree grid"),
             gr.update(visible=view == "Piano-roll"),
         )
 
     view_radio.change(
         _on_view_change, [view_radio],
-        [note_view, degree_view, pianoroll_view],
+        [degree_view, pianoroll_view],
     )
 
     refresh_blocks_btn.click(
@@ -2916,22 +3028,24 @@ def _build_melody_studio_tab(library_trigger: gr.State) -> None:
 
     def _load_compose_and_render():
         plan = melody_load_from_compose()
-        return (plan, *melody_render_views(plan))
+        bars = int(plan.bars) if plan else 8
+        return (plan, *melody_render_views(plan), bars)
 
     def _load_block_and_render(block_name):
         plan = melody_load_from_block(block_name)
-        return (plan, *melody_render_views(plan))
+        bars = int(plan.bars) if plan else 8
+        return (plan, *melody_render_views(plan), bars)
 
     load_compose_btn.click(
         _load_compose_and_render,
         outputs=[plan_state, header_md, note_df, degree_df, pianoroll_df,
-                 override_state, harmony_state],
+                 override_state, harmony_state, plan_bars_state],
     )
     load_block_btn.click(
         _load_block_and_render,
         inputs=[block_picker],
         outputs=[plan_state, header_md, note_df, degree_df, pianoroll_df,
-                 override_state, harmony_state],
+                 override_state, harmony_state, plan_bars_state],
     )
 
     note_df.change(
