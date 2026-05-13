@@ -106,12 +106,18 @@ STYLES: dict[str, StylePreset] = {
         melody_program=26,  # Electric Guitar (jazz)
         # Funk's 9th-chord voicings sing when they share common tones,
         # and the melody usually carves single-line stabs — keep the
-        # chord pad out of its way.
+        # chord pad out of its way. Melody picks up the 16th-note
+        # syncopated rhythm motif and a call/response soul-rnb lick.
         chord_variant={
             "voice_leading": "common_tone",
             "avoid_melody_track": "Melody",
         },
-        melody_variant={"phrase_shape": "call_response"},
+        melody_variant={
+            "phrase_shape": "call_response",
+            "rhythm_motif": "funk_16th_synco",
+            "velocity_curve": "call_response",
+            "lick_pool": ["call_response_3_1"],
+        },
         progression_variants=[
             ("Long form (2-bar)", [("i7", 2.0), ("IV7", 2.0), ("i7", 2.0), ("V7", 2.0)]),
             ("Sub-bar stabs", [("i7", 0.5), ("IV7", 0.5), ("i7", 0.5), ("V7", 0.5)]),
@@ -126,9 +132,16 @@ STYLES: dict[str, StylePreset] = {
         chord_octave=3, bass_octave=3,   # bass sits at A3 register (user preference)
         chord_program=0,  # Acoustic Grand
         # Pop triads benefit from smooth voice leading + a clear melody
-        # line. The melody arc keeps a hook contour audible.
+        # line. The melody arc keeps a hook contour audible. Pop also
+        # gets a cleaner pop_anacrusis rhythm and a phrase-arc velocity
+        # curve so the hook breathes louder mid-phrase.
         chord_variant={"voice_leading": "common_tone"},
-        melody_variant={"phrase_shape": "arc"},
+        melody_variant={
+            "phrase_shape": "arc",
+            "rhythm_motif": "pop_anacrusis",
+            "velocity_curve": "phrase_arc",
+            "lick_pool": ["pop_anacrusis_2_3_5", "arpeggio_climb_1_3_5_8"],
+        },
         progression_variants=[
             ("Pachelbel", ["vi", "IV", "I", "V"]),
             ("Long form (2-bar)", [("I", 2.0), ("V", 2.0), ("vi", 2.0), ("IV", 2.0)]),
@@ -160,13 +173,22 @@ STYLES: dict[str, StylePreset] = {
         melody_program=66, # Alto Sax
         # Headline jazz idiom: walking bass with chromatic leading-tone
         # approach into each new chord, drop-2 voicings connected by
-        # common tones, and the alto sax line arcs over the form.
+        # common tones, and the alto sax line arcs over the form with
+        # charleston rhythm + a chromatic-enclosure turnaround.
         bass_variant={"approach_tones": True},
         chord_variant={
             "voice_leading": "common_tone",
             "avoid_melody_track": "Melody",
         },
-        melody_variant={"phrase_shape": "arc"},
+        melody_variant={
+            "phrase_shape": "arc",
+            "rhythm_motif": "jazz_charleston",
+            "velocity_curve": "phrase_arc",
+            "lick_pool": [
+                "chromatic_enclosure_3",
+                "turn_around_1_6_4_5",
+            ],
+        },
         progression_variants=[
             ("Classic ii-V-I turnaround", ["ii7", "V7", "Imaj7", "Imaj7"]),
             ("Long form (2-bar)", [("ii7", 2.0), ("V7", 2.0), ("Imaj7", 2.0), ("vi7", 2.0)]),
@@ -225,9 +247,14 @@ STYLES: dict[str, StylePreset] = {
         melody_program=25, # Acoustic Guitar (steel) — lead
         # Country bass is built on the leading-tone "5-and-a-half" walk
         # into the next chord; the steel-guitar melody rises through
-        # the form.
+        # the form with long-short country rhythm + a walk-up lick.
         bass_variant={"approach_tones": True},
-        melody_variant={"phrase_shape": "rise"},
+        melody_variant={
+            "phrase_shape": "rise",
+            "rhythm_motif": "country_long_short",
+            "velocity_curve": "rise",
+            "lick_pool": ["country_walk_up_5_to_1"],
+        },
         progression_variants=[
             ("Long form (2-bar)", [("I", 2.0), ("IV", 2.0), ("I", 2.0), ("V", 2.0)]),
             ("Nashville I-IV-V-I", ["I", "IV", "V", "I"]),
@@ -481,9 +508,15 @@ STYLES: dict[str, StylePreset] = {
         bass_program=32,   # Acoustic Bass
         melody_program=66, # Alto Sax
         # Bossa is defined by smooth, conversational chord voicings; the
-        # sax melody breathes in call-and-response phrases over the form.
+        # sax melody breathes in call-and-response phrases over the
+        # form, riding the 3-3-2 partido alto rhythm.
         chord_variant={"voice_leading": "common_tone"},
-        melody_variant={"phrase_shape": "call_response"},
+        melody_variant={
+            "phrase_shape": "call_response",
+            "rhythm_motif": "bossa_partido",
+            "velocity_curve": "call_response",
+            "lick_pool": ["arpeggio_climb_1_3_5_8"],
+        },
         progression_variants=[
             ("Elongated", [("ii7", 2.0), ("V7", 2.0), ("Imaj7", 4.0)]),
             ("Short-long", [("ii7", 0.5), ("V7", 0.5), ("Imaj7", 1.0), ("Imaj7", 1.0)]),

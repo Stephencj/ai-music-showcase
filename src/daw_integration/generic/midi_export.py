@@ -1078,11 +1078,120 @@ _MOTIF_WEAK_BY_METER = {
 }
 
 
+# Pre-baked rhythm templates keyed by genre/idiom. Each entry is a list
+# of (beat_offset, duration, accent) tuples covering a 2-bar motif in
+# counted-pulse units (quarters for 4/4, eighths for 6/8). Beats not
+# listed are silence (real rests, not just zero-velocity notes), which
+# is the key audible difference vs the procedural generator's
+# wall-to-wall coverage.
+#
+# Used by ``add_melody`` when ``rhythm_motif`` is named (typically via a
+# per-style ``melody_variant``). When ``rhythm_motif`` is None the
+# generator falls back to ``_generate_rhythm_motif``'s probabilistic
+# template (today's behavior, bit-identical).
+RHYTHM_MOTIFS: dict[str, list[tuple[float, float, bool]]] = {
+    # Pop: clean quarter + 8th anacrusis, soft mid-phrase breath.
+    "pop_anacrusis": [
+        (0.0, 1.0, True),
+        (1.0, 0.5, False),
+        (1.5, 0.5, False),
+        (2.0, 1.0, True),
+        (3.0, 1.0, False),
+        # short rest 4.0–4.5
+        (4.5, 1.5, True),
+        (6.0, 1.0, False),
+        (7.0, 0.5, False),
+    ],
+    # Jazz charleston: dotted quarter + 8th, sets up that iconic accent.
+    "jazz_charleston": [
+        (0.0, 1.5, True),
+        (1.5, 0.5, False),
+        (2.5, 0.5, False),
+        (3.5, 0.5, False),
+        (4.0, 1.5, True),
+        (5.5, 0.5, False),
+        (6.5, 0.5, False),
+        (7.5, 0.5, False),
+    ],
+    # Funk 16ths with syncopated and-of-1 and and-of-3.
+    "funk_16th_synco": [
+        (0.0, 0.25, True),
+        (0.5, 0.25, False),
+        (0.75, 0.25, False),
+        (1.5, 0.25, False),
+        (1.75, 0.25, False),
+        (2.0, 0.5, True),
+        (2.75, 0.25, False),
+        (3.0, 0.5, False),
+        (3.5, 0.5, False),
+        (4.0, 0.25, True),
+        (4.5, 0.25, False),
+        (4.75, 0.25, False),
+        (5.5, 0.25, False),
+        (6.0, 0.5, True),
+        (6.75, 0.25, False),
+        (7.0, 0.5, False),
+    ],
+    # Blues shuffle triplet feel — long-short-long-short.
+    "blues_shuffle": [
+        (0.0, 0.667, True),
+        (0.667, 0.333, False),
+        (1.0, 0.667, False),
+        (1.667, 0.333, False),
+        (2.0, 0.667, True),
+        (2.667, 0.333, False),
+        (3.0, 0.667, False),
+        (4.0, 0.667, True),
+        (4.667, 0.333, False),
+        (5.0, 1.0, False),
+        (6.0, 1.5, True),
+    ],
+    # Bossa nova partido alto 3-3-2 over 8th-note grid.
+    "bossa_partido": [
+        (0.0, 0.75, True),
+        (0.75, 0.75, False),
+        (1.5, 0.5, False),
+        (2.0, 0.75, True),
+        (2.75, 0.75, False),
+        (3.5, 0.5, False),
+        (4.0, 0.75, True),
+        (4.75, 0.75, False),
+        (5.5, 0.5, False),
+        (6.0, 1.0, True),
+        (7.0, 1.0, False),
+    ],
+    # Country long-short with downbeat emphasis.
+    "country_long_short": [
+        (0.0, 0.75, True),
+        (0.75, 0.25, False),
+        (1.0, 0.75, False),
+        (1.75, 0.25, False),
+        (2.0, 1.0, True),
+        (3.0, 1.0, False),
+        (4.0, 0.75, True),
+        (4.75, 0.25, False),
+        (5.0, 0.75, False),
+        (5.75, 0.25, False),
+        (6.0, 1.0, True),
+    ],
+    # Latin son clave 3-2 (1 - and-of-2 - 3 - rest - and-of-4).
+    "latin_clave_son": [
+        (0.0, 0.5, True),
+        (1.5, 0.5, False),
+        (2.5, 0.5, False),
+        (4.0, 0.5, True),
+        (5.5, 0.5, False),
+        (6.5, 0.5, False),
+    ],
+}
+
+
 def _generate_rhythm_motif(rng, motif_bars: int = 2, density: float = 0.7,
                            swing: float = 0.0,
                            beats_per_bar: int = 4,
                            strong_pulses: tuple = (0, 2),
-                           time_signature: tuple = (4, 4)) -> list[dict]:
+                           time_signature: tuple = (4, 4),
+                           rhythm_motif: Optional[str] = None) -> list[dict]:
     """Sample a rhythmic skeleton for a melodic motif.
 
     Returns a list of events, each a dict:
@@ -1095,9 +1204,35 @@ def _generate_rhythm_motif(rng, motif_bars: int = 2, density: float = 0.7,
     subdivisions are kept probabilistically per ``density``. The FINAL
     portion of each motif gets a lower keep-probability so phrases have
     breathing room. Swing applies to 8th subdivisions.
+
+    ``rhythm_motif`` (Optional[str]): When set to a key in
+    :data:`RHYTHM_MOTIFS`, the procedural template is replaced by the
+    pre-baked catalog entry. This is how per-style melody variants
+    swap in genre-idiomatic rhythms (jazz charleston, funk 16th
+    syncopation, etc.) without growing branches in this function.
+    Unknown names fall through to the procedural path.
     """
     events: list[dict] = []
     total_beats = motif_bars * beats_per_bar
+
+    # Catalog path: return the named motif's events directly, truncating
+    # to ``motif_bars`` and applying swing the same way the procedural
+    # path does.
+    if rhythm_motif and rhythm_motif in RHYTHM_MOTIFS:
+        template = RHYTHM_MOTIFS[rhythm_motif]
+        for beat_off, dur, accent in template:
+            if beat_off >= total_beats:
+                continue   # truncate to requested motif_bars
+            # Cap duration so we don't bleed past the motif end.
+            dur_cap = min(dur, total_beats - beat_off)
+            swung = apply_swing(beat_off % beats_per_bar, swing, grid="8th") \
+                + (int(beat_off) // beats_per_bar) * beats_per_bar
+            events.append({
+                "beat": swung,
+                "duration": max(0.125, dur_cap),
+                "accent": bool(accent),
+            })
+        return events
 
     # Strong beats — always kept
     strong_full = {bar * beats_per_bar + b
@@ -1310,6 +1445,54 @@ def _melody_pitches_in_window(
             continue
         out.add(n.pitch)
     return out
+
+
+def _velocity_for_position(
+    pos: float, shape: str, vmin: int, vmax: int,
+) -> int:
+    """Return a velocity value sampled from a phrase-shape contour.
+
+    ``pos`` is the note's position in the phrase in [0, 1]. ``shape``
+    matches one of the :data:`PHRASE_CONTOURS` values. Output sits
+    between ``vmin`` and ``vmax``. Callers typically add small per-note
+    jitter on top to keep the curve sounding human.
+
+    Curves:
+      - ``arc``: soft start, peak at ~50%, soft end (half-sine).
+      - ``rise``: linear vmin → vmax.
+      - ``fall``: linear vmax → vmin.
+      - ``valley``: peak at start and end, dip in the middle.
+      - ``call_response``: peaks twice (alternating halves at vmax).
+      - ``plateau``: flat at the midpoint.
+    """
+    import math
+
+    pos = max(0.0, min(1.0, float(pos)))
+    span = max(0, int(vmax) - int(vmin))
+    base = int(vmin)
+    s = (shape or "arc").lower()
+    # Accept both the bare PHRASE_CONTOURS keys ("arc") and the
+    # "phrase_<name>" prefix that callers use to flag this as a curve
+    # mode (vs the "flat" default).
+    if s.startswith("phrase_"):
+        s = s[len("phrase_"):]
+
+    if s == "rise":
+        return base + int(round(span * pos))
+    if s == "fall":
+        return base + int(round(span * (1.0 - pos)))
+    if s == "arc":
+        # Half-sine peaks at pos=0.5.
+        return base + int(round(span * math.sin(pos * math.pi)))
+    if s == "valley":
+        # Inverted half-sine — high at both ends.
+        return base + int(round(span * (1.0 - math.sin(pos * math.pi))))
+    if s == "call_response":
+        # Two peaks (each half of the phrase has its own arc).
+        local = (pos * 2.0) % 1.0
+        return base + int(round(span * math.sin(local * math.pi)))
+    # plateau and unknowns → midpoint
+    return base + span // 2
 
 
 def _avoid_collisions(
@@ -1633,6 +1816,9 @@ class MidiExporter:
         phrase_shape: str = "arc",
         cadence: Optional[str] = "authentic_v_i",
         motif_development: Optional[list[str]] = None,
+        rhythm_motif: Optional[str] = None,
+        velocity_curve: str = "flat",
+        lick_pool: Optional[list[str]] = None,
     ) -> "MidiExporter":
         """Generate a melody.
 
@@ -1737,6 +1923,7 @@ class MidiExporter:
             beats_per_bar=self.beats_per_bar,
             strong_pulses=self._meter["strong_pulses"],
             time_signature=self.time_signature,
+            rhythm_motif=rhythm_motif,
         )
 
         # Contour template: small integer offsets (in scale steps) from the
@@ -1797,8 +1984,10 @@ class MidiExporter:
         # ----- Motif-development plan ----------------------------------
         # Per-block op list. Defaults to a tasteful 4-step plan that fits
         # a typical 8-bar / 2-bar-motif phrase. Repeats fill if there are
-        # more blocks than ops.
-        _DEFAULT_MOTIF_PLAN = ["repeat", "sequence_up", "repeat", "cadence"]
+        # more blocks than ops. "restate" returns to block 0's contour
+        # at phrase end — gives every melody a sense of thematic return
+        # instead of the cadence op's bare final-note snap.
+        _DEFAULT_MOTIF_PLAN = ["repeat", "sequence_up", "repeat", "restate"]
         dev_plan = list(motif_development or _DEFAULT_MOTIF_PLAN)
 
         def _dev_op_for_block(block_idx: int) -> str:
@@ -1817,6 +2006,11 @@ class MidiExporter:
                 return -2
             return 0
 
+        # Captured on the first call to _apply_motif_op so the
+        # "restate" op can return block 0's contour at phrase end. We
+        # store a copy so subsequent mutations don't pollute it.
+        base_contour_ref: list[list[int]] = []
+
         def _apply_motif_op(rh, cn, op: str):
             """Reshape the per-event ``rhythm`` and ``contour`` lists
             according to the motif-development operator.
@@ -1828,12 +2022,20 @@ class MidiExporter:
             - ``augmentation``: take every other event and double its
               duration — same total bar length, half as many notes,
               twice as long each (slower, more deliberate feel).
+            - ``restate``: return the OPENING motif's contour over the
+              current chord — gives the phrase a sense of thematic
+              return rather than ending on a bare cadence snap. The
+              base contour is captured from the very first block.
             - everything else (``repeat`` / ``sequence_up/down`` /
               ``cadence``): no rhythmic or contour reshape.
 
             Returns ``(rhythm', contour')`` — both fresh lists, never
             mutates the input.
             """
+            # Capture base contour on first call so "restate" later
+            # has something to reach back for.
+            if not base_contour_ref:
+                base_contour_ref.append(list(cn))
             if op == "inversion":
                 return list(rh), [-s for s in cn]
             if op == "retrograde":
@@ -1844,6 +2046,12 @@ class MidiExporter:
                 for ev in rh[::2]:
                     new_rh.append({**ev, "duration": ev["duration"] * 2.0})
                 return new_rh, list(cn[:len(new_rh)])
+            if op == "restate":
+                # Reach back for the opening motif's contour. Fall
+                # through to "repeat" semantics if we somehow got
+                # called before block 0 captured (defensive).
+                base = base_contour_ref[0] if base_contour_ref else cn
+                return list(rh), list(base)
             return list(rh), list(cn)
 
         # Expand the progression plan once so each melody note can look up
@@ -1954,7 +2162,15 @@ class MidiExporter:
                     anchor = pitch
 
                 vel_accent_boost = 10 if ev["accent"] else 0
-                vel = int(rng.integers(vmin, vmax + 1)) + vel_accent_boost
+                if velocity_curve and velocity_curve != "flat":
+                    base = _velocity_for_position(
+                        note_pos, velocity_curve, vmin, vmax,
+                    )
+                    # Light per-note jitter so the curve sounds human,
+                    # not a pure sinusoid.
+                    vel = base + int(rng.integers(-5, 6)) + vel_accent_boost
+                else:
+                    vel = int(rng.integers(vmin, vmax + 1)) + vel_accent_boost
                 vel = max(1, min(127, vel))
 
                 t = base_t + world_bar * self.bar_duration + beat_in_bar * beat
@@ -1978,6 +2194,50 @@ class MidiExporter:
         if extra_bars > 0:
             _emit_block(total_motifs * motif_bars, 0, extra_bars,
                         block_idx=total_motifs)
+
+        # ----- Lick injection (auto-fire from style variant pool) -----
+        # When ``lick_pool`` names one or more MELODIC_LICKS keys, pick
+        # one deterministically per phrase and stamp it over the chosen
+        # bar — replacing the walker's notes in that bar with the lick.
+        # 60% land on the final bar (recognisable "tag"), 40% on the
+        # penultimate bar (anacrusis-ish setup).
+        if lick_pool and bars >= 1:
+            valid_pool = [n for n in lick_pool if n in MELODIC_LICKS]
+            if valid_pool:
+                rng_lick = np.random.default_rng((seed or 0) + 1337)
+                lick_name = valid_pool[int(rng_lick.integers(0, len(valid_pool)))]
+                use_final = rng_lick.random() < 0.6
+                target_bar = (bars - 1) if use_final else max(0, bars - 2)
+
+                bar_start_t = base_t + target_bar * self.bar_duration
+                bar_end_t = bar_start_t + self.bar_duration
+                # Drop walker notes that fall inside the target bar.
+                track.notes = [
+                    n for n in track.notes
+                    if not (bar_start_t - 1e-6 <= n.start < bar_end_t - 1e-6)
+                ]
+                # Stamp the lick's events.
+                spec = MELODIC_LICKS[lick_name]
+                scale_for_lick = SCALES.get(scale_name, SCALES["major"])
+                for beat_off, degree, dur in spec["events"]:
+                    t = bar_start_t + float(beat_off) * beat
+                    if t >= bar_end_t:
+                        continue
+                    end = min(
+                        t + max(0.05, float(dur) * beat),
+                        bar_end_t,
+                    )
+                    d = max(1, int(degree)) - 1
+                    octave_offset, inner = divmod(d, len(scale_for_lick))
+                    pitch = (
+                        root_midi
+                        + scale_for_lick[inner]
+                        + 12 * octave_offset
+                    )
+                    track.notes.append(NoteEvent(pitch, t, end, 95))
+                # Re-sort by start so downstream readers (cadence,
+                # harmony, follow_line) see notes in time order.
+                track.notes.sort(key=lambda n: n.start)
 
         # ----- Cadence resolution -------------------------------------
         # Replace the no-op phrase-resolution loop that used to live here.
