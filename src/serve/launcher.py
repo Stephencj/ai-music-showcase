@@ -78,6 +78,17 @@ def launch(blocks: gr.Blocks, *,
         # only used by the `share=True` fallback path above.
         api.add_middleware(IPAwareAuthMiddleware, token=token)
 
+    # Mount vendored JS (AlphaTab etc.) before mount_gradio_app so the
+    # routing intent is explicit. /static/alphatab/ is whitelisted in
+    # the auth middleware so the iOS WebView can fetch the library
+    # off-LAN without the token shaking hands on every file.
+    from pathlib import Path as _Path
+    from fastapi.staticfiles import StaticFiles
+    _static_dir = _Path(__file__).resolve().parents[2] / "static"
+    if _static_dir.exists():
+        api.mount("/static", StaticFiles(directory=str(_static_dir)),
+                  name="static")
+
     gr.mount_gradio_app(api, blocks, path="/")
 
     advertiser = MdnsAdvertiser()

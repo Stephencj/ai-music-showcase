@@ -51,6 +51,7 @@ from src.scoring.pdf_export import (
     export_zip as _pdf_export_zip,
     is_lilypond_available,
 )
+from src.playback.playback_html import build_playback_html
 
 # ---------------------------------------------------------------------------
 # Logging — writes structured runtime events to logs/app.log so we can
@@ -1087,6 +1088,116 @@ def _export_song_pdf(state: dict) -> str:
     )
 
 
+def _read_midi_b64(path: Path) -> str:
+    """Read a MIDI file → base64 string for transport to the AlphaTab
+    JS bridge."""
+    import base64
+    return base64.b64encode(Path(path).read_bytes()).decode()
+
+
+def _list_playback_sources() -> list:
+    """Build the Playback-tab source dropdown choices.
+
+    Returns ``[(label, value), ...]`` pairs. ``value`` is a short ID
+    the handlers parse: ``"compose"`` / ``"block:<name>"`` / ``"song"``.
+    """
+    out: list = []
+    if _state.get("midi_path") and Path(_state["midi_path"]).exists():
+        out.append(("Latest compose", "compose"))
+    try:
+        for blk in block_store.list_blocks():
+            name = blk.get("name", "?")
+            out.append((f"Block: {name}", f"block:{name}"))
+    except Exception:
+        logger.exception("Playback: list_blocks failed")
+    song_path = OUTPUT_DIR / "last_song.mid"
+    if song_path.exists():
+        out.append(("Latest song render", "song"))
+    return out
+
+
+def _resolve_playback_source(source_id: str) -> Optional[Path]:
+    """source_id → MIDI path. None if the source can't be resolved."""
+    if not source_id:
+        return None
+    if source_id == "compose":
+        p = _state.get("midi_path")
+        return Path(p) if p and Path(p).exists() else None
+    if source_id == "song":
+        p = OUTPUT_DIR / "last_song.mid"
+        return p if p.exists() else None
+    if source_id.startswith("block:"):
+        name = source_id.split(":", 1)[1]
+        p = block_store.BLOCKS_DIR / f"{name}.mid"
+        return p if p.exists() else None
+    return None
+
+
+def _load_midi_for_playback(source_id: str) -> str:
+    """Resolve the source → return base64 MIDI bytes for the JS bridge."""
+    path = _resolve_playback_source(source_id)
+    if not path:
+        return ""
+    try:
+        return _read_midi_b64(path)
+    except Exception as e:
+        raise _logged_error("Load MIDI for playback", e) from e
+
+
+def _render_hq_for_playback(source_id: str) -> str:
+    """Kick off the FluidSynth HQ render for the current source and
+    return a URL that the JS bridge can plug into the <audio> tag."""
+    path = _resolve_playback_source(source_id)
+    if not path:
+        raise gr.Error("Pick a source first.")
+    # render_high_quality reads from _state["midi_path"] by default;
+    # swap it so the HQ render uses the playback source.
+    prior = _state.get("midi_path")
+    _state["midi_path"] = path
+    try:
+        wav_path, _stems, _info = render_high_quality(
+            "default", False, "auto", output_subdir="playback_hq",
+        )
+    finally:
+        _state["midi_path"] = prior
+    # Gradio serves files under /gradio_api/file=<absolute_path>; that's
+    # the URL the JS bridge points the <audio> tag at.
+    return f"/gradio_api/file={Path(wav_path).resolve()}"
+
+
+def _on_playback_note_event(note_json: str) -> str:
+    """Format a note-click payload from the JS bridge as user-friendly
+    markdown for the side panel."""
+    import json
+    if not note_json:
+        return "Click a note in the score."
+    try:
+        d = json.loads(note_json)
+    except Exception:
+        return "Click a note in the score."
+    pitch = str(d.get("pitch", ""))
+    # `realValueAsString` from AlphaTab is like "G4"; if not present
+    # synthesize from MIDI number.
+    if not pitch and d.get("midi"):
+        midi = int(d["midi"])
+        names = ["C", "C#", "D", "D#", "E", "F",
+                 "F#", "G", "G#", "A", "A#", "B"]
+        pitch = f"{names[midi % 12]}{(midi // 12) - 1}"
+    dur_q = float(d.get("durQuarters", 0))
+    dur_label = {
+        4.0: "whole", 2.0: "half", 1.5: "dotted quarter",
+        1.0: "quarter", 0.75: "dotted 8th",
+        0.5: "8th", 0.25: "16th", 0.125: "32nd",
+    }.get(dur_q, f"{dur_q:.2f}-quarter" if dur_q else "?")
+    bar = int(d.get("barIdx", 0)) + 1
+    beat = float(d.get("beatIdx", 0)) + 1.0
+    track = str(d.get("trackName") or "").strip()
+    line = f"**{pitch or '?'}** · {dur_label} note · bar {bar} · beat {beat:g}"
+    if track:
+        line += f" · _{track}_"
+    return line
+
+
 def save_current_as_block(name: str):
     """Save the most-recent compose_midi result as a named block."""
     if not name or not name.strip():
@@ -1670,6 +1781,87 @@ def render_song(state: dict):
         raise gr.Error(str(e))
     except Exception as e:
         raise _logged_error("Render song", e) from e
+
+
+def _build_playback_tab() -> None:
+    """Guitar-Pro-style score viewer with a moving cursor.
+
+    Layout:
+      - Source dropdown (latest compose / saved block / latest song).
+      - Reload + Render-HQ buttons.
+      - AlphaTab score area (full-width SVG, auto-scrolling cursor).
+      - Hidden bridges (textboxes + button) that wire the JS in
+        ``static/alphatab/playback.js`` to the server handlers.
+      - Note-info markdown that updates on note click.
+    """
+    gr.Markdown(
+        "### Playback — score with moving cursor\n"
+        "Pick a source, click ▶. The cursor sweeps across the staves "
+        "as the audio plays. Tap any note to seek there and see its "
+        "pitch / duration / bar in the panel below. Click **🎚 Render "
+        "HQ mix** to swap AlphaTab's built-in synth for the FluidSynth "
+        "mix (cursor stays beat-locked either way)."
+    )
+
+    initial_sources = _list_playback_sources()
+    initial_value = initial_sources[0][1] if initial_sources else None
+
+    with gr.Row():
+        source_dd = gr.Dropdown(
+            choices=initial_sources,
+            value=initial_value,
+            label="Source",
+            scale=3,
+        )
+        reload_btn = gr.Button("🔄 Reload sources", scale=1)
+        hq_render_btn = gr.Button("🎚 Render HQ mix", scale=1)
+
+    hq_status = gr.Markdown("")
+
+    # Initial base64 MIDI (loads the first source on tab build).
+    initial_b64 = (
+        _load_midi_for_playback(initial_value) if initial_value else ""
+    )
+    score_html = gr.HTML(value=build_playback_html(initial_b64))
+
+    # ---- Hidden Gradio↔JS bridges ----
+    # JS polls these textboxes for new MIDI / HQ-WAV URLs; JS writes
+    # note-click JSON into pb_note_event and clicks pb_note_trigger.
+    midi_payload = gr.Textbox(
+        value="", visible=False, elem_id="pb_midi_payload",
+    )
+    hq_wav_url = gr.Textbox(
+        value="", visible=False, elem_id="pb_hq_wav_url",
+    )
+    note_event = gr.Textbox(
+        value="", visible=False, elem_id="pb_note_event",
+    )
+    note_trigger = gr.Button(
+        "trigger", visible=False, elem_id="pb_note_trigger",
+    )
+
+    note_info = gr.Markdown("Click a note in the score.")
+
+    source_dd.change(_load_midi_for_playback, [source_dd], [midi_payload])
+
+    def _reload_sources():
+        choices = _list_playback_sources()
+        val = choices[0][1] if choices else None
+        return gr.update(choices=choices, value=val)
+    reload_btn.click(_reload_sources, [], [source_dd])
+
+    def _do_render_hq(source_id, progress=gr.Progress(track_tqdm=True)):
+        try:
+            url = _render_hq_for_playback(source_id)
+            return url, "✓ HQ mix rendered — toggle 'Use HQ mix' to hear it."
+        except gr.Error:
+            raise
+        except Exception as e:
+            raise _logged_error("Render HQ for playback", e) from e
+
+    hq_render_btn.click(_do_render_hq, [source_dd], [hq_wav_url, hq_status])
+
+    note_trigger.click(_on_playback_note_event, [note_event], [note_info])
 
 
 def _build_compose_song_tab(library_trigger: gr.State) -> None:
@@ -4014,6 +4206,10 @@ def build_app() -> gr.Blocks:
         # -- Tab: Compose Song (multi-section, freeform tracks) ------------
         with gr.Tab("Compose Song", id="song"):
             _build_compose_song_tab(library_trigger)
+
+        # -- Tab: Playback (Guitar-Pro style score + cursor) ---------------
+        with gr.Tab("Playback", id="playback"):
+            _build_playback_tab()
 
         # -- Tab: Melody Studio --------------------------------------------
         with gr.Tab("Melody Studio", id="melody"):

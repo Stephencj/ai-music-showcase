@@ -174,6 +174,16 @@ class IPAwareAuthMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # Public-domain static assets (vendored AlphaTab JS/CSS/font/
+        # soundfont) are served unauthenticated so the iOS WebView can
+        # boot the Playback tab off-LAN without juggling the token on
+        # every file fetch.
+        if scope.get("type") == "http":
+            path = scope.get("path", "") or ""
+            if path.startswith("/static/alphatab/"):
+                await self.app(scope, receive, send)
+                return
+
         if _is_trusted(_client_ip(scope), self.trusted):
             await self.app(scope, receive, send)
             return
