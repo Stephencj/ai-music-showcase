@@ -295,8 +295,17 @@ def midi_to_score(
     scale: str = "major",
     tempo: Optional[float] = None,
     title: Optional[str] = None,
+    swing: float = 0.0,
 ):
-    """Load MIDI → music21 Score, patch in the key signature, quantize."""
+    """Load MIDI → music21 Score, patch in the key signature, quantize.
+
+    When ``swing > 0`` the drum parts are snapped to a STRAIGHT 8th-note
+    grid (not 16ths) and a "Swing" performance instruction is engraved
+    above the top staff. That mirrors the standard jazz-chart
+    convention: write straight 8ths on paper, let the player interpret
+    them with swing. Otherwise the previous 16th-note binary grid is
+    used for drums.
+    """
 
     import music21
 
@@ -324,19 +333,22 @@ def midi_to_score(
         name = str(getattr(part, "partName", "") or "")
         return "drum" in name.lower() or "perc" in name.lower()
 
+    # When swing is on, snap drum offsets to STRAIGHT 8ths (grid=0.5).
+    # Otherwise use 16ths (grid=0.25). The "Swing" instruction added
+    # below tells the performer to interpret the 8ths with swing feel —
+    # standard jazz-chart convention. Without this, swing-displaced
+    # offsets read as dotted-8th-plus-16th pairs (ugly).
+    swing_active = bool(swing and swing > 0.05)
+    drum_grid = 0.5 if swing_active else 0.25
+
     for part in score.parts:
         try:
             if _is_drum_part(part):
-                # music21's quantize keeps tuplet markings on triplet
-                # durations even when the divisor list is binary, so
-                # we additionally walk the part and snap every note's
-                # offset + duration onto a 16th-note grid and strip
-                # tuplets explicitly.
                 part.quantize(
                     [4, 8, 16],
                     processOffsets=True, processDurations=True, inPlace=True,
                 )
-                _force_binary_grid(part)
+                _force_binary_grid(part, grid=drum_grid)
             else:
                 part.quantize(
                     [4, 8, 12, 16],
@@ -347,6 +359,23 @@ def midi_to_score(
                 "quantize failed on part %r — engraving raw rhythms",
                 getattr(part, "partName", "?"),
             )
+
+    # Engrave a "Swing" performance instruction at the top of the score
+    # so the player knows to swing the straight 8ths.
+    if swing_active:
+        try:
+            top = score.parts[0] if list(score.parts) else None
+            if top is not None:
+                first_measure = top.recurse().getElementsByClass(
+                    music21.stream.Measure,
+                ).first()
+                target = first_measure if first_measure is not None else top
+                te = music21.expressions.TextExpression("Swing")
+                te.placement = "above"
+                # Push to position 0 of the first measure.
+                target.insert(0, te)
+        except Exception:
+            logger.exception("could not add Swing annotation — continuing")
 
     md = music21.metadata.Metadata()
     md.title = title or "Composition"
@@ -761,6 +790,7 @@ def export_zip(
     title: Optional[str] = None,
     progression: Optional[list] = None,
     bars: Optional[int] = None,
+    swing: float = 0.0,
 ) -> Path:
     """End-to-end: MIDI → engraved PDFs → single ZIP file.
 
@@ -792,6 +822,7 @@ def export_zip(
 
     score = midi_to_score(
         midi_path, key=key, scale=scale, tempo=tempo, title=title,
+        swing=swing,
     )
 
     chordmode = _progression_to_chordmode(

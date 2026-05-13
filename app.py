@@ -830,6 +830,7 @@ def compose_midi(
             "title": f"{style.title()} in {key} {scale}",
             "progression": list(progression),
             "bars": int(bars),
+            "swing": float(swing),
         }
 
         # Pin the live MidiExporter + audit issues so the Key-safety panel can
@@ -957,6 +958,7 @@ def _export_pdf_zip(
     title: str,
     progression: list | None = None,
     bars: int | None = None,
+    swing: float = 0.0,
 ) -> str:
     """All three Export-PDF buttons funnel through here so the
     LilyPond-missing error is uniform across MIDI Compose / Library /
@@ -970,7 +972,7 @@ def _export_pdf_zip(
         path = _pdf_export_zip(
             midi_path, out_zip,
             key=key, scale=scale, tempo=tempo, title=title,
-            progression=progression, bars=bars,
+            progression=progression, bars=bars, swing=swing,
         )
         return str(path)
     except gr.Error:
@@ -1020,6 +1022,7 @@ def _export_compose_pdf():
         title=str(meta.get("title", "Composition")),
         progression=meta.get("progression"),
         bars=meta.get("bars"),
+        swing=float(meta.get("swing", 0.0) or 0.0),
     )
     # Pull the full_score.pdf out of the ZIP into a stable location
     # so we can iframe it.
@@ -1111,6 +1114,7 @@ def _midi_to_musicxml_b64(midi_path: Path) -> str:
         key=str(meta.get("key", "C")),
         scale=str(meta.get("scale", "major")),
         title=str(meta.get("title", "Composition")),
+        swing=float(meta.get("swing", 0.0) or 0.0),
     )
     out_path = score.write("musicxml")
     return base64.b64encode(Path(str(out_path)).read_bytes()).decode()
