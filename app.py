@@ -656,8 +656,12 @@ def compose_midi(
     chords_progression_override: dict | None = None,
     bass_progression_override: dict | None = None,
     melody_progression_override: dict | None = None,
+    enable_harmony: bool = False,
+    harmony_voices: int = 2,
+    harmony_preset: str = "queen",
+    harmony_rule: str = "voice_leading_smooth",
 ):
-    if not any([enable_chords, enable_bass, enable_melody, enable_drums]) and not (extras or []):
+    if not any([enable_chords, enable_bass, enable_melody, enable_drums, enable_harmony]) and not (extras or []):
         raise gr.Error("Enable at least one track.")
 
     try:
@@ -767,6 +771,26 @@ def compose_midi(
             else:
                 midi.add_drum_pattern(drum_pattern, bars=bars,
                                       swing=swing, seed=seed)
+
+        # Permanent harmony track (first-class alongside chords/bass/
+        # melody/drums). Layered on top of the melody using the same
+        # add_harmony engine the Studio's HarmonyTag system uses; each
+        # voice writes a separate MIDI track ("Melody Harm 1", " Harm 2",
+        # …) so they're independently editable in any DAW. Runs AFTER
+        # the melody (which the dispatch order above guarantees) so
+        # add_harmony can read the melody's notes.
+        if enable_harmony and enable_melody:
+            try:
+                midi.add_harmony(
+                    source_track="Melody",
+                    style=harmony_preset or "queen",
+                    voices=int(harmony_voices) if harmony_voices else 2,
+                    key=key, scale_name=scale,
+                    progression=progression,
+                    harmony_rule=harmony_rule or "voice_leading_smooth",
+                )
+            except Exception:
+                logger.exception("harmony track render failed")
 
         # Extra freeform tracks
         _render_extras(midi, extras or [],
@@ -1097,17 +1121,20 @@ def _default_extra_track(ttype: str, name: str = "", style_key: str = "pop") -> 
     return base
 
 
-def _render_extra_track_row(idx: int, tr: dict, extras_state: gr.State) -> None:
-    """Render one row of the Extra Tracks accordion. Per-type fields, name,
-    and a Remove button. Mutations write back into extras_state.
+def _render_extra_track_row(idx: int, tr: dict, extras_state: gr.State,
+                            rerender_signal: "gr.Number | None" = None) -> None:
+    """Render one row of the Extra Tracks accordion.
 
-    Every widget carries a stable ``key=`` so Gradio's ``@gr.render`` preserves
-    it across re-renders. Without ``key=`` the entire row tree is destroyed
-    and rebuilt on each state mutation, which races with in-flight
-    ``.change`` events from dropdowns — the user-visible symptom is "the
-    dropdown won't let me select a value." Stable keys keep the widget
-    instance alive, so the .change event always fires against a live
-    component, and the user's selection is what wins.
+    The parent ``@gr.render`` is gated by an explicit ``triggers=`` list
+    (add-button click + ``rerender_signal`` change) so field edits no
+    longer trigger a rebuild. That eliminates the "fields are locked"
+    symptom — widgets are STATIC during editing; only Add and Remove
+    cause structural re-renders.
+
+    Mutations to fields write back into ``extras_state`` but do NOT
+    bump ``rerender_signal``, so the user can change any number of
+    fields without disturbing the row layout. The Remove button bumps
+    the signal so the row physically disappears.
     """
     ttype = tr.get("type", "lead")
     # A row-stable key prefix scopes every widget on this row by index.
@@ -1343,10 +1370,23 @@ def _render_extra_track_row(idx: int, tr: dict, extras_state: gr.State) -> None:
         seed_override.change(lambda s, v: _set(s, seed=v if v not in (None, "", 0) else None),
                              [extras_state, seed_override], extras_state)
 
-        def _remove(state):
-            return [t for i, t in enumerate(state) if i != idx]
+        def _remove(state, sig):
+            new = [t for i, t in enumerate(state) if i != idx]
+            return new, int((sig or 0) + 1)
 
-        remove_btn.click(_remove, [extras_state], extras_state)
+        if rerender_signal is not None:
+            remove_btn.click(
+                _remove,
+                [extras_state, rerender_signal],
+                [extras_state, rerender_signal],
+            )
+        else:
+            # Back-compat: legacy callers without a signal still work
+            # (no structural re-render after remove, but state is correct).
+            remove_btn.click(
+                lambda state: [t for i, t in enumerate(state) if i != idx],
+                [extras_state], extras_state,
+            )
 
 
 def export_session(session_name: str, tempo: float,
@@ -3263,6 +3303,30 @@ def build_app() -> gr.Blocks:
                         bass_on = gr.Checkbox(value=True, label="Bass")
                         melody_on = gr.Checkbox(value=True, label="Melody")
                         drums_on = gr.Checkbox(value=True, label="Drums")
+                        harmony_on = gr.Checkbox(value=False, label="Harmony")
+
+                    # Harmony controls — only meaningful when harmony_on
+                    # is checked. Same plumbing the harmony extras row
+                    # uses; promoted up here so harmony is a first-class
+                    # default track like chords / bass / melody / drums.
+                    with gr.Row():
+                        harmony_voices = gr.Radio(
+                            [1, 2, 3], value=2, label="Harmony voices",
+                            info="How many harmony lines to stack on the melody.",
+                        )
+                        harmony_preset = gr.Dropdown(
+                            HARMONY_PRESETS, value="queen",
+                            label="Harmony preset",
+                            info="queen / abba / boston / journey / elton / chicago.",
+                            allow_custom_value=True,
+                        )
+                        harmony_rule_dd = gr.Dropdown(
+                            ["", *sorted(HARMONY_OPS)],
+                            value="voice_leading_smooth",
+                            label="Voice-leading rule",
+                            info="Blank = smooth default.",
+                            allow_custom_value=True,
+                        )
 
                     with gr.Row():
                         voicing_dd = gr.Dropdown(
@@ -3460,7 +3524,24 @@ def build_app() -> gr.Blocks:
                             )
                             add_extra_btn = gr.Button("+ Add extra track", scale=1)
 
-                        @gr.render(inputs=[extras_state])
+                        # Re-render signal. The @gr.render below uses
+                        # explicit ``triggers=`` so field edits inside a
+                        # row don't tear down + rebuild the row's
+                        # widgets — that's the lock-on-edit symptom
+                        # users were hitting. Only Add (this button) and
+                        # Remove (per-row, which bumps the signal) cause
+                        # a structural rebuild.
+                        extras_render_signal = gr.Number(
+                            value=0, visible=False, label="_extras_signal",
+                        )
+
+                        @gr.render(
+                            inputs=[extras_state],
+                            triggers=[
+                                add_extra_btn.click,
+                                extras_render_signal.change,
+                            ],
+                        )
                         def _render_extras_list(extras):
                             if not extras:
                                 gr.Markdown(
@@ -3470,7 +3551,10 @@ def build_app() -> gr.Blocks:
                                 )
                                 return
                             for tr_idx, tr in enumerate(extras):
-                                _render_extra_track_row(tr_idx, tr, extras_state)
+                                _render_extra_track_row(
+                                    tr_idx, tr, extras_state,
+                                    rerender_signal=extras_render_signal,
+                                )
 
                         def _add_extra(state, ttype, name):
                             if len(state) >= 6:
@@ -3699,7 +3783,9 @@ def build_app() -> gr.Blocks:
                         progression_in, extras_state,
                         chord_octave_in, bass_octave_in, melody_octave_in,
                         drum_grid_state, random_variation_chk,
-                        chords_prog_state, bass_prog_state, melody_prog_state],
+                        chords_prog_state, bass_prog_state, melody_prog_state,
+                        harmony_on, harmony_voices, harmony_preset,
+                        harmony_rule_dd],
                 outputs=[midi_audio, midi_file, compose_info, audit_df,
                          audit_suggestion_dd],
             )
