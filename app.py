@@ -1426,6 +1426,9 @@ def _build_compose_song_tab(library_trigger: gr.State) -> None:
     with gr.Row():
         gr.Markdown("### 📚 Block Library")
         refresh_lib_btn = gr.Button("🔄 Refresh", scale=0)
+        rerender_lib_btn = gr.Button("↻ Re-render all at HQ", scale=0,
+                                     variant="secondary")
+    rerender_status = gr.Markdown("")
 
     @gr.render(inputs=[library_trigger])
     def _render_library(_trigger):
@@ -1447,6 +1450,37 @@ def _build_compose_song_tab(library_trigger: gr.State) -> None:
 
     refresh_lib_btn.click(lambda v: (v or 0) + 1,
                           [library_trigger], library_trigger)
+
+    def _rerender_all_blocks(trigger, progress=gr.Progress()):
+        """Walk the block library and re-render every preview WAV at
+        44.1 kHz stereo via the HQ pipeline. Older blocks saved when
+        the preview synth was 22 kHz mono catch up to today's
+        standard."""
+        names = [b["name"] for b in block_store.list_blocks()]
+        if not names:
+            return "_No blocks to re-render._", (trigger or 0) + 1
+        progress(0, desc="Starting HQ re-render…")
+        n_ok = 0
+        n_fail = 0
+        for i, name in enumerate(names):
+            progress((i + 1) / len(names), desc=f"Rendering {name}…")
+            try:
+                if block_store.rerender_block_wav(name) is not None:
+                    n_ok += 1
+                else:
+                    n_fail += 1
+            except Exception:
+                n_fail += 1
+        msg = f"Re-rendered **{n_ok}** of {len(names)} blocks at 44.1 kHz stereo."
+        if n_fail:
+            msg += f" {n_fail} failed (see logs)."
+        return msg, (trigger or 0) + 1
+
+    rerender_lib_btn.click(
+        _rerender_all_blocks,
+        [library_trigger],
+        [rerender_status, library_trigger],
+    )
 
     # ----- Timeline -------------------------------------------------------
     gr.Markdown("---")

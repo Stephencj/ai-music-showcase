@@ -11,11 +11,18 @@ worth of bars). Each block lives at:
                                 (lazily generated if missing)
 
 The Compose Song tab arranges blocks on a timeline and concatenates them.
+
+Preview WAVs render at 44.1 kHz stereo via FluidSynthRenderer + the
+project's Mixer (same path Compose Song's "Render HQ" uses), with a
+graceful fallback to ``pretty_midi.synthesize`` (22 kHz mono) when
+FluidSynth isn't available — block save shouldn't fail just because
+the soundfont is missing in some constrained environment.
 """
 
 from __future__ import annotations
 
 import datetime as _dt
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -26,9 +33,12 @@ import soundfile as sf
 import yaml
 
 
+logger = logging.getLogger("ai_music_studio.blocks")
+
+
 BLOCKS_DIR = Path("data/blocks")
 
-_DEFAULT_PREVIEW_SR = 22050  # sample rate for the preview WAV (smaller than 44.1k to save disk)
+_DEFAULT_PREVIEW_SR = 44100  # 44.1 kHz stereo, matches Compose Song HQ render
 
 
 def _safe_name(name: str) -> str:
@@ -67,6 +77,73 @@ def _instrument_summary(pm: pretty_midi.PrettyMIDI) -> list[dict]:
 
 def _total_notes(pm: pretty_midi.PrettyMIDI) -> int:
     return sum(len(i.notes) for i in pm.instruments)
+
+
+def _write_block_wav_hq(
+    pm: pretty_midi.PrettyMIDI, wav_path: Path,
+    sample_rate: int = _DEFAULT_PREVIEW_SR,
+) -> bool:
+    """Render ``pm`` via the project's HQ pipeline (FluidSynthRenderer
+    + Mixer) and write a stereo WAV to ``wav_path``.
+
+    Returns True on success, False on any failure (missing soundfont,
+    fluidsynth not installed, OOM mid-mix). The caller decides whether
+    to fall back to a lower-quality path or just skip the preview —
+    block save itself is never blocked by a preview failure.
+    """
+    try:
+        # Lazy imports so blocks.py stays useful without dragging in
+        # the audio_processing stack on import (keeps test load fast).
+        from src.audio_processing.render.pipeline import render_to_audio
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp_dir = Path(td)
+            midi_tmp = tmp_dir / "block.mid"
+            pm.write(str(midi_tmp))
+            result = render_to_audio(
+                midi=midi_tmp,
+                output_dir=tmp_dir / "render",
+                sample_rate=sample_rate,
+                with_stems=False,
+                master_preset="default",
+            )
+            # Move the rendered mix.wav onto the block's expected path.
+            wav_path.parent.mkdir(parents=True, exist_ok=True)
+            # shutil.move is safe across same-filesystem temp dirs.
+            import shutil
+            shutil.move(str(result.mix_path), str(wav_path))
+        return True
+    except Exception as e:
+        logger.warning("HQ block render failed for %s: %s", wav_path, e)
+        return False
+
+
+def _write_block_wav_fallback(
+    pm: pretty_midi.PrettyMIDI, wav_path: Path, sample_rate: int = 22050,
+) -> bool:
+    """Last-resort preview render via pretty_midi.synthesize (mono,
+    sine-y). Used when the HQ pipeline can't fire in the current
+    environment (no soundfont, no fluidsynth, etc.)."""
+    try:
+        audio = pm.synthesize(fs=sample_rate)
+        sf.write(str(wav_path), audio, sample_rate)
+        return True
+    except Exception as e:
+        logger.warning("Fallback block render failed for %s: %s", wav_path, e)
+        return False
+
+
+def _write_block_wav(
+    pm: pretty_midi.PrettyMIDI, wav_path: Path,
+    sample_rate: int = _DEFAULT_PREVIEW_SR,
+) -> bool:
+    """Best-effort preview WAV: try HQ first, fall back to the
+    pretty_midi path on any failure. Returns True if SOME audio
+    landed at ``wav_path``."""
+    if _write_block_wav_hq(pm, wav_path, sample_rate=sample_rate):
+        return True
+    return _write_block_wav_fallback(pm, wav_path, sample_rate=22050)
 
 
 def save_block(name: str,
@@ -115,12 +192,9 @@ def save_block(name: str,
         yaml.safe_dump(metadata, f, sort_keys=False, default_flow_style=False)
 
     if write_wav:
-        try:
-            audio = pm.synthesize(fs=wav_sample_rate)
-            sf.write(str(wav_path), audio, wav_sample_rate)
-        except Exception:
-            # Preview is nice-to-have; don't block save if synth fails.
-            pass
+        # HQ first (44.1 kHz stereo via FluidSynthRenderer + Mixer);
+        # graceful fallback to pretty_midi.synthesize on failure.
+        _write_block_wav(pm, wav_path, sample_rate=wav_sample_rate)
 
     return yaml_path
 
@@ -172,7 +246,11 @@ def load_block(name: str) -> tuple[pretty_midi.PrettyMIDI, dict]:
 
 
 def ensure_preview_wav(name: str, sample_rate: int = _DEFAULT_PREVIEW_SR) -> Optional[Path]:
-    """Lazy-synth a .wav preview if it's missing. Returns the path or None on failure."""
+    """Lazy-synth a .wav preview if it's missing. Returns the path or None on failure.
+
+    Uses the same HQ-first dispatch as :func:`save_block` so lazy
+    previews match the eager ones at 44.1 kHz stereo.
+    """
     wav_path = _wav_path(name)
     if wav_path.exists():
         return wav_path
@@ -181,11 +259,28 @@ def ensure_preview_wav(name: str, sample_rate: int = _DEFAULT_PREVIEW_SR) -> Opt
         return None
     try:
         pm = pretty_midi.PrettyMIDI(str(midi_path))
-        audio = pm.synthesize(fs=sample_rate)
-        sf.write(str(wav_path), audio, sample_rate)
-        return wav_path
     except Exception:
         return None
+    if _write_block_wav(pm, wav_path, sample_rate=sample_rate):
+        return wav_path
+    return None
+
+
+def rerender_block_wav(name: str, sample_rate: int = _DEFAULT_PREVIEW_SR) -> Optional[Path]:
+    """Force-re-render a block's preview WAV to HQ regardless of
+    whether a cached one exists. Used by the Library's
+    'Re-render all blocks at HQ' batch operation."""
+    midi_path = _midi_path(name)
+    if not midi_path.exists():
+        return None
+    try:
+        pm = pretty_midi.PrettyMIDI(str(midi_path))
+    except Exception:
+        return None
+    wav_path = _wav_path(name)
+    if _write_block_wav(pm, wav_path, sample_rate=sample_rate):
+        return wav_path
+    return None
 
 
 def delete_block(name: str) -> None:
