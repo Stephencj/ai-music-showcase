@@ -820,12 +820,15 @@ def compose_midi(
             "bars": int(bars),
         }
         # PDF export needs key/scale/tempo/title to inject the key sig
-        # and title the engraved score.
+        # and title the engraved score, plus the progression to print
+        # chord-symbol markers above the top staff.
         _state["compose_meta"] = {
             "key": str(key),
             "scale": str(scale),
             "tempo": float(tempo),
             "title": f"{style.title()} in {key} {scale}",
+            "progression": list(progression),
+            "bars": int(bars),
         }
 
         # Pin the live MidiExporter + audit issues so the Key-safety panel can
@@ -951,6 +954,8 @@ def _export_pdf_zip(
     scale: str,
     tempo: float,
     title: str,
+    progression: list | None = None,
+    bars: int | None = None,
 ) -> str:
     """All three Export-PDF buttons funnel through here so the
     LilyPond-missing error is uniform across MIDI Compose / Library /
@@ -964,6 +969,7 @@ def _export_pdf_zip(
         path = _pdf_export_zip(
             midi_path, out_zip,
             key=key, scale=scale, tempo=tempo, title=title,
+            progression=progression, bars=bars,
         )
         return str(path)
     except gr.Error:
@@ -974,7 +980,7 @@ def _export_pdf_zip(
 
 def _export_compose_pdf() -> str:
     """Wired to the Export PDF button on the MIDI Compose tab. Reads
-    the latest composition's MIDI + key/scale/tempo metadata."""
+    the latest composition's MIDI + key/scale/tempo/progression."""
     mid_path = _state.get("midi_path")
     meta = _state.get("compose_meta") or {}
     if not mid_path or not Path(mid_path).exists():
@@ -986,6 +992,8 @@ def _export_compose_pdf() -> str:
         scale=str(meta.get("scale", "major")),
         tempo=float(meta.get("tempo", 120.0)),
         title=str(meta.get("title", "Composition")),
+        progression=meta.get("progression"),
+        bars=meta.get("bars"),
     )
 
 

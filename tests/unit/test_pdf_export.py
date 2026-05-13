@@ -239,6 +239,79 @@ class PercussionRegressionTests(unittest.TestCase):
                 )
 
 
+class TaglineAndChordSymbolTests(unittest.TestCase):
+    """The LilyPond default tagline ("Music engraving by LilyPond…")
+    should be suppressed, and a roman-numeral progression should
+    materialise as a ``\\new ChordNames \\chordmode { ... }`` block
+    in the emitted ``.ly`` source.
+    """
+
+    def test_postprocess_suppresses_tagline(self):
+        out = pdf_export._postprocess_ly(
+            "\\paper { }\nfoo", chordmode=None,
+        )
+        self.assertIn("\\paper { tagline = ##f }", out)
+        self.assertNotIn("\\paper { }", out)
+
+    def test_postprocess_injects_chord_names(self):
+        ly = (
+            "\\version \"2.26\"\n"
+            "\\score {\n"
+            "  << \\new Staff { c'4 }\n"
+            "  >>\n"
+            "}\n"
+            "\\paper { }\n"
+        )
+        out = pdf_export._postprocess_ly(
+            ly, chordmode="g1 d1 e1:m c1",
+        )
+        self.assertIn("\\new ChordNames", out)
+        self.assertIn("\\chordmode { g1 d1 e1:m c1", out)
+
+    def test_progression_to_chordmode_roman_numerals(self):
+        cm = pdf_export._progression_to_chordmode(
+            ["I", "V", "vi", "IV"], "G", 4,
+        )
+        self.assertEqual(cm, "g1 d1 e1:m c1")
+
+    def test_progression_to_chordmode_handles_tuples(self):
+        """compose_midi stashes the progression as ``[(sym, beats), ...]``
+        — the helper must transparently unwrap that shape so the export
+        button doesn't need to."""
+        cm = pdf_export._progression_to_chordmode(
+            [("I", 1.0), ("V", 1.0), ("vi", 1.0), ("IV", 1.0)], "G", 4,
+        )
+        self.assertEqual(cm, "g1 d1 e1:m c1")
+
+    def test_progression_to_chordmode_seventh_chords(self):
+        cm = pdf_export._progression_to_chordmode(["V7", "I"], "C", 2)
+        self.assertIn("g1:7", cm)
+        self.assertIn("c1", cm)
+
+    def test_progression_to_chordmode_empty_returns_none(self):
+        self.assertIsNone(
+            pdf_export._progression_to_chordmode(None, "C", 4)
+        )
+        self.assertIsNone(
+            pdf_export._progression_to_chordmode([], "C", 4)
+        )
+
+
+class DrumStaffPositionTests(unittest.TestCase):
+    """Each General-MIDI drum family must map to a distinct staff
+    position. Default would be B4 for every Unpitched — that collapses
+    kick/snare/hat onto one line, which is what the user reported."""
+
+    def test_kick_snare_hat_map_to_distinct_pitches(self):
+        positions = {
+            "Bass Drum": pdf_export._DRUM_PITCH_BY_INSTRUMENT_NAME["Bass Drum"],
+            "Snare Drum": pdf_export._DRUM_PITCH_BY_INSTRUMENT_NAME["Snare Drum"],
+            "Hi-Hat Cymbal": pdf_export._DRUM_PITCH_BY_INSTRUMENT_NAME["Hi-Hat Cymbal"],
+        }
+        # Three drum types → three distinct positions.
+        self.assertEqual(len(set(positions.values())), 3)
+
+
 class IntermediateFilenameRegressionTests(unittest.TestCase):
     """``music21.Stream.write("lily.pdf", fp=X)`` writes the LilyPond
     .ly source to ``X`` and the actual PDF at the path it returns —
