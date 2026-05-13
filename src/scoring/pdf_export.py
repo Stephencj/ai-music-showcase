@@ -64,6 +64,37 @@ def _safe_filename(name: str) -> str:
     return cleaned or "Part"
 
 
+def _normalize_percussion(score) -> int:
+    """Rewrite ``PercussionChord`` elements as regular ``Chord`` notes.
+
+    music21's LilyPond translator silently drops ``PercussionChord``
+    when emitting ``.ly`` source — drum staves end up with bar lines
+    and no notes, and LilyPond then skips the "zero-duration score"
+    so no PDF is produced. Converting each PercussionChord into a
+    pitched Chord (same pitches, same duration) makes drums render
+    as a rhythmic notation on a treble staff. Not authentic drum-set
+    notation, but readable and consistent with the rest of the score.
+
+    Returns the number of elements converted (for logging).
+    """
+    import music21
+    n = 0
+    for el in list(
+        score.recurse().getElementsByClass(music21.percussion.PercussionChord)
+    ):
+        pitches = list(el.pitches)
+        ql = el.duration.quarterLength
+        replacement = (
+            music21.chord.Chord(pitches, quarterLength=ql)
+            if pitches else music21.note.Rest(quarterLength=ql)
+        )
+        site = el.activeSite
+        if site is not None:
+            site.replace(el, replacement)
+            n += 1
+    return n
+
+
 def midi_to_score(
     midi_path: "Path | str",
     *,
@@ -77,6 +108,10 @@ def midi_to_score(
     import music21
 
     score = music21.converter.parse(str(midi_path))
+
+    converted = _normalize_percussion(score)
+    if converted:
+        logger.info("normalized %d percussion chords", converted)
 
     mode = "major" if (scale or "major").lower().startswith("maj") else "minor"
     try:
@@ -102,12 +137,32 @@ def midi_to_score(
 
 
 def score_to_full_pdf(score, out_path: "Path | str") -> Path:
-    """Render the multi-stave conductor score to a single PDF."""
+    """Render the multi-stave conductor score to a single PDF.
+
+    ``music21.Stream.write("lily.pdf", fp=X)`` writes the LilyPond
+    source to ``X`` and then engraves the actual PDF at ``X + ".pdf"``,
+    returning that path. To get a clean ``foo.pdf`` we pass the *stem*
+    (no extension) and trust the return value.
+    """
 
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    score.write("lily.pdf", fp=str(out))
-    return out
+    stem = str(out.with_suffix(""))
+    actual = score.write("lily.pdf", fp=stem)
+    pdf_path = Path(str(actual))
+    # If the stem already had ".pdf" stripped, the returned file is the
+    # canonical PDF. Move it to the caller's requested path so the .ly
+    # intermediate is the only leftover next to it.
+    if pdf_path != out:
+        try:
+            shutil.move(str(pdf_path), str(out))
+            pdf_path = out
+        except Exception:
+            logger.exception(
+                "could not move %s → %s; using engraver output as-is",
+                pdf_path, out,
+            )
+    return pdf_path
 
 
 def score_to_part_pdfs(score, out_dir: "Path | str") -> dict:
@@ -142,15 +197,22 @@ def score_to_part_pdfs(score, out_dir: "Path | str") -> dict:
             suffix += 1
         used.add(unique)
 
+        # Skip empty parts — LilyPond errors out on zero-duration scores.
+        if not list(part.recurse().notesAndRests):
+            logger.info("skipping empty part %r", part_name)
+            continue
+
         single = music21.stream.Score()
         single_md = music21.metadata.Metadata()
         single_md.title = (f"{title} — {part_name}").strip(" —")
         single.metadata = single_md
         single.insert(0, part)
 
-        pdf_path = out / f"{unique}.pdf"
-        single.write("lily.pdf", fp=str(pdf_path))
-        result[str(part_name)] = pdf_path
+        try:
+            pdf_path = score_to_full_pdf(single, out / f"{unique}.pdf")
+            result[str(part_name)] = pdf_path
+        except Exception:
+            logger.exception("failed to engrave part %r — skipping", part_name)
     return result
 
 
