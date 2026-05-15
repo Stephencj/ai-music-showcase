@@ -143,8 +143,8 @@ class BuiltinsCoverageTests(unittest.TestCase):
         self.assertEqual(missing, [],
                          f"Cells with no technique: {missing}")
 
-    def test_total_bank_size_at_least_150(self):
-        self.assertGreaterEqual(len(BANK.all_techniques()), 150)
+    def test_total_bank_size_at_least_190(self):
+        self.assertGreaterEqual(len(BANK.all_techniques()), 190)
 
     def test_each_cell_has_at_least_two_options(self):
         """For weighted-random picks to feel random, every cell should

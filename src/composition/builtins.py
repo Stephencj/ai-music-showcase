@@ -805,7 +805,18 @@ _register(name="jazz_swing_bridge", label="Jazz swing bridge",
 
 def _add_chord_tech(name, *, rhythm, roles, label, description,
                     tags=(), weight=1, voicing="seventh",
-                    velocity=None):
+                    velocity=None, program=None, track_name=None):
+    """Register a chord-instrument technique.
+
+    ``program`` sets the GM MIDI patch — e.g. 25 for acoustic guitar,
+    19 for church organ, 48 for strings. The Chords track keeps the
+    program assigned on its FIRST creation; subsequent calls don't
+    overwrite. So a compose dominated by piano techniques (program 0)
+    sounds piano; one whose first-fired chord technique uses program
+    25 sounds like guitar throughout. Multi-instrument arrangements
+    are a future round — for v1 the rhythm + voicing choice does most
+    of the audible work even when the timbre carries.
+    """
     def _apply(midi, ctx):
         kwargs = dict(
             key=ctx.key, scale_name=ctx.scale,
@@ -815,6 +826,10 @@ def _add_chord_tech(name, *, rhythm, roles, label, description,
         )
         if velocity is not None:
             kwargs["velocity"] = velocity
+        if program is not None:
+            kwargs["program"] = program
+        if track_name is not None:
+            kwargs["track_name"] = track_name
         midi.add_chord_progression(**kwargs)
     _register(name=name, label=label, description=description,
               instruments=("chords",), roles=roles, tags=tags,
@@ -823,7 +838,7 @@ def _add_chord_tech(name, *, rhythm, roles, label, description,
 
 def _add_bass_tech(name, *, pattern, roles, label, description,
                    tags=(), weight=1, approach_tones=False,
-                   velocity=None, swing_floor=None):
+                   velocity=None, swing_floor=None, program=None):
     def _apply(midi, ctx):
         kwargs = dict(
             key=ctx.key, scale_name=ctx.scale,
@@ -835,6 +850,8 @@ def _add_bass_tech(name, *, pattern, roles, label, description,
         )
         if velocity is not None:
             kwargs["velocity"] = velocity
+        if program is not None:
+            kwargs["program"] = program
         midi.add_bass_line(**kwargs)
     _register(name=name, label=label, description=description,
               instruments=("bass",), roles=roles, tags=tags,
@@ -1429,6 +1446,277 @@ _register(name="piano_walking_tenths", label="Walking tenths (split hands)",
           instruments=("chords",), roles=("verse", "chorus"),
           tags=("piano", "jazz"), weight=2,
           apply=_piano_walking_tenths)
+
+
+# ---------------------------------------------------------------------------
+# Piano — more idiomatic patterns
+# ---------------------------------------------------------------------------
+_add_chord_tech("piano_arpeggio_classical", rhythm="arpeggio_up",
+                voicing="seventh", roles=("intro", "verse", "outro"),
+                tags=("piano", "ballad"),
+                label="Classical broken chord", weight=2,
+                description="Slow rising arpeggio — Romantic-era classical piano texture.")
+_add_chord_tech("piano_arpeggio_down", rhythm="arpeggio_down",
+                voicing="seventh", roles=("outro",),
+                tags=("piano",),
+                label="Descending arpeggio outro", weight=2,
+                description="Falling arpeggio — settles the piece down.")
+_add_chord_tech("piano_dotted_ragtime", rhythm="dotted_8ths",
+                voicing="triad", roles=("verse", "chorus"),
+                tags=("piano",),
+                label="Ragtime dotted comping", weight=2,
+                description="Dotted-eighth triadic comping — ragtime / honky-tonk feel.")
+_add_chord_tech("piano_pad_intro", rhythm="pad",
+                voicing="ninth", roles=("intro",),
+                tags=("piano", "ballad"),
+                label="Piano pad intro", weight=2,
+                description="Soft 9th-chord pad — slow piano intro.")
+_add_chord_tech("piano_stabs_2_4", rhythm="charleston",
+                voicing="seventh", roles=("chorus", "bridge"),
+                tags=("piano",),
+                label="Piano stabs on 2 & 4", weight=2,
+                description="Charleston-style stabs on the backbeat.")
+_add_chord_tech("piano_block_pop", rhythm="stabs_8th",
+                voicing="seventh", roles=("chorus",),
+                tags=("piano", "pop"),
+                label="Pop piano block 8ths", weight=2,
+                description="Eighth-note block chords — pop piano chorus.")
+
+
+# ---------------------------------------------------------------------------
+# Guitar styles (chord-instrument, program=25 acoustic / 27 clean electric /
+#                  29 overdriven). Track name stays "Chords" — the timbre
+# locks to whichever guitar program the first guitar-technique fired with.
+# ---------------------------------------------------------------------------
+_add_chord_tech("guitar_acoustic_strum", rhythm="pulse_quarter",
+                voicing="triad", program=25,
+                roles=("verse", "chorus"), tags=("guitar", "acoustic"),
+                weight=2,
+                label="Acoustic strum",
+                description="Steel-string acoustic quarter-note strum — folk / pop verse.")
+_add_chord_tech("guitar_fingerstyle", rhythm="alberti",
+                voicing="seventh", program=25,
+                roles=("verse", "intro"), tags=("guitar", "acoustic"),
+                weight=2,
+                label="Fingerstyle picking",
+                description="Travis-style alternating pick — fingerstyle acoustic verse.")
+_add_chord_tech("guitar_clean_8ths", rhythm="stabs_8th",
+                voicing="seventh", program=27,
+                roles=("verse", "chorus"), tags=("guitar",),
+                weight=2,
+                label="Clean electric 8ths",
+                description="Clean electric guitar 8th-note strum — pop rock.")
+_add_chord_tech("guitar_overdrive_power", rhythm="van_halen_chug",
+                voicing="power", program=29,
+                roles=("verse", "chorus"), tags=("guitar", "rock"),
+                weight=2,
+                label="Overdrive power chords",
+                description="Overdriven palm-mute power chord chug — hard rock.")
+_add_chord_tech("guitar_jangle_arp", rhythm="arpeggio_up",
+                voicing="seventh", program=27,
+                roles=("verse", "intro"), tags=("guitar",),
+                weight=2,
+                label="Jangle arpeggio",
+                description="Byrds-style 12-string jangle arpeggio.")
+
+
+# ---------------------------------------------------------------------------
+# Organ styles (program 18=Rock Organ / 19=Church Organ / 16=Drawbar)
+# ---------------------------------------------------------------------------
+_add_chord_tech("organ_hammond_pad", rhythm="pad",
+                voicing="ninth", program=16,
+                roles=("verse", "outro"), tags=("organ",),
+                weight=2,
+                label="Hammond pad",
+                description="Drawbar-organ sustained 9ths — Hammond soul / rock pad.")
+_add_chord_tech("organ_gospel_pulse", rhythm="pulse_quarter",
+                voicing="seventh", program=18,
+                roles=("verse", "chorus"), tags=("organ", "gospel"),
+                weight=2,
+                label="Gospel organ pulse",
+                description="Rock-organ quarter pulses — gospel comping.")
+_add_chord_tech("organ_church_sustain", rhythm="pad",
+                voicing="triad", program=19,
+                roles=("intro", "outro"), tags=("organ", "ballad"),
+                weight=2,
+                label="Church organ sustain",
+                description="Long held triads on church organ — sacred / ballad intro.")
+_add_chord_tech("organ_funk_stab", rhythm="stabs_8th",
+                voicing="ninth", program=18,
+                roles=("chorus", "bridge"), tags=("organ", "funk_rock"),
+                weight=2,
+                label="Funk organ stab",
+                description="Stabbing 8th-note rock-organ — funky comp.")
+
+
+# ---------------------------------------------------------------------------
+# String section (program 48=Strings 1 / 45=Pizzicato / 44=Tremolo)
+# ---------------------------------------------------------------------------
+_add_chord_tech("strings_long_pad", rhythm="pad",
+                voicing="ninth", program=48,
+                roles=("intro", "verse", "outro"), tags=("strings", "ballad"),
+                weight=2,
+                label="Strings long pad",
+                description="String-ensemble sustained pad — cinematic.")
+_add_chord_tech("strings_pizzicato_stabs", rhythm="stabs_8th",
+                voicing="triad", program=45,
+                roles=("verse", "bridge"), tags=("strings",),
+                weight=2,
+                label="Pizzicato strings",
+                description="Short pizzicato chord stabs — playful verse.")
+_add_chord_tech("strings_tremolo_swell", rhythm="pad",
+                voicing="seventh", program=44,
+                roles=("bridge", "chorus"), tags=("strings",),
+                weight=2,
+                label="Tremolo strings swell",
+                description="Tremolo strings on sustained chords — building tension.")
+_add_chord_tech("strings_quarter_pulse", rhythm="pulse_quarter",
+                voicing="seventh", program=48,
+                roles=("chorus",), tags=("strings",),
+                weight=2,
+                label="Strings quarter pulse",
+                description="Marcato quarter-note strings — chorus drive.")
+
+
+# ---------------------------------------------------------------------------
+# Brass section (program 61=Brass Section / 56=Trumpet)
+# ---------------------------------------------------------------------------
+_add_chord_tech("brass_stabs_horn", rhythm="stabs_8th",
+                voicing="ninth", program=61,
+                roles=("chorus", "bridge"), tags=("brass", "soul"),
+                weight=2,
+                label="Brass section stabs",
+                description="Tight brass-section 8th-note stabs — soul / Motown chorus.")
+_add_chord_tech("brass_swell_long", rhythm="pad",
+                voicing="seventh", program=61,
+                roles=("intro", "outro"), tags=("brass",),
+                weight=2,
+                label="Brass swell",
+                description="Long-sustained brass swell.")
+_add_chord_tech("brass_punch_2_4", rhythm="charleston",
+                voicing="ninth", program=61,
+                roles=("verse",), tags=("brass", "funk_rock"),
+                weight=2,
+                label="Brass 2-and-4 punch",
+                description="Brass hits on the backbeat — funk horn section.")
+
+
+# ---------------------------------------------------------------------------
+# Synth styles (program 89=Warm Pad / 90=Polysynth / 81=Synth Lead Square)
+# ---------------------------------------------------------------------------
+_add_chord_tech("synth_warm_pad", rhythm="pad",
+                voicing="ninth", program=89,
+                roles=("intro", "verse", "outro"), tags=("synth",),
+                weight=2,
+                label="Warm synth pad",
+                description="Lush warm-pad 9ths — ambient synth backbone.")
+_add_chord_tech("synth_pluck_arp", rhythm="arpeggio_16th",
+                voicing="seventh", program=82,
+                roles=("verse", "chorus"), tags=("synth", "edm"),
+                weight=2,
+                label="Synth pluck arpeggio",
+                description="Plucky 16th-note synth arpeggio.")
+_add_chord_tech("synth_polysynth_stabs", rhythm="stabs_8th",
+                voicing="seventh", program=90,
+                roles=("chorus", "bridge"), tags=("synth", "pop", "edm"),
+                weight=2,
+                label="Polysynth stabs",
+                description="80s-style polysynth chord stabs.")
+
+
+# ---------------------------------------------------------------------------
+# Drums — additional patterns
+# ---------------------------------------------------------------------------
+_add_drum_tech("drums_motown_backbeat", pattern="halftime",
+               roles=("verse", "chorus"), tags=("soul", "motown"),
+               density=0.9,
+               label="Motown backbeat",
+               description="Halftime backbeat with steady hat — Motown idiom.")
+_add_drum_tech("drums_dnb_breaks", pattern="metal_blast",
+               roles=("chorus", "bridge"), tags=("edm", "drum_n_bass"),
+               density=1.0,
+               label="Drum'n'bass breakbeat",
+               description="Fast breakbeat-style pattern — DnB chorus.")
+_add_drum_tech("drums_country_train", pattern="basic_rock",
+               roles=("verse", "chorus"), tags=("country",), density=0.85,
+               label="Country train beat alt",
+               description="Brushy 8th-note kit with steady kick — country.")
+_add_drum_tech("drums_afrobeat_kit", pattern="afrobeat",
+               roles=("verse", "chorus", "bridge"), tags=("latin", "afro"),
+               density=0.95,
+               label="Afrobeat kit",
+               description="Afrobeat-style multi-layered percussion.")
+_add_drum_tech("drums_reggaeton_dembow", pattern="reggaeton",
+               roles=("verse", "chorus"), tags=("latin",),
+               density=0.95,
+               label="Reggaeton dembow",
+               description="Reggaeton dembow drum / percussion.")
+_add_drum_tech("drums_samba", pattern="samba",
+               roles=("verse", "chorus"), tags=("latin", "bossa_jazz"),
+               density=0.9,
+               label="Samba kit",
+               description="Brazilian samba drum pattern.")
+_add_drum_tech("drums_compound_6_8", pattern="compound_6_8",
+               roles=("verse", "chorus", "bridge"), tags=("ballad",),
+               density=0.85,
+               label="Compound 6/8 feel",
+               description="6/8 compound-time drum pattern.")
+_add_drum_tech("drums_breakbeat_funk", pattern="funk",
+               roles=("verse",), tags=("hip_hop",), density=0.9,
+               label="Breakbeat funk loop",
+               description="Funk breakbeat loop — sampled hip-hop feel.")
+_add_drum_tech("drums_neil_peart_fill", pattern="neil_peart",
+               roles=("bridge", "chorus"), tags=("rock",), density=1.0,
+               label="Neil Peart-style fills",
+               description="Tom-heavy prog-rock-style drum pattern.")
+_add_drum_tech("drums_chad_smith_pocket", pattern="chad_smith",
+               roles=("verse", "chorus"), tags=("funk_rock", "rock"),
+               density=1.0,
+               label="Chad Smith pocket",
+               description="Tight funk-rock groove pocket.")
+
+
+# ---------------------------------------------------------------------------
+# Bass — additional patterns
+# ---------------------------------------------------------------------------
+_add_bass_tech("bass_jamerson_motown", pattern="walking",
+               roles=("verse", "chorus"), tags=("soul", "motown"),
+               approach_tones=True,
+               label="Jamerson-style Motown bass",
+               description="James Jamerson syncopated walking — Motown feel.")
+_add_bass_tech("bass_dub_root_drone", pattern="root",
+               roles=("verse",), tags=("reggae",), velocity=80,
+               label="Dub root drone",
+               description="Long sustained root with occasional accent — dub reggae.")
+_add_bass_tech("bass_paul_mccartney_melodic", pattern="walking",
+               roles=("verse", "chorus"), tags=("pop",),
+               approach_tones=True,
+               label="McCartney-style melodic bass",
+               description="Melodic walking bass with chord-tone embellishment.")
+_add_bass_tech("bass_country_chromatic_walk", pattern="walking",
+               roles=("verse", "chorus"), tags=("country",),
+               approach_tones=True,
+               label="Country chromatic walk",
+               description="Walking quarters with chromatic approaches — Nashville.")
+_add_bass_tech("bass_synth_arp_edm", pattern="offbeat",
+               roles=("verse", "chorus"), tags=("edm", "synth"),
+               program=38,  # Synth Bass 1
+               label="Synth bass arp",
+               description="Offbeat synth-bass arp — EDM / synthwave.")
+_add_bass_tech("bass_pedal_drone_low", pattern="root",
+               roles=("intro", "bridge", "outro"), tags=("ballad", "modal_jazz"),
+               velocity=65,
+               label="Pedal drone bass",
+               description="Long held root — pedal-point texture.")
+_add_bass_tech("bass_picked_country_walk", pattern="root_fifth",
+               roles=("verse",), tags=("country",),
+               approach_tones=True,
+               label="Picked country walking",
+               description="Picked root-fifth with chromatic walks — country two-step.")
+_add_bass_tech("bass_dance_house_pulse", pattern="offbeat",
+               roles=("verse", "chorus"), tags=("edm", "disco"),
+               label="Dance / house pulse",
+               description="Eighth-note offbeat — house / dance drive.")
 
 
 logger.info(
