@@ -21,7 +21,12 @@ import soundfile as sf
 from src.daw_integration.generic.midi_export import MidiExporter, NoteEvent
 
 from .effects import EffectChainLibrary, classify_family
-from .mix import Mixer, ProcessedStem
+from .mix import Mixer, ProcessedStem, _FAMILY_MIX
+from .profiles import (
+    apply_profile_to_family_mix,
+    MIX_PROFILES,
+    resolve_profile,
+)
 from .synth import FluidSynthRenderer, RenderedStems
 
 logger = logging.getLogger(__name__)
@@ -100,9 +105,11 @@ def render_to_audio(
     soundfont: Optional[str | Path] = None,
     sample_rate: int = 44100,
     with_stems: bool = True,
-    master_preset: str = "default",
+    master_preset: Optional[str] = None,
     library: Optional[EffectChainLibrary] = None,
     mix_filename: str = "mix.wav",
+    mix_profile: Optional[str] = None,
+    style_name: Optional[str] = None,
 ) -> RenderResult:
     """Render MIDI to a finished mixed WAV (and optional per-track stems).
 
@@ -132,9 +139,23 @@ def render_to_audio(
     ) as renderer:
         rendered: RenderedStems = renderer.render_stems(midi_obj)
 
+    # Resolve the genre-aware mix profile. Priority:
+    #   1. Explicit ``mix_profile=`` kwarg (e.g. "rock").
+    #   2. Auto-resolution from ``style_name=`` via _PRESET_TO_PROFILE.
+    #   3. Default to "pop" (vocal-forward streaming).
+    if mix_profile and mix_profile in MIX_PROFILES:
+        profile = MIX_PROFILES[mix_profile]
+    else:
+        profile = resolve_profile(style_name)
+    eff_master = master_preset or profile.master_preset
+    family_mix = apply_profile_to_family_mix(profile, _FAMILY_MIX)
     library = library or EffectChainLibrary()
-    mixer = Mixer(library=library)
-    mix, processed = mixer.mix(rendered, master_preset=master_preset)
+    mixer = Mixer(
+        library=library,
+        family_mix=family_mix,
+        sidechain_kick_into=profile.sidechain_kick_into,
+    )
+    mix, processed = mixer.mix(rendered, master_preset=eff_master)
 
     mix_path = output_dir / mix_filename
     _write_wav(mix_path, mix, sample_rate)
@@ -157,7 +178,7 @@ def render_to_audio(
         processed=processed,
         mix_path=mix_path,
         stem_paths=stem_paths,
-        master_preset=master_preset,
+        master_preset=eff_master,
         duration=duration,
     )
 
@@ -176,7 +197,7 @@ def render_to_audio(
         manifest_path=manifest_path,
         sample_rate=sample_rate,
         soundfont=soundfont_path,
-        master_preset=master_preset,
+        master_preset=eff_master,
         duration_seconds=duration,
     )
 

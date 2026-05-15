@@ -317,6 +317,70 @@ def _parse_progression_text(text: str) -> list[tuple[str, float]] | None:
     return out or None
 
 
+def _progression_in_key(progression_text: str, key: str, scale: str) -> str:
+    """Render a chord-progression text as the literal chord names in
+    the active key/scale. Visual confirmation for the key dropdown —
+    Roman numerals are key-agnostic, so the user can't see the change
+    in the textbox itself.
+
+    Example: ``"I V vi IV"`` in C major → ``"In C major: C – G – Am – F"``.
+    Sub-bar / multi-bar pacing is preserved with ``(×N)`` suffixes.
+    Returns an empty string when the progression doesn't parse.
+    """
+    try:
+        from src.daw_integration.generic.midi_export import (
+            FLAT_TO_SHARP, NOTE_NAMES, roman_to_semitone_offset,
+        )
+    except Exception:
+        return ""
+    plan = _parse_progression_text(progression_text)
+    if not plan:
+        return ""
+    # Normalise flats → sharps for the index lookup, but remember whether
+    # the user picked a flat key so we display flat-spelled chord names
+    # (Eb major → Eb-Bb-Cm-Ab, not D#-A#-Cm-G#).
+    prefers_flats = key in ("Db", "Eb", "Gb", "Ab", "Bb", "F")
+    key_norm = FLAT_TO_SHARP.get(key, key)
+    if key_norm not in NOTE_NAMES:
+        return ""
+    key_pc = NOTE_NAMES.index(key_norm)
+    SHARP_TO_FLAT = {"C#": "Db", "D#": "Eb", "F#": "Gb",
+                     "G#": "Ab", "A#": "Bb"}
+    parts: list[str] = []
+    for symbol, dur in plan:
+        try:
+            offset, quality = roman_to_semitone_offset(symbol, scale)
+        except Exception:
+            continue
+        chord_root = NOTE_NAMES[(key_pc + offset) % 12]
+        if prefers_flats:
+            chord_root = SHARP_TO_FLAT.get(chord_root, chord_root)
+        suffix = ""
+        if quality in ("min", "min7"):
+            suffix = "m"
+        elif quality == "dim":
+            suffix = "°"
+        elif quality == "aug":
+            suffix = "+"
+        if quality == "min7":
+            suffix = "m7"
+        elif quality == "maj7":
+            suffix = "maj7"
+        elif quality == "7":
+            suffix = "7"
+        elif quality == "sus2":
+            suffix = "sus2"
+        elif quality == "sus4":
+            suffix = "sus4"
+        label = f"{chord_root}{suffix}"
+        if abs(dur - 1.0) > 1e-6:
+            label += f" (×{dur:g})"
+        parts.append(label)
+    if not parts:
+        return ""
+    return f"**In {key} {scale}:**  {' – '.join(parts)}"
+
+
 def _render_extras(midi: MidiExporter, extras: list[dict], *,
                    key: str, scale: str, bars: int, swing: float,
                    progression: list[str] | None, seed: int | None) -> None:
@@ -991,6 +1055,7 @@ def compose_midi(
         mid_path = OUTPUT_DIR / "last_composition.mid"
         midi.save(mid_path)
         _state["midi_path"] = mid_path
+        _state["last_compose_style"] = style
 
         # Render to audio for preview
         audio, sr = midi.synthesize(sample_rate=44100)
@@ -1059,6 +1124,7 @@ def render_high_quality(
     midi_path_override: Path | None = None,
     output_subdir: str = "render",
     progress=gr.Progress(track_tqdm=True),
+    style_name: str | None = None,
 ):
     """Re-render the most recent MIDI through the high-quality audio pipeline.
 
@@ -1086,12 +1152,16 @@ def render_high_quality(
         out_dir.mkdir(parents=True, exist_ok=True)
 
         progress(0.20, desc="Synthesizing per-track stems…")
+        # Resolve the active style for genre-aware mix profile picking.
+        # Falls back to None → "pop" profile when unknown.
+        eff_style = style_name or _state.get("last_compose_style")
         result = render_to_audio(
             midi_path,
             output_dir=out_dir,
             soundfont=sf_path,
             with_stems=with_stems,
-            master_preset=master_preset,
+            master_preset=master_preset or None,
+            style_name=eff_style,
         )
         progress(0.90, desc="Packaging output…")
 
@@ -1176,6 +1246,7 @@ def _generate_full_song(
         raise _logged_error("Generate full song", e) from e
 
     _state["midi_path"] = Path(out["midi_path"])
+    _state["last_compose_style"] = style_name
     _state["midi_wav_path"] = (
         Path(out["wav_path"]) if out.get("wav_path") else None
     )
@@ -4267,6 +4338,12 @@ def build_app() -> gr.Blocks:
                             scale=4,
                         )
                         progression_refresh = gr.Button("🔄 Refresh from style", scale=1)
+                    chord_preview_md = gr.Markdown(
+                        value=_progression_in_key(
+                            _progression_plan_to_text(STYLES["pop"].progression),
+                            "C", "major",
+                        ),
+                    )
 
                     # Declared early so the per-instrument accordion
                     # below can render a row per extra. Populated by
@@ -4708,7 +4785,7 @@ def build_app() -> gr.Blocks:
                 rhythm-family CheckboxGroup containing ``drum_kit``.
                 """
                 if style_name == "custom" or style_name not in STYLES:
-                    return (gr.update(),) * 24
+                    return (gr.update(),) * 25
                 p = STYLES[style_name]
                 ts_label = f"{p.time_signature[0]}/{p.time_signature[1]}"
                 drum_update = gr.update() if not p.drum_pattern else gr.update(value=p.drum_pattern)
@@ -4758,6 +4835,10 @@ def build_app() -> gr.Blocks:
                     family_updates["woodwind"],
                     family_updates["strings"],
                     family_updates["vocal"],
+                    _progression_in_key(
+                        _progression_plan_to_text(default_plan),
+                        p.key, p.scale,
+                    ),
                 )
 
             style_dd.change(
@@ -4771,7 +4852,8 @@ def build_app() -> gr.Blocks:
                          bars_slider, rhythm_overrides_state,
                          rhythm_select, bass_select, chord_lead_select,
                          brass_select, woodwind_select, strings_select,
-                         vocal_select],
+                         vocal_select,
+                         chord_preview_md],
             )
 
             def _refresh_progression(style_name):
@@ -4833,6 +4915,19 @@ def build_app() -> gr.Blocks:
                  melody_prog_state, extras_state],
                 [chords_prog_state, bass_prog_state, melody_prog_state, extras_state],
             )
+
+            # Key / scale / progression-text changes refresh the
+            # literal-chord preview line beneath the Roman-numeral
+            # textbox so the user can SEE the key change take effect
+            # without re-composing.
+            def _refresh_chord_preview(prog_text, k, s):
+                return _progression_in_key(prog_text or "", k or "C", s or "major")
+            key.change(_refresh_chord_preview,
+                       [progression_in, key, scale], [chord_preview_md])
+            scale.change(_refresh_chord_preview,
+                         [progression_in, key, scale], [chord_preview_md])
+            progression_in.change(_refresh_chord_preview,
+                                  [progression_in, key, scale], [chord_preview_md])
 
             def _compose_with_families(
                 style, key_, scale_, tempo_, time_sig_, bars_,
