@@ -223,7 +223,9 @@ def roman_to_semitone_offset(symbol: str, scale_type: str = "major") -> tuple[in
     return (offset + accidental, quality)
 
 
-def voice_chord(root_midi: int, quality: str = "maj", voicing: str = "triad") -> list[int]:
+def voice_chord(root_midi: int, quality: str = "maj", voicing: str = "triad",
+                scale_degree_seventh: Optional[int] = None,
+                scale_degree_ninth: Optional[int] = None) -> list[int]:
     """Return MIDI pitches for a chord with the given voicing.
 
     Voicings:
@@ -237,6 +239,17 @@ def voice_chord(root_midi: int, quality: str = "maj", voicing: str = "triad") ->
       - ``power``: root + fifth + octave root (ignores the third — rock/metal).
       - ``open5``: power chord pared down (root + fifth, no octave double).
       - ``drop2``: move the second-from-top voice down an octave (jazz comping).
+
+    ``scale_degree_seventh`` / ``scale_degree_ninth`` let the caller
+    override the 7th and 9th intervals from the chord root with values
+    computed from the song's scale. Without them, plain-triad chords
+    extended via ``ninth`` / ``seventh`` / ``rootless`` / ``shell`` /
+    ``add9`` / ``sixth`` voicings default to major-7 + major-9, which
+    is wrong in diatonic context (e.g. ``V`` in C major picks F# as
+    its 7th instead of the correct F). ``add_chord_progression``
+    computes these per chord from ``scale_name`` and the chord root's
+    position in the scale, so callers using Roman-numeral progressions
+    always land on diatonically-correct extensions.
     """
     if voicing == "power":
         return [root_midi, root_midi + 7, root_midi + 12]
@@ -250,20 +263,31 @@ def voice_chord(root_midi: int, quality: str = "maj", voicing: str = "triad") ->
         # Stacked perfect fifths — open, ringing, gamelan/cinematic.
         return [root_midi, root_midi + 7, root_midi + 14]
     if voicing == "shell":
-        # Jazz shell voicing — root + 3rd + 7th. Quality-aware.
+        # Jazz shell voicing — root + 3rd + 7th. Quality-aware + scale-aware:
+        # when the caller passes a diatonic 7th (from add_chord_progression's
+        # scale lookup) we use it, otherwise fall back to the quality-derived
+        # default. Plain major triads in a major key without an override
+        # would emit maj7 here, which is wrong for diatonic V/iii/vi.
         third = root_midi + (3 if quality in ("min", "dim", "min7") else 4)
-        seventh = root_midi + (10 if quality in ("min", "dim", "min7", "7") else 11)
+        if scale_degree_seventh is not None:
+            seventh = root_midi + scale_degree_seventh
+        else:
+            seventh = root_midi + (10 if quality in ("min", "dim", "min7", "7") else 11)
         return [root_midi, third, seventh]
     if voicing == "rootless":
         # Bill Evans-style rootless: 3rd, 5th, 7th, 9th (no root).
         third = root_midi + (3 if quality in ("min", "dim", "min7") else 4)
         fifth = root_midi + (6 if quality == "dim" else (8 if quality == "aug" else 7))
-        seventh = root_midi + (10 if quality in ("min", "dim", "min7", "7") else 11)
-        ninth = root_midi + 14
+        if scale_degree_seventh is not None:
+            seventh = root_midi + scale_degree_seventh
+        else:
+            seventh = root_midi + (10 if quality in ("min", "dim", "min7", "7") else 11)
+        ninth = root_midi + (scale_degree_ninth if scale_degree_ninth is not None else 14)
         return [third, fifth, seventh, ninth]
     if voicing == "sus4_add9":
         # Bollywood/pop staple — suspended 4 with added 9.
-        return [root_midi, root_midi + 5, root_midi + 7, root_midi + 14]
+        ninth_iv = root_midi + (scale_degree_ninth if scale_degree_ninth is not None else 14)
+        return [root_midi, root_midi + 5, root_midi + 7, ninth_iv]
 
     offsets = list(CHORD_FORMULAS.get(quality, CHORD_FORMULAS["maj"]))
     has_seventh = any(o in (10, 11) for o in offsets)
@@ -275,16 +299,26 @@ def voice_chord(root_midi: int, quality: str = "maj", voicing: str = "triad") ->
     elif voicing == "sus4":
         offsets = [o for o in offsets if o not in (3, 4)] + [5]
 
-    # Extensions
+    # Extensions. When a scale-degree-aware 7th is supplied (from
+    # add_chord_progression's scale lookup), use it — this is the
+    # diatonic 7th of the chord built on the song's scale, which is
+    # what listeners hear as "in key". Without the override, plain
+    # triads were always extended with maj7, which produced the
+    # leading-tone (F# in C major's V9) as a chord tone — sounding
+    # explicitly out of key.
     if voicing in ("seventh", "ninth") and not has_seventh:
-        seventh = 11 if quality in ("maj", "aug") else 10
+        if scale_degree_seventh is not None:
+            seventh = scale_degree_seventh
+        else:
+            seventh = 11 if quality in ("maj", "aug") else 10
         offsets.append(seventh)
 
-    if voicing == "ninth" and 14 not in offsets:
-        offsets.append(14)
+    ninth_iv = scale_degree_ninth if scale_degree_ninth is not None else 14
+    if voicing == "ninth" and ninth_iv not in offsets:
+        offsets.append(ninth_iv)
 
-    if voicing == "add9" and 14 not in offsets:
-        offsets.append(14)
+    if voicing == "add9" and ninth_iv not in offsets:
+        offsets.append(ninth_iv)
 
     if voicing == "sixth" and 9 not in offsets:
         offsets.append(9)
@@ -1797,10 +1831,36 @@ class MidiExporter:
                 if t.name == avoid_melody_track:
                     melody_track = t
                     break
+        # Resolve the song's scale once — we use it to compute the
+        # diatonic 7th and 9th above each chord root so extensions
+        # land in-key (the renderer's fallback was always maj7+9,
+        # which sounded explicitly chromatic for V/iii/vi chords in
+        # a major-keyed song).
+        scale_intervals = SCALES.get(scale_name, SCALES["major"])
         for event in events:
             offset, quality = roman_to_semitone_offset(event.symbol, scale_name)
             root = root_midi + offset
-            pitches = voice_chord(root, quality, voicing)
+            # Locate the chord root within the song's scale. When the
+            # chord is non-diatonic (e.g. secondary dominants like II7
+            # in C major), the lookup fails and we fall back to the
+            # quality-based defaults inside ``voice_chord``.
+            scale_seventh = None
+            scale_ninth = None
+            try:
+                root_degree = scale_intervals.index(offset % 12)
+            except ValueError:
+                root_degree = None
+            if root_degree is not None:
+                n = len(scale_intervals)
+                seventh_pc = scale_intervals[(root_degree + 6) % n]
+                ninth_pc = scale_intervals[(root_degree + 1) % n]
+                scale_seventh = (seventh_pc - (offset % 12)) % 12
+                scale_ninth = ((ninth_pc - (offset % 12)) % 12) + 12
+            pitches = voice_chord(
+                root, quality, voicing,
+                scale_degree_seventh=scale_seventh,
+                scale_degree_ninth=scale_ninth,
+            )
             seg_start_time = base_t + event.start_bar * self.bar_duration
             seg_end_time = base_t + event.end_bar * self.bar_duration
             seg_duration_beats = event.duration_bars * bpb

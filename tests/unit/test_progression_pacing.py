@@ -273,5 +273,69 @@ class LegacyByteIdenticalMidiTest(unittest.TestCase):
                                  f"{name} preset MIDI drifted")
 
 
+class DiatonicVoicingTests(unittest.TestCase):
+    """``voice_chord`` plus ``add_chord_progression`` must extend plain
+    triads with the diatonic 7th/9th from the song's scale — NOT the
+    blanket maj7/maj9 the renderer used to fall back to. Before this
+    fix, ``V9`` in C major emitted ``G-B-D-F#-A``; F# is the chromatic
+    leading tone and made every random pop / rock song sound off-key.
+    """
+
+    def test_voice_chord_uses_scale_seventh_when_supplied(self):
+        from src.daw_integration.generic.midi_export import voice_chord
+        # G major triad with scale's diatonic 7th (F, semitone 10 above G).
+        out = voice_chord(67, "maj", "ninth",
+                          scale_degree_seventh=10, scale_degree_ninth=14)
+        # Expect G-B-D-F-A: 67-71-74-77-81. NOT 78 (F#).
+        self.assertIn(77, out, "G dominant ninth should include F (m7)")
+        self.assertNotIn(78, out, "F# is the wrong 7th for V in C major")
+
+    def test_voice_chord_default_back_compat(self):
+        from src.daw_integration.generic.midi_export import voice_chord
+        # Without overrides the renderer keeps its prior maj7 fallback —
+        # protects any caller that doesn't yet pass the scale context.
+        out = voice_chord(67, "maj", "ninth")
+        self.assertIn(78, out, "back-compat default kept maj7 extension")
+
+    def test_chord_progression_emits_diatonic_v9_in_c_major(self):
+        from src.daw_integration.generic.midi_export import MidiExporter
+        import pretty_midi
+        m = MidiExporter(tempo=120)
+        m.add_chord_progression(
+            key="C", scale_name="major",
+            progression=[("V", 1.0)], bars=1,
+            voicing="ninth", octave=3,
+            track_name="Test", program=0,
+        )
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "test.mid"
+            m.save(path)
+            pm = pretty_midi.PrettyMIDI(str(path))
+        pitch_classes = {n.pitch % 12 for n in pm.instruments[0].notes}
+        # V9 in C major: G(7), B(11), D(2), F(5), A(9). No F#(6).
+        self.assertEqual(pitch_classes, {7, 11, 2, 5, 9})
+        self.assertNotIn(6, pitch_classes, "F# leaked into V9 in C major")
+
+    def test_chord_progression_rootless_voicing_diatonic(self):
+        from src.daw_integration.generic.midi_export import MidiExporter
+        import pretty_midi
+        m = MidiExporter(tempo=120)
+        m.add_chord_progression(
+            key="C", scale_name="major",
+            progression=[("V", 1.0)], bars=1,
+            voicing="rootless", octave=3,
+            track_name="Test", program=0,
+        )
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "test.mid"
+            m.save(path)
+            pm = pretty_midi.PrettyMIDI(str(path))
+        pitch_classes = {n.pitch % 12 for n in pm.instruments[0].notes}
+        # Rootless Vmaj in C major = B + D + F + A. No F# allowed.
+        self.assertNotIn(6, pitch_classes, "F# leaked into rootless V")
+        # Must include F (the diatonic 7th).
+        self.assertIn(5, pitch_classes)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
