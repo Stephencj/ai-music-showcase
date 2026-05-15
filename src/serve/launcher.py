@@ -89,6 +89,15 @@ def launch(blocks: gr.Blocks, *,
         api.mount("/static", StaticFiles(directory=str(_static_dir)),
                   name="static")
 
+    # MCP server (SSE transport) — same auth middleware as the rest of
+    # the FastAPI app, so off-LAN clients need the token. Stdio
+    # transport is a separate process; see scripts/run_mcp.py.
+    try:
+        from src.serve.mcp_tools import mcp as _mcp
+        api.mount("/mcp", _mcp.sse_app())
+    except Exception:
+        logger.exception("could not mount MCP /mcp — server will still boot")
+
     # AlphaTab + the Playback bridge must load in <head>; the browser
     # spec says scripts injected via innerHTML (which is how gr.HTML
     # ends up rendering) are silently ignored, so script tags inside

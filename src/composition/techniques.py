@@ -1,0 +1,160 @@
+"""TechniqueBank — registry + weighted-random pick for musical techniques.
+
+Each Technique is a self-contained transformation keyed by
+``(instrument, section_role)``. A song generator picks one technique
+per cell using a master seed and applies them in instrument order
+over the relevant bar range.
+
+Used by :mod:`src.composition.song_composer` and exposed to LLMs via
+:mod:`src.serve.mcp_tools`.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from typing import Callable, Optional
+
+import numpy as np
+
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Context passed into every Technique.apply()
+# ---------------------------------------------------------------------------
+
+@dataclass
+class TechniqueContext:
+    """Per-section, per-instrument state a Technique reads when applying."""
+
+    start_bar: int                # inclusive
+    end_bar: int                  # inclusive
+    section_role: str             # canonical role token (intro / verse / …)
+    section_label: str            # original UI label ("Verse 1")
+    instrument: str               # "chords" | "bass" | "melody" | "drums"
+    key: str
+    scale: str
+    tempo: float
+    time_signature: tuple[int, int]
+    progression: list             # MidiExporter-compatible chord plan
+    rng: np.random.Generator      # seed-isolated per (section, instrument)
+    swing: float = 0.0
+
+    @property
+    def bar_count(self) -> int:
+        return max(1, self.end_bar - self.start_bar + 1)
+
+
+# ---------------------------------------------------------------------------
+# Technique
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Technique:
+    """A named, weighted, role-tagged musical transformation."""
+
+    name: str
+    label: str
+    description: str
+    instruments: tuple[str, ...]
+    section_roles: tuple[str, ...]
+    apply: Callable[..., None] = field(repr=False)
+    weight: int = 1
+    tags: tuple[str, ...] = ()            # e.g. ("funk_rock", "groove")
+
+    def matches(self, instrument: str, role: str) -> bool:
+        return (
+            instrument in self.instruments
+            and role in self.section_roles
+        )
+
+    def to_dict(self) -> dict:
+        """JSON-friendly summary for MCP introspection."""
+        return {
+            "name": self.name,
+            "label": self.label,
+            "description": self.description,
+            "instruments": list(self.instruments),
+            "section_roles": list(self.section_roles),
+            "weight": self.weight,
+            "tags": list(self.tags),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Bank
+# ---------------------------------------------------------------------------
+
+class TechniqueBank:
+    """Module-level registry of Technique objects.
+
+    Multi-instrument techniques (e.g. an outro riff that passes bass →
+    lead) register once and match for every instrument in their
+    ``instruments`` tuple. Lookup is linear over the dict; the bank
+    rarely exceeds a few hundred entries.
+    """
+
+    def __init__(self) -> None:
+        self._by_name: dict[str, Technique] = {}
+
+    def register(self, technique: Technique) -> Technique:
+        if technique.name in self._by_name:
+            logger.warning(
+                "TechniqueBank: re-registering %r — overwriting prior entry",
+                technique.name,
+            )
+        self._by_name[technique.name] = technique
+        return technique
+
+    def get(self, name: str) -> Optional[Technique]:
+        return self._by_name.get(name)
+
+    def all_techniques(self) -> list[Technique]:
+        return list(self._by_name.values())
+
+    def list_for(self, instrument: str, role: str) -> list[Technique]:
+        """All techniques eligible for ``(instrument, role)``, sorted by
+        descending weight then name (stable for tests)."""
+        out = [
+            t for t in self._by_name.values() if t.matches(instrument, role)
+        ]
+        out.sort(key=lambda t: (-t.weight, t.name))
+        return out
+
+    def pick(
+        self,
+        instrument: str,
+        role: str,
+        rng: np.random.Generator,
+        *,
+        preferred_tags: tuple[str, ...] = (),
+    ) -> Optional[Technique]:
+        """Weighted-random pick of a technique for one cell.
+
+        ``preferred_tags`` lets a song generator nudge picks toward a
+        genre — e.g. ``preferred_tags=("funk_rock",)`` doubles the
+        weight of techniques carrying that tag.
+        """
+        candidates = self.list_for(instrument, role)
+        if not candidates:
+            return None
+        weights = []
+        for t in candidates:
+            w = max(1, int(t.weight))
+            if preferred_tags and any(tag in t.tags for tag in preferred_tags):
+                w *= 2
+            weights.append(w)
+        total = float(sum(weights))
+        roll = float(rng.random()) * total
+        acc = 0.0
+        for t, w in zip(candidates, weights):
+            acc += w
+            if roll <= acc:
+                return t
+        return candidates[-1]
+
+
+# Singleton populated at import time by src/composition/builtins.py.
+BANK = TechniqueBank()

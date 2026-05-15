@@ -1008,6 +1008,45 @@ def download_soundfont():
         raise _logged_error("Download soundfont", e) from e
 
 
+def _generate_full_song(
+    style_name: str, seed_in,
+) -> tuple:
+    """Wire the 🎲 Generate full song button to the TechniqueBank.
+
+    Returns updates for: audio preview / MIDI file / info textbox /
+    summary markdown / rhythm_overrides_state / seed input (so a 0
+    seed auto-bumps for next click).
+    """
+    from src.composition.song_composer import compose_song
+    seed = int(seed_in) if seed_in else 0
+    if seed <= 0:
+        # Auto-roll a seed so successive clicks vary without the user
+        # needing to type. Echoes back to the input so the user can
+        # capture / pin the value.
+        import random as _r
+        seed = _r.randint(1, 1_000_000)
+    try:
+        out = compose_song(genre=style_name, seed=seed)
+    except gr.Error:
+        raise
+    except Exception as e:
+        raise _logged_error("Generate full song", e) from e
+
+    _state["midi_path"] = Path(out["midi_path"])
+    _state["midi_wav_path"] = (
+        Path(out["wav_path"]) if out.get("wav_path") else None
+    )
+    info_line = f"Random song — {out['summary'].splitlines()[0]}"
+    return (
+        out["wav_path"] or None,
+        out["midi_path"],
+        info_line,
+        "```\n" + out["summary"] + "\n```",
+        out["rhythm_overrides"],
+        seed,
+    )
+
+
 def _export_pdf_zip(
     midi_path: Path,
     out_zip: Path,
@@ -4329,6 +4368,30 @@ def build_app() -> gr.Blocks:
                     midi_file = gr.File(label="Download .mid (drag into Ardour)")
                     compose_info = gr.Textbox(label="Info", interactive=False)
                     midi_audio = gr.Audio(label="Preview (synth render)", type="filepath")
+
+                    with gr.Row(elem_classes=["compose-row-grid"]):
+                        random_song_btn = gr.Button(
+                            "🎲 Generate full song (random)",
+                            variant="primary", scale=2,
+                        )
+                        random_song_seed = gr.Number(
+                            value=0, precision=0, label="Seed (0 = auto)",
+                            scale=1,
+                        )
+                    random_song_summary = gr.Markdown(
+                        value="_The TechniqueBank picks one technique per "
+                              "(instrument, section). Same seed = same song; "
+                              "bump the seed for variation._",
+                    )
+
+                    random_song_btn.click(
+                        _generate_full_song,
+                        inputs=[style_dd, random_song_seed],
+                        outputs=[midi_audio, midi_file, compose_info,
+                                 random_song_summary,
+                                 rhythm_overrides_state,
+                                 random_song_seed],
+                    )
 
                     with gr.Row():
                         compose_pdf_btn = gr.Button(
