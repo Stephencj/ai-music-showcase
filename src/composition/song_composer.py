@@ -43,6 +43,41 @@ DEFAULT_WAV_NAME = "last_composition.wav"
 _INSTRUMENT_ORDER: tuple[str, ...] = ("chords", "bass", "drums", "melody")
 
 
+# Preset name → preferred technique-bank tags. The bank stores each
+# genre family's techniques tagged with a short token (``"pop"``,
+# ``"rock"``, ``"funk_rock"``, …); :func:`TechniqueBank.pick` doubles
+# the weight of any candidate carrying one of these tags so picking
+# ``rock_anthem_full`` actually pulls rock idioms rather than the
+# cross-genre baseline.
+_GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
+    # Pop / rock family.
+    "pop":               ("pop",),
+    "pop_full_song":     ("pop",),
+    "pop_dynamic":       ("pop",),
+    "rock":              ("rock",),
+    "rock_anthem_full":  ("rock",),
+    "rock_buildup":      ("rock",),
+    # Funk.
+    "funk":              ("funk_rock",),
+    "funk_full_song":    ("funk_rock", "funk"),
+    "funk_dynamic":      ("funk_rock", "funk"),
+    # Jazz / blues.
+    "jazz":              ("jazz",),
+    "jazz_aaba_full":    ("jazz",),
+    "jazz_trade_fours":  ("jazz",),
+    "blues_12bar_full":  ("blues",),
+    # Ballad.
+    "ballad":            ("ballad",),
+    "ballad_full":       ("ballad",),
+    # Electronic.
+    "edm":               ("edm",),
+    "edm_full_song":     ("edm",),
+    # Hip-hop / metal (the two new presets shipped this round).
+    "hip_hop_full":      ("hip_hop",),
+    "metal_full":        ("metal",),
+}
+
+
 # ---------------------------------------------------------------------------
 # Section spec helpers
 # ---------------------------------------------------------------------------
@@ -189,10 +224,11 @@ def compose_song(
 
     selections: list[dict] = []
     rhythm_overrides_out: list[dict] = []
-    preferred_tags: tuple[str, ...] = (genre,) if genre in (
-        "funk_rock", "pop_full_song", "rock_anthem_full", "funk_full_song",
-        "jazz_aaba_full", "blues_12bar_full", "ballad_full", "edm_full_song",
-    ) else ()
+    # Map the genre key to the technique-bank tag family. Adding a new
+    # full-song preset means adding a row here so its techniques get
+    # the +weight boost from preferred_tags. Unmapped presets get no
+    # bias and fall back to the cross-genre baseline.
+    preferred_tags = _GENRE_TAG_MAP.get(genre, ())
 
     for sec_idx, section in enumerate(sections):
         s, e = int(section["start_bar"]), int(section["end_bar"])

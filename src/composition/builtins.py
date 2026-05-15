@@ -793,6 +793,265 @@ _register(name="jazz_swing_bridge", label="Jazz swing bridge",
           apply=_drums_jazz_swing_bridge)
 
 
+# ---------------------------------------------------------------------------
+# Genre packs — compact factory-driven additions
+# ---------------------------------------------------------------------------
+# Each pack ships 4-6 genre-tagged techniques. ``compose_song`` boosts
+# any technique whose tag matches the chosen preset's genre family, so
+# picking ``pop_full_song`` pulls from the pop pack while
+# ``rock_anthem_full`` pulls from the rock pack. Techniques without
+# genre tags still compete and act as the cross-genre baseline.
+
+
+def _add_chord_tech(name, *, rhythm, roles, label, description,
+                    tags=(), weight=1, voicing="seventh",
+                    velocity=None):
+    def _apply(midi, ctx):
+        kwargs = dict(
+            key=ctx.key, scale_name=ctx.scale,
+            progression=ctx.progression, bars=ctx.bar_count,
+            bar_offset=ctx.start_bar, rhythm=rhythm,
+            voicing=voicing, swing=ctx.swing,
+        )
+        if velocity is not None:
+            kwargs["velocity"] = velocity
+        midi.add_chord_progression(**kwargs)
+    _register(name=name, label=label, description=description,
+              instruments=("chords",), roles=roles, tags=tags,
+              weight=weight, apply=_apply)
+
+
+def _add_bass_tech(name, *, pattern, roles, label, description,
+                   tags=(), weight=1, approach_tones=False,
+                   velocity=None, swing_floor=None):
+    def _apply(midi, ctx):
+        kwargs = dict(
+            key=ctx.key, scale_name=ctx.scale,
+            progression=ctx.progression, bars=ctx.bar_count,
+            bar_offset=ctx.start_bar, pattern=pattern,
+            approach_tones=approach_tones,
+            seed=_seed(ctx),
+            swing=max(ctx.swing, swing_floor or 0.0),
+        )
+        if velocity is not None:
+            kwargs["velocity"] = velocity
+        midi.add_bass_line(**kwargs)
+    _register(name=name, label=label, description=description,
+              instruments=("bass",), roles=roles, tags=tags,
+              weight=weight, apply=_apply)
+
+
+def _add_drum_tech(name, *, pattern, roles, label, description,
+                   tags=(), weight=1, density=1.0, swing_floor=None):
+    def _apply(midi, ctx):
+        midi.add_drum_pattern(
+            pattern=pattern, bars=ctx.bar_count,
+            bar_offset=ctx.start_bar, density=density,
+            seed=_seed(ctx),
+            swing=max(ctx.swing, swing_floor or 0.0),
+        )
+    _register(name=name, label=label, description=description,
+              instruments=("drums",), roles=roles, tags=tags,
+              weight=weight, apply=_apply)
+
+
+def _add_melody_tech(name, *, roles, label, description,
+                     tags=(), weight=1, note_density=0.6,
+                     melody_style="motif"):
+    def _apply(midi, ctx):
+        midi.add_melody(
+            key=ctx.key, scale_name=ctx.scale,
+            bars=ctx.bar_count, bar_offset=ctx.start_bar,
+            seed=_seed(ctx), swing=ctx.swing,
+            note_density=note_density, melody_style=melody_style,
+        )
+    _register(name=name, label=label, description=description,
+              instruments=("melody",), roles=roles, tags=tags,
+              weight=weight, apply=_apply)
+
+
+# ----- POP ------------------------------------------------------------------
+_add_chord_tech("pop_chord_pad_intro", rhythm="pad",
+                roles=("intro",), tags=("pop",),
+                label="Pop pad intro",
+                description="Soft seventh-pad opening — pop ballad / build.")
+_add_chord_tech("pop_pulse_verse", rhythm="pulse_quarter",
+                roles=("verse",), tags=("pop",),
+                label="Pop quarter pulse",
+                description="Steady quarter-note pulse — classic pop verse.")
+_add_chord_tech("pop_anthem_chorus", rhythm="stabs_8th",
+                roles=("chorus",), tags=("pop",),
+                label="Pop anthem chorus",
+                description="Eighth-note chord stabs — radio-pop chorus lift.")
+_add_bass_tech("pop_root_fifth_verse", pattern="root_fifth",
+               roles=("verse",), tags=("pop",),
+               label="Pop root-fifth verse",
+               description="Bouncy root-fifth — pop verse staple.")
+_add_drum_tech("pop_clap_chorus", pattern="pop_disco",
+               roles=("chorus",), tags=("pop",), density=1.0,
+               label="Pop clap chorus",
+               description="Four-on-floor with clap on 2 & 4 — pop drive.")
+
+
+# ----- ROCK -----------------------------------------------------------------
+_add_chord_tech("rock_power_chug_verse", rhythm="van_halen_chug",
+                voicing="power", roles=("verse",), tags=("rock",),
+                label="Rock chug verse",
+                description="Palm-muted 8th chug on power chords — verse drive.")
+_add_chord_tech("rock_open_chorus", rhythm="pulse_quarter",
+                voicing="power", roles=("chorus",), tags=("rock",),
+                label="Rock open chorus",
+                description="Open power chords on every beat — anthemic chorus.")
+_add_chord_tech("rock_pad_break", rhythm="pad",
+                voicing="seventh", roles=("bridge",), tags=("rock",),
+                label="Rock breakdown",
+                description="Held pad chords — bridge dynamic drop.")
+_add_bass_tech("rock_root_eighths_verse", pattern="palm_mute_8ths",
+               roles=("verse",), tags=("rock",),
+               label="Rock root 8ths",
+               description="Driving root 8ths — locks with the chug guitar.")
+_add_bass_tech("rock_root_fifth_chorus", pattern="root_fifth",
+               roles=("chorus",), tags=("rock",), approach_tones=True,
+               label="Rock chorus bass",
+               description="Root-fifth bass with leading tones into changes.")
+_add_drum_tech("rock_anthem_chorus", pattern="basic_rock",
+               roles=("chorus",), tags=("rock",), density=1.0,
+               label="Rock anthem kit",
+               description="Full basic-rock kit at high velocity.")
+
+
+# ----- JAZZ -----------------------------------------------------------------
+_add_chord_tech("jazz_charleston_comp", rhythm="charleston",
+                voicing="seventh", roles=("verse",), tags=("jazz",),
+                label="Jazz charleston comp",
+                description="Charleston-rhythm comping — classic jazz verse.")
+_add_chord_tech("jazz_dotted_chorus", rhythm="dotted_8ths",
+                voicing="ninth", roles=("chorus",), tags=("jazz",),
+                label="Jazz dotted-8ths chorus",
+                description="Dotted-eighth chord stabs on 9th voicings.")
+_add_bass_tech("jazz_walking_swing", pattern="walking_swing",
+               roles=("verse", "chorus"), tags=("jazz",),
+               approach_tones=True, swing_floor=0.25,
+               label="Jazz walking swing",
+               description="Swung walking quarters with leading tones.")
+_add_melody_tech("jazz_blues_run", roles=("verse",), tags=("jazz",),
+                 note_density=0.7, melody_style="blues",
+                 label="Jazz blues run",
+                 description="Bluesy phrasing over the verse changes.")
+_add_drum_tech("jazz_swing_kit_verse", pattern="jazz_swing",
+               roles=("verse",), tags=("jazz",), density=0.85,
+               swing_floor=0.25,
+               label="Jazz swing kit",
+               description="Spang-a-lang ride with sparse ghost snare.")
+
+
+# ----- BLUES ----------------------------------------------------------------
+_add_chord_tech("blues_shuffle_quarter", rhythm="pulse_quarter",
+                voicing="seventh", roles=("verse", "chorus"),
+                tags=("blues",),
+                label="Blues shuffle comp",
+                description="Quarter-note dominant-7 comping for shuffle blues.")
+_add_bass_tech("blues_walking_boogie", pattern="walking",
+               roles=("verse", "chorus"), tags=("blues",),
+               approach_tones=True, swing_floor=0.18,
+               label="Blues walking boogie",
+               description="Walking blues boogie line over I-IV-V changes.")
+_add_melody_tech("blues_pent_riff", roles=("verse",), tags=("blues",),
+                 note_density=0.75, melody_style="blues",
+                 label="Blues pentatonic riff",
+                 description="Pentatonic-flavoured blues riff with bends.")
+_add_drum_tech("blues_shuffle_kit", pattern="basic_rock",
+               roles=("verse",), tags=("blues",), density=0.8,
+               swing_floor=0.18,
+               label="Blues shuffle kit",
+               description="Shuffled basic rock kit at medium density.")
+
+
+# ----- BALLAD ---------------------------------------------------------------
+_add_chord_tech("ballad_arp_intro", rhythm="arpeggio_up",
+                voicing="seventh", roles=("intro",), tags=("ballad",),
+                label="Ballad arpeggio intro",
+                description="Rising arpeggio — emotive ballad opening.")
+_add_chord_tech("ballad_sus_pad_verse", rhythm="pad",
+                voicing="ninth", roles=("verse",), tags=("ballad",),
+                label="Ballad sustained pad",
+                description="Held 9th-chord pads under the verse melody.")
+_add_chord_tech("ballad_open_chorus", rhythm="pulse_quarter",
+                voicing="seventh", roles=("chorus",), tags=("ballad",),
+                label="Ballad open chorus",
+                description="Quarter-note seventh chords — chorus lift.")
+_add_bass_tech("ballad_root_held", pattern="root",
+               roles=("verse", "intro"), tags=("ballad",), velocity=68,
+               label="Ballad sustained root",
+               description="Single held root per bar — leaves space for melody.")
+_add_drum_tech("ballad_brush_chorus", pattern="halftime",
+               roles=("chorus",), tags=("ballad",), density=0.6,
+               label="Ballad brush feel",
+               description="Half-time pattern at low density — ballad chorus.")
+
+
+# ----- EDM ------------------------------------------------------------------
+_add_chord_tech("edm_pluck_drop", rhythm="stabs_8th",
+                voicing="triad", roles=("chorus",), tags=("edm",),
+                label="EDM pluck stab",
+                description="Eighth-note stabs over the drop.")
+_add_chord_tech("edm_pad_breakdown", rhythm="pad",
+                voicing="seventh", roles=("bridge",), tags=("edm",),
+                label="EDM breakdown pad",
+                description="Long pad chords through the breakdown.")
+_add_bass_tech("edm_pump_drop", pattern="disco_octave",
+               roles=("chorus",), tags=("edm",),
+               label="EDM octave pump",
+               description="Sidechain-style octave pump for the drop.")
+_add_bass_tech("edm_filter_buildup", pattern="offbeat",
+               roles=("intro",), tags=("edm",),
+               label="EDM offbeat buildup",
+               description="Offbeat pulse — tension before the drop.")
+_add_drum_tech("edm_four_on_floor_drop", pattern="dance_house",
+               roles=("chorus",), tags=("edm",), density=1.0,
+               label="EDM four-on-floor",
+               description="House kick + offbeat hats — the drop.")
+
+
+# ----- HIP-HOP / R&B --------------------------------------------------------
+_add_chord_tech("hiphop_pad_loop", rhythm="pad",
+                voicing="seventh", roles=("verse", "chorus"),
+                tags=("hip_hop",),
+                label="Hip-hop pad loop",
+                description="Sustained pad loop — backbone of vocal hip-hop.")
+_add_bass_tech("hiphop_sub_verse", pattern="root",
+               roles=("verse",), tags=("hip_hop",), velocity=80,
+               label="Hip-hop sub bass",
+               description="Long sustained root — sub-bass weight.")
+_add_bass_tech("hiphop_octave_hook", pattern="disco_octave",
+               roles=("chorus",), tags=("hip_hop",),
+               label="Hip-hop octave hook",
+               description="Root/octave alternation — chorus hook.")
+_add_drum_tech("hiphop_boom_bap", pattern="halftime",
+               roles=("verse",), tags=("hip_hop",), density=0.7,
+               label="Hip-hop boom-bap",
+               description="Halftime kick/snare — boom-bap feel.")
+
+
+# ----- METAL ----------------------------------------------------------------
+_add_chord_tech("metal_palm_chug", rhythm="van_halen_chug",
+                voicing="power", roles=("verse",), tags=("metal",),
+                label="Metal palm-mute chug",
+                description="Tight palm-muted 8th-note chugs.")
+_add_chord_tech("metal_open_chorus", rhythm="stabs_8th",
+                voicing="power", roles=("chorus",), tags=("metal",),
+                label="Metal open chorus",
+                description="Open power-chord stabs — chorus drive.")
+_add_bass_tech("metal_gallop_verse", pattern="palm_mute_8ths",
+               roles=("verse",), tags=("metal",),
+               label="Metal gallop bass",
+               description="Galloping palm-muted 8ths under the riff.")
+_add_drum_tech("metal_double_kick", pattern="metal_gallop",
+               roles=("chorus",), tags=("metal",), density=1.0,
+               label="Metal gallop kit",
+               description="Gallop kick + tight snare — metal chorus.")
+
+
 logger.info(
     "Registered %d techniques in the bank.", len(BANK.all_techniques()),
 )

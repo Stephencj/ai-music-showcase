@@ -910,6 +910,69 @@ STYLES: dict[str, StylePreset] = {
         },
     ),
 
+    "hip_hop_full": StylePreset(
+        name="Hip-hop (Full song)", tempo=90, key="A", scale="minor",
+        # 4-bar minor loop ×16 = 64 bars.
+        progression=[("i", 1.0), ("VI", 1.0), ("VII", 1.0), ("i", 1.0)] * 16,
+        voicing="seventh", bass_pattern="root", drum_pattern="halftime",
+        chord_rhythm="pad", melody_style="motif",
+        chord_octave=4, bass_octave=2, default_bars=64,
+        rhythm_variants={
+            "Full song": [
+                {"start_bar": 0,  "end_bar": 7,  "label": "Intro",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+                {"start_bar": 8,  "end_bar": 23, "label": "Verse 1",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+                {"start_bar": 24, "end_bar": 31, "label": "Hook 1",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "disco_octave"},
+                {"start_bar": 32, "end_bar": 47, "label": "Verse 2",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+                {"start_bar": 48, "end_bar": 55, "label": "Bridge",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "stabs_8th",
+                 "bass_pattern": "offbeat"},
+                {"start_bar": 56, "end_bar": 63, "label": "Hook out",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "disco_octave"},
+            ],
+        },
+    ),
+
+    "metal_full": StylePreset(
+        name="Metal (Full song)", tempo=150, key="E", scale="minor",
+        # Power-chord drone with bVII / V drops ×20 = 80 bars.
+        progression=[("i", 1.0), ("VII", 1.0), ("i", 1.0), ("V", 1.0)] * 20,
+        voicing="power", bass_pattern="palm_mute_8ths",
+        drum_pattern="metal_gallop",
+        chord_rhythm="van_halen_chug", melody_style="motif",
+        chord_octave=3, bass_octave=2, default_bars=80,
+        rhythm_variants={
+            "Full song": [
+                {"start_bar": 0,  "end_bar": 7,  "label": "Intro",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+                {"start_bar": 8,  "end_bar": 23, "label": "Verse 1",
+                 "chord_rhythm_h1": "van_halen_chug", "chord_rhythm_h2": "",
+                 "bass_pattern": "palm_mute_8ths"},
+                {"start_bar": 24, "end_bar": 39, "label": "Chorus 1",
+                 "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_fifth"},
+                {"start_bar": 40, "end_bar": 55, "label": "Verse 2",
+                 "chord_rhythm_h1": "van_halen_chug", "chord_rhythm_h2": "",
+                 "bass_pattern": "palm_mute_8ths"},
+                {"start_bar": 56, "end_bar": 63, "label": "Bridge / Solo",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_fifth"},
+                {"start_bar": 64, "end_bar": 79, "label": "Chorus 2",
+                 "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_fifth"},
+            ],
+        },
+    ),
+
     "edm_full_song": StylePreset(
         name="EDM (Full song)", tempo=126, key="A", scale="minor",
         # vi-IV-I-V cycle (minor reading) ×32 = 128 bars.

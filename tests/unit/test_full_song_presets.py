@@ -35,6 +35,8 @@ FULL_SONG_KEYS = (
     "blues_12bar_full",
     "ballad_full",
     "edm_full_song",
+    "hip_hop_full",
+    "metal_full",
 )
 
 KNOWN_CHORD_RHYTHMS = (

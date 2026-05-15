@@ -141,10 +141,20 @@ class TechniqueBank:
         if not candidates:
             return None
         weights = []
+        # If ANY candidate in this cell carries a preferred tag, boost
+        # tagged ones by 5× so the chosen genre actually feels like
+        # itself. 2× was too gentle — over an 80-technique baseline
+        # genre-tagged picks lost most rolls. Cells without any
+        # tagged candidate fall back to the cross-genre baseline
+        # automatically.
+        has_tagged = preferred_tags and any(
+            any(tag in t.tags for tag in preferred_tags) for t in candidates
+        )
+        boost = 5 if has_tagged else 1
         for t in candidates:
             w = max(1, int(t.weight))
             if preferred_tags and any(tag in t.tags for tag in preferred_tags):
-                w *= 2
+                w *= boost
             weights.append(w)
         total = float(sum(weights))
         roll = float(rng.random()) * total
