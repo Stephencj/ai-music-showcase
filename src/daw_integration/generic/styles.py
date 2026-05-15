@@ -87,6 +87,12 @@ class StylePreset:
     # change to the preset's base ``chord_rhythm`` / ``bass_pattern``.
     rhythm_variants: dict = field(default_factory=dict)
 
+    # Default bars to load into the UI when the user picks this preset.
+    # Existing presets keep the historical 8-bar default; full-song
+    # presets (the *_full keys below) carry 60-128 to drive verse /
+    # chorus / bridge arrangements via rhythm_variants.
+    default_bars: int = 8
+
     def __post_init__(self):
         # Synthesise a Default entry if no variants were declared so every
         # preset uniformly exposes a non-empty list.
@@ -685,20 +691,255 @@ STYLES: dict[str, StylePreset] = {
     "rock_buildup": StylePreset(
         name="Rock (Buildup)", tempo=120, key="E", scale="minor",
         progression=["i", "VI", "III", "VII"],
-        voicing="triad", bass_pattern="root_only", drum_pattern="basic_rock",
+        voicing="triad", bass_pattern="root", drum_pattern="basic_rock",
         chord_rhythm="pad", melody_style="motif",
         chord_octave=4, bass_octave=2,
         rhythm_variants={
             "Buildup → Lift": [
                 {"start_bar": 0, "end_bar": 3, "label": "Pad",
                  "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
-                 "bass_pattern": "root_only"},
+                 "bass_pattern": "root"},
                 {"start_bar": 4, "end_bar": 6, "label": "Drive",
                  "chord_rhythm_h1": "pulse_quarter", "chord_rhythm_h2": "",
                  "bass_pattern": "root_fifth"},
                 {"start_bar": 7, "end_bar": 7, "label": "Lift",
                  "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "stabs_8th",
                  "bass_pattern": "walking"},
+            ],
+        },
+    ),
+
+    # ----- Full-song presets ----------------------------------------------
+    # One-click classic song structures. Each carries `default_bars` so
+    # the bars slider snaps to the canonical length when the preset is
+    # picked, and a `rhythm_variants["Full song"]` entry that auto-
+    # populates the per-bar override accordion with intro / verse /
+    # chorus / bridge / outro rows. Section breakdowns sum exactly to
+    # default_bars (test enforced).
+
+    "pop_full_song": StylePreset(
+        name="Pop (Full song)", tempo=104, key="C", scale="major",
+        # 4-bar pop cycle ×20 = 80 bars.
+        progression=[("I", 1.0), ("V", 1.0), ("vi", 1.0), ("IV", 1.0)] * 20,
+        voicing="triad", bass_pattern="root_fifth", drum_pattern="basic_rock",
+        chord_rhythm="pulse_quarter", melody_style="motif",
+        chord_octave=4, bass_octave=3, default_bars=80,
+        rhythm_variants={
+            "Full song": [
+                {"start_bar": 0,  "end_bar": 3,  "label": "Intro",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+                {"start_bar": 4,  "end_bar": 19, "label": "Verse 1",
+                 "chord_rhythm_h1": "pulse_quarter", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_fifth"},
+                {"start_bar": 20, "end_bar": 23, "label": "Pre-chorus",
+                 "chord_rhythm_h1": "charleston", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_fifth"},
+                {"start_bar": 24, "end_bar": 39, "label": "Chorus 1",
+                 "chord_rhythm_h1": "disco_stabs", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking"},
+                {"start_bar": 40, "end_bar": 51, "label": "Verse 2",
+                 "chord_rhythm_h1": "pulse_quarter", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_fifth"},
+                {"start_bar": 52, "end_bar": 59, "label": "Bridge",
+                 "chord_rhythm_h1": "off_skank", "chord_rhythm_h2": "",
+                 "bass_pattern": "offbeat"},
+                {"start_bar": 60, "end_bar": 75, "label": "Chorus 2",
+                 "chord_rhythm_h1": "disco_stabs", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking"},
+                {"start_bar": 76, "end_bar": 79, "label": "Outro",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+            ],
+        },
+    ),
+
+    "rock_anthem_full": StylePreset(
+        name="Rock anthem (Full song)", tempo=128, key="E", scale="minor",
+        # i-VI-III-VII minor anthem ×24 = 96 bars.
+        progression=[("i", 1.0), ("VI", 1.0), ("III", 1.0), ("VII", 1.0)] * 24,
+        voicing="triad", bass_pattern="root_fifth", drum_pattern="basic_rock",
+        chord_rhythm="pulse_quarter", melody_style="motif",
+        chord_octave=4, bass_octave=2, default_bars=96,
+        rhythm_variants={
+            "Full song": [
+                {"start_bar": 0,  "end_bar": 7,  "label": "Intro",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+                {"start_bar": 8,  "end_bar": 23, "label": "Verse 1",
+                 "chord_rhythm_h1": "pulse_quarter", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_fifth"},
+                {"start_bar": 24, "end_bar": 39, "label": "Chorus 1",
+                 "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking"},
+                {"start_bar": 40, "end_bar": 55, "label": "Verse 2",
+                 "chord_rhythm_h1": "pulse_quarter", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_fifth"},
+                {"start_bar": 56, "end_bar": 71, "label": "Chorus 2",
+                 "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking"},
+                {"start_bar": 72, "end_bar": 87, "label": "Solo",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_fifth"},
+                {"start_bar": 88, "end_bar": 95, "label": "Outro",
+                 "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking"},
+            ],
+        },
+    ),
+
+    "funk_full_song": StylePreset(
+        name="Funk (Full song)", tempo=100, key="C", scale="dorian",
+        # 2-bar i7-IV7 vamp ×16 = 64 bars.
+        progression=[("i7", 2.0), ("IV7", 2.0)] * 16,
+        voicing="ninth", bass_pattern="funk_16ths", drum_pattern="funk",
+        chord_rhythm="funk_comp", melody_style="pentatonic",
+        chord_octave=4, bass_octave=2, swing=0.15, default_bars=64,
+        rhythm_variants={
+            "Full song": [
+                {"start_bar": 0,  "end_bar": 3,  "label": "Intro",
+                 "chord_rhythm_h1": "funk_comp", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+                {"start_bar": 4,  "end_bar": 19, "label": "Vamp A",
+                 "chord_rhythm_h1": "funk_comp", "chord_rhythm_h2": "",
+                 "bass_pattern": "funk_16ths"},
+                {"start_bar": 20, "end_bar": 23, "label": "Break",
+                 "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+                {"start_bar": 24, "end_bar": 39, "label": "Vamp B",
+                 "chord_rhythm_h1": "funk_comp", "chord_rhythm_h2": "",
+                 "bass_pattern": "funk_16ths"},
+                {"start_bar": 40, "end_bar": 47, "label": "Bridge",
+                 "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "",
+                 "bass_pattern": "offbeat"},
+                {"start_bar": 48, "end_bar": 63, "label": "Outro vamp",
+                 "chord_rhythm_h1": "funk_comp", "chord_rhythm_h2": "",
+                 "bass_pattern": "funk_16ths"},
+            ],
+        },
+    ),
+
+    "jazz_aaba_full": StylePreset(
+        name="Jazz AABA (Full song)", tempo=140, key="F", scale="major",
+        # ii-V-I-I ×16 = 64 bars (four 16-bar A/B sections).
+        progression=[("ii7", 1.0), ("V7", 1.0), ("I", 1.0), ("I", 1.0)] * 16,
+        voicing="seventh", bass_pattern="walking_swing", drum_pattern="basic_rock",
+        chord_rhythm="charleston", melody_style="motif",
+        chord_octave=4, bass_octave=2, swing=0.32, default_bars=64,
+        rhythm_variants={
+            "Full song": [
+                {"start_bar": 0,  "end_bar": 15, "label": "A1",
+                 "chord_rhythm_h1": "charleston", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking_swing"},
+                {"start_bar": 16, "end_bar": 31, "label": "A2",
+                 "chord_rhythm_h1": "charleston", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking_swing"},
+                {"start_bar": 32, "end_bar": 47, "label": "B (bridge)",
+                 "chord_rhythm_h1": "dotted_8ths", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking_swing"},
+                {"start_bar": 48, "end_bar": 63, "label": "A3",
+                 "chord_rhythm_h1": "charleston", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking_swing"},
+            ],
+        },
+    ),
+
+    "blues_12bar_full": StylePreset(
+        name="12-Bar Blues (Full song)", tempo=92, key="A", scale="major",
+        # Classic 12-bar dominant cycle ×5 = 60 bars (5 choruses).
+        progression=(
+            [("I7", 1.0), ("IV7", 1.0), ("I7", 1.0), ("I7", 1.0),
+             ("IV7", 1.0), ("IV7", 1.0), ("I7", 1.0), ("I7", 1.0),
+             ("V7", 1.0), ("IV7", 1.0), ("I7", 1.0), ("V7", 1.0)] * 5
+        ),
+        voicing="seventh", bass_pattern="walking", drum_pattern="basic_rock",
+        chord_rhythm="pulse_quarter", melody_style="motif",
+        chord_octave=4, bass_octave=2, swing=0.18, default_bars=60,
+        rhythm_variants={
+            "Full song": [
+                {"start_bar": 0,  "end_bar": 11, "label": "Chorus 1 (head)",
+                 "chord_rhythm_h1": "pulse_quarter", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking"},
+                {"start_bar": 12, "end_bar": 23, "label": "Chorus 2",
+                 "chord_rhythm_h1": "pulse_quarter", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking"},
+                {"start_bar": 24, "end_bar": 35, "label": "Chorus 3 (var)",
+                 "chord_rhythm_h1": "dotted_8ths", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking"},
+                {"start_bar": 36, "end_bar": 47, "label": "Chorus 4",
+                 "chord_rhythm_h1": "pulse_quarter", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking"},
+                {"start_bar": 48, "end_bar": 59, "label": "Chorus 5 (out)",
+                 "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking"},
+            ],
+        },
+    ),
+
+    "ballad_full": StylePreset(
+        name="Ballad (Full song)", tempo=72, key="C", scale="major",
+        # I-vi-IV-V "50s progression" ×20 = 80 bars.
+        progression=[("I", 1.0), ("vi", 1.0), ("IV", 1.0), ("V", 1.0)] * 20,
+        voicing="seventh", bass_pattern="root_fifth", drum_pattern="basic_rock",
+        chord_rhythm="pad", melody_style="motif",
+        chord_octave=4, bass_octave=3, default_bars=80,
+        rhythm_variants={
+            "Full song": [
+                {"start_bar": 0,  "end_bar": 3,  "label": "Intro",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+                {"start_bar": 4,  "end_bar": 19, "label": "Verse 1",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_fifth"},
+                {"start_bar": 20, "end_bar": 35, "label": "Chorus 1",
+                 "chord_rhythm_h1": "pulse_quarter", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking"},
+                {"start_bar": 36, "end_bar": 51, "label": "Verse 2",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_fifth"},
+                {"start_bar": 52, "end_bar": 59, "label": "Bridge",
+                 "chord_rhythm_h1": "elton_octaves", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+                {"start_bar": 60, "end_bar": 75, "label": "Chorus 2",
+                 "chord_rhythm_h1": "pulse_quarter", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking"},
+                {"start_bar": 76, "end_bar": 79, "label": "Outro",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+            ],
+        },
+    ),
+
+    "edm_full_song": StylePreset(
+        name="EDM (Full song)", tempo=126, key="A", scale="minor",
+        # vi-IV-I-V cycle (minor reading) ×32 = 128 bars.
+        progression=[("vi", 1.0), ("IV", 1.0), ("I", 1.0), ("V", 1.0)] * 32,
+        voicing="triad", bass_pattern="disco_octave", drum_pattern="four_on_floor",
+        chord_rhythm="pulse_quarter", melody_style="motif",
+        chord_octave=4, bass_octave=2, default_bars=128,
+        rhythm_variants={
+            "Full song": [
+                {"start_bar": 0,   "end_bar": 15,  "label": "Intro",
+                 "chord_rhythm_h1": "pulse_quarter", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+                {"start_bar": 16,  "end_bar": 31,  "label": "Buildup 1",
+                 "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "",
+                 "bass_pattern": "disco_octave"},
+                {"start_bar": 32,  "end_bar": 47,  "label": "Drop 1",
+                 "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "",
+                 "bass_pattern": "disco_octave"},
+                {"start_bar": 48,  "end_bar": 63,  "label": "Breakdown",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+                {"start_bar": 64,  "end_bar": 79,  "label": "Buildup 2",
+                 "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "",
+                 "bass_pattern": "disco_octave"},
+                {"start_bar": 80,  "end_bar": 111, "label": "Drop 2",
+                 "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "",
+                 "bass_pattern": "disco_octave"},
+                {"start_bar": 112, "end_bar": 127, "label": "Outro",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
             ],
         },
     ),

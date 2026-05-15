@@ -111,10 +111,29 @@ def launch(blocks: gr.Blocks, *,
         str(_project_root / "data" / "blocks"),
     ]
 
+    # iPhone responsiveness: stack wide rows vertically on narrow
+    # viewports (390 pt iPhone width is the target). `elem_classes`
+    # on the row is the stable selector — survives Gradio version
+    # bumps because it's a public API. Desktop layout is untouched.
+    responsive_css = (
+        "@media (max-width: 500px) {"
+        "  .compose-row-grid {"
+        "    flex-direction: column !important;"
+        "    gap: .5rem !important;"
+        "  }"
+        "  .compose-row-grid > * {"
+        "    min-width: 0 !important;"
+        "    width: 100% !important;"
+        "    max-width: 100% !important;"
+        "  }"
+        "}"
+    )
+
     gr.mount_gradio_app(
         api, blocks, path="/",
         head=playback_head,
         allowed_paths=allowed_paths,
+        css=responsive_css,
     )
 
     advertiser = MdnsAdvertiser()

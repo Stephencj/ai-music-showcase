@@ -11,6 +11,7 @@ Then open http://localhost:7860 in your browser.
 import atexit
 import gc
 import logging
+import re
 import shutil
 import tempfile
 from typing import Optional
@@ -202,6 +203,56 @@ def _progression_plan_to_text(plan) -> str:
     return " ".join(parts)
 
 
+_BRACKET_REPEAT_RE = re.compile(r"\[([^\[\]]+)\]\s*[xX]\s*(\d+)")
+# Single-symbol repeat. Negative lookbehind for ":" so a paced token
+# like "I:0.5 x4" doesn't get mis-grabbed as a symbol-repeat — paced
+# tokens must wrap with brackets to repeat: "[I:0.5] x4".
+_SYMBOL_REPEAT_RE = re.compile(
+    r"(?<![:\w])"                       # not preceded by colon or word char
+    r"([A-Za-z][A-Za-z0-9#°ø♭/\-]*)"    # roman symbol (no colon allowed)
+    r"\s*[xX]\s*(\d+)\b"
+)
+
+
+def _expand_progression_shorthand(text: str) -> str:
+    """Expand ``[X Y Z] xN`` and bare ``Symbol xN`` repeats into a flat
+    space-separated token stream.
+
+    Strict precedence so the two new forms don't collide with the
+    legacy paced / sub-bar tokenizer:
+
+    1. Brackets first — applied repeatedly so nested groups
+       ``[I [V vi] x2 IV] x4`` resolve inside-out.
+    2. Bare-symbol repeats — ``I x4`` → ``I I I I``. The negative-
+       lookbehind on ``:`` keeps paced tokens (``I:2 x4`` is invalid
+       shorthand; users wanting to repeat a paced token must wrap
+       it: ``[I:2] x4``).
+
+    Unmatched / malformed brackets pass through untouched — the
+    downstream tokenizer logs a warning and falls back to 1-bar
+    bare-symbol parsing, which is the safest user-visible behaviour.
+    """
+    if not text:
+        return ""
+    # Bracket pass — repeated until fixed-point. Cap iterations so a
+    # pathological input can't hang the parser.
+    for _ in range(16):
+        new_text = _BRACKET_REPEAT_RE.sub(
+            lambda m: (" " + m.group(1).strip() + " ") * int(m.group(2)),
+            text,
+        )
+        if new_text == text:
+            break
+        text = new_text
+    # Bare-symbol pass — single regex application is enough since
+    # nested ``Symbol xN`` can't exist (only one symbol per match).
+    text = _SYMBOL_REPEAT_RE.sub(
+        lambda m: (" " + m.group(1) + " ") * int(m.group(2)),
+        text,
+    )
+    return text
+
+
 def _parse_progression_text(text: str) -> list[tuple[str, float]] | None:
     """Parse chord-progression text into a list of ``(symbol, bars)`` tuples.
 
@@ -214,6 +265,11 @@ def _parse_progression_text(text: str) -> list[tuple[str, float]] | None:
                                                      ("vi",1), ("IV",4)]``
       - Sub-bar:  ``"i:.5 VII:.5 VI:.5 VII:.5"`` → 4 half-bar chord changes
                                                    inside the first 2 bars.
+      - Repeat:   ``"[ii V I] x2"``              → ``ii V I ii V I``
+      - Vamp:     ``"i7 x4"``                    → ``i7 i7 i7 i7``
+
+    The repeat / vamp forms are expanded by ``_expand_progression_shorthand``
+    before tokenization; everything else is parsed as before.
 
     Bare tokens default to 1.0 bar. Any positive float duration is accepted;
     the MidiExporter generators consume the tuple list directly and render
@@ -225,6 +281,7 @@ def _parse_progression_text(text: str) -> list[tuple[str, float]] | None:
     """
     if not text or not text.strip():
         return None
+    text = _expand_progression_shorthand(text)
     out: list[tuple[str, float]] = []
     for raw in text.replace(",", " ").split():
         tok = raw.strip()
@@ -3828,7 +3885,7 @@ def build_app() -> gr.Blocks:
                         info="Pick a genre preset (populates key/scale/tempo/patterns) or 'custom' to tweak freely.",
                     )
 
-                    with gr.Row():
+                    with gr.Row(elem_classes=["compose-row-grid"]):
                         key = gr.Dropdown(
                             ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"],
                             value="C", label="Key",
@@ -3840,10 +3897,12 @@ def build_app() -> gr.Blocks:
                         time_sig_dd = gr.Dropdown(
                             TIME_SIGS, value="4/4", label="Time signature",
                         )
-                        bars_slider = gr.Slider(2, 32, value=8, step=1, label="Bars")
+                        bars_slider = gr.Slider(
+                            2, 128, value=8, step=1, label="Bars",
+                        )
 
                     gr.Markdown("**Tracks**")
-                    with gr.Row():
+                    with gr.Row(elem_classes=["compose-row-grid"]):
                         chords_on = gr.Checkbox(value=True, label="Chords")
                         bass_on = gr.Checkbox(value=True, label="Bass")
                         melody_on = gr.Checkbox(value=True, label="Melody")
@@ -3854,7 +3913,7 @@ def build_app() -> gr.Blocks:
                     # is checked. Same plumbing the harmony extras row
                     # uses; promoted up here so harmony is a first-class
                     # default track like chords / bass / melody / drums.
-                    with gr.Row():
+                    with gr.Row(elem_classes=["compose-row-grid"]):
                         harmony_voices = gr.Radio(
                             [1, 2, 3], value=2, label="Harmony voices",
                             info="How many harmony lines to stack on the melody.",
@@ -3873,7 +3932,7 @@ def build_app() -> gr.Blocks:
                             allow_custom_value=True,
                         )
 
-                    with gr.Row():
+                    with gr.Row(elem_classes=["compose-row-grid"]):
                         voicing_dd = gr.Dropdown(
                             VOICINGS,
                             value="triad", label="Chord voicing",
@@ -3893,7 +3952,7 @@ def build_app() -> gr.Blocks:
                                   "ethno-musicological palettes for weak-beat notes."),
                         )
 
-                    with gr.Row():
+                    with gr.Row(elem_classes=["compose-row-grid"]):
                         bass_pat = gr.Dropdown(
                             BASS_PATTERNS,
                             value="root_fifth", label="Bass pattern",
@@ -4076,7 +4135,7 @@ def build_app() -> gr.Blocks:
                             "on beats 3-4."
                         )
 
-                        with gr.Row():
+                        with gr.Row(elem_classes=["compose-row-grid"]):
                             rhythm_variant_dd = gr.Dropdown(
                                 choices=[""],
                                 value="",
@@ -4388,14 +4447,37 @@ def build_app() -> gr.Blocks:
                     )
 
             def _apply_preset(style_name: str):
+                """Auto-seed the compose form from the selected style.
+
+                Returns 18 ``gr.update()`` objects — see the ``outputs=``
+                list on the wiring below for the precise order. Two
+                outputs were added to the original 16:
+
+                - ``bars_slider``: jumps to ``preset.default_bars`` so
+                  full-song presets auto-set their canonical length
+                  (existing simple presets keep default_bars=8).
+                - ``rhythm_overrides_state``: auto-applies the first
+                  ``rhythm_variants`` entry so picking ``pop_full_song``
+                  pre-fills the Per-bar rhythm overrides accordion with
+                  the verse/chorus/bridge rows; existing presets with
+                  no variants pass ``[]`` (no overrides).
+                """
                 if style_name == "custom" or style_name not in STYLES:
-                    return (gr.update(),) * 16
+                    return (gr.update(),) * 18
                 p = STYLES[style_name]
                 ts_label = f"{p.time_signature[0]}/{p.time_signature[1]}"
                 drum_update = gr.update() if not p.drum_pattern else gr.update(value=p.drum_pattern)
                 drums_on_update = gr.update(value=bool(p.drum_pattern))
                 variant_names = [v[0] for v in p.progression_variants]
                 default_plan = p.progression_variants[0][1]
+                # First rhythm variant (or []) auto-applies into the
+                # per-bar rhythm overrides accordion.
+                rhythm_rows: list = []
+                if p.rhythm_variants:
+                    first_variant_name = next(iter(p.rhythm_variants))
+                    rhythm_rows = [
+                        dict(r) for r in p.rhythm_variants[first_variant_name]
+                    ]
                 return (
                     gr.update(value=p.key),
                     gr.update(value=p.scale),
@@ -4413,6 +4495,8 @@ def build_app() -> gr.Blocks:
                     gr.update(value=p.bass_octave),
                     gr.update(value=p.melody_octave),
                     gr.update(choices=variant_names, value=variant_names[0]),
+                    gr.update(value=int(p.default_bars)),
+                    rhythm_rows,
                 )
 
             style_dd.change(
@@ -4422,7 +4506,8 @@ def build_app() -> gr.Blocks:
                          bass_pat, drum_pat, drums_on, swing_slider,
                          chord_rhythm_dd, melody_style_dd, progression_in,
                          chord_octave_in, bass_octave_in, melody_octave_in,
-                         progression_variant_dd],
+                         progression_variant_dd,
+                         bars_slider, rhythm_overrides_state],
             )
 
             def _refresh_progression(style_name):
