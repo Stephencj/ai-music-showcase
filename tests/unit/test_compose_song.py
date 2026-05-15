@@ -261,6 +261,96 @@ class SectionPacingTests(unittest.TestCase):
         self.assertIn("[pacing:", out["summary"])
 
 
+class VoicingLayeringTests(unittest.TestCase):
+    """When 2+ chord-role instruments are selected, each should land
+    on a different layer role so the resulting MIDI's chord stacks
+    occupy distinct register / density slices."""
+
+    def test_solo_chord_instrument_no_layering_tag_in_summary(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = compose_song(
+                genre="pop_full_song", seed=42, skip_audio=True,
+                output_dir=Path(td),
+                enabled_instruments=["drum_kit", "electric_bass", "piano"],
+            )
+        # Solo piano → no layering tags surfaced in summary.
+        for tag in ("[mid_comp]", "[pad]", "[top]"):
+            self.assertNotIn(tag, out["summary"],
+                             f"solo piano should not produce {tag} tag")
+        # voicing_role on selections should be None.
+        for sel in out["selections"]:
+            if sel["instrument"] == "piano":
+                self.assertIsNone(sel["voicing_role"])
+
+    def test_three_chord_instruments_assign_three_distinct_roles(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = compose_song(
+                genre="jazz_aaba_full", seed=42, skip_audio=True,
+                output_dir=Path(td),
+                enabled_instruments=[
+                    "drum_kit", "upright_bass",
+                    "piano", "brass_section", "woodwind_section",
+                ],
+            )
+        by_inst = {s["instrument"]: s["voicing_role"]
+                   for s in out["selections"]}
+        self.assertEqual(by_inst.get("piano"), "mid_comp")
+        self.assertEqual(by_inst.get("brass_section"), "pad")
+        self.assertEqual(by_inst.get("woodwind_section"), "top")
+
+    def test_layered_summary_includes_role_tags(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = compose_song(
+                genre="jazz_aaba_full", seed=42, skip_audio=True,
+                output_dir=Path(td),
+                enabled_instruments=[
+                    "drum_kit",
+                    "piano", "brass_section", "woodwind_section",
+                ],
+            )
+        self.assertIn("[mid_comp]", out["summary"])
+        self.assertIn("[pad]", out["summary"])
+        self.assertIn("[top]", out["summary"])
+
+    def test_layered_chord_stacks_differ_in_size(self):
+        """The piano (rootless) and the strings section (pad ninth)
+        should NOT play the same set of pitches on the same chord —
+        otherwise the layering didn't actually take effect."""
+        import pretty_midi
+        with tempfile.TemporaryDirectory() as td:
+            out = compose_song(
+                genre="ballad_full", seed=42, skip_audio=True,
+                output_dir=Path(td),
+                enabled_instruments=[
+                    "drum_kit",
+                    "piano", "brass_section", "woodwind_section",
+                ],
+            )
+            pm = pretty_midi.PrettyMIDI(out["midi_path"])
+        by_name = {i.name: i for i in pm.instruments}
+        # Grab the very first chord onset across all three chord
+        # tracks (within a 0.2 s window) — those should differ in
+        # pitch set if layering applied.
+        def first_chord_pitches(inst):
+            if not inst.notes:
+                return set()
+            first = min(n.start for n in inst.notes)
+            return tuple(sorted({
+                n.pitch for n in inst.notes if abs(n.start - first) < 0.2
+            }))
+        p_piano = first_chord_pitches(by_name["Piano"])
+        p_brass = first_chord_pitches(by_name["Brass Section"])
+        p_wood = first_chord_pitches(by_name["Woodwind Section"])
+        # At least one pair of pitch sets must differ — they're in
+        # different registers AND different voicings.
+        distinct = len({p_piano, p_brass, p_wood})
+        self.assertGreater(
+            distinct, 1,
+            f"expected distinct pitch sets across layered tracks; "
+            f"piano={p_piano} brass={p_brass} wood={p_wood}",
+        )
+
+
 class FunkRockPreferredTagsTests(unittest.TestCase):
     """A song composed against a full-song preset should over-weight
     techniques in the bank tagged with that preset key (or a related

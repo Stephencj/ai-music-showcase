@@ -81,6 +81,13 @@ class Instrument:
     # means "leave whatever the renderer's default is" (used by drum
     # tracks, which have no pitched octave).
     default_octave: Optional[int] = None
+    # Pinned layer role for stratified-voicing assignment when 2+
+    # chord-role instruments stack (see
+    # :mod:`src.composition.voicing_layer`). ``None`` lets the
+    # assigner derive the role from register; a few instruments have
+    # a canonical role regardless of the stack (``synth_pad`` is
+    # always a pad, ``woodwind_section`` always caps the top).
+    voicing_role: Optional[str] = None
 
     @property
     def track_name(self) -> str:
@@ -121,7 +128,7 @@ _add(Instrument("acoustic_guitar",       "Acoustic Guitar",      "chord_lead", "
 _add(Instrument("electric_guitar_clean", "Electric Guitar (clean)", "chord_lead", "chords", 27, default_octave=3))
 _add(Instrument("electric_guitar_dirty", "Electric Guitar (dirty)", "chord_lead", "chords", 29, default_octave=3))
 _add(Instrument("lead_guitar",           "Lead Guitar",          "chord_lead", "melody", 30, default_octave=4))
-_add(Instrument("synth_pad",             "Synth Pad",            "chord_lead", "chords", 89, default_octave=3))
+_add(Instrument("synth_pad",             "Synth Pad",            "chord_lead", "chords", 89, default_octave=3, voicing_role="pad"))
 _add(Instrument("synth_lead",            "Synth Lead",           "chord_lead", "melody", 81, default_octave=5))
 
 # Brass — section composite + individual instruments. Trumpet / alto sit
@@ -130,7 +137,7 @@ _add(Instrument("synth_lead",            "Synth Lead",           "chord_lead", "
 _add(Instrument("brass_section", "Brass Section", "brass", "chords", 61,
                 is_section=True,
                 members=("trumpet", "trombone", "sax_alto", "sax_tenor"),
-                default_octave=4))
+                default_octave=4, voicing_role="pad"))
 _add(Instrument("trumpet",       "Trumpet",       "brass", "melody", 56, default_octave=5))
 _add(Instrument("trombone",      "Trombone",      "brass", "melody", 57, default_octave=4))
 _add(Instrument("sax_alto",      "Alto Sax",      "brass", "melody", 65, default_octave=5))
@@ -142,7 +149,7 @@ _add(Instrument("sax_baritone",  "Baritone Sax",  "brass", "melody", 67, default
 _add(Instrument("woodwind_section", "Woodwind Section", "woodwind", "chords", 71,
                 is_section=True,
                 members=("flute", "clarinet", "oboe", "bassoon"),
-                default_octave=5))
+                default_octave=5, voicing_role="top"))
 _add(Instrument("flute",    "Flute",    "woodwind", "melody", 73, default_octave=5))
 _add(Instrument("clarinet", "Clarinet", "woodwind", "melody", 71, default_octave=5))
 _add(Instrument("oboe",     "Oboe",     "woodwind", "melody", 68, default_octave=5))
@@ -153,7 +160,7 @@ _add(Instrument("bassoon",  "Bassoon",  "woodwind", "bass",   70, default_octave
 _add(Instrument("string_section", "String Section", "strings", "chords", 48,
                 is_section=True,
                 members=("violin", "viola", "cello", "contrabass"),
-                default_octave=4))
+                default_octave=4, voicing_role="pad"))
 _add(Instrument("violin",     "Violin",     "strings", "melody", 40, default_octave=5))
 _add(Instrument("viola",      "Viola",      "strings", "chords", 41, default_octave=4))
 _add(Instrument("cello",      "Cello",      "strings", "bass",   42, default_octave=3))

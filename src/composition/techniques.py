@@ -48,6 +48,15 @@ class TechniqueContext:
     # construct a ctx directly leave it None — techniques fall back
     # to the renderer's hard-coded defaults ("Chords", "Bass", …).
     instrument_obj: object = None
+    # Layer role assigned by
+    # :func:`src.composition.voicing_layer.assign_layered_voicings`
+    # when 2+ chord-role instruments stack in this section. The
+    # ``_RoutedMidi`` proxy rewrites the technique's ``voicing=``
+    # kwarg through ``effective_voicing(role, base)`` so piano /
+    # brass / strings each emit a distinct slice of the chord. Solo
+    # chord-role instruments leave this None and the technique's
+    # voicing flows through unchanged.
+    voicing_role: Optional[str] = None
 
     @property
     def bar_count(self) -> int:
@@ -209,9 +218,10 @@ class _RoutedMidi:
     })
     _TRACK_ONLY = frozenset({"add_drum_pattern"})
 
-    def __init__(self, midi, inst) -> None:
+    def __init__(self, midi, inst, ctx=None) -> None:
         object.__setattr__(self, "_midi", midi)
         object.__setattr__(self, "_inst", inst)
+        object.__setattr__(self, "_ctx", ctx)
 
     def __getattr__(self, name):
         attr = getattr(self._midi, name)
@@ -221,6 +231,7 @@ class _RoutedMidi:
         if name in self._WITH_PROGRAM:
             program, track_name = inst.program, inst.track_name
             default_octave = getattr(inst, "default_octave", None)
+            voicing_role = getattr(self._ctx, "voicing_role", None)
             def routed(*args, **kwargs):
                 kwargs["program"] = program
                 kwargs["track_name"] = track_name
@@ -229,6 +240,16 @@ class _RoutedMidi:
                 # else gets the instrument's registered default register.
                 if default_octave is not None:
                     kwargs.setdefault("octave", default_octave)
+                # Stratified voicing — only fires when compose_song
+                # assigned a layer role (2+ chord-role instruments). Solo
+                # chord instruments leave voicing_role=None so the
+                # technique's voicing passes through. The rewrite uses
+                # setdefault-style update on whatever the technique passed.
+                if voicing_role and "voicing" in kwargs:
+                    from src.composition.voicing_layer import effective_voicing
+                    kwargs["voicing"] = effective_voicing(
+                        voicing_role, kwargs["voicing"],
+                    )
                 return attr(*args, **kwargs)
             return routed
         if name in self._TRACK_ONLY:
@@ -250,5 +271,5 @@ def apply_technique(midi, technique: Technique, ctx: TechniqueContext) -> None:
     against the renderer's hard-coded default track names.
     """
     inst = getattr(ctx, "instrument_obj", None)
-    routed = _RoutedMidi(midi, inst) if inst is not None else midi
+    routed = _RoutedMidi(midi, inst, ctx=ctx) if inst is not None else midi
     technique.apply(routed, ctx)

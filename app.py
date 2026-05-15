@@ -847,11 +847,22 @@ def compose_midi(
                     program=inst.program, track_name=inst.track_name,
                     **melody_variant,
                 )
+            # Stratified voicing assignment for 2+ chord-role
+            # instruments. The dropdown's ``voicing`` becomes the BASE;
+            # ``effective_voicing(role, base)`` rewrites per-instrument.
+            from src.composition.voicing_layer import (
+                assign_layered_voicings as _alv,
+                effective_voicing as _ev,
+            )
+            chord_voicing_assignments = _alv(inst_by_role["chords"])
             for inst in inst_by_role["chords"]:
+                eff_voicing = _ev(
+                    chord_voicing_assignments.get(inst.id), voicing,
+                )
                 midi.add_chord_progression(
                     key=key, progression=chords_progression, bars=bars,
                     octave=int(chord_octave),
-                    scale_name=scale, voicing=voicing,
+                    scale_name=scale, voicing=eff_voicing,
                     rhythm=chord_rhythm, swing=swing,
                     rhythm_overrides=rhythm_overrides,
                     program=inst.program, track_name=inst.track_name,

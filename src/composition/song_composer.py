@@ -25,6 +25,9 @@ import soundfile as sf
 from src.composition import BANK, role_for_label
 from src.composition.pacing import apply_pacing, pick_pacing
 from src.composition.techniques import TechniqueContext, apply_technique
+from src.composition.voicing_layer import (
+    assign_layered_voicings, effective_voicing,
+)
 from src.daw_integration.generic.midi_export import MidiExporter
 from src.daw_integration.generic.styles import STYLES
 
@@ -278,6 +281,17 @@ def compose_song(
     # bias and fall back to the cross-genre baseline.
     preferred_tags = _GENRE_TAG_MAP.get(genre, ())
 
+    # Stratified voicing assignment. When 2+ chord-role instruments are
+    # active in this song, each gets a distinct layer role (mid_comp /
+    # pad / top) so they occupy different register / chord-density
+    # slices. Solo or zero chord instruments returns {} — techniques
+    # render their pinned voicing unchanged.
+    chord_role_instruments = [
+        inst_obj for _, role, inst_obj in active_passes
+        if role == "chords" and inst_obj is not None
+    ]
+    voicing_assignments = assign_layered_voicings(chord_role_instruments)
+
     pacing_picks: dict[str, object] = {}
     for sec_idx, section in enumerate(sections):
         s, e = int(section["start_bar"]), int(section["end_bar"])
@@ -356,6 +370,7 @@ def compose_song(
                     seed, label, instrument_token, "inner",
                 )),
                 instrument_obj=inst_obj,
+                voicing_role=voicing_assignments.get(instrument_token),
             )
             try:
                 apply_technique(midi, technique, ctx)
@@ -375,6 +390,7 @@ def compose_song(
                 "technique_label": technique.label,
                 "pacing":        pacing.name,
                 "pacing_label":  pacing.label,
+                "voicing_role":  voicing_assignments.get(instrument_token),
                 "start_bar": s, "end_bar": e,
             })
 
@@ -420,12 +436,18 @@ def compose_song(
         pacing_tag = ""
         if pacing is not None and pacing.name != "uniform_1":
             pacing_tag = f" [pacing: {pacing.label}]"
+        # Per-instrument layering tag (only when 2+ chord instruments
+        # active — voicing_assignments is non-empty).
+        def _fmt(item):
+            tag = ""
+            role = item.get("voicing_role")
+            if role:
+                tag = f" [{role}]"
+            return f"{item['instrument']}={item['technique']}{tag}"
         line = (
             f"  {label} (bars {span['start_bar'] + 1}-{span['end_bar'] + 1}):"
             f"{pacing_tag}  "
-            + " · ".join(
-                f"{it['instrument']}={it['technique']}" for it in items
-            )
+            + " · ".join(_fmt(it) for it in items)
         )
         summary_lines.append(line)
     summary = "\n".join(summary_lines)
