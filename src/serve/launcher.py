@@ -151,6 +151,18 @@ def launch(blocks: gr.Blocks, *,
         "    min-height: 36px !important;"
         "    font-size: 0.95rem !important;"
         "  }"
+        # iOS Safari: when the on-screen keyboard is open, Gradio
+        # dropdown popups (Key / Scale / Voicing / Chord-rhythm /
+        # Style) extend to their natural height and disappear behind
+        # the keyboard. Capping their max-height keeps them scrollable
+        # and within reach.
+        "  ul[role='listbox'],"
+        "  .options,"
+        "  .dropdown-menu,"
+        "  .gradio-dropdown ul {"
+        "    max-height: 40vh !important;"
+        "    overflow-y: auto !important;"
+        "  }"
         "}"
     )
 
