@@ -89,6 +89,7 @@ _GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
     "jazz_ballad_full":    ("jazz", "ballad_jazz"),
     "jazz_blues_full":     ("jazz", "blues", "jazz_blues"),
     "jazz_bebop_full":     ("jazz", "bebop"),
+    "jazz_piano_full":     ("jazz", "piano"),
 }
 
 

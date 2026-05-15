@@ -1347,6 +1347,90 @@ _add_melody_tech("jazz_blues_lines",
                  description="Blues-scale lines with chromatic decoration.")
 
 
+# ---------------------------------------------------------------------------
+# Piano comping styles
+# ---------------------------------------------------------------------------
+# Catalogued left-hand / right-hand patterns from jazz + classical
+# pedagogy. These all target the ``chords`` instrument and re-use
+# existing rhythm/voicing names — block, alberti, rolled (arpeggio_16th),
+# dotted-eighth comp, sparse 2-and-4 charleston, sustained 9th pad,
+# octave bass riff, and a split-hand walking-tenths technique that
+# overlays a walking single-pitch line under a held chord on the same
+# Chords track.
+
+_add_chord_tech("piano_block_quarter",
+                rhythm="pulse_quarter", voicing="seventh",
+                roles=("verse", "chorus"), tags=("piano",), weight=2,
+                label="Piano block (quarter)",
+                description="Block 7th-chord on every beat — classic piano comping.")
+_add_chord_tech("piano_alberti_bass",
+                rhythm="alberti", voicing="seventh",
+                roles=("intro", "verse"), tags=("piano",), weight=2,
+                label="Alberti bass piano",
+                description="Broken-chord Alberti pattern — Mozart-era piano LH idiom.")
+_add_chord_tech("piano_rolled_16ths",
+                rhythm="arpeggio_16th", voicing="ninth",
+                roles=("verse", "chorus"), tags=("piano",), weight=2,
+                label="Rolled 16th-note piano",
+                description="Continuous 16th-note broken chords — flowing piano texture.")
+_add_chord_tech("piano_dotted_jazz_comp",
+                rhythm="dotted_8ths", voicing="ninth",
+                roles=("verse", "chorus"), tags=("piano", "jazz"), weight=2,
+                label="Jazz dotted comping",
+                description="Dotted-8th stabs on 9th voicings — bebop / hard-bop piano.")
+_add_chord_tech("piano_sparse_charleston",
+                rhythm="charleston", voicing="ninth",
+                roles=("verse",), tags=("piano", "jazz"), weight=2,
+                label="Sparse charleston piano",
+                description="Sparse 2-and-4 charleston — jazz piano comp behind a soloist.")
+_add_chord_tech("piano_sustained_9th",
+                rhythm="pad", voicing="ninth",
+                roles=("intro", "verse", "outro"), tags=("piano", "ballad"),
+                weight=2,
+                label="Sustained 9th voicings",
+                description="Long-held 9th-chord voicings — Bill Evans / ballad piano.")
+_add_chord_tech("piano_octaves_riff",
+                rhythm="elton_octaves", voicing="triad",
+                roles=("chorus", "bridge"), tags=("piano",), weight=2,
+                label="Octave riff piano",
+                description="Elton-style octave riff — anthemic piano lift.")
+
+
+def _piano_walking_tenths(midi, ctx: TechniqueContext) -> None:
+    """Two-handed piano: walking single-pitch line in the bass clef +
+    sustained chord above, both written to the Chords track so the
+    listener hears one piano performance.
+
+    Right hand renders the chord-voicing pitches as a pad; left hand
+    renders a walking bass line on the lowest pitch of each chord (one
+    octave below the chord's natural octave). The MidiExporter happily
+    overlays both passes onto the same track.
+    """
+    midi.add_bass_line(
+        key=ctx.key, scale_name=ctx.scale,
+        progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, pattern="walking",
+        octave=2, track_name="Chords",
+        program=0,  # piano
+        approach_tones=True,
+        seed=_seed(ctx), swing=ctx.swing, velocity=70,
+    )
+    midi.add_chord_progression(
+        key=ctx.key, scale_name=ctx.scale,
+        progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, rhythm="pad",
+        voicing="seventh", track_name="Chords", program=0,
+        swing=ctx.swing,
+    )
+
+
+_register(name="piano_walking_tenths", label="Walking tenths (split hands)",
+          description="LH walks a single-pitch bass line while RH holds the chord — Bill Evans / cocktail piano.",
+          instruments=("chords",), roles=("verse", "chorus"),
+          tags=("piano", "jazz"), weight=2,
+          apply=_piano_walking_tenths)
+
+
 logger.info(
     "Registered %d techniques in the bank.", len(BANK.all_techniques()),
 )

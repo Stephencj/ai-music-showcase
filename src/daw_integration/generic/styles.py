@@ -1177,6 +1177,34 @@ STYLES: dict[str, StylePreset] = {
         },
     ),
 
+    "jazz_piano_full": StylePreset(
+        name="Jazz Piano (Full song)", tempo=128, key="F", scale="major",
+        # ii-V-I cycle × 16 = 64 bars.
+        progression=[("ii7", 1.0), ("V7", 1.0), ("I", 1.0), ("I", 1.0)] * 16,
+        voicing="ninth", bass_pattern="walking_swing", drum_pattern="jazz_swing",
+        chord_rhythm="dotted_8ths", melody_style="motif",
+        chord_octave=4, bass_octave=2, swing=0.28, default_bars=64,
+        rhythm_variants={
+            "Full song": [
+                {"start_bar": 0,  "end_bar": 3,  "label": "Intro",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root"},
+                {"start_bar": 4,  "end_bar": 19, "label": "A1 (comp)",
+                 "chord_rhythm_h1": "dotted_8ths", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking_swing"},
+                {"start_bar": 20, "end_bar": 35, "label": "A2 (solo)",
+                 "chord_rhythm_h1": "charleston", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking_swing"},
+                {"start_bar": 36, "end_bar": 51, "label": "Bridge",
+                 "chord_rhythm_h1": "alberti", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking_swing"},
+                {"start_bar": 52, "end_bar": 63, "label": "Head out",
+                 "chord_rhythm_h1": "dotted_8ths", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking_swing"},
+            ],
+        },
+    ),
+
     "metal_full": StylePreset(
         name="Metal (Full song)", tempo=150, key="E", scale="minor",
         # Power-chord drone with bVII / V drops ×20 = 80 bars.

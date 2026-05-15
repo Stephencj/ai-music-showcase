@@ -45,6 +45,7 @@ FULL_SONG_KEYS = (
     "jazz_hard_bop_full",
     "jazz_modal_full",
     "jazz_ballad_full",
+    "jazz_piano_full",
 )
 
 from src.daw_integration.generic.midi_export import (
