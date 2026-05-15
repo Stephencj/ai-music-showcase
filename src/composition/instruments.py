@@ -31,6 +31,7 @@ FAMILIES: tuple[str, ...] = (
     "brass",         # section + trumpet / trombone / saxes
     "woodwind",      # section + flute / clarinet / oboe / bassoon
     "strings",       # section + violin / viola / cello / contrabass
+    "vocal",         # lead vocal + backing harmonies
 )
 
 # Human-readable labels for each family (used as accordion titles in the UI).
@@ -41,6 +42,7 @@ FAMILY_LABELS: dict[str, str] = {
     "brass":      "Brass",
     "woodwind":   "Woodwinds",
     "strings":    "Strings",
+    "vocal":      "Vocals",
 }
 
 
@@ -165,6 +167,14 @@ _add(Instrument("violin",     "Violin",     "strings", "melody", 40, default_oct
 _add(Instrument("viola",      "Viola",      "strings", "chords", 41, default_octave=4))
 _add(Instrument("cello",      "Cello",      "strings", "bass",   42, default_octave=3))
 _add(Instrument("contrabass", "Contrabass", "strings", "bass",   43, default_octave=2))
+
+# Vocals — lead is GM 53 Voice Oohs; backing is GM 52 Choir Aahs pinned
+# to the "pad" voicing slot so backing layers behind whatever else is
+# in the chord stack.
+_add(Instrument("vocal_lead",    "Lead Vocal",     "vocal", "melody", 53,
+                default_octave=5))
+_add(Instrument("vocal_harmony", "Backing Vocals", "vocal", "chords", 52,
+                default_octave=5, voicing_role="pad"))
 
 
 # ---------------------------------------------------------------------------

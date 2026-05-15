@@ -906,7 +906,22 @@ def _add_drum_tech(name, *, pattern, roles, label, description,
 def _add_melody_tech(name, *, roles, label, description,
                      tags=(), weight=1, note_density=0.6,
                      melody_style="motif", program=None, track_name=None,
-                     instruments=("melody",)):
+                     instruments=("melody",),
+                     phrase_shape=None, velocity_curve=None,
+                     velocity_range=None, octave=None,
+                     motif_development=None, rhythm_motif=None,
+                     lick_pool=None):
+    """Register a melody-instrument technique.
+
+    The base factory (melody_style + note_density) is sufficient for
+    generic patterns. Vocal-lead techniques additionally pin phrasing
+    knobs: ``phrase_shape`` (arc/rise/fall/valley/plateau/call_response),
+    ``velocity_curve`` (matches phrase_shape values; produces real
+    dynamic shaping instead of jitter), explicit ``velocity_range``
+    + ``octave`` for register, and ``motif_development`` /
+    ``rhythm_motif`` / ``lick_pool`` for melisma-style ornamentation.
+    Any kwarg left as None falls through to ``add_melody``'s default.
+    """
     def _apply(midi, ctx):
         eff_program, eff_track = _route_kwargs(ctx, program, track_name)
         kwargs = dict(
@@ -919,6 +934,20 @@ def _add_melody_tech(name, *, roles, label, description,
             kwargs["program"] = eff_program
         if eff_track is not None:
             kwargs["track_name"] = eff_track
+        if phrase_shape is not None:
+            kwargs["phrase_shape"] = phrase_shape
+        if velocity_curve is not None:
+            kwargs["velocity_curve"] = velocity_curve
+        if velocity_range is not None:
+            kwargs["velocity_range"] = velocity_range
+        if octave is not None:
+            kwargs["octave"] = octave
+        if motif_development is not None:
+            kwargs["motif_development"] = motif_development
+        if rhythm_motif is not None:
+            kwargs["rhythm_motif"] = rhythm_motif
+        if lick_pool is not None:
+            kwargs["lick_pool"] = lick_pool
         midi.add_melody(**kwargs)
     _register(name=name, label=label, description=description,
               instruments=instruments, roles=roles, tags=tags,
@@ -1917,6 +1946,134 @@ _add_chord_tech("string_section_shimmer", rhythm="tremolo",
                 program=44,  # Tremolo Strings
                 label="String section shimmer",
                 description="Tremolo on extended voicings — section shimmer texture.")
+
+
+# ---------------------------------------------------------------------------
+# Vocal techniques — lead phrasing styles + backing-vocal stacks. Each lead
+# technique pins a distinct phrasing profile (density / shape / dynamics /
+# register) so the random song generator gives a song's vocal line a
+# recognisable idiomatic character per section. Backing-vocal techniques
+# register as chord-techs (so they flow through the voicing-layer rules)
+# at GM 52 Choir Aahs.
+# ---------------------------------------------------------------------------
+
+# ----- Lead vocal phrasing techniques -----
+_add_melody_tech("vocal_lead_ballad_sustain",
+                 melody_style="motif", note_density=0.3,
+                 phrase_shape="plateau", velocity_curve="arc",
+                 velocity_range=(60, 90),
+                 roles=("intro", "verse", "outro"),
+                 tags=("vocal", "ballad", "lyrical"),
+                 instruments=("vocal_lead",), weight=3,
+                 label="Vocal ballad sustain",
+                 description="Long-tone ballad phrasing — sparse, intimate, swelling.")
+_add_melody_tech("vocal_lead_intimate_verse",
+                 melody_style="motif", note_density=0.35,
+                 phrase_shape="valley", velocity_range=(55, 85),
+                 octave=4,
+                 roles=("verse",),
+                 tags=("vocal", "intimate", "ballad"),
+                 instruments=("vocal_lead",), weight=2,
+                 label="Vocal intimate verse",
+                 description="Low-register, sparse, conversational verse delivery.")
+_add_melody_tech("vocal_lead_jazz_crooner",
+                 melody_style="chord_tone", note_density=0.5,
+                 phrase_shape="call_response", velocity_curve="fall",
+                 roles=("verse",),
+                 tags=("vocal", "jazz", "crooner"),
+                 instruments=("vocal_lead",), weight=2,
+                 label="Vocal jazz crooner",
+                 description="Laid-back call-response motif — Sinatra / Nat King Cole.")
+_add_melody_tech("vocal_lead_country_twang",
+                 melody_style="pentatonic", note_density=0.6,
+                 phrase_shape="arc",
+                 roles=("verse", "chorus"),
+                 tags=("vocal", "country", "twang"),
+                 instruments=("vocal_lead",), weight=2,
+                 label="Vocal country twang",
+                 description="Pentatonic country phrasing — Dolly / Hank shape.")
+_add_melody_tech("vocal_lead_hooky_motif",
+                 melody_style="motif", note_density=0.6,
+                 motif_development=["repeat", "sequence_up", "repeat", "cadence"],
+                 roles=("chorus",),
+                 tags=("vocal", "pop", "hook"),
+                 instruments=("vocal_lead",), weight=2,
+                 label="Vocal hooky motif",
+                 description="Earworm 2-bar motif sequenced up then resolved — pop chorus hook.")
+_add_melody_tech("vocal_lead_pop_chorus_belt",
+                 melody_style="motif", note_density=0.75,
+                 phrase_shape="arc", velocity_curve="arc",
+                 velocity_range=(80, 110),
+                 roles=("chorus",),
+                 tags=("vocal", "pop", "belt"),
+                 instruments=("vocal_lead",), weight=3,
+                 label="Vocal pop chorus belt",
+                 description="Anthemic chorus belt — driving 8ths with crescendo.")
+_add_melody_tech("vocal_lead_rnb_melisma",
+                 melody_style="pentatonic", note_density=0.85,
+                 phrase_shape="arc",
+                 rhythm_motif="gospel_melisma_5_to_1",
+                 lick_pool=["gospel_melisma_5_to_1"],
+                 roles=("chorus", "bridge"),
+                 tags=("vocal", "rnb", "soul", "melisma"),
+                 instruments=("vocal_lead",), weight=2,
+                 label="Vocal R&B melisma",
+                 description="Dense melismatic chord-tone runs — Aretha / Whitney style.")
+_add_melody_tech("vocal_lead_gospel_lift",
+                 melody_style="pentatonic", note_density=0.7,
+                 phrase_shape="rise", velocity_curve="rise",
+                 roles=("chorus", "outro"),
+                 tags=("vocal", "gospel", "soul"),
+                 instruments=("vocal_lead",), weight=2,
+                 label="Vocal gospel lift",
+                 description="Rising pentatonic gospel adlib into the chorus / vamp.")
+_add_melody_tech("vocal_lead_rock_belt",
+                 melody_style="chord_tone", note_density=0.7,
+                 phrase_shape="rise", velocity_curve="rise",
+                 octave=6,
+                 roles=("chorus", "bridge"),
+                 tags=("vocal", "rock", "belt"),
+                 instruments=("vocal_lead",), weight=2,
+                 label="Vocal rock belt",
+                 description="High-register power belt — chord-tone targeting at octave 6.")
+
+# ----- Backing vocal techniques (register as chord-techs to flow through
+# the voicing-layer proxy and route to the Backing Vocals track) -----
+_add_chord_tech("vocal_harmony_oohs_pad", rhythm="pad",
+                voicing="seventh", program=52,  # Choir Aahs
+                roles=("intro", "verse", "chorus", "outro"),
+                tags=("vocal", "pad", "oohs"),
+                instruments=("vocal_harmony",), weight=3,
+                label="Backing oohs pad",
+                description="Sustained ooh-pad backing — bed under the lead.")
+_add_chord_tech("vocal_harmony_aahs_chorus", rhythm="pad",
+                voicing="ninth", program=52,
+                roles=("chorus",),
+                tags=("vocal", "pad", "aahs"),
+                instruments=("vocal_harmony",), weight=2,
+                label="Backing aahs chorus",
+                description="Wide aah-pad on extensions — chorus expansion.")
+_add_chord_tech("vocal_harmony_doowop_block", rhythm="stabs_8th",
+                voicing="triad", program=52,
+                roles=("chorus",),
+                tags=("vocal", "doowop", "motown"),
+                instruments=("vocal_harmony",), weight=2,
+                label="Backing doowop block",
+                description="Block triadic stabs — Beach Boys / doowop hits.")
+_add_chord_tech("vocal_harmony_gospel_stack", rhythm="pad",
+                voicing="ninth", program=52,
+                roles=("chorus", "bridge", "outro"),
+                tags=("vocal", "gospel", "soul"),
+                instruments=("vocal_harmony",), weight=2,
+                label="Backing gospel stack",
+                description="Wide gospel-stack pad — choir-style 9ths.")
+_add_chord_tech("vocal_harmony_motown_charleston", rhythm="charleston",
+                voicing="seventh", program=52,
+                roles=("verse", "chorus"),
+                tags=("vocal", "motown", "soul"),
+                instruments=("vocal_harmony",), weight=2,
+                label="Backing Motown charleston",
+                description="Motown call-and-response stabs on the charleston rhythm.")
 
 
 logger.info(

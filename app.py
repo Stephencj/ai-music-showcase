@@ -1142,6 +1142,7 @@ def _generate_full_song(
     brass_sel: list[str],
     woodwind_sel: list[str],
     strings_sel: list[str],
+    vocal_sel: list[str],
 ) -> tuple:
     """Wire the 🎲 Generate full song button to the TechniqueBank.
 
@@ -1149,9 +1150,9 @@ def _generate_full_song(
     summary markdown / rhythm_overrides_state / seed input (so a 0
     seed auto-bumps for next click).
 
-    The six family CheckboxGroups flatten into one instrument-id list
-    that ``compose_song`` walks one technique per cell — empty list
-    means the user unchecked everything and we raise.
+    The seven family CheckboxGroups flatten into one instrument-id
+    list that ``compose_song`` walks one technique per cell — empty
+    list means the user unchecked everything and we raise.
     """
     from src.composition.song_composer import compose_song
     seed = int(seed_in) if seed_in else 0
@@ -1160,7 +1161,7 @@ def _generate_full_song(
         seed = _r.randint(1, 1_000_000)
     enabled = tuple(_collect_instruments(
         rhythm_sel, bass_sel, chord_lead_sel,
-        brass_sel, woodwind_sel, strings_sel,
+        brass_sel, woodwind_sel, strings_sel, vocal_sel,
     ))
     if not enabled:
         raise gr.Error("Pick at least one instrument.")
@@ -4095,12 +4096,13 @@ def build_app() -> gr.Blocks:
                     # (drum_kit / electric_bass / piano). Picking a style
                     # preset auto-fills these via the preset's
                     # ``default_instruments`` list (see _apply_preset).
-                    _OPEN_FAMILIES = {"rhythm", "bass", "chord_lead"}
+                    _OPEN_FAMILIES = {"rhythm", "bass", "chord_lead", "vocal"}
                     _STARTER_DEFAULTS = {
                         "rhythm": ["drum_kit"],
                         "bass":   ["electric_bass"],
                         "chord_lead": ["piano"],
                         "brass": [], "woodwind": [], "strings": [],
+                        "vocal": [],
                     }
                     family_selects: dict = {}
                     for _family in FAMILIES:
@@ -4125,6 +4127,7 @@ def build_app() -> gr.Blocks:
                     brass_select      = family_selects["brass"]
                     woodwind_select   = family_selects["woodwind"]
                     strings_select    = family_selects["strings"]
+                    vocal_select      = family_selects["vocal"]
                     with gr.Row(elem_classes=["compose-row-grid"]):
                         harmony_on = gr.Checkbox(value=False, label="Stack harmony on melody")
 
@@ -4568,7 +4571,8 @@ def build_app() -> gr.Blocks:
                         _generate_full_song,
                         inputs=[style_dd, random_song_seed,
                                 rhythm_select, bass_select, chord_lead_select,
-                                brass_select, woodwind_select, strings_select],
+                                brass_select, woodwind_select, strings_select,
+                                vocal_select],
                         outputs=[midi_audio, midi_file, compose_info,
                                  random_song_summary,
                                  rhythm_overrides_state,
@@ -4704,7 +4708,7 @@ def build_app() -> gr.Blocks:
                 rhythm-family CheckboxGroup containing ``drum_kit``.
                 """
                 if style_name == "custom" or style_name not in STYLES:
-                    return (gr.update(),) * 23
+                    return (gr.update(),) * 24
                 p = STYLES[style_name]
                 ts_label = f"{p.time_signature[0]}/{p.time_signature[1]}"
                 drum_update = gr.update() if not p.drum_pattern else gr.update(value=p.drum_pattern)
@@ -4753,6 +4757,7 @@ def build_app() -> gr.Blocks:
                     family_updates["brass"],
                     family_updates["woodwind"],
                     family_updates["strings"],
+                    family_updates["vocal"],
                 )
 
             style_dd.change(
@@ -4765,7 +4770,8 @@ def build_app() -> gr.Blocks:
                          progression_variant_dd,
                          bars_slider, rhythm_overrides_state,
                          rhythm_select, bass_select, chord_lead_select,
-                         brass_select, woodwind_select, strings_select],
+                         brass_select, woodwind_select, strings_select,
+                         vocal_select],
             )
 
             def _refresh_progression(style_name):
@@ -4831,7 +4837,7 @@ def build_app() -> gr.Blocks:
             def _compose_with_families(
                 style, key_, scale_, tempo_, time_sig_, bars_,
                 rhythm_sel, bass_sel, chord_lead_sel,
-                brass_sel, woodwind_sel, strings_sel,
+                brass_sel, woodwind_sel, strings_sel, vocal_sel,
                 bass_pattern_, drum_pattern_, voicing_, swing_,
                 chord_rhythm_, melody_style_, seed_,
                 progression_text_, extras_,
@@ -4841,14 +4847,14 @@ def build_app() -> gr.Blocks:
                 enable_harmony_, harmony_voices_, harmony_preset_,
                 harmony_rule_, rhythm_overrides_,
             ):
-                """Flatten the 6 family CheckboxGroups into one
+                """Flatten the 7 family CheckboxGroups into one
                 ``enabled_instruments`` list and call ``compose_midi``.
                 Passes the four legacy enable booleans as ``False`` so
                 the empty-selection path raises rather than silently
                 falling back to the legacy default tracks."""
                 instruments = _collect_instruments(
                     rhythm_sel, bass_sel, chord_lead_sel,
-                    brass_sel, woodwind_sel, strings_sel,
+                    brass_sel, woodwind_sel, strings_sel, vocal_sel,
                 )
                 return compose_midi(
                     style=style, key=key_, scale=scale_, tempo=tempo_,
@@ -4880,6 +4886,7 @@ def build_app() -> gr.Blocks:
                 inputs=[style_dd, key, scale, tempo_slider, time_sig_dd, bars_slider,
                         rhythm_select, bass_select, chord_lead_select,
                         brass_select, woodwind_select, strings_select,
+                        vocal_select,
                         bass_pat, drum_pat, voicing_dd, swing_slider,
                         chord_rhythm_dd, melody_style_dd, seed_input,
                         progression_in, extras_state,
