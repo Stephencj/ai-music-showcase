@@ -201,6 +201,66 @@ class PerInstrumentRoutingTests(unittest.TestCase):
         self.assertIn("Trumpet", names)
 
 
+class SectionPacingTests(unittest.TestCase):
+    """compose_song should pick a per-section pacing strategy and
+    surface it in selections + the summary text. Same seed must
+    reproduce the same pacing decisions."""
+
+    def test_pacing_field_on_every_selection(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = compose_song(
+                genre="jazz_aaba_full", seed=42, skip_audio=True,
+                output_dir=Path(td),
+                enabled_instruments=["drum_kit", "electric_bass", "piano"],
+            )
+        for sel in out["selections"]:
+            self.assertIn("pacing", sel)
+            self.assertIn("pacing_label", sel)
+
+    def test_same_seed_same_pacing_picks(self):
+        with tempfile.TemporaryDirectory() as td:
+            a = compose_song(
+                genre="ballad_full", seed=7, skip_audio=True,
+                output_dir=Path(td) / "a",
+                enabled_instruments=["drum_kit", "piano"],
+            )
+            b = compose_song(
+                genre="ballad_full", seed=7, skip_audio=True,
+                output_dir=Path(td) / "b",
+                enabled_instruments=["drum_kit", "piano"],
+            )
+        pacings_a = [s["pacing"] for s in a["selections"]]
+        pacings_b = [s["pacing"] for s in b["selections"]]
+        self.assertEqual(pacings_a, pacings_b)
+
+    def test_blues_12bar_stays_rigid(self):
+        """Blues form is rigid — every section must use uniform_1 no
+        matter what seed we throw at it."""
+        for seed in (1, 42, 1234):
+            with tempfile.TemporaryDirectory() as td:
+                out = compose_song(
+                    genre="blues_12bar_full", seed=seed, skip_audio=True,
+                    output_dir=Path(td),
+                    enabled_instruments=["drum_kit", "electric_bass", "piano"],
+                )
+            pacings = {s["pacing"] for s in out["selections"]}
+            self.assertEqual(pacings, {"uniform_1"},
+                             f"seed {seed}: pacings = {pacings}")
+
+    def test_non_uniform_pacing_shows_in_summary(self):
+        """When a section picks a non-uniform_1 strategy the summary
+        line carries a ``[pacing: <label>]`` tag."""
+        # Ballad's main pool has zero uniform_1 entries, so at least
+        # one section must surface a pacing tag.
+        with tempfile.TemporaryDirectory() as td:
+            out = compose_song(
+                genre="ballad_full", seed=5, skip_audio=True,
+                output_dir=Path(td),
+                enabled_instruments=["drum_kit", "piano"],
+            )
+        self.assertIn("[pacing:", out["summary"])
+
+
 class FunkRockPreferredTagsTests(unittest.TestCase):
     """A song composed against a full-song preset should over-weight
     techniques in the bank tagged with that preset key (or a related

@@ -23,6 +23,7 @@ import numpy as np
 import soundfile as sf
 
 from src.composition import BANK, role_for_label
+from src.composition.pacing import apply_pacing, pick_pacing
 from src.composition.techniques import TechniqueContext, apply_technique
 from src.daw_integration.generic.midi_export import MidiExporter
 from src.daw_integration.generic.styles import STYLES
@@ -277,14 +278,33 @@ def compose_song(
     # bias and fall back to the cross-genre baseline.
     preferred_tags = _GENRE_TAG_MAP.get(genre, ())
 
+    pacing_picks: dict[str, object] = {}
     for sec_idx, section in enumerate(sections):
         s, e = int(section["start_bar"]), int(section["end_bar"])
         label = section.get("label", f"Section {sec_idx + 1}")
         role = section.get("role") or role_for_label(label)
-        section_prog = _slice_progression(progression, eff_bars, s, e)
+
+        # Per-section harmonic-rhythm variation. Bridge sections sample
+        # from preset.bridge_pacing_options when set (bias toward
+        # exotic strategies); other sections sample from
+        # preset.pacing_options. Presets that didn't opt in always get
+        # uniform_1 so the legacy 1-bar-per-chord behavior is
+        # preserved for unmodified presets and tests.
+        pacing_rng = np.random.default_rng(
+            _sub_seed(seed, label, "pacing"),
+        )
+        pacing = pick_pacing(pacing_rng, preset, role)
+        pacing_picks[label] = pacing
+        paced_progression = apply_pacing(
+            progression, pacing, eff_key, eff_scale,
+        )
+        section_prog = _slice_progression(
+            paced_progression, eff_bars, s, e,
+        )
 
         row = {
             "start_bar": s, "end_bar": e, "label": label, "role": role,
+            "pacing": pacing.name, "pacing_label": pacing.label,
             "chord_rhythm_h1": "", "chord_rhythm_h2": "",
             "bass_pattern": "",
         }
@@ -353,6 +373,8 @@ def compose_song(
                 "instrument_label": inst_obj.label if inst_obj else instrument_token,
                 "technique":     technique.name,
                 "technique_label": technique.label,
+                "pacing":        pacing.name,
+                "pacing_label":  pacing.label,
                 "start_bar": s, "end_bar": e,
             })
 
@@ -392,8 +414,15 @@ def compose_song(
         by_section.setdefault(sel["section_label"], []).append(sel)
     for label, items in by_section.items():
         span = items[0]
+        # Tag the section header with its pacing only when it differs
+        # from the legacy default; otherwise the line stays clean.
+        pacing = pacing_picks.get(label)
+        pacing_tag = ""
+        if pacing is not None and pacing.name != "uniform_1":
+            pacing_tag = f" [pacing: {pacing.label}]"
         line = (
-            f"  {label} (bars {span['start_bar'] + 1}-{span['end_bar'] + 1}):  "
+            f"  {label} (bars {span['start_bar'] + 1}-{span['end_bar'] + 1}):"
+            f"{pacing_tag}  "
             + " · ".join(
                 f"{it['instrument']}={it['technique']}" for it in items
             )

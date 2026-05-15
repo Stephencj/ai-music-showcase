@@ -155,6 +155,39 @@ class DefaultInstrumentsTests(unittest.TestCase):
             )
 
 
+class PacingOptionsTests(unittest.TestCase):
+    """Every preset that opts into pacing must reference names the
+    pacing registry actually knows — otherwise compose_song silently
+    falls back to ``uniform_1`` and the preset's intended variation
+    disappears."""
+
+    def test_pacing_options_resolve_in_registry(self):
+        from src.composition.pacing import PACING_REGISTRY
+        for k in FULL_SONG_KEYS:
+            preset = STYLES[k]
+            for name in preset.pacing_options:
+                self.assertIn(
+                    name, PACING_REGISTRY,
+                    f"{k}: pacing_options references unknown strategy "
+                    f"{name!r}",
+                )
+            for name in preset.bridge_pacing_options:
+                self.assertIn(
+                    name, PACING_REGISTRY,
+                    f"{k}: bridge_pacing_options references unknown "
+                    f"strategy {name!r}",
+                )
+
+    def test_full_song_presets_set_pacing_options(self):
+        """All 18 full-song presets should populate pacing_options so
+        the random generator actually varies harmonic rhythm."""
+        for k in FULL_SONG_KEYS:
+            self.assertGreater(
+                len(STYLES[k].pacing_options), 0,
+                f"{k}: pacing_options is empty",
+            )
+
+
 class DefaultBarsBackwardCompatTests(unittest.TestCase):
 
     def test_simple_presets_keep_default_8_bars(self):

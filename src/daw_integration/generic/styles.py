@@ -103,6 +103,20 @@ class StylePreset:
     # tenor sax automatically.
     default_instruments: list[str] = field(default_factory=list)
 
+    # Pacing-strategy names ``compose_song`` picks from per-section
+    # (see :mod:`src.composition.pacing`). Empty tuple ⇒ every section
+    # uses ``uniform_1`` (1 bar per chord — legacy behavior). Each
+    # full-song preset opts into the pacing pools that fit the genre's
+    # harmonic-rhythm idioms.
+    pacing_options: tuple[str, ...] = ()
+    # Pool used specifically for sections whose role resolves to
+    # ``"bridge"``. When non-empty, the bridge picks from this pool
+    # instead — biased toward exotic strategies (secondary dominants,
+    # chromatic passing, short-long sub-bar) because bridges in
+    # songwriting are the contrast section. Empty ⇒ falls back to
+    # ``pacing_options``.
+    bridge_pacing_options: tuple[str, ...] = ()
+
     def __post_init__(self):
         # Synthesise a Default entry if no variants were declared so every
         # preset uniformly exposes a non-empty list.
@@ -763,6 +777,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'electric_bass', 'piano', 'electric_guitar_clean'],
+        pacing_options=('uniform_1', 'uniform_1', 'stretch_tonic_2'),
+        bridge_pacing_options=('with_secondary_doms', 'stretch_tonic_2', 'with_chromatic_passing'),
     ),
 
     "rock_anthem_full": StylePreset(
@@ -798,6 +814,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'electric_bass', 'electric_guitar_dirty', 'electric_guitar_clean', 'organ_hammond'],
+        pacing_options=('uniform_1', 'uniform_1', 'stretch_tonic_2'),
+        bridge_pacing_options=('with_secondary_doms', 'stretch_tonic_2', 'with_chromatic_passing'),
     ),
 
     "funk_full_song": StylePreset(
@@ -830,6 +848,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'electric_bass', 'electric_piano', 'electric_guitar_clean', 'brass_section'],
+        pacing_options=('uniform_1', 'short_long_subbar', 'uniform_2'),
+        bridge_pacing_options=('short_long_subbar', 'uniform_2'),
     ),
 
     "jazz_aaba_full": StylePreset(
@@ -856,6 +876,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'upright_bass', 'piano', 'sax_tenor', 'trumpet'],
+        pacing_options=('uniform_1', 'cadence_accel', 'with_secondary_doms'),
+        bridge_pacing_options=('with_secondary_doms', 'short_long_subbar', 'cadence_accel'),
     ),
 
     "blues_12bar_full": StylePreset(
@@ -889,6 +911,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'electric_bass', 'electric_guitar_clean', 'organ_hammond'],
+        pacing_options=('uniform_1',),
+        bridge_pacing_options=('uniform_1',),
     ),
 
     "ballad_full": StylePreset(
@@ -924,6 +948,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'electric_bass', 'piano', 'string_section'],
+        pacing_options=('ballad_4_2', 'stretch_tonic_2', 'uniform_2'),
+        bridge_pacing_options=('with_secondary_doms', 'stretch_tonic_2'),
     ),
 
     "hip_hop_full": StylePreset(
@@ -956,6 +982,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'synth_bass', 'electric_piano'],
+        pacing_options=('uniform_1', 'uniform_2'),
+        bridge_pacing_options=('uniform_2', 'with_chromatic_passing'),
     ),
 
     "country_full": StylePreset(
@@ -991,6 +1019,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'electric_bass', 'acoustic_guitar', 'electric_guitar_clean'],
+        pacing_options=('uniform_1', 'uniform_1', 'stretch_tonic_2'),
+        bridge_pacing_options=('with_secondary_doms', 'stretch_tonic_2', 'with_chromatic_passing'),
     ),
 
     "reggae_full": StylePreset(
@@ -1026,6 +1056,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'electric_bass', 'electric_guitar_clean', 'organ_hammond'],
+        pacing_options=('uniform_1', 'stretch_tonic_2'),
+        bridge_pacing_options=('with_secondary_doms', 'short_long_subbar'),
     ),
 
     "disco_full": StylePreset(
@@ -1058,6 +1090,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'electric_bass', 'electric_piano', 'brass_section'],
+        pacing_options=('uniform_1', 'stretch_tonic_2'),
+        bridge_pacing_options=('with_secondary_doms', 'short_long_subbar'),
     ),
 
     "soul_motown_full": StylePreset(
@@ -1093,6 +1127,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'electric_bass', 'electric_piano', 'brass_section'],
+        pacing_options=('uniform_1', 'stretch_tonic_2'),
+        bridge_pacing_options=('with_secondary_doms', 'short_long_subbar'),
     ),
 
     "jazz_bossa_full": StylePreset(
@@ -1119,6 +1155,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'upright_bass', 'piano', 'sax_tenor', 'flute'],
+        pacing_options=('uniform_1', 'short_long_subbar'),
+        bridge_pacing_options=('short_long_subbar', 'with_secondary_doms'),
     ),
 
     "jazz_hard_bop_full": StylePreset(
@@ -1145,6 +1183,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'upright_bass', 'piano', 'sax_tenor', 'trumpet'],
+        pacing_options=('uniform_1', 'cadence_accel', 'with_secondary_doms'),
+        bridge_pacing_options=('with_secondary_doms', 'short_long_subbar', 'cadence_accel'),
     ),
 
     "jazz_modal_full": StylePreset(
@@ -1171,6 +1211,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'upright_bass', 'piano', 'sax_tenor'],
+        pacing_options=('uniform_2', 'uniform_2', 'stretch_tonic_2'),
+        bridge_pacing_options=('with_secondary_doms', 'uniform_2'),
     ),
 
     "jazz_ballad_full": StylePreset(
@@ -1200,6 +1242,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'upright_bass', 'piano', 'sax_tenor'],
+        pacing_options=('uniform_2', 'ballad_4_2', 'stretch_tonic_2'),
+        bridge_pacing_options=('with_secondary_doms', 'uniform_2'),
     ),
 
     "jazz_piano_full": StylePreset(
@@ -1229,6 +1273,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'upright_bass', 'piano'],
+        pacing_options=('uniform_1', 'cadence_accel', 'with_secondary_doms'),
+        bridge_pacing_options=('with_secondary_doms', 'short_long_subbar'),
     ),
 
     "metal_full": StylePreset(
@@ -1262,6 +1308,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'electric_bass', 'electric_guitar_dirty', 'electric_guitar_clean'],
+        pacing_options=('uniform_1',),
+        bridge_pacing_options=('uniform_2',),
     ),
 
     "edm_full_song": StylePreset(
@@ -1297,6 +1345,8 @@ STYLES: dict[str, StylePreset] = {
             ],
         },
         default_instruments=['drum_kit', 'synth_bass', 'synth_pad', 'synth_lead'],
+        pacing_options=('uniform_1', 'uniform_2'),
+        bridge_pacing_options=('uniform_2', 'uniform_1'),
     ),
 }
 
