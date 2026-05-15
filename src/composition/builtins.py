@@ -823,7 +823,8 @@ def _route_kwargs(ctx, default_program=None, default_track=None):
 
 def _add_chord_tech(name, *, rhythm, roles, label, description,
                     tags=(), weight=1, voicing="seventh",
-                    velocity=None, program=None, track_name=None):
+                    velocity=None, program=None, track_name=None,
+                    instruments=("chords",)):
     """Register a chord-instrument technique.
 
     Per-call ``program`` / ``track_name`` are the technique's own
@@ -831,6 +832,11 @@ def _add_chord_tech(name, *, rhythm, roles, label, description,
     technique). When ``compose_song`` is routing the cell to a
     specific Instrument it overrides BOTH via ``ctx.instrument_obj``
     so the technique lands on the right per-instrument track.
+
+    ``instruments`` defaults to the legacy role bucket ``("chords",)``
+    so any chord-role instrument matches; pass a tuple of specific
+    INSTRUMENT_REGISTRY ids (e.g. ``("trumpet",)``) for section-aware
+    techniques that should ONLY fire for that instrument.
     """
     def _apply(midi, ctx):
         eff_program, eff_track = _route_kwargs(ctx, program, track_name)
@@ -848,14 +854,14 @@ def _add_chord_tech(name, *, rhythm, roles, label, description,
             kwargs["track_name"] = eff_track
         midi.add_chord_progression(**kwargs)
     _register(name=name, label=label, description=description,
-              instruments=("chords",), roles=roles, tags=tags,
+              instruments=instruments, roles=roles, tags=tags,
               weight=weight, apply=_apply)
 
 
 def _add_bass_tech(name, *, pattern, roles, label, description,
                    tags=(), weight=1, approach_tones=False,
                    velocity=None, swing_floor=None, program=None,
-                   track_name=None):
+                   track_name=None, instruments=("bass",)):
     def _apply(midi, ctx):
         eff_program, eff_track = _route_kwargs(ctx, program, track_name)
         kwargs = dict(
@@ -874,7 +880,7 @@ def _add_bass_tech(name, *, pattern, roles, label, description,
             kwargs["track_name"] = eff_track
         midi.add_bass_line(**kwargs)
     _register(name=name, label=label, description=description,
-              instruments=("bass",), roles=roles, tags=tags,
+              instruments=instruments, roles=roles, tags=tags,
               weight=weight, apply=_apply)
 
 
@@ -899,7 +905,8 @@ def _add_drum_tech(name, *, pattern, roles, label, description,
 
 def _add_melody_tech(name, *, roles, label, description,
                      tags=(), weight=1, note_density=0.6,
-                     melody_style="motif", program=None, track_name=None):
+                     melody_style="motif", program=None, track_name=None,
+                     instruments=("melody",)):
     def _apply(midi, ctx):
         eff_program, eff_track = _route_kwargs(ctx, program, track_name)
         kwargs = dict(
@@ -914,7 +921,7 @@ def _add_melody_tech(name, *, roles, label, description,
             kwargs["track_name"] = eff_track
         midi.add_melody(**kwargs)
     _register(name=name, label=label, description=description,
-              instruments=("melody",), roles=roles, tags=tags,
+              instruments=instruments, roles=roles, tags=tags,
               weight=weight, apply=_apply)
 
 
@@ -1748,6 +1755,168 @@ _add_bass_tech("bass_dance_house_pulse", pattern="offbeat",
                roles=("verse", "chorus"), tags=("edm", "disco"),
                label="Dance / house pulse",
                description="Eighth-note offbeat — house / dance drive.")
+
+
+# ---------------------------------------------------------------------------
+# Section-aware techniques — tagged with specific INSTRUMENT_REGISTRY ids
+# so that picking trumpet / sax_tenor / violin etc. lands on idiomatic
+# brass / wind / string vocabulary first, falling back to the generic
+# role bucket for cells the section pack doesn't cover. The shared
+# rhythm patterns (``brass_shout`` / ``tremolo`` / ``pizz_alternating``)
+# let multiple section instruments coordinate at the rhythm level without
+# any cross-instrument scheduling logic.
+# ---------------------------------------------------------------------------
+
+# ----- Brass -----
+_add_chord_tech("trumpet_shout_lead", rhythm="brass_shout",
+                voicing="ninth", roles=("chorus", "bridge"),
+                tags=("brass", "shout", "big_band"),
+                instruments=("trumpet",), weight=3,
+                label="Trumpet shout lead",
+                description="Driving 8th-note shout chorus on 9th voicings — big-band lead trumpet.")
+_add_chord_tech("trumpet_fanfare", rhythm="fanfare_dotted",
+                voicing="triad", roles=("intro", "chorus"),
+                tags=("brass", "fanfare", "cinematic"),
+                instruments=("trumpet",), weight=2,
+                label="Trumpet fanfare",
+                description="Heroic dotted-8th fanfare — Strauss / Williams.")
+_add_melody_tech("trumpet_bebop_lines", melody_style="chord_tone",
+                 roles=("verse", "bridge"),
+                 tags=("brass", "jazz", "bebop"),
+                 instruments=("trumpet",), weight=2,
+                 note_density=0.85,
+                 label="Trumpet bebop lines",
+                 description="Chord-tone-targeted bebop lines with dense rhythmic activity.")
+_add_chord_tech("trombone_shout_third", rhythm="brass_shout",
+                voicing="triad", roles=("chorus", "bridge"),
+                tags=("brass", "shout"),
+                instruments=("trombone",), weight=2,
+                label="Trombone shout (third)",
+                description="Trombone supporting the brass shout on triadic voicing.")
+_add_melody_tech("trombone_tailgate", melody_style="riff",
+                 roles=("verse",),
+                 tags=("brass", "dixieland"),
+                 instruments=("trombone",), weight=2,
+                 note_density=0.5,
+                 label="Trombone tailgate",
+                 description="Dixieland-style trombone tailgate riff with slide-friendly intervals.")
+_add_melody_tech("sax_tenor_solo_lick", melody_style="blues",
+                 roles=("verse", "bridge"),
+                 tags=("brass", "jazz", "solo"),
+                 instruments=("sax_tenor",), weight=3,
+                 note_density=0.75,
+                 label="Tenor sax solo lick",
+                 description="Blues-scale solo lines — straight-ahead tenor sax solo.")
+_add_melody_tech("sax_alto_counter_thirds", melody_style="chord_tone",
+                 roles=("chorus",),
+                 tags=("brass", "counter"),
+                 instruments=("sax_alto",), weight=2,
+                 note_density=0.6,
+                 label="Alto sax counter-thirds",
+                 description="Chord-tone counter-melody — shadows the lead a third below.")
+_add_chord_tech("brass_section_swell", rhythm="brass_pad_swell",
+                voicing="seventh", roles=("intro", "outro"),
+                tags=("brass", "swell"),
+                instruments=("brass_section",), weight=2,
+                label="Brass section swell",
+                description="Long brass crescendo into a hit — intro / outro.")
+
+# ----- Woodwind -----
+_add_melody_tech("flute_soaring_arc", melody_style="motif",
+                 roles=("chorus", "bridge"),
+                 tags=("woodwind", "lyrical"),
+                 instruments=("flute",), weight=3,
+                 note_density=0.55,
+                 label="Flute soaring arc",
+                 description="Lyrical arcing line in the upper register — orchestral lift.")
+_add_melody_tech("flute_trill_cadence", melody_style="chord_tone",
+                 roles=("outro",),
+                 tags=("woodwind", "classical"),
+                 instruments=("flute",), weight=2,
+                 note_density=0.9,
+                 label="Flute trill cadence",
+                 description="Trill-heavy cadential figure — classical tail.")
+_add_melody_tech("clarinet_legato_line", melody_style="motif",
+                 roles=("verse",),
+                 tags=("woodwind", "legato"),
+                 instruments=("clarinet",), weight=2,
+                 note_density=0.45,
+                 label="Clarinet legato line",
+                 description="Long-tone legato line — chamber color.")
+_add_melody_tech("clarinet_smear_blues", melody_style="blues",
+                 roles=("bridge",),
+                 tags=("woodwind", "jazz", "dixieland"),
+                 instruments=("clarinet",), weight=2,
+                 note_density=0.7,
+                 label="Clarinet smear blues",
+                 description="Blues-scale smears — dixieland clarinet break.")
+_add_melody_tech("oboe_lyrical_sparse", melody_style="motif",
+                 roles=("intro", "verse"),
+                 tags=("woodwind", "lyrical", "cinematic"),
+                 instruments=("oboe",), weight=2,
+                 note_density=0.35,
+                 label="Oboe lyrical sparse",
+                 description="Plaintive sparse oboe solo — film score color.")
+_add_chord_tech("bassoon_staccato_pulse", rhythm="pulse_quarter",
+                voicing="triad", roles=("verse",),
+                tags=("woodwind", "comic", "bass_double"),
+                instruments=("bassoon",), weight=2,
+                label="Bassoon staccato pulse",
+                description="Staccato quarter pulse — comic / cartoon character.")
+
+# ----- Strings -----
+_add_chord_tech("violin_divisi_pad_top", rhythm="pad",
+                voicing="seventh", roles=("intro", "verse", "outro"),
+                tags=("strings", "pad", "cinematic"),
+                instruments=("violin",), weight=2,
+                label="Violin divisi pad (top voice)",
+                description="Sustained 7th-pad on violins — cinematic top voice.")
+_add_chord_tech("violin_tremolo_swell", rhythm="tremolo",
+                voicing="triad", roles=("bridge", "chorus"),
+                tags=("strings", "tremolo", "tension"),
+                instruments=("violin",), weight=2,
+                label="Violin tremolo swell",
+                description="Triadic tremolo — Herrmann tension build.")
+_add_chord_tech("violin_staccato_ostinato", rhythm="string_ostinato_16ths",
+                voicing="triad", roles=("verse", "bridge"),
+                tags=("strings", "ostinato", "cinematic"),
+                instruments=("violin",), weight=2,
+                label="Violin staccato ostinato",
+                description="Repeated 16ths with quarter accents — Reich / film ostinato.")
+_add_chord_tech("viola_long_pad_middle", rhythm="pad",
+                voicing="seventh", roles=("intro", "verse", "outro"),
+                tags=("strings", "pad"),
+                instruments=("viola",), weight=2,
+                label="Viola long pad",
+                description="Sustained 7th-pad on viola — middle-register fill.")
+_add_bass_tech("cello_arco_bass", pattern="root_fifth",
+               roles=("intro", "verse", "outro"),
+               tags=("strings", "bass_double"),
+               instruments=("cello",), weight=2,
+               velocity=72,
+               label="Cello arco bass",
+               description="Sustained arco root-fifth — orchestral bass double.")
+_add_chord_tech("cello_pizz_eighths", rhythm="pizz_alternating",
+                voicing="triad", roles=("verse",),
+                tags=("strings", "pizzicato"),
+                instruments=("cello",), weight=2,
+                program=45,  # Pizzicato Strings
+                label="Cello pizzicato 8ths",
+                description="Pizz on the upbeats — under sustained brass/wind.")
+_add_bass_tech("contrabass_pedal", pattern="root",
+               roles=("intro", "outro"),
+               tags=("strings", "bass", "pedal"),
+               instruments=("contrabass",), weight=2,
+               velocity=60,
+               label="Contrabass pedal",
+               description="Sustained tonic / dominant pedal on contrabass.")
+_add_chord_tech("string_section_shimmer", rhythm="tremolo",
+                voicing="ninth", roles=("bridge",),
+                tags=("strings", "tremolo", "shimmer"),
+                instruments=("string_section",), weight=2,
+                program=44,  # Tremolo Strings
+                label="String section shimmer",
+                description="Tremolo on extended voicings — section shimmer texture.")
 
 
 logger.info(

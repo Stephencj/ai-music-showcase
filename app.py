@@ -1541,6 +1541,10 @@ CHORD_RHYTHMS = ["pad", "pulse_quarter", "stabs_8th", "charleston",
                  "indian_teental_16", "indian_keherwa_8",
                  # East/SE Asian
                  "gamelan_kotekan",
+                 # Section / orchestral
+                 "brass_shout", "brass_pad_swell",
+                 "string_ostinato_16ths", "pizz_alternating",
+                 "tremolo", "fanfare_dotted",
                  # Arpeggios
                  "arpeggio_up", "arpeggio_down", "arpeggio_16th", "alberti",
                  "arp_raga_ascend", "arp_pentatonic", "arp_quartal"]

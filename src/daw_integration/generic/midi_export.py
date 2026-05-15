@@ -394,6 +394,40 @@ STRUM_RHYTHMS: dict[str, list[tuple[float, float, float]]] = {
                        (4.0, 0.45, 0.9),  (6.0, 0.45, 1.0),
                        (7.0, 0.45, 0.85), (9.0, 0.45, 0.95),
                        (11.0, 0.45, 0.9)],
+    # ----- Section-aware patterns (4/4) -----
+    # Workhorse big-band horn shout: driving 8th stabs with a 16th
+    # pickup on "and-of-2" pulling into beat 3. Idiomatic under
+    # Basie / Ellington / Tower of Power charts.
+    "brass_shout":    [(0.0, 0.3, 1.0),  (0.5, 0.3, 0.85),
+                       (1.0, 0.3, 1.0),  (1.75, 0.3, 0.9),
+                       (2.0, 0.3, 1.0),  (2.5, 0.3, 0.85),
+                       (3.5, 0.3, 0.95)],
+    # Brass swell — long sustained crescendo arriving on beat 4.5.
+    # Intro / fill / cinematic build. Two hits; the renderer's velocity
+    # ramp on the long note approximates the crescendo.
+    "brass_pad_swell": [(0.0, 3.5, 0.55), (3.5, 0.5, 1.0)],
+    # Repeated 16ths with a per-beat accent — Herrmann / Reich /
+    # film-tension ostinato. 16 hits per bar; accents on every
+    # quarter-note pulse.
+    "string_ostinato_16ths": [
+        (i * 0.25, 0.22, 1.0 if i % 4 == 0 else 0.75) for i in range(16)
+    ],
+    # Pizz on every upbeat — sits cleanly under sustained brass/wind
+    # pads. Light velocity, short durations.
+    "pizz_alternating": [(0.5, 0.3, 0.9),  (1.5, 0.3, 0.85),
+                         (2.5, 0.3, 0.95), (3.5, 0.3, 0.85)],
+    # Tremolo: 32nd-note repetition across the bar. Accents on every
+    # quarter to keep the pulse audible. Pair with strings/tremolo
+    # patches (program 44) for the classic shimmer.
+    "tremolo": [
+        (i * 0.125, 0.12, 1.0 if i % 4 == 0 else 0.65) for i in range(32)
+    ],
+    # Heroic dotted-8th + 16th cell — Mahler / Strauss / John Williams
+    # fanfare feel. Two compressed pickups followed by two whole-beat
+    # sustains.
+    "fanfare_dotted": [(0.0, 0.75, 1.0),  (0.75, 0.25, 0.9),
+                       (1.0, 0.75, 1.0),  (1.75, 0.25, 0.9),
+                       (2.0, 1.0, 1.0),   (3.0, 1.0, 0.95)],
 }
 
 # Arpeggio patterns: per-bar count of hits + direction.

@@ -57,6 +57,22 @@ class RegistryShapeTests(unittest.TestCase):
         for inst in INSTRUMENT_REGISTRY.values():
             self.assertEqual(inst.track_name, inst.label)
 
+    def test_default_octave_present_for_pitched_instruments(self):
+        for inst_id, inst in INSTRUMENT_REGISTRY.items():
+            if inst.is_drum:
+                self.assertIsNone(
+                    inst.default_octave,
+                    f"{inst_id}: drum instruments should have "
+                    f"default_octave=None (got {inst.default_octave})",
+                )
+            else:
+                self.assertIsNotNone(
+                    inst.default_octave,
+                    f"{inst_id}: pitched instrument missing default_octave",
+                )
+                self.assertGreaterEqual(inst.default_octave, 1)
+                self.assertLessEqual(inst.default_octave, 6)
+
 
 class SectionCompositeTests(unittest.TestCase):
 

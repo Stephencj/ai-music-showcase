@@ -220,9 +220,15 @@ class _RoutedMidi:
             return attr
         if name in self._WITH_PROGRAM:
             program, track_name = inst.program, inst.track_name
+            default_octave = getattr(inst, "default_octave", None)
             def routed(*args, **kwargs):
                 kwargs["program"] = program
                 kwargs["track_name"] = track_name
+                # setdefault — techniques that pin an octave explicitly
+                # (e.g. a brass-shout lead at octave 5) win; everything
+                # else gets the instrument's registered default register.
+                if default_octave is not None:
+                    kwargs.setdefault("octave", default_octave)
                 return attr(*args, **kwargs)
             return routed
         if name in self._TRACK_ONLY:

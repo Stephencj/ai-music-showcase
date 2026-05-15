@@ -74,6 +74,13 @@ class Instrument:
     is_section: bool = False
     members: tuple[str, ...] = ()    # only meaningful when is_section is True
     velocity_floor: int = 0          # for quiet section instruments
+    # Default octave for this instrument's renderer calls (C4 = MIDI 60
+    # ⇒ octave 4). Read by ``_RoutedMidi`` and injected via setdefault
+    # so techniques that explicitly pass ``octave=`` still win — only
+    # the unspecified case picks up the instrument default. ``None``
+    # means "leave whatever the renderer's default is" (used by drum
+    # tracks, which have no pitched octave).
+    default_octave: Optional[int] = None
 
     @property
     def track_name(self) -> str:
@@ -99,50 +106,58 @@ def _add(inst: Instrument) -> None:
 _add(Instrument("drum_kit",   "Drum kit",   "rhythm", "drums", 0, is_drum=True))
 _add(Instrument("percussion", "Percussion", "rhythm", "drums", 0, is_drum=True))
 
-# Bass
-_add(Instrument("electric_bass", "Electric Bass", "bass", "bass", 33))
-_add(Instrument("upright_bass",  "Upright Bass",  "bass", "bass", 32))
-_add(Instrument("synth_bass",    "Synth Bass",    "bass", "bass", 38))
+# Bass — written low (E1–G3 typical).
+_add(Instrument("electric_bass", "Electric Bass", "bass", "bass", 33, default_octave=2))
+_add(Instrument("upright_bass",  "Upright Bass",  "bass", "bass", 32, default_octave=2))
+_add(Instrument("synth_bass",    "Synth Bass",    "bass", "bass", 38, default_octave=2))
 
-# Chord / lead instruments
-_add(Instrument("piano",                 "Piano",                "chord_lead", "chords", 0))
-_add(Instrument("electric_piano",        "Electric Piano",       "chord_lead", "chords", 4))
-_add(Instrument("organ_hammond",         "Organ (Hammond)",      "chord_lead", "chords", 16))
-_add(Instrument("organ_church",          "Organ (Church)",       "chord_lead", "chords", 19))
-_add(Instrument("acoustic_guitar",       "Acoustic Guitar",      "chord_lead", "chords", 25))
-_add(Instrument("electric_guitar_clean", "Electric Guitar (clean)", "chord_lead", "chords", 27))
-_add(Instrument("electric_guitar_dirty", "Electric Guitar (dirty)", "chord_lead", "chords", 29))
-_add(Instrument("lead_guitar",           "Lead Guitar",          "chord_lead", "melody", 30))
-_add(Instrument("synth_pad",             "Synth Pad",            "chord_lead", "chords", 89))
-_add(Instrument("synth_lead",            "Synth Lead",           "chord_lead", "melody", 81))
+# Chord / lead instruments — comp register. Solo synth_lead / lead_guitar
+# sit one octave higher than the comp instruments.
+_add(Instrument("piano",                 "Piano",                "chord_lead", "chords", 0,  default_octave=3))
+_add(Instrument("electric_piano",        "Electric Piano",       "chord_lead", "chords", 4,  default_octave=3))
+_add(Instrument("organ_hammond",         "Organ (Hammond)",      "chord_lead", "chords", 16, default_octave=3))
+_add(Instrument("organ_church",          "Organ (Church)",       "chord_lead", "chords", 19, default_octave=3))
+_add(Instrument("acoustic_guitar",       "Acoustic Guitar",      "chord_lead", "chords", 25, default_octave=3))
+_add(Instrument("electric_guitar_clean", "Electric Guitar (clean)", "chord_lead", "chords", 27, default_octave=3))
+_add(Instrument("electric_guitar_dirty", "Electric Guitar (dirty)", "chord_lead", "chords", 29, default_octave=3))
+_add(Instrument("lead_guitar",           "Lead Guitar",          "chord_lead", "melody", 30, default_octave=4))
+_add(Instrument("synth_pad",             "Synth Pad",            "chord_lead", "chords", 89, default_octave=3))
+_add(Instrument("synth_lead",            "Synth Lead",           "chord_lead", "melody", 81, default_octave=5))
 
-# Brass — section composite + individual instruments
+# Brass — section composite + individual instruments. Trumpet / alto sit
+# in the soprano register; trombone / tenor are tenor-voice; baritone
+# sax sits at trombone register.
 _add(Instrument("brass_section", "Brass Section", "brass", "chords", 61,
                 is_section=True,
-                members=("trumpet", "trombone", "sax_alto", "sax_tenor")))
-_add(Instrument("trumpet",       "Trumpet",       "brass", "melody", 56))
-_add(Instrument("trombone",      "Trombone",      "brass", "melody", 57))
-_add(Instrument("sax_alto",      "Alto Sax",      "brass", "melody", 65))
-_add(Instrument("sax_tenor",     "Tenor Sax",     "brass", "melody", 66))
-_add(Instrument("sax_baritone",  "Baritone Sax",  "brass", "melody", 67))
+                members=("trumpet", "trombone", "sax_alto", "sax_tenor"),
+                default_octave=4))
+_add(Instrument("trumpet",       "Trumpet",       "brass", "melody", 56, default_octave=5))
+_add(Instrument("trombone",      "Trombone",      "brass", "melody", 57, default_octave=4))
+_add(Instrument("sax_alto",      "Alto Sax",      "brass", "melody", 65, default_octave=5))
+_add(Instrument("sax_tenor",     "Tenor Sax",     "brass", "melody", 66, default_octave=4))
+_add(Instrument("sax_baritone",  "Baritone Sax",  "brass", "melody", 67, default_octave=4))
 
-# Woodwinds
+# Woodwinds — flute / oboe / clarinet sit in the soprano register;
+# bassoon doubles bass.
 _add(Instrument("woodwind_section", "Woodwind Section", "woodwind", "chords", 71,
                 is_section=True,
-                members=("flute", "clarinet", "oboe", "bassoon")))
-_add(Instrument("flute",    "Flute",    "woodwind", "melody", 73))
-_add(Instrument("clarinet", "Clarinet", "woodwind", "melody", 71))
-_add(Instrument("oboe",     "Oboe",     "woodwind", "melody", 68))
-_add(Instrument("bassoon",  "Bassoon",  "woodwind", "bass",   70))
+                members=("flute", "clarinet", "oboe", "bassoon"),
+                default_octave=5))
+_add(Instrument("flute",    "Flute",    "woodwind", "melody", 73, default_octave=5))
+_add(Instrument("clarinet", "Clarinet", "woodwind", "melody", 71, default_octave=5))
+_add(Instrument("oboe",     "Oboe",     "woodwind", "melody", 68, default_octave=5))
+_add(Instrument("bassoon",  "Bassoon",  "woodwind", "bass",   70, default_octave=3))
 
-# Strings
+# Strings — violin section sits brighter than viola; cello + contrabass
+# split bass duty.
 _add(Instrument("string_section", "String Section", "strings", "chords", 48,
                 is_section=True,
-                members=("violin", "viola", "cello", "contrabass")))
-_add(Instrument("violin",     "Violin",     "strings", "melody", 40))
-_add(Instrument("viola",      "Viola",      "strings", "chords", 41))
-_add(Instrument("cello",      "Cello",      "strings", "bass",   42))
-_add(Instrument("contrabass", "Contrabass", "strings", "bass",   43))
+                members=("violin", "viola", "cello", "contrabass"),
+                default_octave=4))
+_add(Instrument("violin",     "Violin",     "strings", "melody", 40, default_octave=5))
+_add(Instrument("viola",      "Viola",      "strings", "chords", 41, default_octave=4))
+_add(Instrument("cello",      "Cello",      "strings", "bass",   42, default_octave=3))
+_add(Instrument("contrabass", "Contrabass", "strings", "bass",   43, default_octave=2))
 
 
 # ---------------------------------------------------------------------------
