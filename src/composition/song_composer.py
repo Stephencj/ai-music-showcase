@@ -75,6 +75,20 @@ _GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
     # Hip-hop / metal (the two new presets shipped this round).
     "hip_hop_full":      ("hip_hop",),
     "metal_full":        ("metal",),
+    # Newer genre packs.
+    "country_full":      ("country",),
+    "reggae_full":       ("reggae",),
+    "disco_full":        ("disco",),
+    "soul_motown_full":  ("soul",),
+    # Jazz sub-styles — preferred_tags stacks: a bossa_jazz technique
+    # tagged ("jazz", "bossa_jazz") under preferred_tags=("jazz",
+    # "bossa_jazz") gets 5×5 = 25× boost vs. a plain "jazz" tech.
+    "jazz_bossa_full":     ("jazz", "bossa_jazz"),
+    "jazz_hard_bop_full":  ("jazz", "hard_bop"),
+    "jazz_modal_full":     ("jazz", "modal_jazz"),
+    "jazz_ballad_full":    ("jazz", "ballad_jazz"),
+    "jazz_blues_full":     ("jazz", "blues", "jazz_blues"),
+    "jazz_bebop_full":     ("jazz", "bebop"),
 }
 
 

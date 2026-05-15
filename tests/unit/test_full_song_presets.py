@@ -37,10 +37,23 @@ FULL_SONG_KEYS = (
     "edm_full_song",
     "hip_hop_full",
     "metal_full",
+    "country_full",
+    "reggae_full",
+    "disco_full",
+    "soul_motown_full",
+    "jazz_bossa_full",
+    "jazz_hard_bop_full",
+    "jazz_modal_full",
+    "jazz_ballad_full",
+)
+
+from src.daw_integration.generic.midi_export import (
+    STRUM_RHYTHMS, ARPEGGIO_PATTERNS,
 )
 
 KNOWN_CHORD_RHYTHMS = (
     set(STRUM_RHYTHMS.keys())
+    | set(ARPEGGIO_PATTERNS.keys())          # arpeggio_up / arpeggio_down etc
     | {"pad", "pulse_quarter", "stabs_8th"}  # auto-scale rhythms
     | {""}
 )

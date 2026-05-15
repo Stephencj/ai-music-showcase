@@ -1052,6 +1052,301 @@ _add_drum_tech("metal_double_kick", pattern="metal_gallop",
                description="Gallop kick + tight snare — metal chorus.")
 
 
+# ----- COUNTRY --------------------------------------------------------------
+_add_chord_tech("country_pulse_verse", rhythm="pulse_quarter",
+                voicing="triad", roles=("verse",), tags=("country",),
+                label="Country pulse verse",
+                description="Open-chord quarter pulse — classic country verse.")
+_add_chord_tech("country_dotted_chorus", rhythm="dotted_8ths",
+                voicing="triad", roles=("chorus",), tags=("country",),
+                label="Country dotted-8ths",
+                description="Galloping dotted-8th strum — country chorus.")
+_add_bass_tech("country_root_fifth_verse", pattern="root_fifth",
+               roles=("verse", "chorus"), tags=("country",),
+               approach_tones=True,
+               label="Country root-fifth",
+               description="Honky-tonk root-fifth with leading-tone walks.")
+_add_drum_tech("country_train_beat", pattern="basic_rock",
+               roles=("verse", "chorus"), tags=("country",), density=0.9,
+               label="Country train beat",
+               description="Steady train-beat kit feel.")
+_add_melody_tech("country_pent_verse",
+                 roles=("verse",), tags=("country",),
+                 note_density=0.7, melody_style="pentatonic",
+                 label="Country pentatonic verse",
+                 description="Major-pentatonic verse line — country idiom.")
+
+
+# ----- REGGAE ---------------------------------------------------------------
+_add_chord_tech("reggae_skank_verse", rhythm="off_skank",
+                voicing="seventh", roles=("verse",), tags=("reggae",),
+                label="Reggae off-beat skank",
+                description="Classic off-beat skank comp — reggae verse.")
+_add_chord_tech("reggae_skank_chorus", rhythm="off_skank",
+                voicing="ninth", roles=("chorus",), tags=("reggae",),
+                label="Reggae chorus skank",
+                description="Wider 9th voicings on the off-beat — chorus lift.")
+_add_bass_tech("reggae_root_held", pattern="root",
+               roles=("verse", "chorus"), tags=("reggae",),
+               label="Reggae sustained root",
+               description="Long sustained root tones under the skank.")
+_add_drum_tech("reggae_one_drop", pattern="halftime",
+               roles=("verse", "chorus"), tags=("reggae",), density=0.7,
+               label="Reggae one-drop",
+               description="Halftime kit feel — reggae one-drop approximation.")
+
+
+# ----- LATIN / SALSA --------------------------------------------------------
+_add_chord_tech("latin_montuno_verse", rhythm="montuno_2_3",
+                voicing="seventh", roles=("verse",), tags=("latin",),
+                label="Latin montuno",
+                description="2-3 montuno piano comp — salsa verse.")
+_add_chord_tech("latin_clave_chorus", rhythm="clave_son_3side",
+                voicing="ninth", roles=("chorus",), tags=("latin",),
+                label="Latin 3-side clave chorus",
+                description="3-side clave-driven chord hits — chorus feel.")
+_add_bass_tech("latin_tumbao_verse", pattern="tumbao",
+               roles=("verse", "chorus"), tags=("latin",),
+               label="Latin tumbao",
+               description="Anticipated tumbao bass — Cuban son idiom.")
+_add_drum_tech("latin_salsa_kit", pattern="salsa",
+               roles=("verse", "chorus"), tags=("latin",), density=0.95,
+               label="Latin salsa kit",
+               description="Salsa drum / percussion pattern.")
+_add_drum_tech("latin_bossa_intro", pattern="bossa_nova",
+               roles=("intro",), tags=("latin",), density=0.7,
+               label="Latin bossa intro",
+               description="Bossa nova kit feel — light intro.")
+
+
+# ----- DISCO ----------------------------------------------------------------
+_add_chord_tech("disco_stabs_verse", rhythm="disco_stabs",
+                voicing="seventh", roles=("verse",), tags=("disco",),
+                label="Disco stabs",
+                description="Disco-style chord stabs on every off-beat.")
+_add_chord_tech("disco_4_on_floor_chorus", rhythm="pulse_quarter",
+                voicing="seventh", roles=("chorus",), tags=("disco",),
+                label="Disco quarter chorus",
+                description="Quarter-note chords driving the chorus.")
+_add_bass_tech("disco_octave_verse", pattern="disco_octave",
+               roles=("verse", "chorus"), tags=("disco",),
+               label="Disco octave bass",
+               description="Pulsing root/octave alternation — classic disco.")
+_add_drum_tech("disco_kit_chorus", pattern="disco",
+               roles=("chorus",), tags=("disco",), density=1.0,
+               label="Disco chorus kit",
+               description="Four-on-floor with snare+clap and open hat on 'and'.")
+_add_drum_tech("disco_kit_verse", pattern="dance_house",
+               roles=("verse",), tags=("disco",), density=0.9,
+               label="Disco verse kit",
+               description="Lighter dance-house feel under the verse.")
+
+
+# ----- SOUL / MOTOWN --------------------------------------------------------
+_add_chord_tech("soul_pulse_verse", rhythm="pulse_quarter",
+                voicing="seventh", roles=("verse",), tags=("soul",),
+                label="Soul pulse verse",
+                description="Even quarter-note 7th-chord comp — Motown verse.")
+_add_chord_tech("soul_stabs_chorus", rhythm="stabs_8th",
+                voicing="ninth", roles=("chorus",), tags=("soul",),
+                label="Soul horn stabs",
+                description="Eighth-note 9th-chord stabs — soul chorus.")
+_add_bass_tech("soul_walking_verse", pattern="walking",
+               roles=("verse",), tags=("soul",), approach_tones=True,
+               label="Soul walking verse",
+               description="Walking quarter-note bass with leading tones — Motown.")
+_add_bass_tech("soul_root_fifth_chorus", pattern="root_fifth",
+               roles=("chorus",), tags=("soul",),
+               label="Soul root-fifth chorus",
+               description="Pumping root-fifth chorus bass.")
+_add_drum_tech("soul_kit_verse", pattern="halftime",
+               roles=("verse",), tags=("soul",), density=0.8,
+               label="Soul halftime verse",
+               description="Halftime snare backbeat with hat eighths.")
+
+
+# ----- PUNK -----------------------------------------------------------------
+_add_chord_tech("punk_power_verse", rhythm="pulse_quarter",
+                voicing="power", roles=("verse",), tags=("punk",),
+                label="Punk power chords",
+                description="Driving power-chord quarter pulse — punk verse.")
+_add_chord_tech("punk_open_chorus", rhythm="stabs_8th",
+                voicing="power", roles=("chorus",), tags=("punk",),
+                label="Punk open chorus",
+                description="Open power-chord 8ths — punk chorus.")
+_add_bass_tech("punk_root_eighths", pattern="palm_mute_8ths",
+               roles=("verse", "chorus"), tags=("punk",),
+               label="Punk root 8ths",
+               description="Aggressive root 8ths — locked with the guitar.")
+_add_drum_tech("punk_kit_drive", pattern="basic_rock",
+               roles=("verse", "chorus"), tags=("punk",), density=1.0,
+               label="Punk drive kit",
+               description="Full basic-rock kit at top velocity — punk drive.")
+
+
+# ---------------------------------------------------------------------------
+# JAZZ sub-styles — every technique tagged ``"jazz"`` AND its sub-style
+# token so jazz-specific presets can pull idiomatically while generic
+# `jazz_aaba_full` still wins on the broader pool.
+# ---------------------------------------------------------------------------
+
+# ----- BOSSA JAZZ -----------------------------------------------------------
+_add_chord_tech("bossa_jazz_comp_verse", rhythm="bossa_comp",
+                voicing="ninth", roles=("verse",),
+                tags=("jazz", "bossa_jazz"),
+                label="Bossa jazz comp",
+                description="Brazilian 9th-chord bossa comp pattern.")
+_add_chord_tech("bossa_jazz_partido_chorus", rhythm="bossa_partido",
+                voicing="ninth", roles=("chorus",),
+                tags=("jazz", "bossa_jazz"),
+                label="Bossa partido chorus",
+                description="Partido alto comp variation — chorus lift.")
+_add_bass_tech("bossa_jazz_samba_bass", pattern="samba_partido_alto",
+               roles=("verse", "chorus"),
+               tags=("jazz", "bossa_jazz"), swing_floor=0.08,
+               label="Bossa partido bass",
+               description="Samba partido bass line — Brazilian bossa feel.")
+_add_drum_tech("bossa_jazz_kit", pattern="bossa_nova",
+               roles=("verse", "chorus"), tags=("jazz", "bossa_jazz"),
+               density=0.9,
+               label="Bossa nova kit",
+               description="Classic bossa nova drum pattern.")
+
+
+# ----- HARD BOP -------------------------------------------------------------
+_add_chord_tech("hard_bop_charleston_verse", rhythm="charleston",
+                voicing="seventh", roles=("verse",),
+                tags=("jazz", "hard_bop"),
+                label="Hard bop charleston",
+                description="Tight charleston comping — hard bop verse.")
+_add_chord_tech("hard_bop_dotted_chorus", rhythm="dotted_8ths",
+                voicing="ninth", roles=("chorus",),
+                tags=("jazz", "hard_bop"),
+                label="Hard bop dotted-8ths",
+                description="Dense dotted-eighth stabs over the changes.")
+_add_bass_tech("hard_bop_walking_swing", pattern="walking_swing",
+               roles=("verse", "chorus"),
+               tags=("jazz", "hard_bop"), approach_tones=True,
+               swing_floor=0.3,
+               label="Hard bop walking swing",
+               description="Fast swung walking bass with strong leading tones.")
+_add_drum_tech("hard_bop_kit", pattern="jazz_swing",
+               roles=("verse", "chorus"),
+               tags=("jazz", "hard_bop"), density=1.0,
+               swing_floor=0.3,
+               label="Hard bop kit",
+               description="Aggressive ride + snare comping — bop feel.")
+_add_melody_tech("hard_bop_bebop_lines",
+                 roles=("verse", "chorus"),
+                 tags=("jazz", "hard_bop"),
+                 note_density=0.85, melody_style="blues",
+                 label="Bebop-style melodic lines",
+                 description="High-density chromatic bop lines.")
+
+
+# ----- MODAL JAZZ -----------------------------------------------------------
+_add_chord_tech("modal_jazz_pad_verse", rhythm="pad",
+                voicing="quartal" if False else "ninth",  # quartal voicing absent
+                roles=("verse",), tags=("jazz", "modal_jazz"),
+                label="Modal jazz pad",
+                description="Sustained 9th-chord pad — modal verse texture.")
+_add_chord_tech("modal_jazz_sparse_chorus", rhythm="pulse_quarter",
+                voicing="ninth", roles=("chorus",),
+                tags=("jazz", "modal_jazz"),
+                label="Modal sparse chorus",
+                description="Sparse quarter-note chord punctuation — modal lift.")
+_add_bass_tech("modal_jazz_root_held", pattern="root",
+               roles=("verse",), tags=("jazz", "modal_jazz"),
+               label="Modal root held",
+               description="Pedal-root bass under modal harmony.")
+_add_bass_tech("modal_jazz_walking", pattern="walking_swing",
+               roles=("chorus", "bridge"),
+               tags=("jazz", "modal_jazz"),
+               approach_tones=False, swing_floor=0.18,
+               label="Modal walking",
+               description="Walking bass without aggressive chromatic approach.")
+_add_drum_tech("modal_jazz_kit", pattern="jazz_swing",
+               roles=("verse", "chorus"),
+               tags=("jazz", "modal_jazz"), density=0.7,
+               swing_floor=0.2,
+               label="Modal jazz kit",
+               description="Lighter ride/brush feel under the modal pad.")
+
+
+# ----- BALLAD JAZZ ----------------------------------------------------------
+_add_chord_tech("ballad_jazz_pad_verse", rhythm="pad",
+                voicing="ninth", roles=("verse",),
+                tags=("jazz", "ballad_jazz"),
+                label="Ballad jazz pad",
+                description="Slow 9th-chord pads — ballad verse mood.")
+_add_chord_tech("ballad_jazz_arp_intro", rhythm="arpeggio_up",
+                voicing="ninth", roles=("intro",),
+                tags=("jazz", "ballad_jazz"),
+                label="Ballad jazz arp intro",
+                description="Rising 9th-chord arpeggio — slow intro.")
+_add_bass_tech("ballad_jazz_walking_soft", pattern="walking_swing",
+               roles=("verse", "chorus"),
+               tags=("jazz", "ballad_jazz"),
+               approach_tones=True, swing_floor=0.22, velocity=70,
+               label="Ballad jazz walking",
+               description="Quiet swung walking bass — ballad weight.")
+_add_drum_tech("ballad_jazz_brushes", pattern="halftime",
+               roles=("verse", "chorus"),
+               tags=("jazz", "ballad_jazz"), density=0.5,
+               swing_floor=0.2,
+               label="Ballad jazz brushes",
+               description="Halftime brush-feel kit — ballad backbone.")
+
+
+# ----- BEBOP ----------------------------------------------------------------
+_add_chord_tech("bebop_dotted_verse", rhythm="dotted_8ths",
+                voicing="ninth", roles=("verse",), tags=("jazz", "bebop"),
+                label="Bebop dotted comping",
+                description="Dense dotted-eighth comping — bebop verse.")
+_add_bass_tech("bebop_walking_dense", pattern="walking_swing",
+               roles=("verse", "chorus"),
+               tags=("jazz", "bebop"),
+               approach_tones=True, swing_floor=0.32,
+               label="Bebop fast walking",
+               description="Fast swing walking with chromatic substitutions.")
+_add_drum_tech("bebop_kit", pattern="jazz_swing",
+               roles=("verse", "chorus"),
+               tags=("jazz", "bebop"), density=1.0, swing_floor=0.32,
+               label="Bebop kit",
+               description="Spang-a-lang ride + frequent ghost snare comping.")
+_add_melody_tech("bebop_chromatic_lines",
+                 roles=("verse", "chorus"),
+                 tags=("jazz", "bebop"),
+                 note_density=0.9, melody_style="blues",
+                 label="Bebop chromatic lines",
+                 description="Dense chromatic eighth-note bebop phrasing.")
+
+
+# ----- JAZZ BLUES -----------------------------------------------------------
+_add_chord_tech("jazz_blues_comp", rhythm="pulse_quarter",
+                voicing="seventh", roles=("verse", "chorus"),
+                tags=("jazz", "blues", "jazz_blues"),
+                label="Jazz blues comp",
+                description="Quarter-note dominant-7 comping — jazz blues.")
+_add_chord_tech("jazz_blues_charleston", rhythm="charleston",
+                voicing="ninth", roles=("verse", "chorus"),
+                tags=("jazz", "blues", "jazz_blues"),
+                label="Jazz blues charleston",
+                description="Charleston rhythm on 9th-chord blues changes.")
+_add_bass_tech("jazz_blues_walking", pattern="walking_swing",
+               roles=("verse", "chorus"),
+               tags=("jazz", "blues", "jazz_blues"),
+               approach_tones=True, swing_floor=0.25,
+               label="Jazz blues walking",
+               description="Swung walking bass over I7-IV7-V7 blues changes.")
+_add_melody_tech("jazz_blues_lines",
+                 roles=("verse", "chorus"),
+                 tags=("jazz", "blues", "jazz_blues"),
+                 note_density=0.8, melody_style="blues",
+                 label="Jazz blues melodic lines",
+                 description="Blues-scale lines with chromatic decoration.")
+
+
 logger.info(
     "Registered %d techniques in the bank.", len(BANK.all_techniques()),
 )

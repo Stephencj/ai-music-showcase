@@ -249,10 +249,15 @@ class DynamicPresetsTests(unittest.TestCase):
     def test_rhythm_variants_reference_known_rhythms(self):
         """Every chord_rhythm_* / bass_pattern value in every variant
         must be either '' (inherit) or present in the live name tables."""
-        from src.daw_integration.generic.midi_export import STRUM_RHYTHMS
-        # The auto-scale rhythms aren't in STRUM_RHYTHMS but are still valid.
+        from src.daw_integration.generic.midi_export import (
+            STRUM_RHYTHMS, ARPEGGIO_PATTERNS,
+        )
+        # The auto-scale rhythms aren't in STRUM_RHYTHMS but are still
+        # valid. Arpeggios live in their own dict; both are accepted by
+        # add_chord_progression.
         known_chord = (
             set(STRUM_RHYTHMS.keys())
+            | set(ARPEGGIO_PATTERNS.keys())
             | {"pad", "pulse_quarter", "stabs_8th"}
             | {""}
         )

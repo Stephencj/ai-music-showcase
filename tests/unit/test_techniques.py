@@ -143,8 +143,8 @@ class BuiltinsCoverageTests(unittest.TestCase):
         self.assertEqual(missing, [],
                          f"Cells with no technique: {missing}")
 
-    def test_total_bank_size_at_least_80(self):
-        self.assertGreaterEqual(len(BANK.all_techniques()), 80)
+    def test_total_bank_size_at_least_140(self):
+        self.assertGreaterEqual(len(BANK.all_techniques()), 140)
 
     def test_each_cell_has_at_least_two_options(self):
         """For weighted-random picks to feel random, every cell should
@@ -176,7 +176,10 @@ class BuiltinsCoverageTests(unittest.TestCase):
         technique in the bank — otherwise compose_song's preferred
         tags do nothing for that preset."""
         required = {"pop", "rock", "funk_rock", "jazz", "blues",
-                    "ballad", "edm", "hip_hop", "metal"}
+                    "ballad", "edm", "hip_hop", "metal",
+                    "country", "reggae", "latin", "disco", "soul", "punk",
+                    "bossa_jazz", "hard_bop", "modal_jazz",
+                    "ballad_jazz", "bebop", "jazz_blues"}
         present = set()
         for t in BANK.all_techniques():
             present.update(t.tags)
