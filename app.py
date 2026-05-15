@@ -1519,7 +1519,10 @@ def save_current_as_block(name: str):
 
 # Curated dropdown choices — match the option lists in the MIDI Compose tab
 # so users get the same vocabulary across both editors.
-KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+KEYS = [
+    "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb",
+    "G", "G#", "Ab", "A", "A#", "Bb", "B",
+]
 TIME_SIGS = ["4/4", "3/4", "6/8", "12/8", "7/8", "5/4"]
 VOICINGS = ["triad", "seventh", "ninth", "sixth", "add9",
             "sus2", "sus4", "power", "open5", "drop2",
@@ -4057,8 +4060,7 @@ def build_app() -> gr.Blocks:
 
                     with gr.Row(elem_classes=["compose-row-grid"]):
                         key = gr.Dropdown(
-                            ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"],
-                            value="C", label="Key",
+                            KEYS, value="C", label="Key",
                         )
                         scale = gr.Dropdown(
                             list(SCALES.keys()), value="major", label="Scale",
