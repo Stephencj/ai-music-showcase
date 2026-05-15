@@ -514,6 +514,285 @@ _register(name="funk_rock_outro_drums_fade", label="Drum fade-out",
           apply=_fr_outro_drums_fade)
 
 
+# ---------------------------------------------------------------------------
+# Additional variety — second-pass techniques per cell so weighted-random
+# picks feel genuinely random instead of selecting the same single option.
+# Tagged sparsely so the genre-preferred pull from compose_song still
+# prefers the funk_rock starter when applicable.
+# ---------------------------------------------------------------------------
+
+# ----- CHORDS extras --------------------------------------------------------
+
+def _chords_arp_ringout(midi, ctx: TechniqueContext) -> None:
+    midi.add_chord_progression(
+        key=ctx.key, scale_name=ctx.scale,
+        progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, rhythm="arpeggio_down",
+        voicing="seventh", swing=ctx.swing,
+    )
+
+
+def _chords_sparse_quarter_outro(midi, ctx: TechniqueContext) -> None:
+    midi.add_chord_progression(
+        key=ctx.key, scale_name=ctx.scale,
+        progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, rhythm="pulse_quarter",
+        voicing="triad", velocity=55, swing=ctx.swing,
+    )
+
+
+def _chords_dotted_eighths_verse(midi, ctx: TechniqueContext) -> None:
+    midi.add_chord_progression(
+        key=ctx.key, scale_name=ctx.scale,
+        progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, rhythm="dotted_8ths",
+        voicing="seventh", swing=ctx.swing,
+    )
+
+
+def _chords_off_skank_chorus(midi, ctx: TechniqueContext) -> None:
+    midi.add_chord_progression(
+        key=ctx.key, scale_name=ctx.scale,
+        progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, rhythm="off_skank",
+        voicing="seventh", swing=ctx.swing,
+    )
+
+
+def _chords_bossa_bridge(midi, ctx: TechniqueContext) -> None:
+    midi.add_chord_progression(
+        key=ctx.key, scale_name=ctx.scale,
+        progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, rhythm="bossa_comp",
+        voicing="ninth", swing=ctx.swing,
+    )
+
+
+def _chords_arp_up_intro(midi, ctx: TechniqueContext) -> None:
+    midi.add_chord_progression(
+        key=ctx.key, scale_name=ctx.scale,
+        progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, rhythm="arpeggio_up",
+        voicing="seventh", swing=ctx.swing,
+    )
+
+
+_register(name="arpeggio_ringout", label="Arpeggio ringout",
+          description="Descending arpeggio over the outro — gentle landing.",
+          instruments=("chords",), roles=("outro",), weight=2,
+          apply=_chords_arp_ringout)
+_register(name="sparse_quarter_outro", label="Sparse quarter outro",
+          description="Soft quarter-note pulse — winds the song down quietly.",
+          instruments=("chords",), roles=("outro",), weight=1,
+          apply=_chords_sparse_quarter_outro)
+_register(name="dotted_8ths_verse", label="Dotted 8ths verse",
+          description="Dotted-eighth comping — classic rock guitar verse feel.",
+          instruments=("chords",), roles=("verse",), weight=1,
+          apply=_chords_dotted_eighths_verse)
+_register(name="off_skank_chorus", label="Off-beat skank chorus",
+          description="Reggae-style off-beat skank — opens the chorus with bounce.",
+          instruments=("chords",), roles=("chorus",), weight=1,
+          apply=_chords_off_skank_chorus)
+_register(name="bossa_comp_bridge", label="Bossa comp bridge",
+          description="Bossa-style comping for the bridge — Brazilian colour.",
+          instruments=("chords",), roles=("bridge",), weight=1,
+          apply=_chords_bossa_bridge)
+_register(name="arpeggio_up_intro", label="Arpeggio up intro",
+          description="Rising arpeggio — pulls the listener into the verse.",
+          instruments=("chords",), roles=("intro",), weight=1,
+          apply=_chords_arp_up_intro)
+
+
+# ----- BASS extras ----------------------------------------------------------
+
+def _bass_walking_verse(midi, ctx: TechniqueContext) -> None:
+    midi.add_bass_line(
+        key=ctx.key, scale_name=ctx.scale,
+        progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, pattern="walking",
+        approach_tones=True, seed=_seed(ctx), swing=ctx.swing,
+    )
+
+
+def _bass_offbeat_chorus(midi, ctx: TechniqueContext) -> None:
+    midi.add_bass_line(
+        key=ctx.key, scale_name=ctx.scale,
+        progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, pattern="offbeat",
+        seed=_seed(ctx), swing=ctx.swing,
+    )
+
+
+def _bass_geddy_lee_bridge(midi, ctx: TechniqueContext) -> None:
+    midi.add_bass_line(
+        key=ctx.key, scale_name=ctx.scale,
+        progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, pattern="geddy_lee",
+        seed=_seed(ctx), swing=ctx.swing,
+    )
+
+
+def _bass_palm_mute_verse(midi, ctx: TechniqueContext) -> None:
+    midi.add_bass_line(
+        key=ctx.key, scale_name=ctx.scale,
+        progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, pattern="palm_mute_8ths",
+        seed=_seed(ctx), swing=ctx.swing,
+    )
+
+
+def _bass_walking_swing_chorus(midi, ctx: TechniqueContext) -> None:
+    midi.add_bass_line(
+        key=ctx.key, scale_name=ctx.scale,
+        progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, pattern="walking_swing",
+        approach_tones=True, seed=_seed(ctx), swing=max(ctx.swing, 0.18),
+    )
+
+
+_register(name="walking_bass_verse", label="Walking bass verse",
+          description="Quarter-note walking with leading-tone approach.",
+          instruments=("bass",), roles=("verse",), weight=1,
+          apply=_bass_walking_verse)
+_register(name="offbeat_pulse_chorus", label="Offbeat pulse chorus",
+          description="Eighth-note offbeat bass — house / disco lift.",
+          instruments=("bass",), roles=("chorus",), weight=1,
+          apply=_bass_offbeat_chorus)
+_register(name="geddy_lee_bridge", label="Geddy Lee-style bridge",
+          description="Melodic chord-tone eighths + 16th-note runs.",
+          instruments=("bass",), roles=("bridge",), weight=1,
+          apply=_bass_geddy_lee_bridge)
+_register(name="palm_mute_verse", label="Palm-mute verse bass",
+          description="Short, choppy root 8ths — metal / hard-rock chug.",
+          instruments=("bass",), roles=("verse",), weight=1,
+          apply=_bass_palm_mute_verse)
+_register(name="walking_swing_chorus", label="Walking-swing chorus",
+          description="Swung walking quarters with approach tones — jazz lift.",
+          instruments=("bass",), roles=("chorus",), weight=1,
+          apply=_bass_walking_swing_chorus)
+
+
+# ----- MELODY extras --------------------------------------------------------
+
+def _melody_arp_chord_tones_intro(midi, ctx: TechniqueContext) -> None:
+    midi.add_melody(
+        key=ctx.key, scale_name=ctx.scale,
+        bars=ctx.bar_count, bar_offset=ctx.start_bar,
+        seed=_seed(ctx), swing=ctx.swing,
+        note_density=0.55, melody_style="chord_tone",
+    )
+
+
+def _melody_pentatonic_verse(midi, ctx: TechniqueContext) -> None:
+    midi.add_melody(
+        key=ctx.key, scale_name=ctx.scale,
+        bars=ctx.bar_count, bar_offset=ctx.start_bar,
+        seed=_seed(ctx), swing=ctx.swing,
+        note_density=0.65, melody_style="pentatonic",
+    )
+
+
+def _melody_hook_repeat_chorus(midi, ctx: TechniqueContext) -> None:
+    midi.add_melody(
+        key=ctx.key, scale_name=ctx.scale,
+        bars=ctx.bar_count, bar_offset=ctx.start_bar,
+        seed=_seed(ctx), swing=ctx.swing,
+        note_density=0.85, melody_style="riff",
+    )
+
+
+def _melody_chromatic_run_bridge(midi, ctx: TechniqueContext) -> None:
+    midi.add_melody(
+        key=ctx.key, scale_name=ctx.scale,
+        bars=ctx.bar_count, bar_offset=ctx.start_bar,
+        seed=_seed(ctx), swing=ctx.swing,
+        note_density=0.75, melody_style="blues",
+    )
+
+
+def _melody_long_held_outro(midi, ctx: TechniqueContext) -> None:
+    midi.add_melody(
+        key=ctx.key, scale_name=ctx.scale,
+        bars=ctx.bar_count, bar_offset=ctx.start_bar,
+        seed=_seed(ctx), swing=ctx.swing,
+        note_density=0.25, melody_style="motif",
+    )
+
+
+_register(name="chord_tone_arp_intro", label="Chord-tone arpeggio intro",
+          description="Slow chord-tone melody mapping the harmony for the intro.",
+          instruments=("melody",), roles=("intro",), weight=1,
+          apply=_melody_arp_chord_tones_intro)
+_register(name="pentatonic_verse", label="Pentatonic verse melody",
+          description="Pentatonic-flavoured verse line — pop/rock idiom.",
+          instruments=("melody",), roles=("verse",), weight=1,
+          apply=_melody_pentatonic_verse)
+_register(name="hook_repeat_chorus", label="Hook-repeat chorus",
+          description="Dense riff-style chorus melody — earworm potential.",
+          instruments=("melody",), roles=("chorus",), weight=1,
+          apply=_melody_hook_repeat_chorus)
+_register(name="chromatic_bridge", label="Chromatic bridge melody",
+          description="Bluesy chromatic phrases for the bridge.",
+          instruments=("melody",), roles=("bridge",), weight=1,
+          apply=_melody_chromatic_run_bridge)
+_register(name="long_held_outro", label="Long-held outro melody",
+          description="Spacious melody — fades the piece out gracefully.",
+          instruments=("melody",), roles=("outro",), weight=1,
+          apply=_melody_long_held_outro)
+
+
+# ----- DRUMS extras ---------------------------------------------------------
+
+def _drums_kick_pulse_intro(midi, ctx: TechniqueContext) -> None:
+    midi.add_drum_pattern(
+        pattern="basic_rock", bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, density=0.5,
+        seed=_seed(ctx), swing=ctx.swing,
+    )
+
+
+def _drums_pop_16ths_verse(midi, ctx: TechniqueContext) -> None:
+    midi.add_drum_pattern(
+        pattern="pop_16ths", bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, density=0.9,
+        seed=_seed(ctx), swing=ctx.swing,
+    )
+
+
+def _drums_disco_chorus(midi, ctx: TechniqueContext) -> None:
+    midi.add_drum_pattern(
+        pattern="disco", bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, density=1.0,
+        seed=_seed(ctx), swing=ctx.swing,
+    )
+
+
+def _drums_jazz_swing_bridge(midi, ctx: TechniqueContext) -> None:
+    midi.add_drum_pattern(
+        pattern="jazz_swing", bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, density=0.85,
+        seed=_seed(ctx), swing=max(ctx.swing, 0.25),
+    )
+
+
+_register(name="kick_pulse_intro", label="Kick-pulse intro",
+          description="Kick on every beat, hat eighths — slow build into the verse.",
+          instruments=("drums",), roles=("intro",), weight=1,
+          apply=_drums_kick_pulse_intro)
+_register(name="pop_16ths_verse", label="Pop 16ths verse",
+          description="16th-note pop drum pattern at high density.",
+          instruments=("drums",), roles=("verse",), weight=1,
+          apply=_drums_pop_16ths_verse)
+_register(name="disco_chorus", label="Disco chorus",
+          description="Four-on-floor with clap on 2/4 and open hat on every 'and'.",
+          instruments=("drums",), roles=("chorus",), weight=1,
+          apply=_drums_disco_chorus)
+_register(name="jazz_swing_bridge", label="Jazz swing bridge",
+          description="Ride spang-a-lang with sparse ghost snare — jazz feel.",
+          instruments=("drums",), roles=("bridge",), weight=1,
+          apply=_drums_jazz_swing_bridge)
+
+
 logger.info(
     "Registered %d techniques in the bank.", len(BANK.all_techniques()),
 )

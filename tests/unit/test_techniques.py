@@ -146,6 +146,18 @@ class BuiltinsCoverageTests(unittest.TestCase):
     def test_total_bank_size_at_least_30(self):
         self.assertGreaterEqual(len(BANK.all_techniques()), 30)
 
+    def test_each_cell_has_at_least_two_options(self):
+        """For weighted-random picks to feel random, every cell should
+        ship with ≥2 candidates. The Funk Rock starter set + variety
+        pass should put every cell over the threshold."""
+        sparse = []
+        for inst in self.INSTRUMENTS:
+            for role in SECTION_ROLES:
+                n = len(BANK.list_for(inst, role))
+                if n < 2:
+                    sparse.append((inst, role, n))
+        self.assertEqual(sparse, [], f"Cells with <2 candidates: {sparse}")
+
     def test_funk_rock_tag_present(self):
         """The funk_rock starter set ships with at least one technique
         per chord/bass/drums instrument."""

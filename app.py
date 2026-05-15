@@ -1009,13 +1009,21 @@ def download_soundfont():
 
 
 def _generate_full_song(
-    style_name: str, seed_in,
+    style_name: str,
+    seed_in,
+    en_chords: bool,
+    en_bass: bool,
+    en_melody: bool,
+    en_drums: bool,
 ) -> tuple:
     """Wire the 🎲 Generate full song button to the TechniqueBank.
 
     Returns updates for: audio preview / MIDI file / info textbox /
     summary markdown / rhythm_overrides_state / seed input (so a 0
     seed auto-bumps for next click).
+
+    Respects the four track checkboxes — disabled instruments are
+    skipped entirely by the bank.
     """
     from src.composition.song_composer import compose_song
     seed = int(seed_in) if seed_in else 0
@@ -1025,8 +1033,19 @@ def _generate_full_song(
         # capture / pin the value.
         import random as _r
         seed = _r.randint(1, 1_000_000)
+    enabled = tuple(
+        name for name, flag in (
+            ("chords", en_chords), ("bass", en_bass),
+            ("melody", en_melody), ("drums", en_drums),
+        ) if flag
+    )
+    if not enabled:
+        raise gr.Error("Enable at least one track (chords / bass / melody / drums).")
     try:
-        out = compose_song(genre=style_name, seed=seed)
+        out = compose_song(
+            genre=style_name, seed=seed,
+            enabled_instruments=enabled,
+        )
     except gr.Error:
         raise
     except Exception as e:
@@ -4386,7 +4405,8 @@ def build_app() -> gr.Blocks:
 
                     random_song_btn.click(
                         _generate_full_song,
-                        inputs=[style_dd, random_song_seed],
+                        inputs=[style_dd, random_song_seed,
+                                chords_on, bass_on, melody_on, drums_on],
                         outputs=[midi_audio, midi_file, compose_info,
                                  random_song_summary,
                                  rhythm_overrides_state,

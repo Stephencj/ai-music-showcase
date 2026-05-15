@@ -100,6 +100,7 @@ def compose_song(
     genre: str = "pop",
     seed: int = 0,
     technique_overrides: Optional[dict[str, str]] = None,
+    enabled_instruments: Optional[list[str]] = None,
     key: str = "",
     scale: str = "",
     tempo: float = 0.0,
@@ -111,6 +112,8 @@ def compose_song(
     Same ``seed`` produces the same song; bump by 1 for variation.
     ``technique_overrides`` pins specific cells, keys shaped
     ``"{role}:{instrument}"`` (e.g. ``{"verse:bass": "funk_walk"}``).
+    ``enabled_instruments`` lets a caller disable parts entirely —
+    e.g. ``["chords", "bass", "drums"]`` to omit melody.
 
     Returns ``midi_path`` + ``wav_path`` (paths Gradio's allowlist
     already exposes via ``/gradio_api/file=…``), ``summary`` (human-
@@ -121,6 +124,8 @@ def compose_song(
         "genre": genre, "seed": int(seed),
         "technique_overrides": technique_overrides or None,
     }
+    if enabled_instruments:
+        kwargs["enabled_instruments"] = tuple(enabled_instruments)
     if key:
         kwargs["key"] = key
     if scale:

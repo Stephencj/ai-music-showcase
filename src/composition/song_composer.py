@@ -134,6 +134,7 @@ def compose_song(
     sections: Optional[list[dict]] = None,
     seed: int = 0,
     technique_overrides: Optional[dict[str, str]] = None,
+    enabled_instruments: Optional[tuple] = None,
     key: Optional[str] = None,
     scale: Optional[str] = None,
     tempo: Optional[float] = None,
@@ -177,6 +178,15 @@ def compose_song(
         time_signature=preset.time_signature,
     )
 
+    # Respect the user's track-enable checkboxes. Default is every
+    # built-in instrument (preserves the original behaviour).
+    if enabled_instruments is None:
+        active_instruments: tuple = _INSTRUMENT_ORDER
+    else:
+        active_instruments = tuple(
+            inst for inst in _INSTRUMENT_ORDER if inst in enabled_instruments
+        )
+
     selections: list[dict] = []
     rhythm_overrides_out: list[dict] = []
     preferred_tags: tuple[str, ...] = (genre,) if genre in (
@@ -196,7 +206,7 @@ def compose_song(
             "bass_pattern": "",
         }
 
-        for instrument in _INSTRUMENT_ORDER:
+        for instrument in active_instruments:
             override_key = f"{role}:{instrument}"
             label_key = f"{label}:{instrument}"
             forced_name = (

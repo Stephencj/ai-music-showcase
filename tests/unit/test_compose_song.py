@@ -101,6 +101,47 @@ class TechniqueOverridesTests(unittest.TestCase):
             self.assertEqual(s["technique"], "funk_walk")
 
 
+class EnabledInstrumentsTests(unittest.TestCase):
+    """``compose_song`` must honour the track-enable filter — disabled
+    instruments never get a technique picked."""
+
+    def test_melody_disabled_produces_no_melody_selections(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = compose_song(
+                genre="pop_full_song", seed=42, skip_audio=True,
+                output_dir=Path(td),
+                enabled_instruments=("chords", "bass", "drums"),
+            )
+        instruments_used = {s["instrument"] for s in out["selections"]}
+        self.assertNotIn("melody", instruments_used)
+        self.assertEqual(
+            instruments_used, {"chords", "bass", "drums"},
+        )
+
+    def test_only_drums_produces_drums_only(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = compose_song(
+                genre="pop_full_song", seed=42, skip_audio=True,
+                output_dir=Path(td),
+                enabled_instruments=("drums",),
+            )
+        instruments_used = {s["instrument"] for s in out["selections"]}
+        self.assertEqual(instruments_used, {"drums"})
+
+    def test_default_includes_all_instruments(self):
+        """Backwards compat: omitting enabled_instruments runs the
+        original 4-instrument pipeline."""
+        with tempfile.TemporaryDirectory() as td:
+            out = compose_song(
+                genre="pop_full_song", seed=42, skip_audio=True,
+                output_dir=Path(td),
+            )
+        instruments_used = {s["instrument"] for s in out["selections"]}
+        self.assertEqual(
+            instruments_used, {"chords", "bass", "melody", "drums"},
+        )
+
+
 class FunkRockPreferredTagsTests(unittest.TestCase):
     """A song composed against a full-song preset should over-weight
     techniques in the bank tagged with that preset key (or a related
