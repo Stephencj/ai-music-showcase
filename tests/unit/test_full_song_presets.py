@@ -128,6 +128,33 @@ class KnownNamesTests(unittest.TestCase):
                                   f"{k}/{v_name}: unknown bass_pattern {bp!r}")
 
 
+class DefaultInstrumentsTests(unittest.TestCase):
+    """Every preset that ships ``default_instruments`` must reference
+    only valid instrument ids — otherwise picking the style auto-fills
+    the family CheckboxGroups with ghost values that won't render."""
+
+    def test_default_instruments_resolve_in_registry(self):
+        from src.composition.instruments import INSTRUMENT_REGISTRY
+        for k in FULL_SONG_KEYS:
+            preset = STYLES[k]
+            for inst_id in preset.default_instruments:
+                self.assertIn(
+                    inst_id, INSTRUMENT_REGISTRY,
+                    f"{k}: default_instruments references unknown id "
+                    f"{inst_id!r}",
+                )
+
+    def test_full_song_presets_set_default_instruments(self):
+        """Each full-song preset should ship a non-empty default
+        instrumentation so the family CheckboxGroups auto-fill on
+        preset change."""
+        for k in FULL_SONG_KEYS:
+            self.assertGreater(
+                len(STYLES[k].default_instruments), 0,
+                f"{k}: default_instruments is empty",
+            )
+
+
 class DefaultBarsBackwardCompatTests(unittest.TestCase):
 
     def test_simple_presets_keep_default_8_bars(self):

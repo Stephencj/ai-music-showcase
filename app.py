@@ -38,6 +38,12 @@ from src.daw_integration.generic.midi_export import (
     PHRASE_CONTOURS, MOTIF_DEVELOPMENT_OPS,
 )
 from src.daw_integration.generic.styles import STYLES, list_styles
+from src.composition.instruments import (
+    FAMILIES,
+    FAMILY_LABELS,
+    INSTRUMENT_REGISTRY,
+    instruments_for_family,
+)
 from src.daw_integration.generic.song_spec import (
     Section, SongSpec, render as render_song_spec,
 )
@@ -702,6 +708,20 @@ def _resolve_instrument_progression(
     return _parse_progression_text(text) or master_plan
 
 
+def _collect_instruments(*lists) -> list[str]:
+    """Flatten 6 per-family CheckboxGroup selections into one ordered
+    de-duplicated list of instrument ids, suitable for
+    ``compose_midi(enabled_instruments=…)`` and
+    ``compose_song(enabled_instruments=…)``.
+    """
+    out: list[str] = []
+    for lst in lists:
+        for item in (lst or []):
+            if item not in out:
+                out.append(item)
+    return out
+
+
 def compose_midi(
     style: str, key: str, scale: str, tempo: float, time_sig: str, bars: int,
     enable_chords: bool, enable_bass: bool, enable_melody: bool, enable_drums: bool,
@@ -723,9 +743,34 @@ def compose_midi(
     harmony_preset: str = "queen",
     harmony_rule: str = "voice_leading_smooth",
     rhythm_overrides: list[dict] | None = None,
+    enabled_instruments: list[str] | None = None,
 ):
-    if not any([enable_chords, enable_bass, enable_melody, enable_drums, enable_harmony]) and not (extras or []):
+    # When the UI passes a non-empty ``enabled_instruments`` list, each
+    # entry resolves to a concrete Instrument (program + track_name) and
+    # we loop one add_* call per instrument. Empty / None falls back to
+    # the legacy 4-boolean code path so MCP clients and tests that still
+    # pass ``enable_chords=True`` etc. keep working.
+    from src.composition.instruments import (
+        INSTRUMENT_REGISTRY, expand_selection,
+    )
+    resolved_instruments = expand_selection(enabled_instruments or [])
+    inst_by_role: dict[str, list] = {
+        "chords": [], "bass": [], "melody": [], "drums": [],
+    }
+    for inst in resolved_instruments:
+        inst_by_role.setdefault(inst.role, []).append(inst)
+    use_instruments = bool(resolved_instruments)
+
+    if not use_instruments and not any([
+        enable_chords, enable_bass, enable_melody, enable_drums, enable_harmony,
+    ]) and not (extras or []):
         raise gr.Error("Enable at least one track.")
+    if use_instruments and not any([
+        inst_by_role["chords"], inst_by_role["bass"],
+        inst_by_role["melody"], inst_by_role["drums"],
+        enable_harmony,
+    ]) and not (extras or []):
+        raise gr.Error("Pick at least one instrument.")
 
     try:
         logger.info(
@@ -780,62 +825,121 @@ def compose_midi(
         bass_variant = (preset.bass_variant or {}) if preset else {}
         melody_variant = (preset.melody_variant or {}) if preset else {}
 
-        # Generation order: melody → chords → bass. Putting the melody
-        # first lets the chord generator read it (via avoid_melody_track)
-        # for collision avoidance when a per-style variant enables it.
-        # Bass goes last so future approach-tone-with-melody-context
-        # logic can also peek; nothing else cross-reads today.
-        if enable_melody:
-            midi.add_melody(
-                key=key, scale_name=scale, bars=bars,
-                octave=int(melody_octave),
-                seed=seed, swing=swing,
-                progression=melody_progression, melody_style=melody_style,
-                **melody_variant,
-            )
-        if enable_chords:
-            midi.add_chord_progression(
-                key=key, progression=chords_progression, bars=bars,
-                octave=int(chord_octave),
-                scale_name=scale, voicing=voicing,
-                rhythm=chord_rhythm, swing=swing,
-                rhythm_overrides=rhythm_overrides,
-                **chord_variant,
-            )
-        if enable_bass:
-            midi.add_bass_line(
-                key=key, progression=bass_progression, bars=bars,
-                pattern=bass_pattern,
-                octave=int(bass_octave),
-                scale_name=scale, swing=swing, seed=seed,
-                pattern_overrides=rhythm_overrides,
-                **bass_variant,
-            )
-        if enable_drums:
-            # The drum grid is the source of truth — it always reflects the
-            # currently-selected drum_pattern dropdown (auto-resynced on
-            # dropdown/meter/bars changes) and may include user edits. We
-            # only fall back to the named-pattern code path if the grid is
-            # empty or malformed (e.g. on the very first compose before any
-            # change event has fired).
-            if drum_grid_state and any(
-                any(v for v in row) for row in drum_grid_state.values()
-            ):
-                try:
-                    midi.add_drum_grid(
-                        drum_grid_state, bars=bars,
-                        swing=swing, track_name="Drums",
-                    )
-                except Exception:
-                    logger.exception(
-                        "drum grid render failed — falling back to preset %r",
-                        drum_pattern,
-                    )
+        # Generation order: melody → chords → bass → drums. Putting the
+        # melody first lets the chord generator read it (via
+        # avoid_melody_track) for collision avoidance when a per-style
+        # variant enables it.
+        #
+        # When ``enabled_instruments`` populated the registry-resolved
+        # ``inst_by_role`` map, each role iterates its specific
+        # Instrument list so that e.g. picking trumpet + tenor sax
+        # produces two distinct MIDI tracks at the right GM patches.
+        # Otherwise the legacy single-shot branch fires once per
+        # enabled bool — keeps MCP / tests untouched.
+        if use_instruments:
+            for inst in inst_by_role["melody"]:
+                midi.add_melody(
+                    key=key, scale_name=scale, bars=bars,
+                    octave=int(melody_octave),
+                    seed=seed, swing=swing,
+                    progression=melody_progression,
+                    melody_style=melody_style,
+                    program=inst.program, track_name=inst.track_name,
+                    **melody_variant,
+                )
+            for inst in inst_by_role["chords"]:
+                midi.add_chord_progression(
+                    key=key, progression=chords_progression, bars=bars,
+                    octave=int(chord_octave),
+                    scale_name=scale, voicing=voicing,
+                    rhythm=chord_rhythm, swing=swing,
+                    rhythm_overrides=rhythm_overrides,
+                    program=inst.program, track_name=inst.track_name,
+                    **chord_variant,
+                )
+            for inst in inst_by_role["bass"]:
+                midi.add_bass_line(
+                    key=key, progression=bass_progression, bars=bars,
+                    pattern=bass_pattern,
+                    octave=int(bass_octave),
+                    scale_name=scale, swing=swing, seed=seed,
+                    pattern_overrides=rhythm_overrides,
+                    program=inst.program, track_name=inst.track_name,
+                    **bass_variant,
+                )
+            for inst in inst_by_role["drums"]:
+                # Drum grid is the source of truth when populated; one
+                # named pattern is reused across multiple drum-role
+                # instruments (e.g. drum_kit + percussion) but each
+                # lands on its own track_name.
+                if drum_grid_state and any(
+                    any(v for v in row) for row in drum_grid_state.values()
+                ):
+                    try:
+                        midi.add_drum_grid(
+                            drum_grid_state, bars=bars,
+                            swing=swing, track_name=inst.track_name,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "drum grid render failed — falling back to "
+                            "preset %r",
+                            drum_pattern,
+                        )
+                        midi.add_drum_pattern(drum_pattern, bars=bars,
+                                              swing=swing, seed=seed,
+                                              track_name=inst.track_name)
+                else:
+                    midi.add_drum_pattern(drum_pattern, bars=bars,
+                                          swing=swing, seed=seed,
+                                          track_name=inst.track_name)
+        else:
+            if enable_melody:
+                midi.add_melody(
+                    key=key, scale_name=scale, bars=bars,
+                    octave=int(melody_octave),
+                    seed=seed, swing=swing,
+                    progression=melody_progression, melody_style=melody_style,
+                    **melody_variant,
+                )
+            if enable_chords:
+                midi.add_chord_progression(
+                    key=key, progression=chords_progression, bars=bars,
+                    octave=int(chord_octave),
+                    scale_name=scale, voicing=voicing,
+                    rhythm=chord_rhythm, swing=swing,
+                    rhythm_overrides=rhythm_overrides,
+                    **chord_variant,
+                )
+            if enable_bass:
+                midi.add_bass_line(
+                    key=key, progression=bass_progression, bars=bars,
+                    pattern=bass_pattern,
+                    octave=int(bass_octave),
+                    scale_name=scale, swing=swing, seed=seed,
+                    pattern_overrides=rhythm_overrides,
+                    **bass_variant,
+                )
+            if enable_drums:
+                if drum_grid_state and any(
+                    any(v for v in row) for row in drum_grid_state.values()
+                ):
+                    try:
+                        midi.add_drum_grid(
+                            drum_grid_state, bars=bars,
+                            swing=swing, track_name="Drums",
+                        )
+                    except Exception:
+                        logger.exception(
+                            "drum grid render failed — falling back to "
+                            "preset %r",
+                            drum_pattern,
+                        )
+                        midi.add_drum_pattern(drum_pattern, bars=bars,
+                                              swing=swing, seed=seed)
+                else:
                     midi.add_drum_pattern(drum_pattern, bars=bars,
                                           swing=swing, seed=seed)
-            else:
-                midi.add_drum_pattern(drum_pattern, bars=bars,
-                                      swing=swing, seed=seed)
 
         # Permanent harmony track (first-class alongside chords/bass/
         # melody/drums). Layered on top of the melody using the same
@@ -844,18 +948,28 @@ def compose_midi(
         # …) so they're independently editable in any DAW. Runs AFTER
         # the melody (which the dispatch order above guarantees) so
         # add_harmony can read the melody's notes.
-        if enable_harmony and enable_melody:
-            try:
-                midi.add_harmony(
-                    source_track="Melody",
-                    style=harmony_preset or "queen",
-                    voices=int(harmony_voices) if harmony_voices else 2,
-                    key=key, scale_name=scale,
-                    progression=progression,
-                    harmony_rule=harmony_rule or "voice_leading_smooth",
-                )
-            except Exception:
-                logger.exception("harmony track render failed")
+        if enable_harmony:
+            # Source the harmony from the first melody track that exists
+            # — per-instrument routing means it may be "Trumpet" or
+            # "Tenor Sax" rather than the legacy "Melody". Skip when no
+            # melody source is present.
+            harmony_source: str | None = None
+            if use_instruments and inst_by_role["melody"]:
+                harmony_source = inst_by_role["melody"][0].track_name
+            elif not use_instruments and enable_melody:
+                harmony_source = "Melody"
+            if harmony_source:
+                try:
+                    midi.add_harmony(
+                        source_track=harmony_source,
+                        style=harmony_preset or "queen",
+                        voices=int(harmony_voices) if harmony_voices else 2,
+                        key=key, scale_name=scale,
+                        progression=progression,
+                        harmony_rule=harmony_rule or "voice_leading_smooth",
+                    )
+                except Exception:
+                    logger.exception("harmony track render failed")
 
         # Extra freeform tracks
         _render_extras(midi, extras or [],
@@ -1011,10 +1125,12 @@ def download_soundfont():
 def _generate_full_song(
     style_name: str,
     seed_in,
-    en_chords: bool,
-    en_bass: bool,
-    en_melody: bool,
-    en_drums: bool,
+    rhythm_sel: list[str],
+    bass_sel: list[str],
+    chord_lead_sel: list[str],
+    brass_sel: list[str],
+    woodwind_sel: list[str],
+    strings_sel: list[str],
 ) -> tuple:
     """Wire the 🎲 Generate full song button to the TechniqueBank.
 
@@ -1022,25 +1138,21 @@ def _generate_full_song(
     summary markdown / rhythm_overrides_state / seed input (so a 0
     seed auto-bumps for next click).
 
-    Respects the four track checkboxes — disabled instruments are
-    skipped entirely by the bank.
+    The six family CheckboxGroups flatten into one instrument-id list
+    that ``compose_song`` walks one technique per cell — empty list
+    means the user unchecked everything and we raise.
     """
     from src.composition.song_composer import compose_song
     seed = int(seed_in) if seed_in else 0
     if seed <= 0:
-        # Auto-roll a seed so successive clicks vary without the user
-        # needing to type. Echoes back to the input so the user can
-        # capture / pin the value.
         import random as _r
         seed = _r.randint(1, 1_000_000)
-    enabled = tuple(
-        name for name, flag in (
-            ("chords", en_chords), ("bass", en_bass),
-            ("melody", en_melody), ("drums", en_drums),
-        ) if flag
-    )
+    enabled = tuple(_collect_instruments(
+        rhythm_sel, bass_sel, chord_lead_sel,
+        brass_sel, woodwind_sel, strings_sel,
+    ))
     if not enabled:
-        raise gr.Error("Enable at least one track (chords / bass / melody / drums).")
+        raise gr.Error("Pick at least one instrument.")
     try:
         out = compose_song(
             genre=style_name, seed=seed,
@@ -3959,13 +4071,45 @@ def build_app() -> gr.Blocks:
                             2, 128, value=8, step=1, label="Bars",
                         )
 
-                    gr.Markdown("**Tracks**")
+                    gr.Markdown("**Instruments**")
+                    # Six family accordions. Each is a CheckboxGroup of
+                    # instruments from that family; the first three open
+                    # by default with sensible single-instrument picks
+                    # (drum_kit / electric_bass / piano). Picking a style
+                    # preset auto-fills these via the preset's
+                    # ``default_instruments`` list (see _apply_preset).
+                    _OPEN_FAMILIES = {"rhythm", "bass", "chord_lead"}
+                    _STARTER_DEFAULTS = {
+                        "rhythm": ["drum_kit"],
+                        "bass":   ["electric_bass"],
+                        "chord_lead": ["piano"],
+                        "brass": [], "woodwind": [], "strings": [],
+                    }
+                    family_selects: dict = {}
+                    for _family in FAMILIES:
+                        _choices = [
+                            (inst.label, inst.id)
+                            for inst in instruments_for_family(_family)
+                        ]
+                        with gr.Accordion(
+                            FAMILY_LABELS[_family],
+                            open=_family in _OPEN_FAMILIES,
+                            elem_classes=["instrument-family"],
+                        ):
+                            family_selects[_family] = gr.CheckboxGroup(
+                                choices=_choices,
+                                value=_STARTER_DEFAULTS[_family],
+                                show_label=False,
+                                container=False,
+                            )
+                    rhythm_select     = family_selects["rhythm"]
+                    bass_select       = family_selects["bass"]
+                    chord_lead_select = family_selects["chord_lead"]
+                    brass_select      = family_selects["brass"]
+                    woodwind_select   = family_selects["woodwind"]
+                    strings_select    = family_selects["strings"]
                     with gr.Row(elem_classes=["compose-row-grid"]):
-                        chords_on = gr.Checkbox(value=True, label="Chords")
-                        bass_on = gr.Checkbox(value=True, label="Bass")
-                        melody_on = gr.Checkbox(value=True, label="Melody")
-                        drums_on = gr.Checkbox(value=True, label="Drums")
-                        harmony_on = gr.Checkbox(value=False, label="Harmony")
+                        harmony_on = gr.Checkbox(value=False, label="Stack harmony on melody")
 
                     # Harmony controls — only meaningful when harmony_on
                     # is checked. Same plumbing the harmony extras row
@@ -4406,7 +4550,8 @@ def build_app() -> gr.Blocks:
                     random_song_btn.click(
                         _generate_full_song,
                         inputs=[style_dd, random_song_seed,
-                                chords_on, bass_on, melody_on, drums_on],
+                                rhythm_select, bass_select, chord_lead_select,
+                                brass_select, woodwind_select, strings_select],
                         outputs=[midi_audio, midi_file, compose_info,
                                  random_song_summary,
                                  rhythm_overrides_state,
@@ -4532,35 +4677,41 @@ def build_app() -> gr.Blocks:
             def _apply_preset(style_name: str):
                 """Auto-seed the compose form from the selected style.
 
-                Returns 18 ``gr.update()`` objects — see the ``outputs=``
-                list on the wiring below for the precise order. Two
-                outputs were added to the original 16:
-
-                - ``bars_slider``: jumps to ``preset.default_bars`` so
-                  full-song presets auto-set their canonical length
-                  (existing simple presets keep default_bars=8).
-                - ``rhythm_overrides_state``: auto-applies the first
-                  ``rhythm_variants`` entry so picking ``pop_full_song``
-                  pre-fills the Per-bar rhythm overrides accordion with
-                  the verse/chorus/bridge rows; existing presets with
-                  no variants pass ``[]`` (no overrides).
+                Returns 23 ``gr.update()`` objects. Order matches the
+                wiring's ``outputs=`` list below. The 6 family
+                CheckboxGroup updates auto-fill from
+                ``preset.default_instruments`` (empty list for the
+                cultural-genre presets that don't override). The
+                ``drums_on`` checkbox went away with the 5-checkbox
+                row swap; drum kit presence is now expressed by the
+                rhythm-family CheckboxGroup containing ``drum_kit``.
                 """
                 if style_name == "custom" or style_name not in STYLES:
-                    return (gr.update(),) * 18
+                    return (gr.update(),) * 23
                 p = STYLES[style_name]
                 ts_label = f"{p.time_signature[0]}/{p.time_signature[1]}"
                 drum_update = gr.update() if not p.drum_pattern else gr.update(value=p.drum_pattern)
-                drums_on_update = gr.update(value=bool(p.drum_pattern))
                 variant_names = [v[0] for v in p.progression_variants]
                 default_plan = p.progression_variants[0][1]
-                # First rhythm variant (or []) auto-applies into the
-                # per-bar rhythm overrides accordion.
                 rhythm_rows: list = []
                 if p.rhythm_variants:
                     first_variant_name = next(iter(p.rhythm_variants))
                     rhythm_rows = [
                         dict(r) for r in p.rhythm_variants[first_variant_name]
                     ]
+                # Bucket default_instruments by family for the 6
+                # CheckboxGroups. Presets without an explicit
+                # default_instruments list leave the user's existing
+                # selection untouched (per-family gr.update() pass-through).
+                family_updates: dict[str, object] = {f: gr.update() for f in FAMILIES}
+                if p.default_instruments:
+                    family_buckets: dict[str, list[str]] = {f: [] for f in FAMILIES}
+                    for inst_id in p.default_instruments:
+                        inst = INSTRUMENT_REGISTRY.get(inst_id)
+                        if inst is not None:
+                            family_buckets[inst.family].append(inst_id)
+                    for f in FAMILIES:
+                        family_updates[f] = gr.update(value=family_buckets[f])
                 return (
                     gr.update(value=p.key),
                     gr.update(value=p.scale),
@@ -4569,7 +4720,6 @@ def build_app() -> gr.Blocks:
                     gr.update(value=p.voicing),
                     gr.update(value=p.bass_pattern),
                     drum_update,
-                    drums_on_update,
                     gr.update(value=p.swing),
                     gr.update(value=p.chord_rhythm),
                     gr.update(value=p.melody_style),
@@ -4580,17 +4730,25 @@ def build_app() -> gr.Blocks:
                     gr.update(choices=variant_names, value=variant_names[0]),
                     gr.update(value=int(p.default_bars)),
                     rhythm_rows,
+                    family_updates["rhythm"],
+                    family_updates["bass"],
+                    family_updates["chord_lead"],
+                    family_updates["brass"],
+                    family_updates["woodwind"],
+                    family_updates["strings"],
                 )
 
             style_dd.change(
                 _apply_preset,
                 inputs=[style_dd],
                 outputs=[key, scale, tempo_slider, time_sig_dd, voicing_dd,
-                         bass_pat, drum_pat, drums_on, swing_slider,
+                         bass_pat, drum_pat, swing_slider,
                          chord_rhythm_dd, melody_style_dd, progression_in,
                          chord_octave_in, bass_octave_in, melody_octave_in,
                          progression_variant_dd,
-                         bars_slider, rhythm_overrides_state],
+                         bars_slider, rhythm_overrides_state,
+                         rhythm_select, bass_select, chord_lead_select,
+                         brass_select, woodwind_select, strings_select],
             )
 
             def _refresh_progression(style_name):
@@ -4653,10 +4811,58 @@ def build_app() -> gr.Blocks:
                 [chords_prog_state, bass_prog_state, melody_prog_state, extras_state],
             )
 
+            def _compose_with_families(
+                style, key_, scale_, tempo_, time_sig_, bars_,
+                rhythm_sel, bass_sel, chord_lead_sel,
+                brass_sel, woodwind_sel, strings_sel,
+                bass_pattern_, drum_pattern_, voicing_, swing_,
+                chord_rhythm_, melody_style_, seed_,
+                progression_text_, extras_,
+                chord_octave_, bass_octave_, melody_octave_,
+                drum_grid_state_, random_variation_,
+                chords_prog_, bass_prog_, melody_prog_,
+                enable_harmony_, harmony_voices_, harmony_preset_,
+                harmony_rule_, rhythm_overrides_,
+            ):
+                """Flatten the 6 family CheckboxGroups into one
+                ``enabled_instruments`` list and call ``compose_midi``.
+                Passes the four legacy enable booleans as ``False`` so
+                the empty-selection path raises rather than silently
+                falling back to the legacy default tracks."""
+                instruments = _collect_instruments(
+                    rhythm_sel, bass_sel, chord_lead_sel,
+                    brass_sel, woodwind_sel, strings_sel,
+                )
+                return compose_midi(
+                    style=style, key=key_, scale=scale_, tempo=tempo_,
+                    time_sig=time_sig_, bars=bars_,
+                    enable_chords=False, enable_bass=False,
+                    enable_melody=False, enable_drums=False,
+                    bass_pattern=bass_pattern_, drum_pattern=drum_pattern_,
+                    voicing=voicing_, swing=swing_,
+                    chord_rhythm=chord_rhythm_, melody_style=melody_style_,
+                    seed=seed_, progression_text=progression_text_,
+                    extras=extras_,
+                    chord_octave=chord_octave_, bass_octave=bass_octave_,
+                    melody_octave=melody_octave_,
+                    drum_grid_state=drum_grid_state_,
+                    random_variation=random_variation_,
+                    chords_progression_override=chords_prog_,
+                    bass_progression_override=bass_prog_,
+                    melody_progression_override=melody_prog_,
+                    enable_harmony=enable_harmony_,
+                    harmony_voices=harmony_voices_,
+                    harmony_preset=harmony_preset_,
+                    harmony_rule=harmony_rule_,
+                    rhythm_overrides=rhythm_overrides_,
+                    enabled_instruments=instruments,
+                )
+
             compose_btn.click(
-                compose_midi,
+                _compose_with_families,
                 inputs=[style_dd, key, scale, tempo_slider, time_sig_dd, bars_slider,
-                        chords_on, bass_on, melody_on, drums_on,
+                        rhythm_select, bass_select, chord_lead_select,
+                        brass_select, woodwind_select, strings_select,
                         bass_pat, drum_pat, voicing_dd, swing_slider,
                         chord_rhythm_dd, melody_style_dd, seed_input,
                         progression_in, extras_state,

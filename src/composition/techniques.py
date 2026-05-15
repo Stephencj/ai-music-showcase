@@ -33,7 +33,7 @@ class TechniqueContext:
     end_bar: int                  # inclusive
     section_role: str             # canonical role token (intro / verse / …)
     section_label: str            # original UI label ("Verse 1")
-    instrument: str               # "chords" | "bass" | "melody" | "drums"
+    instrument: str               # role bucket or specific id ("chords" | …)
     key: str
     scale: str
     tempo: float
@@ -41,6 +41,13 @@ class TechniqueContext:
     progression: list             # MidiExporter-compatible chord plan
     rng: np.random.Generator      # seed-isolated per (section, instrument)
     swing: float = 0.0
+    # When ``compose_song`` knows the specific Instrument routing for
+    # this cell, it's attached here. Factory-built techniques in
+    # builtins.py read .program and .track_name from it so the
+    # renderer lands on a per-instrument MIDI track. Tests that
+    # construct a ctx directly leave it None — techniques fall back
+    # to the renderer's hard-coded defaults ("Chords", "Bass", …).
+    instrument_obj: object = None
 
     @property
     def bar_count(self) -> int:
@@ -168,3 +175,74 @@ class TechniqueBank:
 
 # Singleton populated at import time by src/composition/builtins.py.
 BANK = TechniqueBank()
+
+
+# ---------------------------------------------------------------------------
+# Per-instrument routing proxy
+# ---------------------------------------------------------------------------
+
+class _RoutedMidi:
+    """Wrap a MidiExporter so the four arrangement-level renderer calls
+    land on the track + GM patch named by ``ctx.instrument_obj``.
+
+    The hand-rolled techniques in :mod:`src.composition.builtins` call
+    ``midi.add_chord_progression(...)`` without routing kwargs and let
+    the renderer's defaults (``"Chords"`` / ``"Bass"`` / ``"Melody"`` /
+    ``"Drums"``) win. That used to be fine when every cell wrote to one
+    of those four shared tracks. Now ``compose_song`` runs one pass per
+    enabled :class:`~src.composition.instruments.Instrument`, and each
+    must land on its own per-instrument track — otherwise picking
+    ``trumpet`` + ``sax_tenor`` both collapses into "Melody" and we
+    lose the timbre.
+
+    The proxy injects ``program=`` and ``track_name=`` (or just
+    ``track_name=`` for drums, which has no program kwarg) into the
+    four renderer methods. Every other attribute pass-through is
+    untouched, so techniques that touch ``midi.tracks`` or build
+    intermediate state still work.
+    """
+
+    _WITH_PROGRAM = frozenset({
+        "add_chord_progression",
+        "add_bass_line",
+        "add_melody",
+    })
+    _TRACK_ONLY = frozenset({"add_drum_pattern"})
+
+    def __init__(self, midi, inst) -> None:
+        object.__setattr__(self, "_midi", midi)
+        object.__setattr__(self, "_inst", inst)
+
+    def __getattr__(self, name):
+        attr = getattr(self._midi, name)
+        inst = self._inst
+        if inst is None:
+            return attr
+        if name in self._WITH_PROGRAM:
+            program, track_name = inst.program, inst.track_name
+            def routed(*args, **kwargs):
+                kwargs["program"] = program
+                kwargs["track_name"] = track_name
+                return attr(*args, **kwargs)
+            return routed
+        if name in self._TRACK_ONLY:
+            track_name = inst.track_name
+            def routed(*args, **kwargs):
+                kwargs["track_name"] = track_name
+                return attr(*args, **kwargs)
+            return routed
+        return attr
+
+    def __setattr__(self, name, value):
+        setattr(self._midi, name, value)
+
+
+def apply_technique(midi, technique: Technique, ctx: TechniqueContext) -> None:
+    """Apply ``technique`` with per-instrument routing when ``ctx`` has
+    an ``instrument_obj`` attached. Otherwise pass-through — keeps every
+    direct unit-test that constructs a ctx without an Instrument working
+    against the renderer's hard-coded default track names.
+    """
+    inst = getattr(ctx, "instrument_obj", None)
+    routed = _RoutedMidi(midi, inst) if inst is not None else midi
+    technique.apply(routed, ctx)

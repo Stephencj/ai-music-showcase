@@ -142,6 +142,65 @@ class EnabledInstrumentsTests(unittest.TestCase):
         )
 
 
+class PerInstrumentRoutingTests(unittest.TestCase):
+    """When ``enabled_instruments`` carries registry ids (rather than
+    legacy role tokens), each enabled instrument must land on its own
+    MIDI track at the correct GM patch."""
+
+    def test_specific_instruments_get_their_own_tracks(self):
+        import pretty_midi
+        with tempfile.TemporaryDirectory() as td:
+            out = compose_song(
+                genre="jazz_aaba_full", seed=42, skip_audio=True,
+                output_dir=Path(td),
+                enabled_instruments=[
+                    "piano", "upright_bass", "drum_kit",
+                    "sax_tenor", "trumpet",
+                ],
+            )
+            pm = pretty_midi.PrettyMIDI(out["midi_path"])
+        names = {inst.name for inst in pm.instruments}
+        self.assertEqual(
+            names,
+            {"Piano", "Upright Bass", "Drum kit", "Tenor Sax", "Trumpet"},
+        )
+        by_name = {inst.name: inst for inst in pm.instruments}
+        self.assertEqual(by_name["Piano"].program, 0)
+        self.assertEqual(by_name["Upright Bass"].program, 32)
+        self.assertTrue(by_name["Drum kit"].is_drum)
+        self.assertEqual(by_name["Tenor Sax"].program, 66)
+        self.assertEqual(by_name["Trumpet"].program, 56)
+
+    def test_section_composite_collapses_to_one_track(self):
+        import pretty_midi
+        with tempfile.TemporaryDirectory() as td:
+            out = compose_song(
+                genre="jazz_aaba_full", seed=42, skip_audio=True,
+                output_dir=Path(td),
+                enabled_instruments=["drum_kit", "brass_section"],
+            )
+            pm = pretty_midi.PrettyMIDI(out["midi_path"])
+        names = {inst.name for inst in pm.instruments}
+        self.assertEqual(names, {"Drum kit", "Brass Section"})
+        by_name = {inst.name: inst for inst in pm.instruments}
+        self.assertEqual(by_name["Brass Section"].program, 61)
+
+    def test_picking_member_drops_composite(self):
+        """Selecting ``brass_section`` AND ``trumpet`` should expand to
+        just trumpet — composite is dropped to avoid double-rendering."""
+        import pretty_midi
+        with tempfile.TemporaryDirectory() as td:
+            out = compose_song(
+                genre="jazz_aaba_full", seed=42, skip_audio=True,
+                output_dir=Path(td),
+                enabled_instruments=["drum_kit", "brass_section", "trumpet"],
+            )
+            pm = pretty_midi.PrettyMIDI(out["midi_path"])
+        names = {inst.name for inst in pm.instruments}
+        self.assertNotIn("Brass Section", names)
+        self.assertIn("Trumpet", names)
+
+
 class FunkRockPreferredTagsTests(unittest.TestCase):
     """A song composed against a full-song preset should over-weight
     techniques in the bank tagged with that preset key (or a related

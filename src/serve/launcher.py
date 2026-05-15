@@ -135,6 +135,22 @@ def launch(blocks: gr.Blocks, *,
         "    width: 100% !important;"
         "    max-width: 100% !important;"
         "  }"
+        # Family accordions on iPhone: stack vertically, full-width,
+        # with bigger tap targets for each instrument checkbox.
+        "  .instrument-family {"
+        "    width: 100% !important;"
+        "    margin-bottom: .35rem !important;"
+        "  }"
+        "  .instrument-family .wrap,"
+        "  .instrument-family .gradio-checkboxgroup {"
+        "    flex-direction: column !important;"
+        "    gap: .25rem !important;"
+        "  }"
+        "  .instrument-family label {"
+        "    padding: .4rem 0 !important;"
+        "    min-height: 36px !important;"
+        "    font-size: 0.95rem !important;"
+        "  }"
         "}"
     )
 

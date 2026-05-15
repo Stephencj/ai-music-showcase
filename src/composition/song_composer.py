@@ -23,7 +23,7 @@ import numpy as np
 import soundfile as sf
 
 from src.composition import BANK, role_for_label
-from src.composition.techniques import TechniqueContext
+from src.composition.techniques import TechniqueContext, apply_technique
 from src.daw_integration.generic.midi_export import MidiExporter
 from src.daw_integration.generic.styles import STYLES
 
@@ -228,14 +228,46 @@ def compose_song(
         time_signature=preset.time_signature,
     )
 
-    # Respect the user's track-enable checkboxes. Default is every
-    # built-in instrument (preserves the original behaviour).
+    # Resolve enabled_instruments into a list of (label, role,
+    # Instrument-or-None) tuples. Three shapes are accepted, in order
+    # of priority:
+    #
+    # 1. ``["piano", "electric_bass", "drum_kit", …]`` — instrument
+    #    ids from INSTRUMENT_REGISTRY. Each resolves to a specific
+    #    Instrument; bank picks fire per-instrument with proper
+    #    track routing.
+    # 2. ``["chords", "bass", "melody", "drums"]`` — legacy role
+    #    bucket tokens (still emitted by older callers).
+    # 3. ``None`` — defaults to all four legacy roles for backward
+    #    compat with the original compose_song shape.
+    from src.composition.instruments import (
+        INSTRUMENT_REGISTRY, expand_selection,
+    )
+    legacy_roles = {"chords", "bass", "melody", "drums"}
+    active_passes: list[tuple] = []   # (instrument_token, role, Instrument | None)
+
     if enabled_instruments is None:
-        active_instruments: tuple = _INSTRUMENT_ORDER
+        for role in _INSTRUMENT_ORDER:
+            active_passes.append((role, role, None))
     else:
-        active_instruments = tuple(
-            inst for inst in _INSTRUMENT_ORDER if inst in enabled_instruments
-        )
+        # Split between specific instrument ids and legacy role tokens.
+        specific_ids = [
+            i for i in enabled_instruments if i in INSTRUMENT_REGISTRY
+        ]
+        legacy_tokens = [
+            i for i in enabled_instruments if i in legacy_roles
+        ]
+        # Expand section composites + dedupe.
+        resolved = expand_selection(specific_ids)
+        for inst in resolved:
+            active_passes.append((inst.id, inst.role, inst))
+        for token in legacy_tokens:
+            # Only fire the legacy role if no concrete instrument is
+            # already covering that role — otherwise we'd render the
+            # part twice (once on a per-instrument track + once on the
+            # legacy "Chords"/"Bass"/… track).
+            if not any(role == token for _, role, _ in active_passes):
+                active_passes.append((token, token, None))
 
     selections: list[dict] = []
     rhythm_overrides_out: list[dict] = []
@@ -257,9 +289,9 @@ def compose_song(
             "bass_pattern": "",
         }
 
-        for instrument in active_instruments:
-            override_key = f"{role}:{instrument}"
-            label_key = f"{label}:{instrument}"
+        for instrument_token, inst_role, inst_obj in active_passes:
+            override_key = f"{role}:{instrument_token}"
+            label_key = f"{label}:{instrument_token}"
             forced_name = (
                 technique_overrides.get(label_key)
                 or technique_overrides.get(override_key)
@@ -268,45 +300,57 @@ def compose_song(
                 BANK.get(forced_name) if forced_name else None
             )
             if technique is None:
-                sub = _sub_seed(seed, label, instrument)
+                sub = _sub_seed(seed, label, instrument_token)
                 rng = np.random.default_rng(sub)
+                # Try the specific instrument id first (so future
+                # instrument-tagged techniques win), then fall back to
+                # the role bucket for the 193 existing role-tagged
+                # techniques.
+                tags_for_pick = preferred_tags
                 technique = BANK.pick(
-                    instrument, role, rng,
-                    preferred_tags=preferred_tags,
+                    instrument_token, role, rng,
+                    preferred_tags=tags_for_pick,
                 )
+                if technique is None and instrument_token != inst_role:
+                    technique = BANK.pick(
+                        inst_role, role, rng,
+                        preferred_tags=tags_for_pick,
+                    )
             if technique is None:
                 logger.info(
                     "compose_song: no technique for (%s, %s) — skipping",
-                    instrument, role,
+                    instrument_token, role,
                 )
                 continue
 
             ctx = TechniqueContext(
                 start_bar=s, end_bar=e,
                 section_role=role, section_label=label,
-                instrument=instrument,
+                instrument=instrument_token,
                 key=eff_key, scale=eff_scale,
                 tempo=eff_tempo,
                 time_signature=preset.time_signature,
                 progression=section_prog,
                 swing=eff_swing,
                 rng=np.random.default_rng(_sub_seed(
-                    seed, label, instrument, "inner",
+                    seed, label, instrument_token, "inner",
                 )),
+                instrument_obj=inst_obj,
             )
             try:
-                technique.apply(midi, ctx)
+                apply_technique(midi, technique, ctx)
             except Exception:
                 logger.exception(
                     "compose_song: technique %r raised on (%s, %s) — "
                     "section will be incomplete",
-                    technique.name, instrument, role,
+                    technique.name, instrument_token, role,
                 )
 
             selections.append({
                 "section_label": label,
                 "section_role":  role,
-                "instrument":    instrument,
+                "instrument":    instrument_token,
+                "instrument_label": inst_obj.label if inst_obj else instrument_token,
                 "technique":     technique.name,
                 "technique_label": technique.label,
                 "start_bar": s, "end_bar": e,
@@ -317,9 +361,9 @@ def compose_song(
             # techniques may compose multiple sub-rhythms), so we just
             # record the technique name in the label so the user sees
             # what fired.
-            if instrument == "chords":
+            if inst_role == "chords":
                 row["chord_rhythm_h1"] = technique.name
-            elif instrument == "bass":
+            elif inst_role == "bass":
                 row["bass_pattern"] = technique.name
 
         rhythm_overrides_out.append(row)

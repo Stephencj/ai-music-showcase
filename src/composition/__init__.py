@@ -12,6 +12,15 @@ returns paths + a human-readable summary.
 The bank itself is populated at import time by ``src.composition.builtins``.
 """
 
+from src.composition.instruments import (
+    FAMILIES,
+    FAMILY_LABELS,
+    INSTRUMENT_REGISTRY,
+    Instrument,
+    expand_selection,
+    instruments_for_family,
+    role_of,
+)
 from src.composition.roles import role_for_label, SECTION_ROLES
 from src.composition.techniques import (
     BANK,
@@ -26,9 +35,16 @@ from src.composition import builtins  # noqa: F401
 
 __all__ = [
     "BANK",
+    "FAMILIES",
+    "FAMILY_LABELS",
+    "INSTRUMENT_REGISTRY",
+    "Instrument",
     "SECTION_ROLES",
     "Technique",
     "TechniqueBank",
     "TechniqueContext",
+    "expand_selection",
+    "instruments_for_family",
     "role_for_label",
+    "role_of",
 ]

@@ -803,21 +803,37 @@ _register(name="jazz_swing_bridge", label="Jazz swing bridge",
 # genre tags still compete and act as the cross-genre baseline.
 
 
+def _route_kwargs(ctx, default_program=None, default_track=None):
+    """Pick program + track_name for a renderer call.
+
+    Priority: per-call default (the technique's own preference) →
+    ``ctx.instrument_obj`` (the user-selected Instrument the composer
+    is routing this cell to) → renderer's hard-coded default.
+    """
+    program = default_program
+    track_name = default_track
+    inst = getattr(ctx, "instrument_obj", None)
+    if inst is not None:
+        # Per-instrument routing overrides the technique's preference
+        # so the same technique can fire on piano, organ, guitar, etc.
+        program = inst.program
+        track_name = inst.label
+    return program, track_name
+
+
 def _add_chord_tech(name, *, rhythm, roles, label, description,
                     tags=(), weight=1, voicing="seventh",
                     velocity=None, program=None, track_name=None):
     """Register a chord-instrument technique.
 
-    ``program`` sets the GM MIDI patch — e.g. 25 for acoustic guitar,
-    19 for church organ, 48 for strings. The Chords track keeps the
-    program assigned on its FIRST creation; subsequent calls don't
-    overwrite. So a compose dominated by piano techniques (program 0)
-    sounds piano; one whose first-fired chord technique uses program
-    25 sounds like guitar throughout. Multi-instrument arrangements
-    are a future round — for v1 the rhythm + voicing choice does most
-    of the audible work even when the timbre carries.
+    Per-call ``program`` / ``track_name`` are the technique's own
+    preferences (e.g. ``program=25`` for an "acoustic strum"
+    technique). When ``compose_song`` is routing the cell to a
+    specific Instrument it overrides BOTH via ``ctx.instrument_obj``
+    so the technique lands on the right per-instrument track.
     """
     def _apply(midi, ctx):
+        eff_program, eff_track = _route_kwargs(ctx, program, track_name)
         kwargs = dict(
             key=ctx.key, scale_name=ctx.scale,
             progression=ctx.progression, bars=ctx.bar_count,
@@ -826,10 +842,10 @@ def _add_chord_tech(name, *, rhythm, roles, label, description,
         )
         if velocity is not None:
             kwargs["velocity"] = velocity
-        if program is not None:
-            kwargs["program"] = program
-        if track_name is not None:
-            kwargs["track_name"] = track_name
+        if eff_program is not None:
+            kwargs["program"] = eff_program
+        if eff_track is not None:
+            kwargs["track_name"] = eff_track
         midi.add_chord_progression(**kwargs)
     _register(name=name, label=label, description=description,
               instruments=("chords",), roles=roles, tags=tags,
@@ -838,8 +854,10 @@ def _add_chord_tech(name, *, rhythm, roles, label, description,
 
 def _add_bass_tech(name, *, pattern, roles, label, description,
                    tags=(), weight=1, approach_tones=False,
-                   velocity=None, swing_floor=None, program=None):
+                   velocity=None, swing_floor=None, program=None,
+                   track_name=None):
     def _apply(midi, ctx):
+        eff_program, eff_track = _route_kwargs(ctx, program, track_name)
         kwargs = dict(
             key=ctx.key, scale_name=ctx.scale,
             progression=ctx.progression, bars=ctx.bar_count,
@@ -850,8 +868,10 @@ def _add_bass_tech(name, *, pattern, roles, label, description,
         )
         if velocity is not None:
             kwargs["velocity"] = velocity
-        if program is not None:
-            kwargs["program"] = program
+        if eff_program is not None:
+            kwargs["program"] = eff_program
+        if eff_track is not None:
+            kwargs["track_name"] = eff_track
         midi.add_bass_line(**kwargs)
     _register(name=name, label=label, description=description,
               instruments=("bass",), roles=roles, tags=tags,
@@ -861,12 +881,17 @@ def _add_bass_tech(name, *, pattern, roles, label, description,
 def _add_drum_tech(name, *, pattern, roles, label, description,
                    tags=(), weight=1, density=1.0, swing_floor=None):
     def _apply(midi, ctx):
-        midi.add_drum_pattern(
+        kwargs = dict(
             pattern=pattern, bars=ctx.bar_count,
             bar_offset=ctx.start_bar, density=density,
             seed=_seed(ctx),
             swing=max(ctx.swing, swing_floor or 0.0),
         )
+        # Drums use channel 10 — only track_name matters for routing.
+        inst = getattr(ctx, "instrument_obj", None)
+        if inst is not None:
+            kwargs["track_name"] = inst.label
+        midi.add_drum_pattern(**kwargs)
     _register(name=name, label=label, description=description,
               instruments=("drums",), roles=roles, tags=tags,
               weight=weight, apply=_apply)
@@ -874,14 +899,20 @@ def _add_drum_tech(name, *, pattern, roles, label, description,
 
 def _add_melody_tech(name, *, roles, label, description,
                      tags=(), weight=1, note_density=0.6,
-                     melody_style="motif"):
+                     melody_style="motif", program=None, track_name=None):
     def _apply(midi, ctx):
-        midi.add_melody(
+        eff_program, eff_track = _route_kwargs(ctx, program, track_name)
+        kwargs = dict(
             key=ctx.key, scale_name=ctx.scale,
             bars=ctx.bar_count, bar_offset=ctx.start_bar,
             seed=_seed(ctx), swing=ctx.swing,
             note_density=note_density, melody_style=melody_style,
         )
+        if eff_program is not None:
+            kwargs["program"] = eff_program
+        if eff_track is not None:
+            kwargs["track_name"] = eff_track
+        midi.add_melody(**kwargs)
     _register(name=name, label=label, description=description,
               instruments=("melody",), roles=roles, tags=tags,
               weight=weight, apply=_apply)

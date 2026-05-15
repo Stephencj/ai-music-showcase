@@ -93,6 +93,16 @@ class StylePreset:
     # chorus / bridge arrangements via rhythm_variants.
     default_bars: int = 8
 
+    # When the user picks this preset, the family-checkbox accordions
+    # auto-tick exactly this list of instrument ids (see
+    # :mod:`src.composition.instruments`). Empty list = "don't touch
+    # the user's current selection" — used by the 49 cultural presets
+    # that share generic rhythm/bass/chord/melody coverage. Full-song
+    # presets populate this with idiom-correct instrumentation so e.g.
+    # picking ``jazz_aaba_full`` swaps the brass family into trumpet +
+    # tenor sax automatically.
+    default_instruments: list[str] = field(default_factory=list)
+
     def __post_init__(self):
         # Synthesise a Default entry if no variants were declared so every
         # preset uniformly exposes a non-empty list.
@@ -752,6 +762,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "root"},
             ],
         },
+        default_instruments=['drum_kit', 'electric_bass', 'piano', 'electric_guitar_clean'],
     ),
 
     "rock_anthem_full": StylePreset(
@@ -786,6 +797,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "walking"},
             ],
         },
+        default_instruments=['drum_kit', 'electric_bass', 'electric_guitar_dirty', 'electric_guitar_clean', 'organ_hammond'],
     ),
 
     "funk_full_song": StylePreset(
@@ -817,6 +829,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "funk_16ths"},
             ],
         },
+        default_instruments=['drum_kit', 'electric_bass', 'electric_piano', 'electric_guitar_clean', 'brass_section'],
     ),
 
     "jazz_aaba_full": StylePreset(
@@ -842,6 +855,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "walking_swing"},
             ],
         },
+        default_instruments=['drum_kit', 'upright_bass', 'piano', 'sax_tenor', 'trumpet'],
     ),
 
     "blues_12bar_full": StylePreset(
@@ -874,6 +888,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "walking"},
             ],
         },
+        default_instruments=['drum_kit', 'electric_bass', 'electric_guitar_clean', 'organ_hammond'],
     ),
 
     "ballad_full": StylePreset(
@@ -908,6 +923,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "root"},
             ],
         },
+        default_instruments=['drum_kit', 'electric_bass', 'piano', 'string_section'],
     ),
 
     "hip_hop_full": StylePreset(
@@ -939,6 +955,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "disco_octave"},
             ],
         },
+        default_instruments=['drum_kit', 'synth_bass', 'electric_piano'],
     ),
 
     "country_full": StylePreset(
@@ -973,6 +990,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "root"},
             ],
         },
+        default_instruments=['drum_kit', 'electric_bass', 'acoustic_guitar', 'electric_guitar_clean'],
     ),
 
     "reggae_full": StylePreset(
@@ -1007,6 +1025,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "root"},
             ],
         },
+        default_instruments=['drum_kit', 'electric_bass', 'electric_guitar_clean', 'organ_hammond'],
     ),
 
     "disco_full": StylePreset(
@@ -1038,6 +1057,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "disco_octave"},
             ],
         },
+        default_instruments=['drum_kit', 'electric_bass', 'electric_piano', 'brass_section'],
     ),
 
     "soul_motown_full": StylePreset(
@@ -1072,6 +1092,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "root"},
             ],
         },
+        default_instruments=['drum_kit', 'electric_bass', 'electric_piano', 'brass_section'],
     ),
 
     "jazz_bossa_full": StylePreset(
@@ -1097,6 +1118,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "samba_partido_alto"},
             ],
         },
+        default_instruments=['drum_kit', 'upright_bass', 'piano', 'sax_tenor', 'flute'],
     ),
 
     "jazz_hard_bop_full": StylePreset(
@@ -1122,6 +1144,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "walking_swing"},
             ],
         },
+        default_instruments=['drum_kit', 'upright_bass', 'piano', 'sax_tenor', 'trumpet'],
     ),
 
     "jazz_modal_full": StylePreset(
@@ -1147,6 +1170,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "root"},
             ],
         },
+        default_instruments=['drum_kit', 'upright_bass', 'piano', 'sax_tenor'],
     ),
 
     "jazz_ballad_full": StylePreset(
@@ -1175,6 +1199,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "root"},
             ],
         },
+        default_instruments=['drum_kit', 'upright_bass', 'piano', 'sax_tenor'],
     ),
 
     "jazz_piano_full": StylePreset(
@@ -1203,6 +1228,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "walking_swing"},
             ],
         },
+        default_instruments=['drum_kit', 'upright_bass', 'piano'],
     ),
 
     "metal_full": StylePreset(
@@ -1235,6 +1261,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "root_fifth"},
             ],
         },
+        default_instruments=['drum_kit', 'electric_bass', 'electric_guitar_dirty', 'electric_guitar_clean'],
     ),
 
     "edm_full_song": StylePreset(
@@ -1269,6 +1296,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "root"},
             ],
         },
+        default_instruments=['drum_kit', 'synth_bass', 'synth_pad', 'synth_lead'],
     ),
 }
 
