@@ -77,6 +77,16 @@ class StylePreset:
     bass_variant: Optional[dict] = None
     melody_variant: Optional[dict] = None
 
+    # Optional named multi-section rhythm sets. Each variant is a list
+    # of override-row dicts shaped:
+    #   {start_bar, end_bar, chord_rhythm_h1, chord_rhythm_h2,
+    #    bass_pattern, label}
+    # The "Per-bar rhythm overrides" UI in MIDI Compose surfaces these
+    # in an "Apply variant from style" dropdown — picking one
+    # populates rhythm_overrides_state for the current compose, no
+    # change to the preset's base ``chord_rhythm`` / ``bass_pattern``.
+    rhythm_variants: dict = field(default_factory=dict)
+
     def __post_init__(self):
         # Synthesise a Default entry if no variants were declared so every
         # preset uniformly exposes a non-empty list.
@@ -608,6 +618,89 @@ STYLES: dict[str, StylePreset] = {
         chord_program=12,   # Marimba (saron substitute)
         bass_program=12,
         melody_program=107, # Koto
+    ),
+
+    # ----- Dynamic variants -----------------------------------------------
+    # These sit ALONGSIDE the simple presets above. The base preset
+    # (chord_rhythm + bass_pattern) is just one cell of the per-bar
+    # override system; the real character comes from rhythm_variants,
+    # which the Compose tab's "Apply variant from style" dropdown reads.
+    "pop_dynamic": StylePreset(
+        name="Pop (Dynamic)", tempo=104, key="C", scale="major",
+        progression=["I", "V", "vi", "IV"],
+        voicing="triad", bass_pattern="root_fifth", drum_pattern="basic_rock",
+        chord_rhythm="pulse_quarter", melody_style="motif",
+        chord_octave=4, bass_octave=2,
+        rhythm_variants={
+            "Verse / Chorus": [
+                {"start_bar": 0, "end_bar": 3, "label": "Verse",
+                 "chord_rhythm_h1": "pulse_quarter", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_fifth"},
+                {"start_bar": 4, "end_bar": 7, "label": "Chorus",
+                 "chord_rhythm_h1": "disco_stabs", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking"},
+                {"start_bar": 7, "end_bar": 7, "label": "Fill",
+                 "chord_rhythm_h1": "", "chord_rhythm_h2": "stabs_8th",
+                 "bass_pattern": ""},
+            ],
+        },
+    ),
+    "funk_dynamic": StylePreset(
+        name="Funk (Dynamic)", tempo=100, key="C", scale="dorian",
+        progression=["i7", "IV7", "i7", "V7"],
+        voicing="ninth", bass_pattern="funk_16ths", drum_pattern="funk",
+        chord_rhythm="funk_comp", melody_style="pentatonic",
+        chord_octave=4, bass_octave=2, swing=0.15,
+        rhythm_variants={
+            "Groove / Bridge / Drop": [
+                {"start_bar": 0, "end_bar": 3, "label": "Groove",
+                 "chord_rhythm_h1": "funk_comp", "chord_rhythm_h2": "",
+                 "bass_pattern": "funk_16ths"},
+                {"start_bar": 4, "end_bar": 5, "label": "Bridge",
+                 "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_only"},
+                {"start_bar": 6, "end_bar": 7, "label": "Drop",
+                 "chord_rhythm_h1": "funk_comp", "chord_rhythm_h2": "",
+                 "bass_pattern": "funk_16ths"},
+            ],
+        },
+    ),
+    "jazz_trade_fours": StylePreset(
+        name="Jazz (Trade fours)", tempo=140, key="F", scale="major",
+        progression=["ii7", "V7", "I", "I"],
+        voicing="seventh", bass_pattern="walking_swing", drum_pattern="basic_rock",
+        chord_rhythm="charleston", melody_style="motif",
+        chord_octave=4, bass_octave=2, swing=0.32,
+        rhythm_variants={
+            "Trade fours": [
+                {"start_bar": 0, "end_bar": 3, "label": "A",
+                 "chord_rhythm_h1": "charleston", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking_swing"},
+                {"start_bar": 4, "end_bar": 7, "label": "B",
+                 "chord_rhythm_h1": "dotted_8ths", "chord_rhythm_h2": "",
+                 "bass_pattern": "walking_swing"},
+            ],
+        },
+    ),
+    "rock_buildup": StylePreset(
+        name="Rock (Buildup)", tempo=120, key="E", scale="minor",
+        progression=["i", "VI", "III", "VII"],
+        voicing="triad", bass_pattern="root_only", drum_pattern="basic_rock",
+        chord_rhythm="pad", melody_style="motif",
+        chord_octave=4, bass_octave=2,
+        rhythm_variants={
+            "Buildup → Lift": [
+                {"start_bar": 0, "end_bar": 3, "label": "Pad",
+                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_only"},
+                {"start_bar": 4, "end_bar": 6, "label": "Drive",
+                 "chord_rhythm_h1": "pulse_quarter", "chord_rhythm_h2": "",
+                 "bass_pattern": "root_fifth"},
+                {"start_bar": 7, "end_bar": 7, "label": "Lift",
+                 "chord_rhythm_h1": "stabs_8th", "chord_rhythm_h2": "stabs_8th",
+                 "bass_pattern": "walking"},
+            ],
+        },
     ),
 }
 

@@ -1277,6 +1277,67 @@ def _generate_rhythm_motif(rng, motif_bars: int = 2, density: float = 0.7,
     return events
 
 
+def _rhythm_override_at(
+    overrides: Optional[list], bar_idx: int,
+) -> Optional[dict]:
+    """First override covering ``bar_idx`` (or None).
+
+    Mirrors ``melody_plan._override_for_bar``'s first-match-wins
+    convention so chord-rhythm / bass-pattern overrides resolve the
+    same way melody section overrides do — earlier-declared overrides
+    win on overlap.
+
+    Defined locally here (not imported from melody_plan) because
+    melody_plan already imports from this module, and the lookup is
+    too small to be worth resolving via a third helper file.
+    """
+    if not overrides:
+        return None
+    for ov in overrides:
+        try:
+            s = int(ov.get("start_bar", 0))
+            e = int(ov.get("end_bar", 0))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if s <= bar_idx <= e:
+            return ov
+    return None
+
+
+def _resolve_chord_rhythm(
+    overrides: Optional[list],
+    master_rhythm: str,
+    bar_idx: int,
+    half: int,
+) -> str:
+    """Pick the chord rhythm name for a (bar, half) — inherit chain.
+
+    Order: override.chord_rhythm_h2 (if half==1 and set) →
+           override.chord_rhythm_h1 (if set) → master_rhythm.
+    """
+    ov = _rhythm_override_at(overrides, bar_idx)
+    if ov is None:
+        return master_rhythm
+    h1 = (ov.get("chord_rhythm_h1") or "").strip()
+    h2 = (ov.get("chord_rhythm_h2") or "").strip()
+    if half == 1 and h2:
+        return h2
+    if h1:
+        return h1
+    return master_rhythm
+
+
+def _resolve_bass_pattern(
+    overrides: Optional[list], master_pattern: str, bar_idx: int,
+) -> str:
+    """Pick the bass pattern name for a bar — inherit chain."""
+    ov = _rhythm_override_at(overrides, bar_idx)
+    if ov is None:
+        return master_pattern
+    bp = (ov.get("bass_pattern") or "").strip()
+    return bp or master_pattern
+
+
 def apply_swing(offset_in_beats: float, swing: float, grid: str = "8th") -> float:
     """Delay off-beat positions by ``swing * subdivision_duration`` (in beats).
 
@@ -1660,6 +1721,7 @@ class MidiExporter:
         swing: float = 0.0,
         voice_leading: str = "fresh",
         avoid_melody_track: Optional[str] = None,
+        rhythm_overrides: Optional[list[dict]] = None,
     ) -> "MidiExporter":
         """Add a chord progression using Roman numerals.
 
@@ -1757,10 +1819,13 @@ class MidiExporter:
                     for h in strum_hits
                 ) else "8th"
                 num_loops = max(1, int(event.duration_bars + 1e-9))
-                for loop in range(num_loops):
-                    loop_start = seg_start_time + loop * self.bar_duration
-                    for beat_off, dur_beats, vel_mult in strum_hits:
-                        swung = apply_swing(beat_off, swing, grid=grid)
+
+                def _emit_hits(loop_start: float, hits, hit_off_in_bar: float = 0.0):
+                    """Inner: emit a list of hits relative to ``loop_start``,
+                    shifting their beat offsets by ``hit_off_in_bar``."""
+                    for beat_off, dur_beats, vel_mult in hits:
+                        actual_off = beat_off + hit_off_in_bar
+                        swung = apply_swing(actual_off, swing, grid=grid)
                         start = loop_start + swung * beat
                         if start >= seg_end_time - 1e-9:
                             break
@@ -1770,6 +1835,42 @@ class MidiExporter:
                         vel = int(velocity * vel_mult)
                         for pitch in pitches:
                             track.notes.append(NoteEvent(pitch, start, end, vel))
+
+                for loop in range(num_loops):
+                    loop_start = seg_start_time + loop * self.bar_duration
+                    abs_bar = int(event.start_bar) + loop
+                    # Per-bar / per-half-bar override path. Falls through
+                    # to the master rhythm if no override fires for this
+                    # bar's halves.
+                    eff_h1 = _resolve_chord_rhythm(
+                        rhythm_overrides, rhythm, abs_bar, 0,
+                    )
+                    eff_h2 = _resolve_chord_rhythm(
+                        rhythm_overrides, rhythm, abs_bar, 1,
+                    )
+                    if eff_h1 == rhythm and eff_h2 == rhythm:
+                        # Fast path — uniform bar matches the global
+                        # rhythm. Use the pre-computed strum_hits.
+                        _emit_hits(loop_start, strum_hits)
+                        continue
+                    if eff_h1 == eff_h2:
+                        bar_hits = self._resolve_strum_hits(eff_h1)
+                        if bar_hits is None:
+                            _emit_hits(loop_start, strum_hits)
+                        else:
+                            _emit_hits(loop_start, bar_hits)
+                        continue
+                    # Half-bar split: each half gets its own compressed
+                    # rhythm cell.
+                    half_target = bpb / 2.0
+                    h1_hits = self._resolve_strum_hits(
+                        eff_h1, half_beats=half_target,
+                    ) or []
+                    h2_hits = self._resolve_strum_hits(
+                        eff_h2, half_beats=half_target,
+                    ) or []
+                    _emit_hits(loop_start, h1_hits)
+                    _emit_hits(loop_start, h2_hits, hit_off_in_bar=half_target)
             else:
                 # Unknown rhythm → fall back to pad-style sustained chord
                 # spanning the whole segment.
@@ -1780,22 +1881,50 @@ class MidiExporter:
 
         return self
 
-    def _resolve_strum_hits(self, rhythm: str):
+    def _resolve_strum_hits(
+        self, rhythm: str, half_beats: Optional[float] = None,
+    ):
         """Look up strum-rhythm hit table, generating meter-aware versions for
         auto-scaling rhythms (pad, pulse_quarter, stabs_8th).
+
+        When ``half_beats`` is provided, the rhythm is compressed into a
+        half-bar slot of that many beats — used by
+        :meth:`add_chord_progression` when a per-half-bar override fires
+        a different rhythm on beats [bpb/2, bpb). The pattern's relative
+        shape is preserved (tresillo on half 2 still sounds like
+        tresillo, just inside a 2-beat cell). Hits whose scaled offset
+        exceeds ``half_beats`` are dropped.
 
         Returns a list of (beat_off, dur_beats, vel_mult) tuples or ``None``.
         """
         bpb = self.beats_per_bar
+        target = float(half_beats) if half_beats is not None else float(bpb)
         if rhythm == "pad":
-            return [(0.0, float(bpb), 1.0)]
+            return [(0.0, target, 1.0)]
         if rhythm == "pulse_quarter":
             base_vels = [1.0, 0.85, 0.95, 0.8]
-            return [(float(b), 0.9, base_vels[b % 4]) for b in range(bpb)]
+            n_quarters = max(1, int(round(target)))
+            return [(float(b), 0.9, base_vels[b % 4]) for b in range(n_quarters)]
         if rhythm == "stabs_8th":
+            n_eighths = max(1, int(round(target * 2)))
             return [(i * 0.5, 0.35, 1.0 if i % 2 == 0 else 0.78)
-                    for i in range(bpb * 2)]
-        return STRUM_RHYTHMS.get(rhythm)
+                    for i in range(n_eighths)]
+        base = STRUM_RHYTHMS.get(rhythm)
+        if base is None or half_beats is None:
+            return base
+        # Compress the bar-relative pattern into the half-bar cell.
+        scale = target / float(bpb)
+        compressed: list = []
+        for off, dur, vel in base:
+            new_off = off * scale
+            new_dur = dur * scale
+            if new_off + 1e-6 >= target:
+                continue
+            # Clamp the tail of the last hit so it doesn't bleed past
+            # the cell boundary.
+            new_dur = min(new_dur, target - new_off)
+            compressed.append((new_off, new_dur, vel))
+        return compressed
 
     def add_melody(
         self,
@@ -2313,6 +2442,7 @@ class MidiExporter:
         density: float = 1.0,
         seed: Optional[int] = None,
         approach_tones: bool = False,
+        pattern_overrides: Optional[list[dict]] = None,
     ) -> "MidiExporter":
         """Add a bass line that follows the chord progression.
 
@@ -2363,11 +2493,33 @@ class MidiExporter:
                 bar_loop_start = (bar_offset + event.start_bar + li) * self.bar_duration
                 loop_tasks.append((bar_loop_start, event.symbol, seg_end_time))
 
+        # Cache the user's master pattern (the kwarg) so per-bar
+        # overrides resolve against the original each iteration —
+        # otherwise the first override would stick.
+        master_pattern = pattern
+
         for bar_idx, (bar_start, symbol, _seg_end_time) in enumerate(loop_tasks):
             offset, _ = roman_to_semitone_offset(symbol, scale_name)
             root = root_midi + offset
             fifth = root + 7
             _notes_before = len(track.notes)
+
+            # Per-bar pattern override (whole-bar; bass patterns plan
+            # walking steps with full-bar knowledge so we don't split).
+            pattern = _resolve_bass_pattern(
+                pattern_overrides, master_pattern, bar_idx,
+            )
+            # Walking → non-walking transitions sound abrupt without a
+            # leading-tone setup; force approach_tones on for the bar
+            # that walks INTO a different pattern.
+            bar_approach = approach_tones
+            if pattern in ("walking", "walking_swing"):
+                if bar_idx + 1 < len(loop_tasks):
+                    next_pat = _resolve_bass_pattern(
+                        pattern_overrides, master_pattern, bar_idx + 1,
+                    )
+                    if next_pat not in ("walking", "walking_swing"):
+                        bar_approach = True
 
             if pattern == "root":
                 track.notes.append(NoteEvent(root, bar_start,
@@ -2407,7 +2559,7 @@ class MidiExporter:
                 # segment's root via a leading-tone (half-step below) when
                 # this is the final bar of the current chord segment.
                 approach_note = root + 5
-                if approach_tones:
+                if bar_approach:
                     # Find the next chord whose symbol differs from this one.
                     next_root: Optional[int] = None
                     for nxt_idx in range(bar_idx + 1, len(loop_tasks)):

@@ -332,6 +332,90 @@ def _override_for_bar(
     return None
 
 
+def rhythm_override_for_bar_half(
+    overrides: Optional[list],
+    bar_idx: int,
+    half: int = 0,
+) -> Optional[dict]:
+    """Look up a per-bar / per-half-bar rhythm override.
+
+    Mirrors :func:`_override_for_bar`'s first-match-wins convention so
+    chord-rhythm / bass-pattern overrides resolve the same way melody
+    section overrides do across the codebase.
+
+    Each override is a plain dict shaped::
+
+        {
+            "start_bar": int,         # inclusive
+            "end_bar":   int,         # inclusive
+            "chord_rhythm_h1": str,   # rhythm name on beats [0, bpb/2)
+            "chord_rhythm_h2": str,   # rhythm name on beats [bpb/2, bpb)
+            "bass_pattern":   str,    # whole-bar bass pattern
+            "label":          str,    # display name (e.g. "Verse")
+        }
+
+    Plain dicts (not a dataclass) so the UI ``gr.State`` round-trip
+    stays cheap and parity with the existing Extras / Override row
+    pattern in ``app.py``.
+    """
+    if not overrides:
+        return None
+    for ov in overrides:
+        try:
+            s = int(ov.get("start_bar", 0))
+            e = int(ov.get("end_bar", 0))
+        except (TypeError, ValueError):
+            continue
+        if s <= bar_idx <= e:
+            return ov
+    return None
+
+
+def resolve_chord_rhythm_for(
+    overrides: Optional[list],
+    master_rhythm: str,
+    bar_idx: int,
+    half: int,
+) -> str:
+    """Return the chord rhythm name that should fire on (bar, half).
+
+    Resolution order:
+        1. Active override for this bar: ``chord_rhythm_h2`` if half==1
+           and that field is non-empty; otherwise ``chord_rhythm_h1``.
+        2. Master ``rhythm`` arg to ``add_chord_progression`` /
+           ``compose_midi``.
+
+    Empty strings inside an override mean "inherit" — half 2 inheriting
+    from half 1 gives the common case of "same rhythm both halves" with
+    one filled cell.
+    """
+    ov = rhythm_override_for_bar_half(overrides, bar_idx, half)
+    if ov is None:
+        return master_rhythm
+    h1 = (ov.get("chord_rhythm_h1") or "").strip()
+    h2 = (ov.get("chord_rhythm_h2") or "").strip()
+    if half == 1 and h2:
+        return h2
+    if h1:
+        return h1
+    if half == 1 and h2:  # belt-and-braces
+        return h2
+    return master_rhythm
+
+
+def resolve_bass_pattern_for(
+    overrides: Optional[list],
+    master_pattern: str,
+    bar_idx: int,
+) -> str:
+    """Return the bass pattern that should fire on ``bar_idx``."""
+    ov = rhythm_override_for_bar_half(overrides, bar_idx, 0)
+    if ov is None:
+        return master_pattern
+    bp = (ov.get("bass_pattern") or "").strip()
+    return bp or master_pattern
+
+
 # ---------------------------------------------------------------------------
 # Render helpers
 # ---------------------------------------------------------------------------

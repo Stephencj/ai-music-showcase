@@ -665,6 +665,7 @@ def compose_midi(
     harmony_voices: int = 2,
     harmony_preset: str = "queen",
     harmony_rule: str = "voice_leading_smooth",
+    rhythm_overrides: list[dict] | None = None,
 ):
     if not any([enable_chords, enable_bass, enable_melody, enable_drums, enable_harmony]) and not (extras or []):
         raise gr.Error("Enable at least one track.")
@@ -741,6 +742,7 @@ def compose_midi(
                 octave=int(chord_octave),
                 scale_name=scale, voicing=voicing,
                 rhythm=chord_rhythm, swing=swing,
+                rhythm_overrides=rhythm_overrides,
                 **chord_variant,
             )
         if enable_bass:
@@ -749,6 +751,7 @@ def compose_midi(
                 pattern=bass_pattern,
                 octave=int(bass_octave),
                 scale_name=scale, swing=swing, seed=seed,
+                pattern_overrides=rhythm_overrides,
                 **bass_variant,
             )
         if enable_drums:
@@ -2671,6 +2674,116 @@ def _default_harmony_dict() -> dict:
     }
 
 
+def _default_rhythm_override_row(start_bar: int = 0) -> dict:
+    """Default shape for a new "Per-bar rhythm overrides" row."""
+    return {
+        "start_bar": int(start_bar),
+        "end_bar":   int(start_bar),
+        "label":     "",
+        "chord_rhythm_h1": "",
+        "chord_rhythm_h2": "",
+        "bass_pattern":    "",
+    }
+
+
+def _render_rhythm_override_row(
+    idx: int, ov: dict,
+    override_state: gr.State,
+    reorder_signal: gr.Number,
+) -> None:
+    """One row in the "Per-bar rhythm overrides" accordion.
+
+    Mirrors :func:`_render_override_row` (Melody Studio section
+    overrides) — same stable-key trick keeps the dropdowns alive
+    across ``@gr.render`` rebuilds and lets the user edit fields
+    without the parent re-rendering mid-interaction.
+    """
+    k = lambda field: f"rhythm_ov_{idx}_{field}"
+
+    def _set(state, **kv):
+        out = list(state)
+        out[idx] = {**out[idx], **kv}
+        return out
+
+    def _remove(state):
+        return [r for i, r in enumerate(state) if i != idx]
+
+    def _move(state, direction: int):
+        out = list(state)
+        new_idx = idx + direction
+        if 0 <= new_idx < len(out):
+            out[idx], out[new_idx] = out[new_idx], out[idx]
+        return out
+
+    with gr.Group():
+        with gr.Row():
+            gr.Markdown(f"**{idx + 1}**")
+            start_in = gr.Number(
+                value=int(ov.get("start_bar", 0)), precision=0,
+                label="Start bar", key=k("start"), scale=1,
+            )
+            end_in = gr.Number(
+                value=int(ov.get("end_bar", 0)), precision=0,
+                label="End bar", key=k("end"), scale=1,
+            )
+            label_in = gr.Textbox(
+                value=str(ov.get("label", "")),
+                label="Label", placeholder="Verse / Chorus / Fill",
+                key=k("label"), scale=2,
+            )
+            up_btn = gr.Button("↑", size="sm", scale=0, key=k("up"))
+            down_btn = gr.Button("↓", size="sm", scale=0, key=k("down"))
+            remove_btn = gr.Button(
+                "⛌", size="sm", variant="stop", scale=0, key=k("remove"),
+            )
+
+        with gr.Row():
+            chord_h1_dd = gr.Dropdown(
+                choices=["", *CHORD_RHYTHMS],
+                value=ov.get("chord_rhythm_h1", ""),
+                label="Chord rhythm — half 1 (beats 1-2)",
+                allow_custom_value=True,
+                key=k("chord_h1"), scale=2,
+            )
+            chord_h2_dd = gr.Dropdown(
+                choices=["", *CHORD_RHYTHMS],
+                value=ov.get("chord_rhythm_h2", ""),
+                label="Chord rhythm — half 2 (beats 3-4, blank = same as half 1)",
+                allow_custom_value=True,
+                key=k("chord_h2"), scale=2,
+            )
+            bass_dd = gr.Dropdown(
+                choices=["", *BASS_PATTERNS],
+                value=ov.get("bass_pattern", ""),
+                label="Bass pattern (whole bar)",
+                allow_custom_value=True,
+                key=k("bass"), scale=2,
+            )
+
+        start_in.change(lambda s, v: _set(s, start_bar=int(v or 0)),
+                        [override_state, start_in], override_state)
+        end_in.change(lambda s, v: _set(s, end_bar=int(v or 0)),
+                      [override_state, end_in], override_state)
+        label_in.change(lambda s, v: _set(s, label=str(v or "")),
+                        [override_state, label_in], override_state)
+        chord_h1_dd.change(lambda s, v: _set(s, chord_rhythm_h1=str(v or "")),
+                           [override_state, chord_h1_dd], override_state)
+        chord_h2_dd.change(lambda s, v: _set(s, chord_rhythm_h2=str(v or "")),
+                           [override_state, chord_h2_dd], override_state)
+        bass_dd.change(lambda s, v: _set(s, bass_pattern=str(v or "")),
+                       [override_state, bass_dd], override_state)
+
+        # Reorder + remove trigger a re-render via the signal. Without
+        # the bumped signal, @gr.render would only fire on field-edit
+        # changes (which we suppress via explicit triggers=...).
+        up_btn.click(lambda s: _move(s, -1), [override_state], [override_state])
+        down_btn.click(lambda s: _move(s, +1), [override_state], [override_state])
+        up_btn.click(lambda v: (v or 0) + 1, [reorder_signal], [reorder_signal])
+        down_btn.click(lambda v: (v or 0) + 1, [reorder_signal], [reorder_signal])
+        remove_btn.click(_remove, [override_state], [override_state])
+        remove_btn.click(lambda v: (v or 0) + 1, [reorder_signal], [reorder_signal])
+
+
 def _render_override_row(idx: int, ov: dict, override_state: gr.State) -> None:
     """Render one Section Override row. Stable per-row keys keep the
     dropdowns alive across @gr.render rebuilds — same fix as the Extras
@@ -3942,6 +4055,157 @@ def build_app() -> gr.Blocks:
                                     extras_state, progression_in,
                                 )
 
+                    # -------------------------------------------------
+                    # Per-bar rhythm overrides
+                    # -------------------------------------------------
+                    rhythm_overrides_state = gr.State([])
+                    rhythm_overrides_stash = gr.State([])
+                    rhythm_reorder_signal = gr.Number(
+                        value=0, visible=False,
+                    )
+
+                    with gr.Accordion("Per-bar rhythm overrides", open=False):
+                        gr.Markdown(
+                            "Override the chord rhythm and bass pattern "
+                            "for specific bars or ranges. Each row covers "
+                            "``[start, end]`` (inclusive). Earlier rows "
+                            "win on overlap — use the ↑ / ↓ buttons to "
+                            "set precedence. Empty field = inherit the "
+                            "master dropdown above. Chord rhythm splits "
+                            "the bar in half so you can comp differently "
+                            "on beats 3-4."
+                        )
+
+                        with gr.Row():
+                            rhythm_variant_dd = gr.Dropdown(
+                                choices=[""],
+                                value="",
+                                label="Apply variant from style",
+                                scale=2,
+                            )
+                            rhythm_apply_btn = gr.Button(
+                                "Apply", scale=1, variant="secondary",
+                            )
+                            rhythm_undo_btn = gr.Button(
+                                "↶ Undo apply", scale=1,
+                            )
+                            rhythm_split_btn = gr.Button(
+                                "+ Split rows per bar", scale=1,
+                            )
+                            rhythm_add_btn = gr.Button(
+                                "+ Add range", scale=1, variant="primary",
+                            )
+
+                        @gr.render(
+                            inputs=[rhythm_overrides_state],
+                            triggers=[
+                                rhythm_add_btn.click,
+                                rhythm_reorder_signal.change,
+                                rhythm_apply_btn.click,
+                                rhythm_undo_btn.click,
+                                rhythm_split_btn.click,
+                            ],
+                        )
+                        def _render_rhythm_overrides(overrides):
+                            if not overrides:
+                                gr.Markdown(
+                                    "_No overrides — the master rhythm "
+                                    "and bass pattern apply to every bar._"
+                                )
+                                return
+                            for idx, ov in enumerate(overrides):
+                                _render_rhythm_override_row(
+                                    idx, ov,
+                                    rhythm_overrides_state,
+                                    rhythm_reorder_signal,
+                                )
+
+                        # Wire toolbar actions.
+                        rhythm_add_btn.click(
+                            lambda s: list(s) + [_default_rhythm_override_row(
+                                start_bar=(s[-1]["end_bar"] + 1) if s else 0,
+                            )],
+                            [rhythm_overrides_state],
+                            [rhythm_overrides_state],
+                        )
+
+                        def _refresh_variant_choices(style_name):
+                            try:
+                                from src.daw_integration.generic.styles import STYLES
+                                preset = STYLES.get(style_name)
+                                names = list((preset.rhythm_variants or {}).keys()) \
+                                        if preset else []
+                            except Exception:
+                                names = []
+                            value = names[0] if names else ""
+                            return gr.update(
+                                choices=[""] + names, value=value,
+                            )
+
+                        rhythm_apply_btn.click(
+                            lambda s: list(s),
+                            [rhythm_overrides_state],
+                            [rhythm_overrides_stash],
+                        )
+
+                        def _apply_variant(style_name, variant_name, current):
+                            if not variant_name:
+                                return list(current)
+                            try:
+                                from src.daw_integration.generic.styles import STYLES
+                                preset = STYLES.get(style_name)
+                                if not preset:
+                                    return list(current)
+                                rows = preset.rhythm_variants.get(variant_name) or []
+                                return [dict(r) for r in rows]
+                            except Exception:
+                                return list(current)
+
+                        rhythm_apply_btn.click(
+                            _apply_variant,
+                            # `style_dd` is the master style dropdown
+                            # built earlier in this tab.
+                            [style_dd, rhythm_variant_dd,
+                             rhythm_overrides_state],
+                            [rhythm_overrides_state],
+                        )
+
+                        rhythm_undo_btn.click(
+                            lambda stashed: list(stashed),
+                            [rhythm_overrides_stash],
+                            [rhythm_overrides_state],
+                        )
+
+                        def _split_per_bar(overrides):
+                            out = []
+                            for ov in overrides:
+                                s = int(ov.get("start_bar", 0))
+                                e = int(ov.get("end_bar", 0))
+                                if e < s:
+                                    s, e = e, s
+                                if s == e:
+                                    out.append(dict(ov))
+                                    continue
+                                for b in range(s, e + 1):
+                                    out.append({
+                                        **ov, "start_bar": b, "end_bar": b,
+                                    })
+                            return out
+
+                        rhythm_split_btn.click(
+                            _split_per_bar,
+                            [rhythm_overrides_state],
+                            [rhythm_overrides_state],
+                        )
+
+                        # Keep the variant dropdown in sync with the
+                        # currently selected style (different presets
+                        # offer different rhythm_variants).
+                        style_dd.change(
+                            _refresh_variant_choices,
+                            [style_dd], [rhythm_variant_dd],
+                        )
+
                     # Extra Tracks — dynamic list of additional tracks beyond the 4.
                     # extras_state was declared earlier so the per-instrument
                     # progression panel can render a row per extra.
@@ -4232,7 +4496,7 @@ def build_app() -> gr.Blocks:
                         drum_grid_state, random_variation_chk,
                         chords_prog_state, bass_prog_state, melody_prog_state,
                         harmony_on, harmony_voices, harmony_preset,
-                        harmony_rule_dd],
+                        harmony_rule_dd, rhythm_overrides_state],
                 outputs=[midi_audio, midi_file, compose_info, audit_df,
                          audit_suggestion_dd],
             )
