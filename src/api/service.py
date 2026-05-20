@@ -131,6 +131,17 @@ def run_generation(req, progress, job_id: str) -> dict:
             "audio_wav": str(wav_path),
             "pdf": str(pdf_path) if pdf_path else None,
         },
+        # Context for post-hoc "save as block" / "split into sections" so the
+        # UI can let the user decide after listening.
+        "_split": {
+            "tempo": eff_tempo,
+            "time_signature": list(ts),
+            "sections": [
+                {"start_bar": s["start_bar"], "end_bar": s["end_bar"],
+                 "label": s["label"], "role": s["role"]}
+                for s in secs
+            ],
+        },
     }
 
 

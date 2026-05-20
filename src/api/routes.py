@@ -119,6 +119,7 @@ def job_status(job_id: str) -> dict:
     if job.status == "done":
         res = dict(job.result)
         paths = res.pop("_paths", {})
+        res.pop("_split", None)
         base = f"/api/jobs/{job.id}"
         res["urls"] = {
             "midi": f"{base}/midi" if paths.get("midi") else None,
@@ -219,6 +220,25 @@ def save_block_from_job(req: SaveBlockFromJobRequest) -> dict:
         bars=res.get("bars", 0),
     ) if not req.overwrite else _overwrite_block(req.name.strip(), pm, res, ts)
     return {"name": name}
+
+
+@router.post("/jobs/{job_id}/split")
+def split_job_into_blocks(job_id: str) -> dict:
+    """Carve a finished generation into one block per section (mix & match)."""
+    job = registry.get(job_id)
+    if job is None or job.status != "done":
+        raise HTTPException(404, "Job not found or not finished")
+    midi = job.result.get("_paths", {}).get("midi")
+    ctx = job.result.get("_split")
+    if not midi or not Path(midi).exists() or not ctx:
+        raise HTTPException(400, "Job has no splittable MIDI")
+    pm = pretty_midi.PrettyMIDI(str(midi))
+    ts = ctx["time_signature"]
+    names = block_concat.split_into_section_blocks(
+        pm, ctx["sections"], tempo=ctx["tempo"],
+        time_signature=(int(ts[0]), int(ts[1])),
+    )
+    return {"section_blocks": names}
 
 
 @router.delete("/blocks/{name}")
