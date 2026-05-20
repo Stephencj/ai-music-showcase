@@ -26,7 +26,7 @@ settings:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.10"
-    DEVELOPMENT_TEAM: ""              # fill in via Xcode → Signing & Capabilities
+    DEVELOPMENT_TEAM: "2WHH92R86T"    # Apple Development team (stephencjuliano@gmail.com)
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     GENERATE_INFOPLIST_FILE: NO       # we ship a hand-written Info.plist
