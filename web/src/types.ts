@@ -65,6 +65,39 @@ export interface Job {
   result?: JobResult;
 }
 
+export interface BlockInstrument {
+  name: string;
+  n_notes: number;
+}
+
+export interface Block {
+  name: string;
+  bars: number | null;
+  tempo: number | null;
+  time_signature: number[] | null;
+  n_notes: number | null;
+  duration_seconds: number | null;
+  instruments?: BlockInstrument[];
+  has_preview: boolean;
+  audio_url: string;
+}
+
+export interface TimelineEntry {
+  block_name: string;
+  repeat: number;
+}
+
+export interface SongRenderResult {
+  render_id: string;
+  audio_url: string;
+  info: {
+    duration_seconds: number;
+    n_instruments: number;
+    n_notes: number;
+    summary: string;
+  };
+}
+
 export interface GenerateBody {
   genre: string;
   key?: string | null;

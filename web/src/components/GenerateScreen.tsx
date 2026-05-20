@@ -301,7 +301,7 @@ export default function GenerateScreen() {
         </div>
       )}
 
-      <div className="generate-bar">
+      <div className="action-bar">
         <div className="inner">
           <button className="btn" disabled={busy || !preset} onClick={onGenerate}>
             {busy ? "Generating…" : "🎲 Generate Song"}

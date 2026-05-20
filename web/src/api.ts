@@ -1,4 +1,12 @@
-import type { Family, GenerateBody, Job, Preset } from "./types";
+import type {
+  Block,
+  Family,
+  GenerateBody,
+  Job,
+  Preset,
+  SongRenderResult,
+  TimelineEntry,
+} from "./types";
 
 // API base. Same-origin by default (FastAPI serves the bundle + /api). A
 // packaged Capacitor/Tauri client can override it to point at the Mac via
@@ -36,6 +44,20 @@ export const saveBlockFromJob = (job_id: string, name: string) =>
   jpost<{ name: string }>("/api/blocks/from-job", { job_id, name });
 export const splitJob = (id: string) =>
   jpost<{ section_blocks: string[] }>(`/api/jobs/${id}/split`);
+
+// --- Blocks & songs (Compose screen) ---
+export const getBlocks = () => jget<Block[]>("/api/blocks");
+export async function deleteBlock(name: string): Promise<void> {
+  const r = await fetch(url(`/api/blocks/${encodeURIComponent(name)}`), { method: "DELETE" });
+  if (!r.ok) throw new Error((await r.text()) || r.statusText);
+}
+export const renderSong = (timeline: TimelineEntry[]) =>
+  jpost<SongRenderResult>("/api/songs/render", { timeline });
+export const saveSong = (title: string, timeline: TimelineEntry[], overwrite = true) =>
+  jpost<{ saved: string }>("/api/songs", { title, timeline, overwrite });
+export const listSongs = () => jget<{ songs: string[] }>("/api/songs");
+export const loadSong = (title: string) =>
+  jget<{ title: string; timeline: TimelineEntry[] }>(`/api/songs/${encodeURIComponent(title)}`);
 
 /** Absolute URL for an artifact path (for <audio src> / download links). */
 export const mediaUrl = (path: string) => url(path);
