@@ -2148,13 +2148,19 @@ def render_song(state: dict):
         audio = pm.synthesize(fs=44100)
         wav_path = OUTPUT_DIR / "last_song.wav"
         sf.write(str(wav_path), audio, 44100)
+        del audio
+        # Hand the player a compact MP3 — the raw WAV for a full-length
+        # song renders as a blank player in the browser/iPhone WebView.
+        mp3_path = OUTPUT_DIR / "last_song.mp3"
+        preview = (str(mp3_path)
+                   if block_store.write_preview_mp3(wav_path, mp3_path)
+                   else str(wav_path))
         _state["midi_path"] = mid_path
         _state["midi_wav_path"] = wav_path
-        del audio
         info_text = (f"{info['duration_seconds']:.1f}s | "
                      f"{info['n_instruments']} instruments | "
                      f"{info['n_notes']} notes | {info['summary']}")
-        return str(wav_path), str(mid_path), info_text
+        return preview, str(mid_path), info_text
     except gr.Error:
         raise
     except ValueError as e:
@@ -2504,16 +2510,19 @@ def _render_library_card(blk: dict, song_state: gr.State,
             f"{len(blk.get('instruments', []))} instruments · "
             f"{blk.get('n_notes', '?')} notes"
         )
-        wav_path = blk.get("_wav_path")
-        if wav_path and Path(wav_path).exists():
-            gr.Audio(value=wav_path, label="Preview", type="filepath",
+        # Prefer the compact MP3 preview; the raw multi-minute WAV that
+        # full-song blocks produce loads as a blank player (esp. on the
+        # iPhone WebView). Fall back to the WAV for blocks predating MP3.
+        preview = blk.get("_preview_path") or blk.get("_wav_path")
+        if preview and Path(preview).exists():
+            gr.Audio(value=preview, label="Preview", type="filepath",
                      interactive=False, key=k("audio"))
         else:
             preview_btn = gr.Button("▶ Generate preview", size="sm",
                                     key=k("preview"))
 
             def _gen_preview(name=name):
-                p = block_store.ensure_preview_wav(name)
+                p = block_store.ensure_preview_audio(name)
                 if not p:
                     return None
                 return str(p)
