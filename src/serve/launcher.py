@@ -78,6 +78,15 @@ def launch(blocks: gr.Blocks, *,
         # only used by the `share=True` fallback path above.
         api.add_middleware(IPAwareAuthMiddleware, token=token)
 
+    # Thin REST API for the cross-platform frontend — calls the same engine
+    # functions the Gradio buttons call. Mounted before the Gradio app so
+    # /api/* resolves here; inherits the token middleware above.
+    try:
+        from src.api import router as api_router
+        api.include_router(api_router)
+    except Exception:
+        logger.exception("could not mount /api router — Gradio UI still boots")
+
     # Mount vendored JS (AlphaTab etc.) before mount_gradio_app so the
     # routing intent is explicit. /static/alphatab/ is whitelisted in
     # the auth middleware so the iOS WebView can fetch the library

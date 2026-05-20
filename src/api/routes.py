@@ -1,0 +1,320 @@
+"""REST routes for the music engine. Mounted under ``/api`` on the existing
+FastAPI app (so it inherits the token auth middleware).
+
+Audio/MIDI/PDF artifacts are streamed with Starlette's ``FileResponse``,
+which honours HTTP Range requests — that (plus the compact MP3 previews)
+is what makes long songs play in the iPhone WebView."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import uuid
+from pathlib import Path
+from urllib.parse import quote
+
+import pretty_midi
+import soundfile as sf
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
+
+from src.composition import instruments as instruments_mod
+from src.daw_integration.generic import block_concat
+from src.daw_integration.generic import blocks as block_store
+from src.daw_integration.generic import songs as song_store
+from src.daw_integration.generic.styles import STYLES
+
+from . import arrangement, service
+from .jobs import registry
+from .schemas import (
+    GenerateRequest,
+    SaveBlockFromJobRequest,
+    SongRenderRequest,
+    SongSaveRequest,
+)
+
+logger = logging.getLogger("ai_music_studio.api.routes")
+
+router = APIRouter(prefix="/api")
+
+# Song-render artifacts, keyed by a per-render token (single-process map).
+_SONG_RENDERS: dict[str, Path] = {}
+_SONG_RENDER_DIR = service.API_OUT / "song_render"
+
+
+# --------------------------------------------------------------------------
+# Catalog
+# --------------------------------------------------------------------------
+@router.get("/presets")
+def list_presets() -> list[dict]:
+    out = []
+    for key, p in STYLES.items():
+        out.append({
+            "id": key,
+            "name": getattr(p, "name", key),
+            "tempo": getattr(p, "tempo", None),
+            "key": getattr(p, "key", None),
+            "scale": getattr(p, "scale", None),
+            "time_signature": list(getattr(p, "time_signature", (4, 4))),
+            "default_bars": getattr(p, "default_bars", None),
+            "default_instruments": list(getattr(p, "default_instruments", []) or []),
+            "sections": arrangement.available_sections(key),
+        })
+    out.sort(key=lambda d: d["name"].lower())
+    return out
+
+
+@router.get("/instruments")
+def list_instruments() -> list[dict]:
+    fams = []
+    for fam in instruments_mod.FAMILIES:
+        members = instruments_mod.instruments_for_family(fam)
+        fams.append({
+            "family": fam,
+            "label": instruments_mod.FAMILY_LABELS.get(fam, fam),
+            "instruments": [
+                {"id": i.id, "label": i.label, "role": i.role,
+                 "default": i.id in _DEFAULT_INSTRUMENT_IDS}
+                for i in members
+            ],
+        })
+    return fams
+
+
+@router.get("/master-presets")
+def list_master_presets() -> list[str]:
+    from src.audio_processing.render import MASTER_PRESETS
+    return list(MASTER_PRESETS.keys())
+
+
+# A small, musical default tick-set for the UI (used to pre-check boxes).
+_DEFAULT_INSTRUMENT_IDS = {"drum_kit", "electric_bass", "piano"}
+
+
+# --------------------------------------------------------------------------
+# Generation
+# --------------------------------------------------------------------------
+@router.post("/generate")
+def generate(req: GenerateRequest) -> dict:
+    if req.genre not in STYLES:
+        raise HTTPException(404, f"Unknown genre {req.genre!r}")
+    job = registry.create()
+    registry.run(job, lambda progress: service.run_generation(req, progress, job.id))
+    return {"job_id": job.id}
+
+
+@router.get("/jobs/{job_id}")
+def job_status(job_id: str) -> dict:
+    job = registry.get(job_id)
+    if job is None:
+        raise HTTPException(404, "Unknown job")
+    payload = {
+        "id": job.id,
+        "status": job.status,
+        "progress": job.progress,
+        "message": job.message,
+        "error": job.error,
+    }
+    if job.status == "done":
+        res = dict(job.result)
+        paths = res.pop("_paths", {})
+        base = f"/api/jobs/{job.id}"
+        res["urls"] = {
+            "midi": f"{base}/midi" if paths.get("midi") else None,
+            "audio": f"{base}/audio" if (paths.get("audio_mp3") or paths.get("audio_wav")) else None,
+            "audio_hifi": f"{base}/audio.wav" if paths.get("audio_wav") else None,
+            "pdf": f"{base}/pdf" if paths.get("pdf") else None,
+        }
+        payload["result"] = res
+    return payload
+
+
+@router.get("/jobs/{job_id}/events")
+async def job_events(job_id: str) -> StreamingResponse:
+    async def gen():
+        while True:
+            job = registry.get(job_id)
+            if job is None:
+                yield _sse({"error": "unknown job"})
+                return
+            yield _sse({"status": job.status, "progress": job.progress,
+                        "message": job.message, "error": job.error})
+            if job.status in ("done", "error"):
+                return
+            await asyncio.sleep(0.3)
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+@router.get("/jobs/{job_id}/midi")
+def job_midi(job_id: str) -> FileResponse:
+    return _serve(_job_path(job_id, "midi"), "audio/midi", download=True)
+
+
+@router.get("/jobs/{job_id}/audio")
+def job_audio(job_id: str) -> FileResponse:
+    p = _job_path(job_id, "audio_mp3", fallback="audio_wav")
+    media = "audio/mpeg" if p.suffix == ".mp3" else "audio/wav"
+    return _serve(p, media)
+
+
+@router.get("/jobs/{job_id}/audio.wav")
+def job_audio_hifi(job_id: str) -> FileResponse:
+    return _serve(_job_path(job_id, "audio_wav"), "audio/wav")
+
+
+@router.get("/jobs/{job_id}/pdf")
+def job_pdf(job_id: str) -> FileResponse:
+    return _serve(_job_path(job_id, "pdf"), "application/zip", download=True)
+
+
+# --------------------------------------------------------------------------
+# Blocks
+# --------------------------------------------------------------------------
+@router.get("/blocks")
+def list_blocks() -> list[dict]:
+    out = []
+    for b in block_store.list_blocks():
+        name = b.get("name")
+        out.append({
+            "name": name,
+            "bars": b.get("bars"),
+            "tempo": b.get("tempo"),
+            "time_signature": b.get("time_signature"),
+            "n_notes": b.get("n_notes"),
+            "duration_seconds": b.get("duration_seconds"),
+            "instruments": b.get("instruments"),
+            "has_preview": bool(b.get("_preview_path") or b.get("_wav_path")),
+            "audio_url": f"/api/blocks/{quote(name)}/audio",
+        })
+    return out
+
+
+@router.get("/blocks/{name}/audio")
+def block_audio(name: str) -> FileResponse:
+    p = block_store.ensure_preview_audio(name)
+    if not p:
+        raise HTTPException(404, "No audio for block")
+    media = "audio/mpeg" if Path(p).suffix == ".mp3" else "audio/wav"
+    return _serve(Path(p), media)
+
+
+@router.post("/blocks/from-job")
+def save_block_from_job(req: SaveBlockFromJobRequest) -> dict:
+    job = registry.get(req.job_id)
+    if job is None or job.status != "done":
+        raise HTTPException(404, "Job not found or not finished")
+    paths = job.result.get("_paths", {})
+    midi = paths.get("midi")
+    if not midi or not Path(midi).exists():
+        raise HTTPException(400, "Job has no MIDI to save")
+    pm = pretty_midi.PrettyMIDI(str(midi))
+    res = job.result
+    ts = res.get("time_signature", [4, 4])
+    name = service._save_unique_block(
+        block_store, req.name.strip(), pm,
+        tempo=res.get("tempo", 120.0),
+        time_signature=(int(ts[0]), int(ts[1])),
+        bars=res.get("bars", 0),
+    ) if not req.overwrite else _overwrite_block(req.name.strip(), pm, res, ts)
+    return {"name": name}
+
+
+@router.delete("/blocks/{name}")
+def delete_block(name: str) -> dict:
+    block_store.delete_block(name)
+    return {"deleted": name}
+
+
+# --------------------------------------------------------------------------
+# Songs (timelines of blocks)
+# --------------------------------------------------------------------------
+@router.get("/songs")
+def list_songs() -> dict:
+    return {"songs": song_store.list_song_timelines()}
+
+
+@router.get("/songs/{title}")
+def load_song(title: str) -> dict:
+    try:
+        return song_store.load_song_timeline(title)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, f"Song not found: {exc}")
+
+
+@router.post("/songs")
+def save_song(req: SongSaveRequest) -> dict:
+    try:
+        path = song_store.save_song_timeline(req.title, req.timeline, overwrite=req.overwrite)
+        return {"saved": req.title, "path": str(path)}
+    except FileExistsError as exc:
+        raise HTTPException(409, str(exc))
+
+
+@router.post("/songs/render")
+def render_song(req: SongRenderRequest) -> dict:
+    if not req.timeline:
+        raise HTTPException(400, "Timeline is empty")
+    try:
+        pm, info = block_concat.concat_blocks(req.timeline)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+    _SONG_RENDER_DIR.mkdir(parents=True, exist_ok=True)
+    rid = uuid.uuid4().hex[:12]
+    wav = _SONG_RENDER_DIR / f"{rid}.wav"
+    audio = pm.synthesize(fs=44100)
+    sf.write(str(wav), audio, 44100)
+    del audio
+    mp3 = _SONG_RENDER_DIR / f"{rid}.mp3"
+    served = mp3 if block_store.write_preview_mp3(wav, mp3) else wav
+    _SONG_RENDERS[rid] = served
+    return {
+        "render_id": rid,
+        "audio_url": f"/api/songs/render/{rid}/audio",
+        "info": info,
+    }
+
+
+@router.get("/songs/render/{render_id}/audio")
+def song_render_audio(render_id: str) -> FileResponse:
+    p = _SONG_RENDERS.get(render_id)
+    if not p or not p.exists():
+        raise HTTPException(404, "Render not found")
+    media = "audio/mpeg" if p.suffix == ".mp3" else "audio/wav"
+    return _serve(p, media)
+
+
+# --------------------------------------------------------------------------
+# Helpers
+# --------------------------------------------------------------------------
+def _sse(obj: dict) -> str:
+    return f"data: {json.dumps(obj)}\n\n"
+
+
+def _job_path(job_id: str, key: str, fallback: str | None = None) -> Path:
+    job = registry.get(job_id)
+    if job is None or job.status != "done":
+        raise HTTPException(404, "Job not found or not finished")
+    paths = job.result.get("_paths", {})
+    p = paths.get(key) or (paths.get(fallback) if fallback else None)
+    if not p or not Path(p).exists():
+        raise HTTPException(404, f"Artifact {key!r} not available")
+    return Path(p)
+
+
+def _serve(path: Path, media_type: str, *, download: bool = False) -> FileResponse:
+    headers = None
+    if download:
+        headers = {"Content-Disposition": f'attachment; filename="{path.name}"'}
+    return FileResponse(str(path), media_type=media_type, headers=headers)
+
+
+def _overwrite_block(name: str, pm, res: dict, ts) -> str:
+    block_store.save_block(
+        name, pm, tempo=res.get("tempo", 120.0),
+        time_signature=(int(ts[0]), int(ts[1])),
+        bars=res.get("bars", 0), overwrite=True,
+    )
+    return name
