@@ -98,6 +98,15 @@ def launch(blocks: gr.Blocks, *,
         api.mount("/static", StaticFiles(directory=str(_static_dir)),
                   name="static")
 
+    # New cross-platform web app (React/Vite). Built bundle is served at
+    # /app so an iPhone/desktop client can load it straight from the Mac
+    # (and Capacitor/Tauri later bundle the same dist/). html=True makes it
+    # an SPA fallback. Built via `cd web && npm run build`.
+    _web_dist = _Path(__file__).resolve().parents[2] / "web" / "dist"
+    if _web_dist.exists():
+        api.mount("/app", StaticFiles(directory=str(_web_dist), html=True),
+                  name="webapp")
+
     # MCP server (SSE transport) — same auth middleware as the rest of
     # the FastAPI app, so off-LAN clients need the token. Stdio
     # transport is a separate process; see scripts/run_mcp.py.
