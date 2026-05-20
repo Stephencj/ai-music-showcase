@@ -103,7 +103,8 @@ struct MainView: View {
                             Button("Settings") { showSettings = true }
                         }
                     case .ok(let url):
-                        StudioWebView(url: url, token: settings.authToken, reloadToken: reloadToken)
+                        StudioWebView(url: settings.entryURL(base: url),
+                                      token: settings.authToken, reloadToken: reloadToken)
                             .ignoresSafeArea(edges: .bottom)
                     }
                 }

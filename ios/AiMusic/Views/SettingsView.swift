@@ -65,6 +65,13 @@ struct SettingsView: View {
                     Toggle("Prefer LAN when available", isOn: $settings.preferLAN)
                 }
 
+                Section("Interface") {
+                    Toggle("Use new Studio UI", isOn: $settings.useStudioUI)
+                    Text("Loads the redesigned Generate/Compose app at /app. Turn off for the classic Gradio tabs (Melody Studio, AI Audio, Playback).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("Auth token") {
                     SecureField("AI_MUSIC_AUTH_TOKEN", text: $settings.authToken)
                         .textInputAutocapitalization(.never)
