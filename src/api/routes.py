@@ -321,7 +321,9 @@ def edit_block(name: str, req: EditBlockRequest) -> dict:
 
 @router.get("/voices")
 def list_voices() -> dict:
-    return {"voices": service.list_voices(), "engines": ["rough"]}
+    from src.models.vocals import studio_available
+    engines = ["rough"] + (["studio"] if studio_available() else [])
+    return {"voices": service.list_voices(), "engines": engines}
 
 
 @router.get("/blocks/{name}/melody")

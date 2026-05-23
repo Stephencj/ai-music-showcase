@@ -35,17 +35,23 @@ def render_lead_vocal(midi, lyrics, *, sr: int = 44100, voice: str = "",
     segs = align_words_to_notes(text, notes)
     eng = engine or RoughEngine(voice)
     total = float(midi.get_end_time())
-    out = np.zeros(int(total * sr) + sr, dtype=np.float32)
 
-    for seg in segs:
-        y = eng.render_segment(seg["text"], seg["notes"], sr)
-        if y.size == 0:
-            continue
-        i0 = int(seg["start"] * sr)
-        i1 = min(len(out), i0 + len(y))
-        out[i0:i1] += y[: i1 - i0]
-
-    out = out[: int(total * sr) + int(0.3 * sr)]
+    # Engines that synthesize a whole phrase at once (e.g. DiffSinger needs
+    # the full phoneme sequence + F0 contour) implement ``render_line``.
+    if hasattr(eng, "render_line"):
+        out, sr = eng.render_line(segs, sr)  # type: ignore[attr-defined]
+        if out.size == 0:
+            return out.astype(np.float32), sr
+    else:
+        out = np.zeros(int(total * sr) + sr, dtype=np.float32)
+        for seg in segs:
+            y = eng.render_segment(seg["text"], seg["notes"], sr)
+            if y.size == 0:
+                continue
+            i0 = int(seg["start"] * sr)
+            i1 = min(len(out), i0 + len(y))
+            out[i0:i1] += y[: i1 - i0]
+        out = out[: int(total * sr) + int(0.3 * sr)]
     peak = float(np.max(np.abs(out))) if out.size else 0.0
     if peak > 0:
         out = out * (0.9 / peak)

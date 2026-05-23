@@ -422,11 +422,15 @@ def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
     import numpy as np
     import soundfile as sf
     from src.daw_integration.generic import blocks as block_store
-    from src.models.vocals import RoughEngine, render_lead_vocal
+    from src.models.vocals import RoughEngine, get_engine, render_lead_vocal
 
     pm, _meta = block_store.load_block(name)
     progress("Synthesizing vocal…", 0.25)
-    engine = RoughEngine(voice or "")  # engine_name reserved for "studio" later
+    try:
+        engine = get_engine(engine_name, voice)
+    except Exception as exc:  # noqa: BLE001 — studio voicebank missing etc.
+        logger.warning("vocal engine %r unavailable (%s) — using rough", engine_name, exc)
+        engine = RoughEngine(voice or "")
     voc, sr = render_lead_vocal(pm, lyrics, voice=voice or "", engine=engine)
 
     job_dir = API_OUT / job_id

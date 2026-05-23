@@ -91,10 +91,13 @@ export default function ComposeScreen({
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [voices, setVoices] = useState<string[]>([]);
+  const [engines, setEngines] = useState<string[]>(["rough"]);
 
   const counter = useRef(0);
 
-  useEffect(() => { api.getVoices().then((v) => setVoices(v.voices)).catch(() => {}); }, []);
+  useEffect(() => {
+    api.getVoices().then((v) => { setVoices(v.voices); setEngines(v.engines); }).catch(() => {});
+  }, []);
 
   useEffect(() => { ls.set("compose.sortBy", sortBy); }, [sortBy]);
   useEffect(() => { ls.set("compose.sortDir", sortDir); }, [sortDir]);
@@ -411,6 +414,7 @@ export default function ComposeScreen({
                     onEdit={onEditBlock}
                     onEditInGenerate={onEditInGenerate}
                     voices={voices}
+                    engines={engines}
                   />
                 ))}
               </div>
@@ -434,7 +438,7 @@ export default function ComposeScreen({
 
 function BlockCard({
   block, selectMode, selected, onToggleSel, isFav, onToggleFav,
-  onAdd, onDelete, onRename, onTags, onEdit, onEditInGenerate, voices,
+  onAdd, onDelete, onRename, onTags, onEdit, onEditInGenerate, voices, engines,
 }: {
   block: Block;
   selectMode: boolean;
@@ -449,6 +453,7 @@ function BlockCard({
   onEdit: (name: string, body: { mute: string[]; regenerate: string[]; save_as?: string | null }) => Promise<string>;
   onEditInGenerate: (spec: BlockSpec) => void;
   voices: string[];
+  engines: string[];
 }) {
   const [open, setOpen] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -463,6 +468,7 @@ function BlockCard({
   const [lyrics, setLyrics] = useState(block.lyrics ?? "");
   const [theme, setTheme] = useState("");
   const [voice, setVoice] = useState("");
+  const [engine, setEngine] = useState("");
   const [drafting, setDrafting] = useState(false);
   const [vocBusy, setVocBusy] = useState(false);
   const [vocProg, setVocProg] = useState(0);
@@ -475,8 +481,9 @@ function BlockCard({
       api.getMelodyInfo(block.name).then((m) => setNoteCount(m.total_notes)).catch(() => setNoteCount(0));
     }
     if (open && !voice && voices.length) setVoice(voices.includes("Samantha") ? "Samantha" : voices[0]);
+    if (open && !engine && engines.length) setEngine(engines.includes("studio") ? "studio" : engines[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, voices]);
+  }, [open, voices, engines]);
 
   async function onDraft() {
     setDrafting(true); setVocMsg("");
@@ -488,7 +495,7 @@ function BlockCard({
     if (!lyrics.trim()) return;
     setVocBusy(true); setVocUrls(null); setVocProg(0); setVocMsg("Starting…");
     try {
-      const { job_id } = await api.renderVocals(block.name, { lyrics, voice, engine: "rough" });
+      const { job_id } = await api.renderVocals(block.name, { lyrics, voice, engine: engine || "rough" });
       const job = await api.pollVocal(job_id, (p, m) => { setVocProg(p); setVocMsg(m); });
       if (job.status === "error") setVocMsg(job.error || "Vocal render failed");
       else if (job.result) setVocUrls({ audio: job.result.urls.audio, vocal: job.result.urls.vocal });
@@ -632,10 +639,19 @@ function BlockCard({
               <button className="btn ghost sm" disabled={drafting} onClick={onDraft}>{drafting ? "…" : "✨ Draft"}</button>
             </div>
             <div className="voc-row">
-              <select value={voice} onChange={(e) => setVoice(e.target.value)}>
-                {voices.length === 0 && <option value="">default</option>}
-                {voices.map((v) => <option key={v} value={v}>{v}</option>)}
-              </select>
+              {engines.length > 1 && (
+                <select value={engine} onChange={(e) => setEngine(e.target.value)} title="Voice engine">
+                  {engines.map((en) => (
+                    <option key={en} value={en}>{en === "studio" ? "Studio (real SVS)" : "Rough (demo)"}</option>
+                  ))}
+                </select>
+              )}
+              {engine !== "studio" && (
+                <select value={voice} onChange={(e) => setVoice(e.target.value)} title="Voice">
+                  {voices.length === 0 && <option value="">default</option>}
+                  {voices.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              )}
               <button className="btn secondary sm" disabled={vocBusy || !lyrics.trim()} onClick={onSing}>
                 {vocBusy ? "Singing…" : "🎤 Sing it"}
               </button>
