@@ -90,7 +90,8 @@ export const blockFileUrl = (name: string, kind: "midi" | "wav" | "pdf" | "stems
   url(`/api/blocks/${encodeURIComponent(name)}/${kind}`);
 
 // --- Vocals ---
-export const getVoices = () => jget<{ voices: string[]; engines: string[] }>("/api/voices");
+export const getVoices = () =>
+  jget<{ voices: string[]; engines: string[]; studio_voices?: string[] }>("/api/voices");
 export const getMelodyInfo = (name: string) =>
   jget<{ total_notes: number; phrase_syllables: number[]; has_lead: boolean }>(
     `/api/blocks/${encodeURIComponent(name)}/melody`);

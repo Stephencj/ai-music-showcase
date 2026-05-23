@@ -35,6 +35,14 @@ def available(vb_dir: Path = DEFAULT_VB) -> bool:
            (vb_dir / "dsvocoder" / "tgm_hifigan.onnx").exists()
 
 
+def list_speakers(vb_dir: Path = DEFAULT_VB) -> list[str]:
+    """Selectable studio voices = the voicebank's speaker embeddings (.emb)."""
+    try:
+        return sorted(p.stem for p in (vb_dir / "dsacoustic").glob("*.emb"))
+    except Exception:  # noqa: BLE001
+        return []
+
+
 class StudioEngine(VocalEngine):
     name = "studio"
 
@@ -46,10 +54,21 @@ class StudioEngine(VocalEngine):
         self.vb = Path(vb_dir)
         if not available(self.vb):
             raise FileNotFoundError(f"DiffSinger voicebank not found at {self.vb}")
-        providers = [p for p in ("CoreMLExecutionProvider", "CPUExecutionProvider")
-                     if p in ort.get_available_providers()] or ["CPUExecutionProvider"]
-        self._acoustic = ort.InferenceSession(str(self.vb / "dsacoustic" / "acoustic.onnx"), providers=providers)
-        self._vocoder = ort.InferenceSession(str(self.vb / "dsvocoder" / "tgm_hifigan.onnx"), providers=providers)
+
+        def _session(path: Path):
+            # CoreML accelerates this on Apple Silicon, but its model-compile
+            # step writes to a cache and fails with an I/O error when disk is
+            # tight — fall back to CPU so a render never hard-fails.
+            avail = ort.get_available_providers()
+            if "CoreMLExecutionProvider" in avail:
+                try:
+                    return ort.InferenceSession(str(path), providers=["CoreMLExecutionProvider", "CPUExecutionProvider"])
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("CoreML init failed for %s (%s) — CPU only", path.name, exc)
+            return ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+
+        self._acoustic = _session(self.vb / "dsacoustic" / "acoustic.onnx")
+        self._vocoder = _session(self.vb / "dsvocoder" / "tgm_hifigan.onnx")
 
         cfg = yaml.safe_load(open(self.vb / "dsacoustic" / "dsconfig.yaml"))
         self.sr = int(cfg.get("sample_rate", 44100))
@@ -62,6 +81,15 @@ class StudioEngine(VocalEngine):
         self.ph2id = {p: i for i, p in enumerate(phs)}
         self._sp = self.ph2id.get("SP", 2)
         self._fallback_vowel = self.ph2id.get("ax", self.ph2id.get("ah", 3))
+
+        # phoneme → articulation type (for natural consonant lengths)
+        self.ph_type: dict[str, str] = {}
+        try:
+            dd = yaml.safe_load(open(self.vb / "dsdur" / "dsdict-en.yaml"))
+            for s in dd.get("symbols", []):
+                self.ph_type[str(s["symbol"])] = str(s.get("type"))
+        except Exception:  # noqa: BLE001
+            pass
 
         emb_path = self.vb / "dsacoustic" / f"{speaker}.emb"
         if not emb_path.exists():
@@ -110,15 +138,30 @@ class StudioEngine(VocalEngine):
             groups.append([next((p for p in reversed(groups[-1]) if p in _VOWELS), groups[-1][-1])])
         return groups
 
+    def _cons_frames(self, ph: str) -> int:
+        """Natural-ish consonant length in frames (~12 ms/frame) by type."""
+        t = self.ph_type.get(ph, "")
+        if t == "stop":
+            return 2                                   # ~23 ms — plosive
+        if t in ("fricative", "affricate"):
+            return 5                                   # ~58 ms — sustained noise
+        if t in ("nasal", "liquid", "approximant", "semivowel", "glide"):
+            return 4
+        return 3
+
     def _allocate(self, group: list[str], n_frames: int) -> list[tuple[str, int]]:
         n_frames = max(n_frames, len(group))
-        cons = [p for p in group if p not in _VOWELS]
-        n_vow = max(1, len(group) - len(cons))
-        c_fr = 2                                       # ~23 ms per consonant
-        v_fr = max(1, (n_frames - c_fr * len(cons)) // n_vow)
-        alloc = [[p, (v_fr if p in _VOWELS else c_fr)] for p in group]
+        vows = [p for p in group if p in _VOWELS] or [group[-1]]
+        cons_total = sum(self._cons_frames(p) for p in group if p not in _VOWELS)
+        v_fr = max(2, (n_frames - cons_total) // len(vows))
+        alloc = [[p, (v_fr if p in _VOWELS else self._cons_frames(p))] for p in group]
         diff = n_frames - sum(f for _, f in alloc)
-        alloc[-1][1] = max(1, alloc[-1][1] + diff)
+        # absorb the leftover into the (last) vowel so sustains land on the note
+        for i in range(len(alloc) - 1, -1, -1):
+            if alloc[i][0] in _VOWELS:
+                alloc[i][1] = max(1, alloc[i][1] + diff); break
+        else:
+            alloc[-1][1] = max(1, alloc[-1][1] + diff)
         return [(p, f) for p, f in alloc]
 
     # -- full-line render (interface used by render_lead_vocal) ------------
@@ -127,18 +170,28 @@ class StudioEngine(VocalEngine):
         durs: list[int] = []
         f0: list[float] = []
         prev_end = 0.0
+        prev_hz = 0.0
         for seg in segments:
             gap = seg["start"] - prev_end
             if gap > 0.03:
                 g = max(1, round(gap / self.frame_sec))
                 tokens.append(self._sp); durs.append(g); f0.extend([0.0] * g)
+                prev_hz = 0.0
             groups = self._syllabify(self._phonemes(seg["text"]), len(seg["notes"]))
             for (midi, ndur), group in zip(seg["notes"], groups):
                 nf = max(1, round(ndur / self.frame_sec))
                 hz = float(midi_to_hz(midi))
+                # phoneme tokens + per-phoneme frame durations (sum == nf)
                 for ph, fr in self._allocate(group, nf):
                     tokens.append(self.ph2id.get(ph, self._fallback_vowel))
-                    durs.append(fr); f0.extend([hz] * fr)
+                    durs.append(fr)
+                # per-frame F0 for this note: a short glide (portamento) from
+                # the previous pitch, then hold — sung note transitions, not steps.
+                glide = min(4, nf // 3) if prev_hz > 0 else 0
+                if glide > 0:
+                    f0.extend(np.linspace(prev_hz, hz, glide, endpoint=False).tolist())
+                f0.extend([hz] * (nf - glide))
+                prev_hz = hz
             prev_end = seg["start"] + sum(d for _, d in seg["notes"])
 
         if not tokens:

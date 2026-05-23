@@ -91,12 +91,15 @@ export default function ComposeScreen({
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [voices, setVoices] = useState<string[]>([]);
+  const [studioVoices, setStudioVoices] = useState<string[]>([]);
   const [engines, setEngines] = useState<string[]>(["rough"]);
 
   const counter = useRef(0);
 
   useEffect(() => {
-    api.getVoices().then((v) => { setVoices(v.voices); setEngines(v.engines); }).catch(() => {});
+    api.getVoices().then((v) => {
+      setVoices(v.voices); setEngines(v.engines); setStudioVoices(v.studio_voices ?? []);
+    }).catch(() => {});
   }, []);
 
   useEffect(() => { ls.set("compose.sortBy", sortBy); }, [sortBy]);
@@ -414,6 +417,7 @@ export default function ComposeScreen({
                     onEdit={onEditBlock}
                     onEditInGenerate={onEditInGenerate}
                     voices={voices}
+                    studioVoices={studioVoices}
                     engines={engines}
                   />
                 ))}
@@ -438,7 +442,7 @@ export default function ComposeScreen({
 
 function BlockCard({
   block, selectMode, selected, onToggleSel, isFav, onToggleFav,
-  onAdd, onDelete, onRename, onTags, onEdit, onEditInGenerate, voices, engines,
+  onAdd, onDelete, onRename, onTags, onEdit, onEditInGenerate, voices, studioVoices, engines,
 }: {
   block: Block;
   selectMode: boolean;
@@ -453,6 +457,7 @@ function BlockCard({
   onEdit: (name: string, body: { mute: string[]; regenerate: string[]; save_as?: string | null }) => Promise<string>;
   onEditInGenerate: (spec: BlockSpec) => void;
   voices: string[];
+  studioVoices: string[];
   engines: string[];
 }) {
   const [open, setOpen] = useState(false);
@@ -476,14 +481,23 @@ function BlockCard({
   const [vocUrls, setVocUrls] = useState<{ audio: string | null; vocal?: string | null } | null>(null);
   const [noteCount, setNoteCount] = useState<number | null>(null);
 
+  const voiceOptions = engine === "studio" ? studioVoices : voices;
+
   useEffect(() => {
     if (open && noteCount === null) {
       api.getMelodyInfo(block.name).then((m) => setNoteCount(m.total_notes)).catch(() => setNoteCount(0));
     }
-    if (open && !voice && voices.length) setVoice(voices.includes("Samantha") ? "Samantha" : voices[0]);
     if (open && !engine && engines.length) setEngine(engines.includes("studio") ? "studio" : engines[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, voices, engines]);
+  }, [open, engines]);
+
+  // Pick a sensible default voice for the current engine.
+  useEffect(() => {
+    if (!open || !voiceOptions.length || voiceOptions.includes(voice)) return;
+    const preferred = engine === "studio" ? "tiger_fresh" : "Samantha";
+    setVoice(voiceOptions.includes(preferred) ? preferred : voiceOptions[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, engine, voiceOptions]);
 
   async function onDraft() {
     setDrafting(true); setVocMsg("");
@@ -646,12 +660,12 @@ function BlockCard({
                   ))}
                 </select>
               )}
-              {engine !== "studio" && (
-                <select value={voice} onChange={(e) => setVoice(e.target.value)} title="Voice">
-                  {voices.length === 0 && <option value="">default</option>}
-                  {voices.map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
-              )}
+              <select value={voice} onChange={(e) => setVoice(e.target.value)} title="Voice">
+                {voiceOptions.length === 0 && <option value="">default</option>}
+                {voiceOptions.map((v) => (
+                  <option key={v} value={v}>{v.replace(/^tiger_/, "")}</option>
+                ))}
+              </select>
               <button className="btn secondary sm" disabled={vocBusy || !lyrics.trim()} onClick={onSing}>
                 {vocBusy ? "Singing…" : "🎤 Sing it"}
               </button>
