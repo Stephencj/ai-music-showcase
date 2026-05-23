@@ -544,21 +544,27 @@ function BlockCard({
                 ? <button className="te-ineditor" onClick={() => onEditInGenerate(block.spec!)}>✎ Edit in Generate</button>
                 : <span className="te-note">no generation info</span>}
             </div>
-            {(block.instruments ?? []).map((inst) => (
-              <div className="te-row" key={inst.name}>
-                <span className="te-name">{inst.name}</span>
-                <button
-                  className={"te-btn" + (muteSet.has(inst.name) ? " on" : "")}
-                  onClick={() => toggleIn(muteSet, inst.name, setMuteSet)}
-                >🔇 mute</button>
-                <button
-                  className={"te-btn" + (regenSet.has(inst.name) ? " on" : "")}
-                  disabled={!block.spec}
-                  title={block.spec ? "Re-roll this part" : "Needs generation info"}
-                  onClick={() => toggleIn(regenSet, inst.name, setRegenSet)}
-                >↻ regen</button>
-              </div>
-            ))}
+            {block.spec?.inferred && (
+              <div className="te-note">Estimated info — regenerate disabled; “Edit in Generate” is a starting point.</div>
+            )}
+            {(block.instruments ?? []).map((inst) => {
+              const canRegen = !!block.spec && !block.spec.inferred;
+              return (
+                <div className="te-row" key={inst.name}>
+                  <span className="te-name">{inst.name}</span>
+                  <button
+                    className={"te-btn" + (muteSet.has(inst.name) ? " on" : "")}
+                    onClick={() => toggleIn(muteSet, inst.name, setMuteSet)}
+                  >🔇 mute</button>
+                  <button
+                    className={"te-btn" + (regenSet.has(inst.name) ? " on" : "")}
+                    disabled={!canRegen}
+                    title={canRegen ? "Re-roll this part" : "Needs full generation info"}
+                    onClick={() => toggleIn(regenSet, inst.name, setRegenSet)}
+                  >↻ regen</button>
+                </div>
+              );
+            })}
             <div className="te-actions">
               <button className="btn secondary sm" disabled={editBusy || !dirty} onClick={() => applyEdit(null)}>
                 {editBusy ? "Working…" : "Apply"}

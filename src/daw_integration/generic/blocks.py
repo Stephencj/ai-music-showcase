@@ -436,6 +436,81 @@ def set_tags(name: str, tags: list[str]) -> list[str]:
     return clean
 
 
+def set_spec(name: str, spec: dict) -> None:
+    """Attach/replace a block's generation spec (provenance)."""
+    yaml_path = _yaml_path(name)
+    if not yaml_path.exists():
+        raise FileNotFoundError(f"Block not found: {name}")
+    with open(yaml_path, "r") as f:
+        meta = yaml.safe_load(f) or {}
+    meta["spec"] = spec
+    with open(yaml_path, "w") as f:
+        yaml.safe_dump(meta, f, sort_keys=False, default_flow_style=False)
+
+
+def _estimate_key(midi_path: Path) -> tuple[str, str]:
+    """Best-effort key/mode from the MIDI via music21. Falls back to C major."""
+    names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+    try:
+        from music21 import converter
+        analyzed = converter.parse(str(midi_path)).analyze("key")
+        tonic = names[analyzed.tonic.pitchClass]
+        mode = "minor" if analyzed.mode == "minor" else "major"
+        return tonic, mode
+    except Exception:
+        return "C", "major"
+
+
+def infer_spec(name: str, default_genre: str = "pop") -> Optional[dict]:
+    """Build a *best-effort* generation spec for a block that predates
+    provenance. Instruments come from the track names; key/mode are
+    estimated from the MIDI; tempo/meter from metadata. Genre can't be
+    recovered, so it defaults (caller marks ``inferred=True``). Good enough
+    to seed "Edit in Generate"; NOT a basis for per-instrument regenerate
+    (the guessed genre's progression would clash)."""
+    midi_path = _midi_path(name)
+    if not midi_path.exists():
+        return None
+    try:
+        pm = pretty_midi.PrettyMIDI(str(midi_path))
+        with open(_yaml_path(name), "r") as f:
+            meta = yaml.safe_load(f) or {}
+    except Exception:
+        return None
+
+    from src.composition.instruments import INSTRUMENT_REGISTRY
+    by_label: dict[str, str] = {}
+    for iid, inst in INSTRUMENT_REGISTRY.items():
+        by_label[(inst.label or "").lower()] = iid
+        tn = getattr(inst, "track_name", None)
+        if tn:
+            by_label[tn.lower()] = iid
+    inst_ids: list[str] = []
+    for i in pm.instruments:
+        iid = by_label.get((i.name or "").lower())
+        if iid and iid not in inst_ids:
+            inst_ids.append(iid)
+
+    key, scale = _estimate_key(midi_path)
+    ts = meta.get("time_signature") or [4, 4]
+    bars = int(meta.get("bars") or 0)
+    sections = (
+        [{"start_bar": 0, "end_bar": max(0, bars - 1), "label": "Section", "role": "verse"}]
+        if bars else []
+    )
+    return {
+        "genre": default_genre,
+        "key": key, "scale": scale,
+        "tempo": float(meta.get("tempo") or 120.0),
+        "time_signature": [int(ts[0]), int(ts[1])],
+        "seed": None, "swing": None,
+        "instruments": inst_ids,
+        "sections": sections,
+        "section": None,
+        "inferred": True,
+    }
+
+
 def rename_block(old: str, new: str) -> str:
     """Rename a block (and all its sidecars). Returns the new safe name.
     Raises FileExistsError on collision, FileNotFoundError if missing."""

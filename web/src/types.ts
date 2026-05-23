@@ -81,6 +81,7 @@ export interface BlockSpec {
   instruments?: string[];
   sections?: { start_bar: number; end_bar: number; label: string; role: string }[];
   section?: { start_bar: number; end_bar: number } | null;
+  inferred?: boolean;
 }
 
 export interface Block {
