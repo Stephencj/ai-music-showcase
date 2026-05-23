@@ -180,6 +180,7 @@ def list_blocks() -> list[dict]:
             "n_notes": b.get("n_notes"),
             "duration_seconds": b.get("duration_seconds"),
             "instruments": b.get("instruments"),
+            "created": b.get("created"),
             "has_preview": bool(b.get("_preview_path") or b.get("_wav_path")),
             "audio_url": f"/api/blocks/{quote(name)}/audio",
         })
@@ -193,6 +194,72 @@ def block_audio(name: str) -> FileResponse:
         raise HTTPException(404, "No audio for block")
     media = "audio/mpeg" if Path(p).suffix == ".mp3" else "audio/wav"
     return _serve(Path(p), media)
+
+
+@router.get("/blocks/{name}/midi")
+def block_midi(name: str) -> FileResponse:
+    p = block_store._midi_path(name)
+    if not p.exists():
+        raise HTTPException(404, "No MIDI for block")
+    return _serve(p, "audio/midi", download=True)
+
+
+@router.get("/blocks/{name}/wav")
+def block_wav(name: str) -> FileResponse:
+    p = block_store._wav_path(name)
+    if not p.exists():
+        raise HTTPException(404, "No WAV for block")
+    return _serve(p, "audio/wav", download=True)
+
+
+@router.get("/blocks/{name}/pdf")
+def block_pdf(name: str) -> FileResponse:
+    """Engrave the block to a PDF score (full score + parts), cached."""
+    midi = block_store._midi_path(name)
+    if not midi.exists():
+        raise HTTPException(404, "No MIDI for block")
+    from src.scoring.pdf_export import export_zip
+    cache_dir = service.API_OUT / "_blocks"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    out = cache_dir / f"{block_store._safe_name(name)}.score.zip"
+    if not out.exists():
+        try:
+            _, meta = block_store.load_block(name)
+            export_zip(midi, out, tempo=meta.get("tempo"), title=name)
+        except Exception as exc:  # noqa: BLE001 — LilyPond optional
+            raise HTTPException(503, f"PDF engraving failed: {exc}")
+    return _serve(out, "application/zip", download=True)
+
+
+@router.get("/blocks/{name}/stems")
+def block_stems(name: str) -> FileResponse:
+    """Re-render the block with per-instrument stems and zip them. Rendered
+    on demand into a temp dir that's deleted after the response is sent."""
+    import shutil
+    import tempfile
+    import zipfile
+    from starlette.background import BackgroundTask
+    from src.audio_processing.render.pipeline import render_to_audio
+
+    midi = block_store._midi_path(name)
+    if not midi.exists():
+        raise HTTPException(404, "No MIDI for block")
+    tmp = Path(tempfile.mkdtemp(prefix="blockstems_"))
+    render = render_to_audio(midi=midi, output_dir=tmp / "r",
+                             with_stems=True, master_preset="default")
+    safe = block_store._safe_name(name)
+    archive = tmp / f"{safe}_stems.zip"
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(render.mix_path, arcname="mix.wav")
+        for track, p in (render.stem_paths or {}).items():
+            try:
+                zf.write(p, arcname=f"{track}.wav")
+            except OSError:
+                pass
+    return FileResponse(
+        str(archive), media_type="application/zip", filename=f"{safe}_stems.zip",
+        background=BackgroundTask(shutil.rmtree, str(tmp), ignore_errors=True),
+    )
 
 
 @router.post("/blocks/from-job")

@@ -78,6 +78,7 @@ export interface Block {
   n_notes: number | null;
   duration_seconds: number | null;
   instruments?: BlockInstrument[];
+  created?: string | null;
   has_preview: boolean;
   audio_url: string;
 }

@@ -84,6 +84,10 @@ export const loadSong = (title: string) =>
 /** Absolute URL for an artifact path (for <audio src> / download links). */
 export const mediaUrl = (path: string) => url(path);
 
+/** Download URL for a block artifact (midi/wav/pdf/stems). */
+export const blockFileUrl = (name: string, kind: "midi" | "wav" | "pdf" | "stems") =>
+  url(`/api/blocks/${encodeURIComponent(name)}/${kind}`);
+
 /** Poll a job to completion, reporting each status to `onProgress`. */
 export async function pollJob(
   id: string,

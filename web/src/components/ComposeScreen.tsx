@@ -24,6 +24,16 @@ interface TLItem {
   repeat: number;
 }
 
+type SortKey = "name" | "created" | "tempo" | "bars" | "notes" | "duration";
+const SORTS: Record<SortKey, (a: Block, b: Block) => number> = {
+  name: (a, b) => a.name.localeCompare(b.name),
+  created: (a, b) => String(b.created ?? "").localeCompare(String(a.created ?? "")),
+  tempo: (a, b) => (b.tempo ?? 0) - (a.tempo ?? 0),
+  bars: (a, b) => (b.bars ?? 0) - (a.bars ?? 0),
+  notes: (a, b) => (b.n_notes ?? 0) - (a.n_notes ?? 0),
+  duration: (a, b) => (b.duration_seconds ?? 0) - (a.duration_seconds ?? 0),
+};
+
 export default function ComposeScreen() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [timeline, setTimeline] = useState<TLItem[]>([]);
@@ -35,6 +45,8 @@ export default function ComposeScreen() {
   const [renderMsg, setRenderMsg] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortKey>("name");
 
   const counter = useRef(0);
 
@@ -140,6 +152,12 @@ export default function ComposeScreen() {
     [timeline, blockByName]
   );
 
+  const shownBlocks = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const arr = q ? blocks.filter((b) => b.name.toLowerCase().includes(q)) : blocks.slice();
+    return arr.sort(SORTS[sortBy]);
+  }, [blocks, query, sortBy]);
+
   return (
     <>
       <div className="card">
@@ -227,11 +245,31 @@ export default function ComposeScreen() {
             No blocks yet. Generate a song and tap <strong>Save as Block</strong> (or Split into section blocks).
           </div>
         ) : (
-          <div className="block-list">
-            {blocks.map((b) => (
-              <BlockCard key={b.name} block={b} onAdd={add} onDelete={onDelete} />
-            ))}
-          </div>
+          <>
+            <div className="lib-controls">
+              <input
+                className="lib-search" type="text" placeholder="Search blocks…"
+                value={query} onChange={(e) => setQuery(e.target.value)}
+              />
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortKey)}>
+                <option value="name">Name A–Z</option>
+                <option value="created">Recent</option>
+                <option value="tempo">Tempo</option>
+                <option value="bars">Bars</option>
+                <option value="notes">Notes</option>
+                <option value="duration">Duration</option>
+              </select>
+            </div>
+            {shownBlocks.length === 0 ? (
+              <div className="meta" style={{ marginTop: 10 }}>No blocks match “{query}”.</div>
+            ) : (
+              <div className="block-list">
+                {shownBlocks.map((b) => (
+                  <BlockCard key={b.name} block={b} onAdd={add} onDelete={onDelete} />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -296,6 +334,7 @@ function BlockCard({
           {playing ? "⏸" : "▶"}
         </button>
         <span className="bc-name" onClick={() => setOpen((o) => !o)}>{block.name}</span>
+        <button className="bc-add" onClick={() => onAdd(block.name)} aria-label="Add to timeline">＋</button>
         <button className="bc-gear" onClick={() => setOpen((o) => !o)} aria-label="Details">⚙</button>
       </div>
       {open && (
@@ -308,6 +347,12 @@ function BlockCard({
             <span>{block.instruments?.length ?? 0} instr.</span>
             <span>{block.n_notes ?? 0} notes</span>
             {block.duration_seconds != null && <span>{block.duration_seconds.toFixed(1)}s</span>}
+          </div>
+          <div className="links">
+            <a href={api.blockFileUrl(block.name, "midi")} download>↓ MIDI</a>
+            <a href={api.blockFileUrl(block.name, "wav")} download>↓ WAV</a>
+            <a href={api.blockFileUrl(block.name, "pdf")} download>↓ PDF</a>
+            <a href={api.blockFileUrl(block.name, "stems")} download>↓ Stems</a>
           </div>
           <div className="bc-actions">
             <button className="btn secondary sm" onClick={() => onAdd(block.name)}>+ Timeline</button>
