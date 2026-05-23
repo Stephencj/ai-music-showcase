@@ -14,6 +14,22 @@ logger = logging.getLogger("ai_music_studio.api.service")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 API_OUT = PROJECT_ROOT / "data" / "outputs" / "api"
 
+# Keep only the most-recent N job output dirs so renders don't grow
+# unbounded and fill the disk (each HQ mix is several MB).
+_KEEP_RECENT_JOBS = 30
+
+
+def _prune_old_job_dirs(keep: int = _KEEP_RECENT_JOBS) -> None:
+    try:
+        dirs = [p for p in API_OUT.iterdir() if p.is_dir()]
+    except FileNotFoundError:
+        return
+    if len(dirs) <= keep:
+        return
+    import shutil
+    for old in sorted(dirs, key=lambda p: p.stat().st_mtime)[:-keep]:
+        shutil.rmtree(old, ignore_errors=True)
+
 
 def run_generation(req, progress, job_id: str) -> dict:
     """Compose → HQ render → (optional) PDF → (optional) save/split blocks.
@@ -49,6 +65,7 @@ def run_generation(req, progress, job_id: str) -> dict:
 
     job_dir = API_OUT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
+    _prune_old_job_dirs()
 
     progress("Composing arrangement…", 0.10)
     out = compose_song(
@@ -165,6 +182,7 @@ def run_song_render(timeline: list[dict], with_pdf: bool,
 
     job_dir = API_OUT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
+    _prune_old_job_dirs()
     midi_path = job_dir / "song.mid"
     pm.write(str(midi_path))
 
