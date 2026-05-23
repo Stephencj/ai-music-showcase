@@ -145,6 +145,85 @@ def run_generation(req, progress, job_id: str) -> dict:
     }
 
 
+def run_song_render(timeline: list[dict], with_pdf: bool,
+                    progress, job_id: str) -> dict:
+    """Render a Compose-Song timeline into the FULL deliverable set — the
+    same one-shot the Generate/block flow produces: concatenated MIDI, HQ
+    FluidSynth audio (+ MP3 preview) and a PDF score. Mirrors
+    run_generation so the /jobs/{id} status + artifact endpoints serve it
+    identically."""
+    from src.daw_integration.generic import block_concat
+    from src.daw_integration.generic import blocks as block_store
+    from src.audio_processing.render.pipeline import render_to_audio
+    from src.scoring.pdf_export import export_zip
+
+    if not timeline:
+        raise ValueError("Timeline is empty")
+
+    progress("Assembling timeline…", 0.10)
+    pm, info = block_concat.concat_blocks(timeline)
+
+    job_dir = API_OUT / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    midi_path = job_dir / "song.mid"
+    pm.write(str(midi_path))
+
+    progress("Rendering high-quality audio…", 0.45)
+    render = render_to_audio(
+        midi=midi_path, output_dir=job_dir / "render",
+        with_stems=False, master_preset="default",
+    )
+    wav_path = Path(render.mix_path)
+    mp3_path: Path | None = job_dir / "song.mp3"
+    if not block_store.write_preview_mp3(wav_path, mp3_path):
+        mp3_path = None
+
+    pdf_path: Path | None = None
+    if with_pdf:
+        progress("Engraving PDF score…", 0.80)
+        try:
+            pdf_path = export_zip(
+                midi_path, job_dir / "score.zip",
+                tempo=_first_block_tempo(timeline), title="Song",
+            )
+        except Exception as exc:  # noqa: BLE001 — LilyPond optional
+            logger.warning("song PDF export failed for %s: %s", job_id, exc)
+            pdf_path = None
+
+    progress("Done.", 1.0)
+    return {
+        "kind": "song",
+        "info": {
+            "duration_seconds": info.get("duration_seconds"),
+            "n_instruments": info.get("n_instruments"),
+            "n_notes": info.get("n_notes"),
+            "summary": info.get("summary", ""),
+        },
+        "_paths": {
+            "midi": str(midi_path),
+            "audio_mp3": str(mp3_path) if mp3_path else None,
+            "audio_wav": str(wav_path),
+            "pdf": str(pdf_path) if pdf_path else None,
+        },
+    }
+
+
+def _first_block_tempo(timeline: list[dict]):
+    """Tempo to engrave the score at — the first block's (concat's seed
+    tempo). None lets export_zip fall back."""
+    from src.daw_integration.generic import blocks as block_store
+    for t in timeline:
+        name = t.get("block_name")
+        if not name:
+            continue
+        try:
+            _, meta = block_store.load_block(name)
+            return float(meta["tempo"]) if meta.get("tempo") else None
+        except Exception:  # noqa: BLE001
+            return None
+    return None
+
+
 def _save_unique_block(block_store, base_name: str, pm, *,
                        tempo: float, time_signature, bars: int) -> str:
     existing = {b.get("name") for b in block_store.list_blocks()}

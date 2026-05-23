@@ -10,12 +10,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import uuid
 from pathlib import Path
 from urllib.parse import quote
 
 import pretty_midi
-import soundfile as sf
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 
@@ -37,10 +35,6 @@ from .schemas import (
 logger = logging.getLogger("ai_music_studio.api.routes")
 
 router = APIRouter(prefix="/api")
-
-# Song-render artifacts, keyed by a per-render token (single-process map).
-_SONG_RENDERS: dict[str, Path] = {}
-_SONG_RENDER_DIR = service.API_OUT / "song_render"
 
 
 # --------------------------------------------------------------------------
@@ -274,36 +268,15 @@ def save_song(req: SongSaveRequest) -> dict:
 
 @router.post("/songs/render")
 def render_song(req: SongRenderRequest) -> dict:
+    """Render the timeline into the full deliverable set (HQ audio + MIDI +
+    PDF) as a background job — same shape as /generate, so the /jobs/{id}
+    status + artifact endpoints serve it identically."""
     if not req.timeline:
         raise HTTPException(400, "Timeline is empty")
-    try:
-        pm, info = block_concat.concat_blocks(req.timeline)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc))
-
-    _SONG_RENDER_DIR.mkdir(parents=True, exist_ok=True)
-    rid = uuid.uuid4().hex[:12]
-    wav = _SONG_RENDER_DIR / f"{rid}.wav"
-    audio = pm.synthesize(fs=44100)
-    sf.write(str(wav), audio, 44100)
-    del audio
-    mp3 = _SONG_RENDER_DIR / f"{rid}.mp3"
-    served = mp3 if block_store.write_preview_mp3(wav, mp3) else wav
-    _SONG_RENDERS[rid] = served
-    return {
-        "render_id": rid,
-        "audio_url": f"/api/songs/render/{rid}/audio",
-        "info": info,
-    }
-
-
-@router.get("/songs/render/{render_id}/audio")
-def song_render_audio(render_id: str) -> FileResponse:
-    p = _SONG_RENDERS.get(render_id)
-    if not p or not p.exists():
-        raise HTTPException(404, "Render not found")
-    media = "audio/mpeg" if p.suffix == ".mp3" else "audio/wav"
-    return _serve(p, media)
+    job = registry.create()
+    registry.run(job, lambda progress: service.run_song_render(
+        req.timeline, req.with_pdf, progress, job.id))
+    return {"job_id": job.id}
 
 
 # --------------------------------------------------------------------------

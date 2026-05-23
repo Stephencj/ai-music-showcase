@@ -52,7 +52,29 @@ export async function deleteBlock(name: string): Promise<void> {
   if (!r.ok) throw new Error((await r.text()) || r.statusText);
 }
 export const renderSong = (timeline: TimelineEntry[]) =>
-  jpost<SongRenderResult>("/api/songs/render", { timeline });
+  jpost<{ job_id: string }>("/api/songs/render", { timeline });
+
+interface SongJob {
+  status: "pending" | "running" | "done" | "error";
+  progress: number;
+  message: string;
+  error: string | null;
+  result?: SongRenderResult;
+}
+
+/** Poll a song-render job (full HQ+MIDI+PDF, same job pipeline as generate). */
+export async function pollSongRender(
+  id: string,
+  onProgress: (progress: number, message: string) => void,
+  intervalMs = 400
+): Promise<SongJob> {
+  for (;;) {
+    const job = await jget<SongJob>(`/api/jobs/${id}`);
+    onProgress(job.progress, job.message);
+    if (job.status === "done" || job.status === "error") return job;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}
 export const saveSong = (title: string, timeline: TimelineEntry[], overwrite = true) =>
   jpost<{ saved: string }>("/api/songs", { title, timeline, overwrite });
 export const listSongs = () => jget<{ songs: string[] }>("/api/songs");

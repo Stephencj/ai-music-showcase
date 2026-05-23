@@ -44,3 +44,4 @@ class SongSaveRequest(BaseModel):
 
 class SongRenderRequest(BaseModel):
     timeline: list[dict]
+    with_pdf: bool = True

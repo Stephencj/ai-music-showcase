@@ -87,15 +87,17 @@ export interface TimelineEntry {
   repeat: number;
 }
 
+export interface SongInfo {
+  duration_seconds: number;
+  n_instruments: number;
+  n_notes: number;
+  summary: string;
+}
+
 export interface SongRenderResult {
-  render_id: string;
-  audio_url: string;
-  info: {
-    duration_seconds: number;
-    n_instruments: number;
-    n_notes: number;
-    summary: string;
-  };
+  kind?: string;
+  info: SongInfo;
+  urls: JobUrls;
 }
 
 export interface GenerateBody {

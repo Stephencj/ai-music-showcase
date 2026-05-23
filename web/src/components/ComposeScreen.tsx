@@ -31,6 +31,8 @@ export default function ComposeScreen() {
   const [songs, setSongs] = useState<string[]>([]);
   const [render, setRender] = useState<SongRenderResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [renderProg, setRenderProg] = useState(0);
+  const [renderMsg, setRenderMsg] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -69,9 +71,17 @@ export default function ComposeScreen() {
   async function onRender() {
     if (!timeline.length) return;
     setBusy(true); setErr(null); setRender(null); setMsg(null);
+    setRenderProg(0); setRenderMsg("Starting…");
     try {
-      const r = await api.renderSong(timeline.map(({ block_name, repeat }) => ({ block_name, repeat })));
-      setRender(r);
+      const { job_id } = await api.renderSong(
+        timeline.map(({ block_name, repeat }) => ({ block_name, repeat }))
+      );
+      const job = await api.pollSongRender(job_id, (p, m) => {
+        setRenderProg(p);
+        setRenderMsg(m);
+      });
+      if (job.status === "error") setErr(job.error || "Render failed");
+      else if (job.result) setRender(job.result);
     } catch (e) {
       setErr(String(e));
     } finally {
@@ -183,13 +193,23 @@ export default function ComposeScreen() {
 
         {(busy || render || err) && (
           <div style={{ marginTop: 14 }}>
-            {busy && <div className="progress-msg">Rendering song…</div>}
+            {busy && (
+              <>
+                <div className="progress"><div style={{ width: `${Math.round(renderProg * 100)}%` }} /></div>
+                <div className="progress-msg">{renderMsg}</div>
+              </>
+            )}
             {err && <div className="error">{err}</div>}
             {render && (
               <>
-                <Waveform url={api.mediaUrl(render.audio_url)} height={64} />
+                {render.urls.audio && <Waveform url={api.mediaUrl(render.urls.audio)} height={64} />}
                 <div className="meta">
                   {render.info.duration_seconds.toFixed(1)}s · {render.info.n_instruments} instruments · {render.info.n_notes} notes
+                </div>
+                <div className="links">
+                  {render.urls.midi && <a href={api.mediaUrl(render.urls.midi)} download>↓ MIDI</a>}
+                  {render.urls.pdf && <a href={api.mediaUrl(render.urls.pdf)} download>↓ PDF</a>}
+                  {render.urls.audio_hifi && <a href={api.mediaUrl(render.urls.audio_hifi)} download>↓ WAV (HQ)</a>}
                 </div>
               </>
             )}
