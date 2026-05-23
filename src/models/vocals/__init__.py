@@ -21,11 +21,21 @@ def studio_available() -> bool:
         return False
 
 
+_STUDIO_ENGINE = None  # cached: compiled ONNX sessions reused across jobs
+
+
 def get_engine(name: str, voice: str = ""):
-    """Resolve an engine by name, falling back to rough."""
+    """Resolve an engine by name, falling back to rough. The studio engine
+    is cached (the ONNX models are costly to compile); we just swap the
+    speaker per call."""
     if name == "studio":
+        global _STUDIO_ENGINE
         from .studio import StudioEngine
-        return StudioEngine(speaker=voice or "tiger_fresh")
+        if _STUDIO_ENGINE is None:
+            _STUDIO_ENGINE = StudioEngine(speaker=voice or "tiger_fresh")
+        else:
+            _STUDIO_ENGINE.set_speaker(voice or "tiger_fresh")
+        return _STUDIO_ENGINE
     return RoughEngine(voice)
 
 

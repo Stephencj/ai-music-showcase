@@ -91,12 +91,21 @@ class StudioEngine(VocalEngine):
         except Exception:  # noqa: BLE001
             pass
 
+        self._spk = np.zeros(256, np.float32)
+        self.speaker = ""
+        self.set_speaker(speaker)
+        self._g2p = None
+
+    def set_speaker(self, speaker: str) -> "StudioEngine":
+        """Swap the speaker embedding (the ONNX sessions are speaker-
+        independent, so one compiled engine serves every voice)."""
         emb_path = self.vb / "dsacoustic" / f"{speaker}.emb"
         if not emb_path.exists():
             cands = sorted((self.vb / "dsacoustic").glob("*.emb"))
             emb_path = cands[0] if cands else None
         self._spk = (np.fromfile(str(emb_path), dtype=np.float32) if emb_path else np.zeros(256, np.float32))
-        self._g2p = None
+        self.speaker = emb_path.stem if emb_path else ""
+        return self
 
     # -- phonemes ----------------------------------------------------------
     def _phonemes(self, word: str) -> list[str]:
