@@ -7,6 +7,7 @@ librosa>=0.11.0
 pretty_midi>=0.2.11
 pydub>=0.25.1
 soundfile>=0.13.1
+pyworld>=0.3.5          # WORLD vocoder — F0 resynthesis for the rough vocal engine
 
 # Numerical Computing
 numpy>=2.4.4
