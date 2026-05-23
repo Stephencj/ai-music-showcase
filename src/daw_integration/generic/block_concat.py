@@ -339,7 +339,8 @@ def slice_pm_by_bars(pm: pretty_midi.PrettyMIDI, start_bar: int, end_bar: int,
 def split_into_section_blocks(pm: pretty_midi.PrettyMIDI, sections: Iterable[dict],
                               *, tempo: float, time_signature: tuple[int, int],
                               prefix: str = "", overwrite: bool = False,
-                              tag: str | None = None) -> list[str]:
+                              tag: str | None = None,
+                              spec_base: dict | None = None) -> list[str]:
     """Slice ``pm`` into one saved block per section so the parts can be
     mixed and matched on the Compose Song timeline.
 
@@ -364,14 +365,16 @@ def split_into_section_blocks(pm: pretty_midi.PrettyMIDI, sections: Iterable[dic
             n += 1
             name = f"{base} {n}"
         try:
+            # Each section block remembers the full generation spec plus
+            # its own bar-range, so a single instrument can be regenerated
+            # later (re-run the full song, slice to this section, splice).
+            spec = None
+            if spec_base is not None:
+                spec = {**spec_base, "section": {"start_bar": s, "end_bar": e}}
             _b.save_block(name, sub, tempo=float(tempo),
                           time_signature=(int(time_signature[0]), int(time_signature[1])),
-                          bars=e - s + 1, overwrite=overwrite)
-            if tag:
-                try:
-                    _b.set_tags(name, [tag])
-                except Exception:  # noqa: BLE001 — tagging is best-effort
-                    pass
+                          bars=e - s + 1, overwrite=overwrite,
+                          spec=spec, tags=[tag] if tag else None)
             existing.add(name)
             saved.append(name)
         except (FileExistsError, ValueError) as exc:

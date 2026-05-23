@@ -19,7 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import * as api from "../api";
-import type { Block, SongRenderResult } from "../types";
+import type { Block, BlockSpec, SongRenderResult } from "../types";
 import Waveform from "./Waveform";
 import Sparkline from "./Sparkline";
 
@@ -63,7 +63,11 @@ const ls = {
 // One block preview plays at a time across the whole library.
 let _currentAudio: HTMLAudioElement | null = null;
 
-export default function ComposeScreen() {
+export default function ComposeScreen({
+  onEditInGenerate,
+}: {
+  onEditInGenerate: (spec: BlockSpec) => void;
+}) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [timeline, setTimeline] = useState<TLItem[]>([]);
   const [songTitle, setSongTitle] = useState("Untitled Song");
@@ -189,6 +193,12 @@ export default function ComposeScreen() {
   }
   async function onTags(name: string, tags: string[]) {
     try { await api.setTags(name, tags); refresh(); } catch (e) { setErr(String(e)); }
+  }
+  async function onEditBlock(name: string, body: { mute: string[]; regenerate: string[]; save_as?: string | null }) {
+    const r = await api.editBlock(name, body);
+    await refresh();
+    setMsg(`Updated "${r.name}"`);
+    return r.name;
   }
   async function bulkDelete() {
     if (!selected.size || !window.confirm(`Delete ${selected.size} block(s)?`)) return;
@@ -395,6 +405,8 @@ export default function ComposeScreen() {
                     onDelete={onDelete}
                     onRename={onRename}
                     onTags={onTags}
+                    onEdit={onEditBlock}
+                    onEditInGenerate={onEditInGenerate}
                   />
                 ))}
               </div>
@@ -418,7 +430,7 @@ export default function ComposeScreen() {
 
 function BlockCard({
   block, selectMode, selected, onToggleSel, isFav, onToggleFav,
-  onAdd, onDelete, onRename, onTags,
+  onAdd, onDelete, onRename, onTags, onEdit, onEditInGenerate,
 }: {
   block: Block;
   selectMode: boolean;
@@ -430,12 +442,30 @@ function BlockCard({
   onDelete: (name: string) => void;
   onRename: (oldName: string, newName: string) => void;
   onTags: (name: string, tags: string[]) => void;
+  onEdit: (name: string, body: { mute: string[]; regenerate: string[]; save_as?: string | null }) => Promise<string>;
+  onEditInGenerate: (spec: BlockSpec) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [rename, setRename] = useState(block.name);
   const [newTag, setNewTag] = useState("");
+  const [muteSet, setMuteSet] = useState<Set<string>>(new Set());
+  const [regenSet, setRegenSet] = useState<Set<string>>(new Set());
+  const [editBusy, setEditBusy] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const dirty = muteSet.size > 0 || regenSet.size > 0;
+  const toggleIn = (s: Set<string>, v: string, setter: (x: Set<string>) => void) => {
+    const n = new Set(s); n.has(v) ? n.delete(v) : n.add(v); setter(n);
+  };
+  async function applyEdit(saveAs: string | null) {
+    setEditBusy(true);
+    try {
+      await onEdit(block.name, { mute: [...muteSet], regenerate: [...regenSet], save_as: saveAs });
+      setMuteSet(new Set()); setRegenSet(new Set());
+    } catch { /* surfaced by parent */ }
+    finally { setEditBusy(false); }
+  }
 
   const drag = useDraggable({ id: `lib:${block.name}`, disabled: selectMode });
 
@@ -504,6 +534,40 @@ function BlockCard({
             <span>{block.instruments?.length ?? 0} instr.</span>
             <span>{block.n_notes ?? 0} notes</span>
             {block.duration_seconds != null && <span>{block.duration_seconds.toFixed(1)}s</span>}
+          </div>
+
+          {/* Channel editor: mute / regenerate instruments */}
+          <div className="track-edit">
+            <div className="te-head">
+              <span className="te-title">Channels</span>
+              {block.spec
+                ? <button className="te-ineditor" onClick={() => onEditInGenerate(block.spec!)}>✎ Edit in Generate</button>
+                : <span className="te-note">no generation info</span>}
+            </div>
+            {(block.instruments ?? []).map((inst) => (
+              <div className="te-row" key={inst.name}>
+                <span className="te-name">{inst.name}</span>
+                <button
+                  className={"te-btn" + (muteSet.has(inst.name) ? " on" : "")}
+                  onClick={() => toggleIn(muteSet, inst.name, setMuteSet)}
+                >🔇 mute</button>
+                <button
+                  className={"te-btn" + (regenSet.has(inst.name) ? " on" : "")}
+                  disabled={!block.spec}
+                  title={block.spec ? "Re-roll this part" : "Needs generation info"}
+                  onClick={() => toggleIn(regenSet, inst.name, setRegenSet)}
+                >↻ regen</button>
+              </div>
+            ))}
+            <div className="te-actions">
+              <button className="btn secondary sm" disabled={editBusy || !dirty} onClick={() => applyEdit(null)}>
+                {editBusy ? "Working…" : "Apply"}
+              </button>
+              <button className="btn ghost sm" disabled={editBusy || !dirty}
+                onClick={() => { const nm = window.prompt("New block name", `${block.name} edit`); if (nm) applyEdit(nm); }}>
+                Save as new
+              </button>
+            </div>
           </div>
 
           <div className="tag-edit">

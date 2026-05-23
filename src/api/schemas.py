@@ -57,3 +57,9 @@ class RenameRequest(BaseModel):
 
 class TagsRequest(BaseModel):
     tags: list[str] = Field(default_factory=list)
+
+
+class EditBlockRequest(BaseModel):
+    mute: list[str] = Field(default_factory=list)          # track names to drop
+    regenerate: list[str] = Field(default_factory=list)    # track names to re-roll
+    save_as: Optional[str] = None                          # None → overwrite in place

@@ -159,6 +159,24 @@ def run_generation(req, progress, job_id: str) -> dict:
                 for s in secs
             ],
         },
+        # Generation provenance stored on saved blocks → enables
+        # per-instrument regenerate and "Edit in Generate".
+        "_spec": {
+            "genre": genre,
+            "key": eff_key,
+            "scale": eff_scale,
+            "tempo": eff_tempo,
+            "time_signature": list(ts),
+            "seed": seed,
+            "swing": float(req.swing) if req.swing is not None else None,
+            "instruments": list(req.instruments),
+            "sections": [
+                {"start_bar": s["start_bar"], "end_bar": s["end_bar"],
+                 "label": s["label"], "role": s["role"]}
+                for s in secs
+            ],
+            "section": None,
+        },
     }
 
 
@@ -242,14 +260,98 @@ def _first_block_tempo(timeline: list[dict]):
     return None
 
 
-def _save_unique_block(block_store, base_name: str, pm, *,
-                       tempo: float, time_signature, bars: int) -> str:
+def _regenerate_pm(spec: dict):
+    """Re-run the generation at a fresh seed (same preset/key/scale/tempo/
+    sections, so harmonically compatible) and return the PrettyMIDI — sliced
+    to the block's section when it was a split part."""
+    import random
+    import pretty_midi
+    from src.composition.song_composer import compose_song
+    from src.daw_integration.generic import block_concat
+
+    out = compose_song(
+        genre=spec["genre"],
+        sections=spec.get("sections"),
+        seed=random.randint(1, 1_000_000),
+        enabled_instruments=tuple(spec.get("instruments") or ()) or None,
+        key=spec.get("key"), scale=spec.get("scale"), tempo=spec.get("tempo"),
+        swing=spec.get("swing"),
+        output_dir=API_OUT / "_regen",
+        skip_audio=True,
+    )
+    pm = pretty_midi.PrettyMIDI(str(out["midi_path"]))
+    sec = spec.get("section")
+    if sec:
+        ts = spec.get("time_signature") or [4, 4]
+        pm = block_concat.slice_pm_by_bars(
+            pm, int(sec["start_bar"]), int(sec["end_bar"]),
+            float(spec["tempo"]), (int(ts[0]), int(ts[1])),
+        )
+    return pm
+
+
+def edit_block(name: str, *, mute=None, regenerate=None, save_as=None) -> str:
+    """Apply an edit to a block: drop muted instrument tracks and/or
+    re-roll specific instrument tracks (regenerate, needs provenance).
+    Saves over the original (default) or as a new block when ``save_as`` is
+    given. Returns the resulting block name."""
+    import pretty_midi
+    from src.daw_integration.generic import blocks as block_store
+
+    mute_set = set(mute or [])
+    regen_set = set(regenerate or [])
+    pm, meta = block_store.load_block(name)
+    spec = meta.get("spec")
+
+    regen_tracks: dict[str, object] = {}
+    if regen_set:
+        if not spec:
+            raise ValueError("Block has no generation info to regenerate from.")
+        new_pm = _regenerate_pm(spec)
+        for inst in new_pm.instruments:
+            regen_tracks.setdefault(inst.name, inst)
+
+    ts = meta.get("time_signature") or [4, 4]
+    out = pretty_midi.PrettyMIDI(initial_tempo=float(meta.get("tempo") or 120.0))
+    out.time_signature_changes = [pretty_midi.TimeSignature(int(ts[0]), int(ts[1]), 0.0)]
+    for inst in pm.instruments:
+        if inst.name in mute_set:
+            continue
+        src = regen_tracks[inst.name] if (inst.name in regen_set and inst.name in regen_tracks) else inst
+        ni = pretty_midi.Instrument(program=int(src.program), is_drum=bool(src.is_drum), name=src.name)
+        ni.notes = [pretty_midi.Note(velocity=int(n.velocity), pitch=int(n.pitch),
+                                     start=float(n.start), end=float(n.end)) for n in src.notes]
+        out.instruments.append(ni)
+
+    if sum(len(i.notes) for i in out.instruments) == 0:
+        raise ValueError("That edit would leave the block empty.")
+
+    if save_as and save_as.strip():
+        target = _unique_block_name(block_store, save_as.strip())
+    else:
+        target = name
+    block_store.save_block(
+        target, out, tempo=float(meta.get("tempo") or 120.0),
+        time_signature=(int(ts[0]), int(ts[1])), bars=int(meta.get("bars") or 0),
+        overwrite=True, spec=spec, tags=meta.get("tags"),
+    )
+    return target
+
+
+def _unique_block_name(block_store, base: str) -> str:
     existing = {b.get("name") for b in block_store.list_blocks()}
-    name, n = base_name, 1
+    name, n = base, 1
     while name in existing:
         n += 1
-        name = f"{base_name} {n}"
+        name = f"{base} {n}"
+    return name
+
+
+def _save_unique_block(block_store, base_name: str, pm, *,
+                       tempo: float, time_signature, bars: int,
+                       spec: dict | None = None) -> str:
+    name = _unique_block_name(block_store, base_name)
     block_store.save_block(name, pm, tempo=float(tempo),
                            time_signature=time_signature, bars=int(bars),
-                           overwrite=False)
+                           overwrite=False, spec=spec)
     return name

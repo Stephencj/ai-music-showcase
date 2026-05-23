@@ -225,7 +225,9 @@ def save_block(name: str,
                bars: int,
                overwrite: bool = False,
                write_wav: bool = True,
-               wav_sample_rate: int = _DEFAULT_PREVIEW_SR) -> Path:
+               wav_sample_rate: int = _DEFAULT_PREVIEW_SR,
+               spec: Optional[dict] = None,
+               tags: Optional[list[str]] = None) -> Path:
     """Persist a block. Writes .mid + .yaml (and .wav unless ``write_wav=False``).
 
     Returns the .yaml path. Raises FileExistsError on collision unless
@@ -259,6 +261,10 @@ def save_block(name: str,
         "instruments": _instrument_summary(pm),
         "n_notes": _total_notes(pm),
     }
+    if spec is not None:
+        metadata["spec"] = spec       # generation provenance (regenerate / edit-in-generate)
+    if tags:
+        metadata["tags"] = [str(t) for t in tags]
     with open(yaml_path, "w") as f:
         yaml.safe_dump(metadata, f, sort_keys=False, default_flow_style=False)
 

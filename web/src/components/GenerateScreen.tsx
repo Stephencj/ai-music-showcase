@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import * as api from "../api";
-import type { Family, GenerateBody, Job, JobResult, Preset } from "../types";
+import type { BlockSpec, Family, GenerateBody, Job, JobResult, Preset } from "../types";
 
 const KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const SCALES = [
@@ -11,7 +11,13 @@ const SECTION_LABELS: Record<string, string> = {
   intro: "Intro", verse: "Verse", chorus: "Chorus", bridge: "Bridge", outro: "Outro",
 };
 
-export default function GenerateScreen() {
+export default function GenerateScreen({
+  initialSpec,
+  onSpecConsumed,
+}: {
+  initialSpec?: BlockSpec | null;
+  onSpecConsumed?: () => void;
+}) {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [families, setFamilies] = useState<Family[]>([]);
   const [masters, setMasters] = useState<string[]>([]);
@@ -56,6 +62,21 @@ export default function GenerateScreen() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Prefill the form when a block is opened via "Edit in Generate".
+  useEffect(() => {
+    if (!initialSpec || !presets.length) return;
+    const p = presets.find((x) => x.id === initialSpec.genre);
+    if (p) applyPreset(p);
+    if (initialSpec.key) setKey(initialSpec.key);
+    if (initialSpec.scale) setScale(initialSpec.scale);
+    if (initialSpec.tempo) setTempo(initialSpec.tempo);
+    if (initialSpec.seed != null) setSeed(String(initialSpec.seed));
+    if (initialSpec.instruments?.length) setInstruments(new Set(initialSpec.instruments));
+    if (initialSpec.sections?.length) setSections(new Set(initialSpec.sections.map((s) => s.role)));
+    onSpecConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSpec, presets]);
 
   function defaultTrio(fams: Family[]): string[] {
     const ids = fams.flatMap((f) => f.instruments).filter((i) => i.default).map((i) => i.id);

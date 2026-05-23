@@ -94,6 +94,10 @@ export const renameBlock = (name: string, new_name: string) =>
   jpost<{ name: string }>(`/api/blocks/${encodeURIComponent(name)}/rename`, { new_name });
 export const setTags = (name: string, tags: string[]) =>
   jpost<{ tags: string[] }>(`/api/blocks/${encodeURIComponent(name)}/tags`, { tags });
+export const editBlock = (
+  name: string,
+  body: { mute: string[]; regenerate: string[]; save_as?: string | null }
+) => jpost<{ name: string }>(`/api/blocks/${encodeURIComponent(name)}/edit`, body);
 
 /** Poll a job to completion, reporting each status to `onProgress`. */
 export async function pollJob(

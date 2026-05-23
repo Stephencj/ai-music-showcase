@@ -70,6 +70,19 @@ export interface BlockInstrument {
   n_notes: number;
 }
 
+export interface BlockSpec {
+  genre: string;
+  key?: string;
+  scale?: string;
+  tempo?: number;
+  time_signature?: number[];
+  seed?: number;
+  swing?: number | null;
+  instruments?: string[];
+  sections?: { start_bar: number; end_bar: number; label: string; role: string }[];
+  section?: { start_bar: number; end_bar: number } | null;
+}
+
 export interface Block {
   name: string;
   bars: number | null;
@@ -80,6 +93,7 @@ export interface Block {
   instruments?: BlockInstrument[];
   created?: string | null;
   tags?: string[];
+  spec?: BlockSpec | null;
   has_preview: boolean;
   audio_url: string;
 }

@@ -255,6 +255,26 @@ audio { width: 100%; margin: 8px 0 12px; }
 .bulk-bar span { flex: 1; font-size: 13px; color: var(--muted); }
 .btn.sm.danger { color: var(--danger); background: var(--card-2); border: 1px solid rgba(248,113,113,0.4); }
 
+/* Channel editor (mute / regenerate instruments) */
+.track-edit {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px; border-radius: 10px; background: var(--bg);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.te-head { display: flex; justify-content: space-between; align-items: center; }
+.te-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.te-note { font-size: 11px; color: var(--muted); font-style: italic; }
+.te-ineditor { background: none; border: none; color: var(--accent-2); font-size: 12px; font-weight: 600; cursor: pointer; padding: 0; }
+.te-row { display: flex; align-items: center; gap: 6px; }
+.te-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.te-btn {
+  flex: 0 0 auto; font-size: 12px; padding: 5px 9px; border-radius: 8px; cursor: pointer;
+  background: var(--bg-2); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--muted);
+}
+.te-btn.on { color: white; border-color: transparent; background: linear-gradient(135deg, var(--violet), var(--blue)); }
+.te-btn:disabled { opacity: 0.4; cursor: default; }
+.te-actions { display: flex; gap: 8px; margin-top: 4px; }
+
 /* Tag editor in expanded card */
 .tag-edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .tag-chip {

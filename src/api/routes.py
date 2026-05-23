@@ -26,6 +26,7 @@ from src.daw_integration.generic.styles import STYLES
 from . import arrangement, service
 from .jobs import registry
 from .schemas import (
+    EditBlockRequest,
     GenerateRequest,
     RenameRequest,
     SaveBlockFromJobRequest,
@@ -117,6 +118,7 @@ def job_status(job_id: str) -> dict:
         res = dict(job.result)
         paths = res.pop("_paths", {})
         res.pop("_split", None)
+        res.pop("_spec", None)
         base = f"/api/jobs/{job.id}"
         res["urls"] = {
             "midi": f"{base}/midi" if paths.get("midi") else None,
@@ -185,6 +187,7 @@ def list_blocks() -> list[dict]:
             "instruments": b.get("instruments"),
             "created": b.get("created"),
             "tags": b.get("tags", []),
+            "spec": b.get("spec"),
             "has_preview": bool(b.get("_preview_path") or b.get("_wav_path")),
             "audio_url": f"/api/blocks/{quote(name)}/audio",
         })
@@ -296,6 +299,21 @@ def set_block_tags(name: str, req: TagsRequest) -> dict:
         raise HTTPException(404, str(exc))
 
 
+@router.post("/blocks/{name}/edit")
+def edit_block(name: str, req: EditBlockRequest) -> dict:
+    """Mute and/or regenerate specific instrument tracks of a block, saving
+    over it (default) or as a new block (``save_as``)."""
+    try:
+        new_name = service.edit_block(
+            name, mute=req.mute, regenerate=req.regenerate, save_as=req.save_as,
+        )
+        return {"name": new_name}
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
 @router.post("/blocks/from-job")
 def save_block_from_job(req: SaveBlockFromJobRequest) -> dict:
     job = registry.get(req.job_id)
@@ -308,12 +326,13 @@ def save_block_from_job(req: SaveBlockFromJobRequest) -> dict:
     pm = pretty_midi.PrettyMIDI(str(midi))
     res = job.result
     ts = res.get("time_signature", [4, 4])
+    spec = res.get("_spec")
     name = service._save_unique_block(
         block_store, req.name.strip(), pm,
         tempo=res.get("tempo", 120.0),
         time_signature=(int(ts[0]), int(ts[1])),
-        bars=res.get("bars", 0),
-    ) if not req.overwrite else _overwrite_block(req.name.strip(), pm, res, ts)
+        bars=res.get("bars", 0), spec=spec,
+    ) if not req.overwrite else _overwrite_block(req.name.strip(), pm, res, ts, spec)
     return {"name": name}
 
 
@@ -338,6 +357,7 @@ def split_job_into_blocks(job_id: str, req: SplitRequest | None = None) -> dict:
     names = block_concat.split_into_section_blocks(
         pm, ctx["sections"], tempo=ctx["tempo"],
         time_signature=(int(ts[0]), int(ts[1])), tag=tag,
+        spec_base=res.get("_spec"),
     )
     return {"section_blocks": names, "tag": tag}
 
@@ -411,10 +431,10 @@ def _serve(path: Path, media_type: str, *, download: bool = False) -> FileRespon
     return FileResponse(str(path), media_type=media_type, headers=headers)
 
 
-def _overwrite_block(name: str, pm, res: dict, ts) -> str:
+def _overwrite_block(name: str, pm, res: dict, ts, spec: dict | None = None) -> str:
     block_store.save_block(
         name, pm, tempo=res.get("tempo", 120.0),
         time_signature=(int(ts[0]), int(ts[1])),
-        bars=res.get("bars", 0), overwrite=True,
+        bars=res.get("bars", 0), overwrite=True, spec=spec,
     )
     return name
