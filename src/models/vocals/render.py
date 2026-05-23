@@ -27,6 +27,7 @@ def render_lead_vocal(midi, lyrics, *, sr: int = 44100, voice: str = "",
     notes = extract_lead_notes(midi)
     if not notes:
         return np.zeros(0, dtype=np.float32), sr
+    notes = _transpose_to_singable(notes)
     text = lyrics if isinstance(lyrics, str) else " ".join(lyrics)
     if not text.strip():
         return np.zeros(0, dtype=np.float32), sr
@@ -51,6 +52,24 @@ def render_lead_vocal(midi, lyrics, *, sr: int = 44100, voice: str = "",
     if fx:
         out = _apply_fx(out, sr)
     return out.astype(np.float32), sr
+
+
+def _transpose_to_singable(notes, lo: int = 53, hi: int = 67):
+    """Shift the whole melody by octaves so its median lands in a natural
+    sung register (~G3–G4). Re-pitching a speaking voice two octaves up is
+    where the 'creepy/screechy' comes from; this keeps the contour but in
+    a comfortable range. ``lo``/``hi`` bound the median (MIDI)."""
+    if not notes:
+        return notes
+    median = float(np.median([p for p, _, _ in notes]))
+    shift = 0
+    while median + shift > hi:
+        shift -= 12
+    while median + shift < lo:
+        shift += 12
+    if shift == 0:
+        return notes
+    return [(p + shift, s, e) for (p, s, e) in notes]
 
 
 def _apply_fx(audio: np.ndarray, sr: int) -> np.ndarray:

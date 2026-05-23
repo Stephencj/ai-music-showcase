@@ -77,17 +77,21 @@ def phrase_syllable_counts(notes: list[tuple[int, float, float]], gap: float = 0
 def align_words_to_notes(text: str, notes: list[tuple[int, float, float]]) -> list[dict]:
     """Map words to consecutive notes by syllable count.
 
-    Returns segments ``{text, notes: [(midi, dur_seconds)], start}``:
-    one per word (sung across its syllable-notes) plus "ah" melisma
-    segments for any notes left after the words run out.
+    Returns segments ``{text, notes: [(midi, dur_seconds)], start}`` — one
+    per word, sung across the notes its syllables occupy. If the lyric runs
+    out before the notes do, it loops from the top (so the line keeps
+    singing real words rather than collapsing to "ah"). When the lyric is
+    matched to the melody's syllable count (the UI's job), there's no loop.
     """
     words = re.findall(r"[A-Za-z']+", text or "")
+    if not words:
+        return []
     segs: list[dict] = []
     i = 0
+    wi = 0
     n = len(notes)
-    for w in words:
-        if i >= n:
-            break
+    while i < n:
+        w = words[wi % len(words)]
         syl = count_syllables(w)
         grp = notes[i:i + syl]
         if not grp:
@@ -97,9 +101,6 @@ def align_words_to_notes(text: str, notes: list[tuple[int, float, float]]) -> li
             "notes": [(p, max(0.05, e - s)) for (p, s, e) in grp],
             "start": grp[0][1],
         })
-        i += syl
-    while i < n:
-        p, s, e = notes[i]
-        segs.append({"text": "ah", "notes": [(p, max(0.05, e - s))], "start": s})
-        i += 1
+        i += len(grp)
+        wi += 1
     return segs
