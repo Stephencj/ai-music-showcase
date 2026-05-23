@@ -28,12 +28,15 @@ from .jobs import registry
 from .schemas import (
     EditBlockRequest,
     GenerateRequest,
+    LyricsDraftRequest,
     RenameRequest,
     SaveBlockFromJobRequest,
+    SetLyricsRequest,
     SongRenderRequest,
     SongSaveRequest,
     SplitRequest,
     TagsRequest,
+    VocalsRequest,
 )
 
 logger = logging.getLogger("ai_music_studio.api.routes")
@@ -125,6 +128,7 @@ def job_status(job_id: str) -> dict:
             "audio": f"{base}/audio" if (paths.get("audio_mp3") or paths.get("audio_wav")) else None,
             "audio_hifi": f"{base}/audio.wav" if paths.get("audio_wav") else None,
             "pdf": f"{base}/pdf" if paths.get("pdf") else None,
+            "vocal": f"{base}/vocal" if paths.get("vocal_mp3") else None,
         }
         payload["result"] = res
     return payload
@@ -188,6 +192,7 @@ def list_blocks() -> list[dict]:
             "created": b.get("created"),
             "tags": b.get("tags", []),
             "spec": b.get("spec"),
+            "lyrics": b.get("lyrics", ""),
             "has_preview": bool(b.get("_preview_path") or b.get("_wav_path")),
             "audio_url": f"/api/blocks/{quote(name)}/audio",
         })
@@ -312,6 +317,56 @@ def edit_block(name: str, req: EditBlockRequest) -> dict:
         raise HTTPException(404, str(exc))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+
+
+@router.get("/voices")
+def list_voices() -> dict:
+    return {"voices": service.list_voices(), "engines": ["rough"]}
+
+
+@router.get("/blocks/{name}/melody")
+def block_melody(name: str) -> dict:
+    try:
+        return service.melody_info(name)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, f"No melody: {exc}")
+
+
+@router.post("/blocks/{name}/lyrics/draft")
+def draft_block_lyrics(name: str, req: LyricsDraftRequest) -> dict:
+    try:
+        return {"lyrics": service.draft_lyrics(name, req.theme)}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"Lyric draft failed: {exc}")
+
+
+@router.post("/blocks/{name}/lyrics")
+def set_block_lyrics(name: str, req: SetLyricsRequest) -> dict:
+    try:
+        block_store.set_lyrics(name, req.lyrics)
+        return {"ok": True}
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.post("/blocks/{name}/vocals")
+def render_block_vocals(name: str, req: VocalsRequest) -> dict:
+    if not block_store._midi_path(name).exists():
+        raise HTTPException(404, "Block not found")
+    if not req.lyrics.strip():
+        raise HTTPException(400, "Lyrics are empty")
+    job = registry.create()
+    registry.run(job, lambda progress: service.run_block_vocals(
+        name, req.lyrics, req.voice, req.engine, progress, job.id))
+    return {"job_id": job.id}
+
+
+@router.get("/jobs/{job_id}/vocal")
+def job_vocal_stem(job_id: str) -> FileResponse:
+    p = _job_path(job_id, "vocal_mp3")
+    return _serve(p, "audio/mpeg")
 
 
 @router.post("/blocks/from-job")

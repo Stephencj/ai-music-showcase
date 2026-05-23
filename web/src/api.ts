@@ -3,6 +3,7 @@ import type {
   Family,
   GenerateBody,
   Job,
+  JobUrls,
   Preset,
   SongRenderResult,
   TimelineEntry,
@@ -87,6 +88,38 @@ export const mediaUrl = (path: string) => url(path);
 /** Download URL for a block artifact (midi/wav/pdf/stems). */
 export const blockFileUrl = (name: string, kind: "midi" | "wav" | "pdf" | "stems") =>
   url(`/api/blocks/${encodeURIComponent(name)}/${kind}`);
+
+// --- Vocals ---
+export const getVoices = () => jget<{ voices: string[]; engines: string[] }>("/api/voices");
+export const getMelodyInfo = (name: string) =>
+  jget<{ total_notes: number; phrase_syllables: number[]; has_lead: boolean }>(
+    `/api/blocks/${encodeURIComponent(name)}/melody`);
+export const draftLyrics = (name: string, theme: string) =>
+  jpost<{ lyrics: string }>(`/api/blocks/${encodeURIComponent(name)}/lyrics/draft`, { theme });
+export const setLyrics = (name: string, lyrics: string) =>
+  jpost<{ ok: boolean }>(`/api/blocks/${encodeURIComponent(name)}/lyrics`, { lyrics });
+export const renderVocals = (name: string, body: { lyrics: string; voice: string; engine: string }) =>
+  jpost<{ job_id: string }>(`/api/blocks/${encodeURIComponent(name)}/vocals`, body);
+
+interface VocalJob {
+  status: "pending" | "running" | "done" | "error";
+  progress: number;
+  message: string;
+  error: string | null;
+  result?: { urls: JobUrls };
+}
+export async function pollVocal(
+  id: string,
+  onProgress: (progress: number, message: string) => void,
+  intervalMs = 500
+): Promise<VocalJob> {
+  for (;;) {
+    const job = await jget<VocalJob>(`/api/jobs/${id}`);
+    onProgress(job.progress, job.message);
+    if (job.status === "done" || job.status === "error") return job;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}
 
 export const getPeaks = (name: string) =>
   jget<{ peaks: number[] }>(`/api/blocks/${encodeURIComponent(name)}/peaks`).then((r) => r.peaks);

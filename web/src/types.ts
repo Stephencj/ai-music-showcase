@@ -33,6 +33,7 @@ export interface JobUrls {
   audio: string | null;
   audio_hifi: string | null;
   pdf: string | null;
+  vocal?: string | null;
 }
 
 export interface SectionInfo {
@@ -95,6 +96,7 @@ export interface Block {
   created?: string | null;
   tags?: string[];
   spec?: BlockSpec | null;
+  lyrics?: string;
   has_preview: boolean;
   audio_url: string;
 }

@@ -436,6 +436,18 @@ def set_tags(name: str, tags: list[str]) -> list[str]:
     return clean
 
 
+def set_lyrics(name: str, lyrics: str) -> None:
+    """Store lyrics on a block (they travel with it; vocals re-render on demand)."""
+    yaml_path = _yaml_path(name)
+    if not yaml_path.exists():
+        raise FileNotFoundError(f"Block not found: {name}")
+    with open(yaml_path, "r") as f:
+        meta = yaml.safe_load(f) or {}
+    meta["lyrics"] = str(lyrics)
+    with open(yaml_path, "w") as f:
+        yaml.safe_dump(meta, f, sort_keys=False, default_flow_style=False)
+
+
 def set_spec(name: str, spec: dict) -> None:
     """Attach/replace a block's generation spec (provenance)."""
     yaml_path = _yaml_path(name)

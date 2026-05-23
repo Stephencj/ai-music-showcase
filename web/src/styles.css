@@ -275,6 +275,22 @@ audio { width: 100%; margin: 8px 0 12px; }
 .te-btn:disabled { opacity: 0.4; cursor: default; }
 .te-actions { display: flex; gap: 8px; margin-top: 4px; }
 
+/* Vocals panel */
+.vocals {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px; border-radius: 10px; background: var(--bg);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+}
+.lyrics-area {
+  width: 100%; resize: vertical; font-size: 14px; line-height: 1.4;
+  padding: 8px 10px; border-radius: 10px; background: var(--bg-2);
+  border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text);
+}
+.voc-row { display: flex; gap: 8px; align-items: center; }
+.voc-row > input, .voc-row > select { flex: 1; min-width: 0; }
+.voc-theme { padding: 9px 10px; }
+.vocals audio { width: 100%; }
+
 /* Tag editor in expanded card */
 .tag-edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .tag-chip {

@@ -63,3 +63,17 @@ class EditBlockRequest(BaseModel):
     mute: list[str] = Field(default_factory=list)          # track names to drop
     regenerate: list[str] = Field(default_factory=list)    # track names to re-roll
     save_as: Optional[str] = None                          # None → overwrite in place
+
+
+class LyricsDraftRequest(BaseModel):
+    theme: Optional[str] = None
+
+
+class SetLyricsRequest(BaseModel):
+    lyrics: str = ""
+
+
+class VocalsRequest(BaseModel):
+    lyrics: str
+    voice: str = ""               # "" = system default say voice
+    engine: str = "rough"         # "rough" now; "studio" when available

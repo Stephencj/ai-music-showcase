@@ -347,6 +347,145 @@ def _unique_block_name(block_store, base: str) -> str:
     return name
 
 
+# ---------------------------------------------------------------------------
+# Vocals
+# ---------------------------------------------------------------------------
+def melody_info(name: str) -> dict:
+    """Syllable-helper data for a block: notes per phrase + total."""
+    import pretty_midi
+    from src.daw_integration.generic import blocks as block_store
+    from src.models.vocals.lyrics import extract_lead_notes, phrase_syllable_counts
+    pm = pretty_midi.PrettyMIDI(str(block_store._midi_path(name)))
+    notes = extract_lead_notes(pm)
+    return {
+        "total_notes": len(notes),
+        "phrase_syllables": phrase_syllable_counts(notes),
+        "has_lead": bool(notes),
+    }
+
+
+def list_voices() -> list[str]:
+    """Clear English macOS ``say`` voices (filters out the novelty ones)."""
+    import subprocess
+    try:
+        out = subprocess.run(["say", "-v", "?"], capture_output=True, text=True, check=True).stdout
+    except Exception:  # noqa: BLE001
+        return []
+    novelty = {"bad news", "bahh", "bells", "boing", "bubbles", "cellos", "good news",
+               "jester", "organ", "superstar", "trinoids", "whisper", "wobble", "zarvox"}
+    voices = []
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 2 or "en_" not in line:
+            continue
+        # voice name is everything before the locale token
+        name = line[: line.index("en_")].strip().split("(")[0].strip()
+        if name and name.lower() not in novelty and name not in voices:
+            voices.append(name)
+    return voices[:24]
+
+
+def draft_lyrics(name: str, theme: str | None) -> str:
+    """Draft lyrics fitted to the block melody's syllable counts via the
+    OpenAI key in the env. Raises ValueError if no key is configured."""
+    import os
+    import requests
+    key = os.environ.get("OPENAI_API_KEY")
+    if not key:
+        raise ValueError("No OPENAI_API_KEY set — type lyrics manually, or set the key for AI drafts.")
+    counts = melody_info(name)["phrase_syllables"] or [8, 8, 8, 8]
+    spec = ", ".join(str(c) for c in counts)
+    prompt = (
+        f"Write original, singable song lyrics{(' about ' + theme) if theme else ''}. "
+        f"Produce {len(counts)} short lines, one per musical phrase, with approximately "
+        f"these syllable counts per line (in order): {spec}. Keep words simple and natural "
+        f"to sing. Return ONLY the lyrics — one line per phrase, no title, no labels, no quotes."
+    )
+    resp = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={"Authorization": f"Bearer {key}"},
+        json={
+            "model": os.environ.get("AI_MUSIC_LYRICS_MODEL", "gpt-4o-mini"),
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.9, "max_tokens": 400,
+        },
+        timeout=45,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"].strip()
+
+
+def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
+                     progress, job_id: str) -> dict:
+    """Render a sung vocal over a block and mix it with the block's
+    instrumental. Reuses the block's existing HQ WAV when present."""
+    import numpy as np
+    import soundfile as sf
+    from src.daw_integration.generic import blocks as block_store
+    from src.models.vocals import RoughEngine, render_lead_vocal
+
+    pm, _meta = block_store.load_block(name)
+    progress("Synthesizing vocal…", 0.25)
+    engine = RoughEngine(voice or "")  # engine_name reserved for "studio" later
+    voc, sr = render_lead_vocal(pm, lyrics, voice=voice or "", engine=engine)
+
+    job_dir = API_OUT / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    _prune_old_job_dirs()
+
+    progress("Mixing with the instrumental…", 0.7)
+    wav_path = block_store._wav_path(name)
+    if wav_path.exists():
+        inst, isr = sf.read(str(wav_path), dtype="float32")
+    else:
+        from src.audio_processing.render.pipeline import render_to_audio
+        r = render_to_audio(midi=block_store._midi_path(name), output_dir=job_dir / "r", with_stems=False)
+        inst, isr = sf.read(str(r.mix_path), dtype="float32")
+    if voc.size and sr != isr:
+        import librosa
+        voc = librosa.resample(voc, orig_sr=sr, target_sr=isr)
+    if inst.ndim == 1:
+        inst = np.stack([inst, inst], axis=1)
+    vstereo = np.stack([voc, voc], axis=1) if voc.size else np.zeros((1, 2), dtype=np.float32)
+    n = max(len(inst), len(vstereo))
+
+    def _pad(a):
+        o = np.zeros((n, 2), dtype=np.float32)
+        o[: len(a)] = a
+        return o
+
+    mix = _pad(inst) * 0.85 + _pad(vstereo) * 0.95
+    peak = float(np.max(np.abs(mix))) if mix.size else 0.0
+    if peak > 0:
+        mix = mix * (0.97 / peak)
+    mix_wav = job_dir / "vocal_mix.wav"
+    sf.write(str(mix_wav), mix, isr)
+    mix_mp3 = job_dir / "vocal_mix.mp3"
+    served_mix = str(mix_mp3) if block_store.write_preview_mp3(mix_wav, mix_mp3) else str(mix_wav)
+
+    served_stem = None
+    if voc.size:
+        stem_wav = job_dir / "vocal.wav"
+        sf.write(str(stem_wav), voc, isr)
+        stem_mp3 = job_dir / "vocal.mp3"
+        served_stem = str(stem_mp3) if block_store.write_preview_mp3(stem_wav, stem_mp3) else str(stem_wav)
+
+    try:
+        block_store.set_lyrics(name, lyrics)
+    except Exception:  # noqa: BLE001
+        pass
+
+    progress("Done.", 1.0)
+    return {
+        "block": name, "engine": engine_name, "voice": voice,
+        "_paths": {
+            "audio_mp3": served_mix, "audio_wav": str(mix_wav),
+            "vocal_mp3": served_stem,
+            "midi": str(block_store._midi_path(name)),
+        },
+    }
+
+
 def _save_unique_block(block_store, base_name: str, pm, *,
                        tempo: float, time_signature, bars: int,
                        spec: dict | None = None) -> str:

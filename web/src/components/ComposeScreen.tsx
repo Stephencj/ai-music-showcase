@@ -90,8 +90,11 @@ export default function ComposeScreen({
   const [fTags, setFTags] = useState<Set<string>>(new Set());
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [voices, setVoices] = useState<string[]>([]);
 
   const counter = useRef(0);
+
+  useEffect(() => { api.getVoices().then((v) => setVoices(v.voices)).catch(() => {}); }, []);
 
   useEffect(() => { ls.set("compose.sortBy", sortBy); }, [sortBy]);
   useEffect(() => { ls.set("compose.sortDir", sortDir); }, [sortDir]);
@@ -407,6 +410,7 @@ export default function ComposeScreen({
                     onTags={onTags}
                     onEdit={onEditBlock}
                     onEditInGenerate={onEditInGenerate}
+                    voices={voices}
                   />
                 ))}
               </div>
@@ -430,7 +434,7 @@ export default function ComposeScreen({
 
 function BlockCard({
   block, selectMode, selected, onToggleSel, isFav, onToggleFav,
-  onAdd, onDelete, onRename, onTags, onEdit, onEditInGenerate,
+  onAdd, onDelete, onRename, onTags, onEdit, onEditInGenerate, voices,
 }: {
   block: Block;
   selectMode: boolean;
@@ -444,6 +448,7 @@ function BlockCard({
   onTags: (name: string, tags: string[]) => void;
   onEdit: (name: string, body: { mute: string[]; regenerate: string[]; save_as?: string | null }) => Promise<string>;
   onEditInGenerate: (spec: BlockSpec) => void;
+  voices: string[];
 }) {
   const [open, setOpen] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -453,6 +458,43 @@ function BlockCard({
   const [regenSet, setRegenSet] = useState<Set<string>>(new Set());
   const [editBusy, setEditBusy] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Vocals panel state
+  const [lyrics, setLyrics] = useState(block.lyrics ?? "");
+  const [theme, setTheme] = useState("");
+  const [voice, setVoice] = useState("");
+  const [drafting, setDrafting] = useState(false);
+  const [vocBusy, setVocBusy] = useState(false);
+  const [vocProg, setVocProg] = useState(0);
+  const [vocMsg, setVocMsg] = useState("");
+  const [vocUrls, setVocUrls] = useState<{ audio: string | null; vocal?: string | null } | null>(null);
+  const [noteCount, setNoteCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (open && noteCount === null) {
+      api.getMelodyInfo(block.name).then((m) => setNoteCount(m.total_notes)).catch(() => setNoteCount(0));
+    }
+    if (open && !voice && voices.length) setVoice(voices.includes("Samantha") ? "Samantha" : voices[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, voices]);
+
+  async function onDraft() {
+    setDrafting(true); setVocMsg("");
+    try { const r = await api.draftLyrics(block.name, theme); setLyrics(r.lyrics); }
+    catch (e) { setVocMsg(String(e)); }
+    finally { setDrafting(false); }
+  }
+  async function onSing() {
+    if (!lyrics.trim()) return;
+    setVocBusy(true); setVocUrls(null); setVocProg(0); setVocMsg("Starting…");
+    try {
+      const { job_id } = await api.renderVocals(block.name, { lyrics, voice, engine: "rough" });
+      const job = await api.pollVocal(job_id, (p, m) => { setVocProg(p); setVocMsg(m); });
+      if (job.status === "error") setVocMsg(job.error || "Vocal render failed");
+      else if (job.result) setVocUrls({ audio: job.result.urls.audio, vocal: job.result.urls.vocal });
+    } catch (e) { setVocMsg(String(e)); }
+    finally { setVocBusy(false); }
+  }
 
   const dirty = muteSet.size > 0 || regenSet.size > 0;
   const toggleIn = (s: Set<string>, v: string, setter: (x: Set<string>) => void) => {
@@ -574,6 +616,41 @@ function BlockCard({
                 Save as new
               </button>
             </div>
+          </div>
+
+          {/* Vocals */}
+          <div className="vocals">
+            <div className="te-head">
+              <span className="te-title">Vocals</span>
+              {noteCount != null && noteCount > 0 && <span className="te-note">~{noteCount} notes to sing</span>}
+            </div>
+            <textarea className="lyrics-area" rows={3} value={lyrics}
+              onChange={(e) => setLyrics(e.target.value)} placeholder="Lyrics… (or draft with AI)" />
+            <div className="voc-row">
+              <input className="voc-theme" type="text" placeholder="theme (e.g. summer night)"
+                value={theme} onChange={(e) => setTheme(e.target.value)} />
+              <button className="btn ghost sm" disabled={drafting} onClick={onDraft}>{drafting ? "…" : "✨ Draft"}</button>
+            </div>
+            <div className="voc-row">
+              <select value={voice} onChange={(e) => setVoice(e.target.value)}>
+                {voices.length === 0 && <option value="">default</option>}
+                {voices.map((v) => <option key={v} value={v}>{v}</option>)}
+              </select>
+              <button className="btn secondary sm" disabled={vocBusy || !lyrics.trim()} onClick={onSing}>
+                {vocBusy ? "Singing…" : "🎤 Sing it"}
+              </button>
+            </div>
+            {vocBusy && <div className="progress"><div style={{ width: `${Math.round(vocProg * 100)}%` }} /></div>}
+            {vocMsg && !vocUrls && <div className={vocMsg.startsWith("Error") || vocMsg.includes("OPENAI") ? "error" : "progress-msg"}>{vocMsg}</div>}
+            {vocUrls?.audio && (
+              <>
+                <audio controls src={api.mediaUrl(vocUrls.audio)} />
+                <div className="links">
+                  <a href={api.mediaUrl(vocUrls.audio)} download>↓ Mix</a>
+                  {vocUrls.vocal && <a href={api.mediaUrl(vocUrls.vocal)} download>↓ Vocal stem</a>}
+                </div>
+              </>
+            )}
           </div>
 
           <div className="tag-edit">
