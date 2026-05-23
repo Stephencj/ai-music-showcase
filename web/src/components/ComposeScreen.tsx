@@ -167,7 +167,7 @@ export default function ComposeScreen() {
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2 style={{ margin: 0 }}>Timeline</h2>
-          <span className="bc-meta">{timeline.length} parts · {totalBars} bars</span>
+          <span className="meta">{timeline.length} parts · {totalBars} bars</span>
         </div>
         {timeline.length === 0 ? (
           <div className="meta" style={{ marginTop: 10 }}>
@@ -227,7 +227,7 @@ export default function ComposeScreen() {
             No blocks yet. Generate a song and tap <strong>Save as Block</strong> (or Split into section blocks).
           </div>
         ) : (
-          <div className="block-grid">
+          <div className="block-list">
             {blocks.map((b) => (
               <BlockCard key={b.name} block={b} onAdd={add} onDelete={onDelete} />
             ))}
@@ -246,6 +246,9 @@ export default function ComposeScreen() {
   );
 }
 
+// One block preview plays at a time across the whole library.
+let _currentAudio: HTMLAudioElement | null = null;
+
 function BlockCard({
   block,
   onAdd,
@@ -255,26 +258,63 @@ function BlockCard({
   onAdd: (name: string) => void;
   onDelete: (name: string) => void;
 }) {
-  const [wave, setWave] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => () => { audioRef.current?.pause(); }, []);
+
+  function togglePlay() {
+    if (!block.has_preview) return;
+    let a = audioRef.current;
+    if (!a) {
+      a = new Audio(api.mediaUrl(block.audio_url));
+      a.addEventListener("play", () => setPlaying(true));
+      a.addEventListener("pause", () => setPlaying(false));
+      a.addEventListener("ended", () => setPlaying(false));
+      audioRef.current = a;
+    }
+    if (a.paused) {
+      if (_currentAudio && _currentAudio !== a) _currentAudio.pause();
+      _currentAudio = a;
+      void a.play();
+    } else {
+      a.pause();
+    }
+  }
+
+  const ts = block.time_signature;
   return (
-    <div className="block-card">
-      <div className="bc-head">
-        <strong>{block.name}</strong>
-        <span className="bc-meta">
-          {block.bars ?? "?"}b · {block.tempo ?? "?"}bpm
-        </span>
-      </div>
-      {wave ? (
-        <Waveform url={api.mediaUrl(block.audio_url)} autoplay />
-      ) : (
-        <button className="btn ghost sm" onClick={() => setWave(true)} disabled={!block.has_preview}>
-          ▶ Preview
+    <div className={"block-card" + (open ? " open" : "")}>
+      <div className="bc-row">
+        <button
+          className="bc-play"
+          onClick={togglePlay}
+          disabled={!block.has_preview}
+          aria-label={playing ? "Pause" : "Play"}
+        >
+          {playing ? "⏸" : "▶"}
         </button>
-      )}
-      <div className="bc-actions">
-        <button className="btn secondary sm" onClick={() => onAdd(block.name)}>+ Timeline</button>
-        <button className="btn ghost sm danger" onClick={() => onDelete(block.name)} aria-label="Delete">🗑</button>
+        <span className="bc-name" onClick={() => setOpen((o) => !o)}>{block.name}</span>
+        <button className="bc-gear" onClick={() => setOpen((o) => !o)} aria-label="Details">⚙</button>
       </div>
+      {open && (
+        <div className="bc-detail">
+          <Waveform url={api.mediaUrl(block.audio_url)} height={56} />
+          <div className="bc-meta-grid">
+            <span>{block.bars ?? "?"} bars</span>
+            <span>{block.tempo ?? "?"} BPM</span>
+            <span>{ts ? `${ts[0]}/${ts[1]}` : "4/4"}</span>
+            <span>{block.instruments?.length ?? 0} instr.</span>
+            <span>{block.n_notes ?? 0} notes</span>
+            {block.duration_seconds != null && <span>{block.duration_seconds.toFixed(1)}s</span>}
+          </div>
+          <div className="bc-actions">
+            <button className="btn secondary sm" onClick={() => onAdd(block.name)}>+ Timeline</button>
+            <button className="btn ghost sm danger" onClick={() => onDelete(block.name)} aria-label="Delete">🗑 Delete</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

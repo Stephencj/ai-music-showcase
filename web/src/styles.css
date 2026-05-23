@@ -23,7 +23,12 @@ body {
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;            /* nothing should scroll the page sideways */
 }
+
+/* Grid/flex children default to min-width:auto and refuse to shrink below
+   their content — the usual cause of horizontal overflow on phones. */
+.card, .block-card, .tl-item, .row > * { min-width: 0; }
 
 .app {
   max-width: 720px;
@@ -171,19 +176,42 @@ audio { width: 100%; margin: 8px 0 12px; }
 .btn.sm { width: auto; padding: 9px 12px; font-size: 14px; font-weight: 600; border-radius: 10px; }
 .btn.sm.danger { color: var(--danger); }
 
-/* Block library */
-.block-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+/* Block library — sleek collapsible rows (play + gear), expand for detail */
+.block-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .block-card {
   background: var(--bg-2);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 12px;
-  padding: 10px;
-  display: flex; flex-direction: column; gap: 8px;
+  overflow: hidden;
 }
-.bc-head { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.bc-head strong { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bc-meta { font-size: 11px; color: var(--muted); }
-.bc-actions { display: flex; gap: 6px; align-items: center; }
+.block-card.open { border-color: rgba(139, 92, 246, 0.5); }
+.bc-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; min-width: 0; }
+.bc-play {
+  flex: 0 0 auto; width: 32px; height: 32px; border-radius: 50%; border: none;
+  background: linear-gradient(135deg, var(--violet), var(--blue));
+  color: white; font-size: 12px; cursor: pointer;
+}
+.bc-play:disabled { opacity: 0.45; }
+.bc-name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.bc-gear {
+  flex: 0 0 auto; background: none; border: none; color: var(--muted);
+  font-size: 17px; cursor: pointer; padding: 4px 6px; line-height: 1;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.block-card.open .bc-gear { color: var(--accent-2); transform: rotate(45deg); }
+.bc-detail {
+  padding: 2px 10px 12px; display: flex; flex-direction: column; gap: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.bc-meta-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.bc-meta-grid span {
+  font-size: 11px; color: var(--muted); background: var(--bg);
+  border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 4px 8px;
+}
+.bc-actions { display: flex; gap: 8px; align-items: center; }
 .bc-actions .btn.sm:first-child { flex: 1; }
 
 /* Waveform */
