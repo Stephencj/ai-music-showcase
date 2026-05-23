@@ -464,15 +464,6 @@ function BlockCard({
   return (
     <div ref={drag.setNodeRef} className={"block-card" + (open ? " open" : "") + (drag.isDragging ? " dragging" : "")}>
       <div className="bc-row">
-        {selectMode ? (
-          <label className="bc-check">
-            <input type="checkbox" checked={selected} onChange={() => onToggleSel(block.name)} />
-          </label>
-        ) : (
-          <button className="bc-play" onClick={togglePlay} disabled={!block.has_preview} aria-label={playing ? "Pause" : "Play"}>
-            {playing ? "⏸" : "▶"}
-          </button>
-        )}
         <span
           className="bc-name"
           {...(selectMode ? {} : drag.listeners)}
@@ -481,18 +472,27 @@ function BlockCard({
         >
           {block.name}
         </span>
-        {!selectMode && (
-          <>
-            <button className={"bc-star" + (isFav ? " on" : "")} onClick={() => onToggleFav(block.name)} aria-label="Favorite">
-              {isFav ? "★" : "☆"}
-            </button>
-            <button className="bc-add" onClick={() => onAdd(block.name)} aria-label="Add to timeline">＋</button>
-            <button className="bc-gear" onClick={() => setOpen((o) => !o)} aria-label="Details">⚙</button>
-          </>
+        {selectMode ? (
+          <label className="bc-check">
+            <input type="checkbox" checked={selected} onChange={() => onToggleSel(block.name)} />
+          </label>
+        ) : (
+          <button className={"bc-star" + (isFav ? " on" : "")} onClick={() => onToggleFav(block.name)} aria-label="Favorite">
+            {isFav ? "★" : "☆"}
+          </button>
         )}
       </div>
 
-      {block.has_preview && <Sparkline name={block.name} />}
+      {!selectMode && (
+        <div className="bc-controls">
+          <button className="bc-play" onClick={togglePlay} disabled={!block.has_preview} aria-label={playing ? "Pause" : "Play"}>
+            {playing ? "⏸" : "▶"}
+          </button>
+          {block.has_preview ? <Sparkline name={block.name} /> : <div className="spark-empty" />}
+          <button className="bc-add" onClick={() => onAdd(block.name)} aria-label="Add to timeline">＋</button>
+          <button className="bc-gear" onClick={() => setOpen((o) => !o)} aria-label="Details">⚙</button>
+        </div>
+      )}
 
       {open && !selectMode && (
         <div className="bc-detail">
