@@ -28,6 +28,13 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(preferLAN, forKey: Keys.preferLAN) }
     }
 
+    // Load the new React "Studio" UI at /app (default) vs. the classic
+    // Gradio UI at the server root. Off lets power users reach the
+    // Gradio-only tabs (Melody Studio, AI Audio, Playback).
+    @Published var useStudioUI: Bool {
+        didSet { defaults.set(useStudioUI, forKey: Keys.useStudioUI) }
+    }
+
     // Mirror of the keychain-stored auth token. Writing this property
     // updates the keychain; reading returns the cached value.
     @Published var authToken: String {
@@ -46,7 +53,15 @@ final class AppSettings: ObservableObject {
         self.lanURL = defaults.string(forKey: Keys.lanURL) ?? ""
         self.remoteURL = defaults.string(forKey: Keys.remoteURL) ?? ""
         self.preferLAN = defaults.object(forKey: Keys.preferLAN) as? Bool ?? true
+        self.useStudioUI = defaults.object(forKey: Keys.useStudioUI) as? Bool ?? true
         self.authToken = Keychain.get(account: Keys.authToken) ?? ""
+    }
+
+    /// The WebView entry point for a resolved server base URL: the new
+    /// React UI at `/app/` when `useStudioUI`, else the Gradio root.
+    func entryURL(base: URL) -> URL {
+        guard useStudioUI else { return base }
+        return URL(string: "/app/", relativeTo: base)?.absoluteURL ?? base
     }
 
     /// Resolved URL to load in the WebView. Returns nil when nothing is
@@ -75,6 +90,7 @@ final class AppSettings: ObservableObject {
         static let lanURL = "aiMusic.lanURL"
         static let remoteURL = "aiMusic.remoteURL"
         static let preferLAN = "aiMusic.preferLAN"
+        static let useStudioUI = "aiMusic.useStudioUI"
         static let authToken = "aiMusic.authToken"
     }
 }

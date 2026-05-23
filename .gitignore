@@ -154,3 +154,8 @@ ios/build/
 
 # macOS resource forks
 ._.DS_Store
+# block waveform-peak sidecars (generated)
+data/blocks/*.peaks.json
+
+# Generated Xcode project — regenerate with: cd ios && xcodegen
+ios/AiMusic.xcodeproj/

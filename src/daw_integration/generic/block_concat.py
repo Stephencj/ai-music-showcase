@@ -288,3 +288,92 @@ def _append_tempo_change(pm: pretty_midi.PrettyMIDI,
         pm._tick_scales.append((tick, tick_scale))
     # Refresh the tick→time cache.
     pm._update_tick_to_time(pm._tick_scales[-1][0] + 1)
+
+
+# ---------------------------------------------------------------------------
+# Splitting a rendered song back into per-section blocks (mix-and-match).
+# ---------------------------------------------------------------------------
+
+def _bar_seconds(tempo: float, time_signature: tuple[int, int]) -> float:
+    """Seconds per bar at ``tempo`` (quarter-notes/min) in ``time_signature``.
+
+    Uses the SAME meter convention the renderer lays bars with, so slice
+    boundaries land exactly on bar lines: bar_in_quarters · 60/tempo.
+    """
+    from .midi_export import meter_info
+    bar_in_quarters = meter_info((int(time_signature[0]), int(time_signature[1])))["bar_in_quarters"]
+    return float(bar_in_quarters) * 60.0 / float(tempo)
+
+
+def slice_pm_by_bars(pm: pretty_midi.PrettyMIDI, start_bar: int, end_bar: int,
+                     tempo: float, time_signature: tuple[int, int]
+                     ) -> pretty_midi.PrettyMIDI:
+    """Return a new PrettyMIDI with only the notes that *start* within bars
+    ``[start_bar, end_bar]`` (inclusive), shifted so the slice begins at
+    t=0. Instrument program / name / drum-flag are preserved; notes that
+    spill past the slice end are clamped to it."""
+    spb = _bar_seconds(tempo, time_signature)
+    t0 = start_bar * spb
+    t1 = (end_bar + 1) * spb
+    out = pretty_midi.PrettyMIDI(initial_tempo=float(tempo))
+    out.time_signature_changes = [
+        pretty_midi.TimeSignature(int(time_signature[0]), int(time_signature[1]), 0.0)
+    ]
+    for inst in pm.instruments:
+        new_inst = pretty_midi.Instrument(
+            program=int(inst.program), is_drum=bool(inst.is_drum),
+            name=inst.name,
+        )
+        for n in inst.notes:
+            if t0 <= n.start < t1:
+                new_inst.notes.append(pretty_midi.Note(
+                    velocity=int(n.velocity), pitch=int(n.pitch),
+                    start=max(0.0, n.start - t0),
+                    end=min(t1, n.end) - t0,
+                ))
+        if new_inst.notes:
+            out.instruments.append(new_inst)
+    return out
+
+
+def split_into_section_blocks(pm: pretty_midi.PrettyMIDI, sections: Iterable[dict],
+                              *, tempo: float, time_signature: tuple[int, int],
+                              prefix: str = "", overwrite: bool = False,
+                              tag: str | None = None) -> list[str]:
+    """Slice ``pm`` into one saved block per section so the parts can be
+    mixed and matched on the Compose Song timeline.
+
+    ``sections`` items are ``{"start_bar", "end_bar", "label", ...}`` — the
+    same shape ``compose_song`` consumes. Empty (note-less) slices are
+    skipped. Names collide-safely: ``"Verse"`` → ``"Verse 2"`` etc.
+    Returns the list of block names actually written.
+    """
+    from . import blocks as _b
+    existing = {b.get("name") for b in _b.list_blocks()}
+    saved: list[str] = []
+    for i, sec in enumerate(sections):
+        s, e = int(sec["start_bar"]), int(sec["end_bar"])
+        label = (sec.get("label") or f"Section {i + 1}").strip()
+        sub = slice_pm_by_bars(pm, s, e, tempo, time_signature)
+        if not sub.instruments:
+            continue
+        base = f"{prefix}{label}".strip() if prefix else label
+        name = base
+        n = 1
+        while name in existing and not overwrite:
+            n += 1
+            name = f"{base} {n}"
+        try:
+            _b.save_block(name, sub, tempo=float(tempo),
+                          time_signature=(int(time_signature[0]), int(time_signature[1])),
+                          bars=e - s + 1, overwrite=overwrite)
+            if tag:
+                try:
+                    _b.set_tags(name, [tag])
+                except Exception:  # noqa: BLE001 — tagging is best-effort
+                    pass
+            existing.add(name)
+            saved.append(name)
+        except (FileExistsError, ValueError) as exc:
+            logger.warning("split_into_section_blocks: skipped %r (%s)", name, exc)
+    return saved

@@ -897,6 +897,8 @@ def _add_drum_tech(name, *, pattern, roles, label, description,
         inst = getattr(ctx, "instrument_obj", None)
         if inst is not None:
             kwargs["track_name"] = inst.label
+        # add_drum_pattern self-heals a meter-incompatible pattern by
+        # falling back to a meter-appropriate default.
         midi.add_drum_pattern(**kwargs)
     _register(name=name, label=label, description=description,
               instruments=("drums",), roles=roles, tags=tags,

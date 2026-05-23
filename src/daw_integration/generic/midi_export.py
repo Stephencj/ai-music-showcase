@@ -5,6 +5,7 @@ Create MIDI files from note sequences, chord progressions, melodies,
 and drum patterns for import into any DAW.
 """
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -2982,18 +2983,29 @@ class MidiExporter:
         hits_and_grid = meter_table.get(pattern)
         if hits_and_grid is None:
             available = sorted(meter_table.keys())
-            # Fall back to a meter-appropriate sensible default and warn via
-            # an empty pattern only when no entries exist for this meter.
             if not available:
+                # No drum patterns defined for this meter at all.
                 hits_and_grid = ([], "8th")
             else:
-                # If the requested pattern only exists in 4/4, raise — we'd
-                # rather fail loudly than misrender silently.
-                raise ValueError(
-                    f"Drum pattern {pattern!r} not available in "
-                    f"{self.time_signature[0]}/{self.time_signature[1]}. "
-                    f"Available: {available}"
+                # Requested pattern isn't defined for this meter (e.g. a
+                # 4/4 groove picked for a 6/8 song, or compound_6_8 in
+                # 4/4). Fall back to a meter-appropriate default so drums
+                # still render instead of dropping out / crashing the
+                # whole generation.
+                _METER_DEFAULT = {
+                    (4, 4): "basic_rock", (3, 4): "waltz_basic",
+                    (6, 8): "compound_6_8", (12, 8): "bembe",
+                    (7, 8): "prog_7_8", (5, 4): "take_five_5_4",
+                }
+                fallback = _METER_DEFAULT.get(self.time_signature)
+                if fallback not in meter_table:
+                    fallback = available[0]
+                logging.getLogger("ai_music_studio.midi_export").warning(
+                    "drum pattern %r not available in %d/%d — using %r",
+                    pattern, self.time_signature[0],
+                    self.time_signature[1], fallback,
                 )
+                hits_and_grid = meter_table[fallback]
         hits, grid = hits_and_grid
 
         track = self._track_for(track_name, is_drum=True, channel=9)

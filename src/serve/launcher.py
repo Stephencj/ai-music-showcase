@@ -78,6 +78,15 @@ def launch(blocks: gr.Blocks, *,
         # only used by the `share=True` fallback path above.
         api.add_middleware(IPAwareAuthMiddleware, token=token)
 
+    # Thin REST API for the cross-platform frontend — calls the same engine
+    # functions the Gradio buttons call. Mounted before the Gradio app so
+    # /api/* resolves here; inherits the token middleware above.
+    try:
+        from src.api import router as api_router
+        api.include_router(api_router)
+    except Exception:
+        logger.exception("could not mount /api router — Gradio UI still boots")
+
     # Mount vendored JS (AlphaTab etc.) before mount_gradio_app so the
     # routing intent is explicit. /static/alphatab/ is whitelisted in
     # the auth middleware so the iOS WebView can fetch the library
@@ -88,6 +97,15 @@ def launch(blocks: gr.Blocks, *,
     if _static_dir.exists():
         api.mount("/static", StaticFiles(directory=str(_static_dir)),
                   name="static")
+
+    # New cross-platform web app (React/Vite). Built bundle is served at
+    # /app so an iPhone/desktop client can load it straight from the Mac
+    # (and Capacitor/Tauri later bundle the same dist/). html=True makes it
+    # an SPA fallback. Built via `cd web && npm run build`.
+    _web_dist = _Path(__file__).resolve().parents[2] / "web" / "dist"
+    if _web_dist.exists():
+        api.mount("/app", StaticFiles(directory=str(_web_dist), html=True),
+                  name="webapp")
 
     # MCP server (SSE transport) — same auth middleware as the rest of
     # the FastAPI app, so off-LAN clients need the token. Stdio

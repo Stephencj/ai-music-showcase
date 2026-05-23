@@ -55,7 +55,13 @@ def _load_midi(source: MidiSource) -> MidiExporter:
     if not path.exists():
         raise FileNotFoundError(f"MIDI file not found: {path}")
     pm = pretty_midi.PrettyMIDI(str(path))
-    tempo = float(pm.estimate_tempo()) if pm.instruments else 120.0
+    # estimate_tempo() raises on a near-empty MIDI (<2 notes), which sparse
+    # generations can produce. Fall back to the file's written tempo.
+    try:
+        tempo = float(pm.estimate_tempo()) if pm.instruments else 120.0
+    except (ValueError, IndexError):
+        _, _tempi = pm.get_tempo_changes()
+        tempo = float(_tempi[0]) if len(_tempi) else 120.0
     if pm.time_signature_changes:
         ts = pm.time_signature_changes[0]
         time_sig = (ts.numerator, ts.denominator)
