@@ -216,7 +216,11 @@ def concat_blocks(timeline: Iterable[dict],
 
     for entry in timeline_list:
         name = entry["block_name"]
-        repeat = max(1, int(entry.get("repeat") or 1))
+        # ``repeat`` may be fractional (<1 to shorten a block, e.g. 0.5 of an
+        # 8-bar block = 4 bars) or whole (>=1 to loop). An explicit ``bars``
+        # overrides it. We translate to a target bar count, then emit full
+        # copies + a partial first-N-bars slice for any remainder.
+        repeat = float(entry.get("repeat") or 1)
         try:
             pm_block, meta = _blocks.load_block(name)
         except FileNotFoundError:
@@ -235,8 +239,28 @@ def concat_blocks(timeline: Iterable[dict],
         ts_meta = meta.get("time_signature") or [4, 4]
         ts = (int(ts_meta[0]), int(ts_meta[1]))
         block_dur = float(pm_block.get_end_time())
+        block_bars = int(meta.get("bars") or 0)
+        bar_sec = _bar_seconds(block_tempo, ts) if block_bars else block_dur
 
-        for r in range(repeat):
+        # Resolve the target length in bars for this entry.
+        if entry.get("bars"):
+            target_bars = max(1, int(entry["bars"]))
+        elif block_bars:
+            target_bars = max(1, round(repeat * block_bars))
+        else:
+            target_bars = max(1, round(repeat))
+
+        # Build the list of (pm, duration) units: N full copies + a partial.
+        if block_bars:
+            full, rem = divmod(target_bars, block_bars)
+        else:
+            full, rem = max(1, round(repeat)), 0
+        units: list[tuple] = [(pm_block, block_bars * bar_sec if block_bars else block_dur)] * full
+        if rem:
+            sliced = slice_pm_by_bars(pm_block, 0, rem - 1, block_tempo, ts)
+            units.append((sliced, rem * bar_sec))
+
+        for unit_pm, unit_dur in units:
             # Time-signature change at this boundary.
             if last_ts != ts:
                 out_pm.time_signature_changes.append(
@@ -249,12 +273,12 @@ def concat_blocks(timeline: Iterable[dict],
                 _append_tempo_change(out_pm, cursor, block_tempo)
                 last_tempo = block_tempo
 
-            _merge_instruments(merged, pm_block, time_offset=cursor)
-            cursor += block_dur
+            _merge_instruments(merged, unit_pm, time_offset=cursor)
+            cursor += unit_dur
 
         bars_label = meta.get("bars", "?")
         plan_tag = " 🎵" if plan_applied else ""
-        info_parts.append(f"{name}×{repeat} ({bars_label}b){plan_tag}")
+        info_parts.append(f"{name}→{target_bars}b (of {bars_label}){plan_tag}")
 
     if not merged:
         raise ValueError("Timeline produced zero notes — all blocks missing or empty.")

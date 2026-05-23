@@ -112,7 +112,7 @@ export default function ComposeScreen({
     setTimeline((t) => [...t, ...names.map((n) => ({ id: `${n}#${counter.current++}`, block_name: n, repeat: 1 }))]);
   const removeItem = (id: string) => setTimeline((t) => t.filter((e) => e.id !== id));
   const setRepeat = (id: string, r: number) =>
-    setTimeline((t) => t.map((e) => (e.id === id ? { ...e, repeat: Math.max(1, Math.min(32, Math.round(r) || 1)) } : e)));
+    setTimeline((t) => t.map((e) => (e.id === id ? { ...e, repeat: Math.max(0.25, Math.min(32, Math.round(r * 100) / 100)) } : e)));
 
   // drag-and-drop (library → timeline add, and timeline reorder)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -217,7 +217,7 @@ export default function ComposeScreen({
     return m;
   }, [blocks]);
   const totalBars = useMemo(
-    () => timeline.reduce((s, e) => s + (blockByName[e.block_name]?.bars || 0) * e.repeat, 0),
+    () => timeline.reduce((s, e) => s + Math.round((blockByName[e.block_name]?.bars || 0) * e.repeat), 0),
     [timeline, blockByName]
   );
   const allTags = useMemo(() => [...new Set(blocks.flatMap((b) => b.tags ?? []))].sort(), [blocks]);
@@ -637,13 +637,16 @@ function TimelineItem({
     <div ref={setNodeRef} style={style} className="tl-item">
       <span className="tl-drag" {...attributes} {...listeners}>≡</span>
       <span className="tl-name">{entry.block_name}</span>
-      <span className="tl-meta">{bars ?? "?"}b</span>
       <div className="tl-rep">
-        <button onClick={() => onRepeat(entry.id, entry.repeat - 1)}
-          disabled={entry.repeat <= 1} aria-label="Fewer repeats">−</button>
-        <span className="tl-rep-n">×{entry.repeat}</span>
-        <button onClick={() => onRepeat(entry.id, entry.repeat + 1)}
-          disabled={entry.repeat >= 32} aria-label="More repeats">+</button>
+        <button
+          onClick={() => onRepeat(entry.id, entry.repeat > 1 ? entry.repeat - 1 : entry.repeat - 0.25)}
+          disabled={entry.repeat <= 0.25} aria-label="Shorter">−</button>
+        <span className="tl-rep-n">
+          {bars ? `${Math.max(1, Math.round(entry.repeat * bars))}b` : `×${entry.repeat}`}
+        </span>
+        <button
+          onClick={() => onRepeat(entry.id, entry.repeat < 1 ? entry.repeat + 0.25 : entry.repeat + 1)}
+          disabled={entry.repeat >= 32} aria-label="Longer">+</button>
       </div>
       <button className="tl-x" onClick={() => onRemove(entry.id)} aria-label="Remove">✕</button>
     </div>
