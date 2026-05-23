@@ -316,6 +316,12 @@ audio { width: 100%; margin: 8px 0 12px; }
 .tl-drag { cursor: grab; touch-action: none; color: var(--muted); font-size: 18px; padding: 0 2px; }
 .tl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .tl-meta { font-size: 12px; color: var(--muted); }
-.tl-rep { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); }
-.tl-rep input { width: 52px; padding: 6px 8px; font-size: 14px; text-align: center; }
+.tl-rep { display: flex; align-items: center; gap: 6px; color: var(--muted); flex: 0 0 auto; }
+.tl-rep button {
+  width: 28px; height: 28px; border-radius: 8px; cursor: pointer;
+  background: var(--bg-2); border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text); font-size: 16px; line-height: 1; display: grid; place-items: center;
+}
+.tl-rep button:disabled { opacity: 0.4; cursor: default; }
+.tl-rep-n { min-width: 26px; text-align: center; font-size: 14px; font-variant-numeric: tabular-nums; }
 .tl-x { background: none; border: none; color: var(--danger); font-size: 14px; cursor: pointer; padding: 4px; }

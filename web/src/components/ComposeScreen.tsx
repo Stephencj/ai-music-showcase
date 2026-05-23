@@ -112,7 +112,7 @@ export default function ComposeScreen({
     setTimeline((t) => [...t, ...names.map((n) => ({ id: `${n}#${counter.current++}`, block_name: n, repeat: 1 }))]);
   const removeItem = (id: string) => setTimeline((t) => t.filter((e) => e.id !== id));
   const setRepeat = (id: string, r: number) =>
-    setTimeline((t) => t.map((e) => (e.id === id ? { ...e, repeat: Math.max(1, r || 1) } : e)));
+    setTimeline((t) => t.map((e) => (e.id === id ? { ...e, repeat: Math.max(1, Math.min(32, Math.round(r) || 1)) } : e)));
 
   // drag-and-drop (library → timeline add, and timeline reorder)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -638,10 +638,13 @@ function TimelineItem({
       <span className="tl-drag" {...attributes} {...listeners}>≡</span>
       <span className="tl-name">{entry.block_name}</span>
       <span className="tl-meta">{bars ?? "?"}b</span>
-      <label className="tl-rep">
-        ×<input type="number" min={1} max={32} value={entry.repeat}
-          onChange={(e) => onRepeat(entry.id, Number(e.target.value))} />
-      </label>
+      <div className="tl-rep">
+        <button onClick={() => onRepeat(entry.id, entry.repeat - 1)}
+          disabled={entry.repeat <= 1} aria-label="Fewer repeats">−</button>
+        <span className="tl-rep-n">×{entry.repeat}</span>
+        <button onClick={() => onRepeat(entry.id, entry.repeat + 1)}
+          disabled={entry.repeat >= 32} aria-label="More repeats">+</button>
+      </div>
       <button className="tl-x" onClick={() => onRemove(entry.id)} aria-label="Remove">✕</button>
     </div>
   );
