@@ -27,9 +27,12 @@ from . import arrangement, service
 from .jobs import registry
 from .schemas import (
     GenerateRequest,
+    RenameRequest,
     SaveBlockFromJobRequest,
     SongRenderRequest,
     SongSaveRequest,
+    SplitRequest,
+    TagsRequest,
 )
 
 logger = logging.getLogger("ai_music_studio.api.routes")
@@ -181,6 +184,7 @@ def list_blocks() -> list[dict]:
             "duration_seconds": b.get("duration_seconds"),
             "instruments": b.get("instruments"),
             "created": b.get("created"),
+            "tags": b.get("tags", []),
             "has_preview": bool(b.get("_preview_path") or b.get("_wav_path")),
             "audio_url": f"/api/blocks/{quote(name)}/audio",
         })
@@ -262,6 +266,36 @@ def block_stems(name: str) -> FileResponse:
     )
 
 
+@router.get("/blocks/{name}/peaks")
+def block_peaks(name: str) -> dict:
+    """Small normalized waveform-peak array for the card thumbnail."""
+    peaks = block_store.block_peaks(name)
+    if peaks is None:
+        raise HTTPException(404, "No audio to derive peaks from")
+    return {"peaks": peaks}
+
+
+@router.post("/blocks/{name}/rename")
+def rename_block(name: str, req: RenameRequest) -> dict:
+    try:
+        new_name = block_store.rename_block(name, req.new_name)
+        return {"name": new_name}
+    except FileExistsError as exc:
+        raise HTTPException(409, str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@router.post("/blocks/{name}/tags")
+def set_block_tags(name: str, req: TagsRequest) -> dict:
+    try:
+        return {"tags": block_store.set_tags(name, req.tags)}
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc))
+
+
 @router.post("/blocks/from-job")
 def save_block_from_job(req: SaveBlockFromJobRequest) -> dict:
     job = registry.get(req.job_id)
@@ -284,8 +318,10 @@ def save_block_from_job(req: SaveBlockFromJobRequest) -> dict:
 
 
 @router.post("/jobs/{job_id}/split")
-def split_job_into_blocks(job_id: str) -> dict:
-    """Carve a finished generation into one block per section (mix & match)."""
+def split_job_into_blocks(job_id: str, req: SplitRequest | None = None) -> dict:
+    """Carve a finished generation into one block per section (mix & match).
+    The sections are auto-tagged (collection) with ``tag`` or, by default,
+    the generation's ``genre seed`` so they group together in the library."""
     job = registry.get(job_id)
     if job is None or job.status != "done":
         raise HTTPException(404, "Job not found or not finished")
@@ -293,13 +329,17 @@ def split_job_into_blocks(job_id: str) -> dict:
     ctx = job.result.get("_split")
     if not midi or not Path(midi).exists() or not ctx:
         raise HTTPException(400, "Job has no splittable MIDI")
+    res = job.result
+    tag = (req.tag if req and req.tag else None) or (
+        f"{res.get('genre')} {res.get('seed')}" if res.get("genre") and res.get("seed") else None
+    )
     pm = pretty_midi.PrettyMIDI(str(midi))
     ts = ctx["time_signature"]
     names = block_concat.split_into_section_blocks(
         pm, ctx["sections"], tempo=ctx["tempo"],
-        time_signature=(int(ts[0]), int(ts[1])),
+        time_signature=(int(ts[0]), int(ts[1])), tag=tag,
     )
-    return {"section_blocks": names}
+    return {"section_blocks": names, "tag": tag}
 
 
 @router.delete("/blocks/{name}")

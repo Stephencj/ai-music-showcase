@@ -79,6 +79,7 @@ export interface Block {
   duration_seconds: number | null;
   instruments?: BlockInstrument[];
   created?: string | null;
+  tags?: string[];
   has_preview: boolean;
   audio_url: string;
 }

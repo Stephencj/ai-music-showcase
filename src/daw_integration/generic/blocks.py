@@ -301,6 +301,7 @@ def list_blocks() -> list[dict]:
             meta["_wav_path"] = str(wav) if wav.exists() else None
             mp3 = yaml_file.with_suffix(".mp3")
             meta["_preview_path"] = str(mp3) if mp3.exists() else None
+            meta.setdefault("tags", [])
             out.append(meta)
         except Exception:
             continue
@@ -362,14 +363,100 @@ def rerender_block_wav(name: str, sample_rate: int = _DEFAULT_PREVIEW_SR) -> Opt
 
 
 def delete_block(name: str) -> None:
-    """Remove the .mid, .yaml, .wav, .mp3, and Melody Studio sidecar for
-    a block. Silently ignores missing files."""
+    """Remove the .mid, .yaml, .wav, .mp3, .peaks.json, and Melody Studio
+    sidecar for a block. Silently ignores missing files."""
     safe = _safe_name(name)
     sidecar = BLOCKS_DIR / f"{safe}_melody.yaml"
     for p in (_midi_path(name), _yaml_path(name), _wav_path(name),
-              _preview_path(name), sidecar):
+              _preview_path(name), _peaks_path(name), sidecar):
         try:
             if p.exists():
                 p.unlink()
         except OSError:
             pass
+
+
+def _peaks_path(name: str) -> Path:
+    return BLOCKS_DIR / f"{_safe_name(name)}.peaks.json"
+
+
+def block_peaks(name: str, buckets: int = 64) -> Optional[list[float]]:
+    """Return a small normalized waveform-peak array (0..1) for a sleek
+    thumbnail, computed once from the block WAV and cached as a sidecar."""
+    import json
+    pp = _peaks_path(name)
+    if pp.exists():
+        try:
+            return json.loads(pp.read_text())
+        except Exception:
+            pass
+    wav = _wav_path(name)
+    if not wav.exists():
+        return None
+    try:
+        data, _ = sf.read(str(wav), dtype="float32")
+    except Exception:
+        return None
+    if getattr(data, "ndim", 1) == 2:
+        data = data.mean(axis=1)
+    n = len(data)
+    if n == 0:
+        return None
+    edges = np.linspace(0, n, buckets + 1).astype(int)
+    peaks = [
+        float(np.abs(data[edges[i]:edges[i + 1]]).max()) if edges[i + 1] > edges[i] else 0.0
+        for i in range(buckets)
+    ]
+    peak_max = max(peaks) or 1.0
+    peaks = [round(p / peak_max, 3) for p in peaks]
+    try:
+        pp.write_text(json.dumps(peaks))
+    except OSError:
+        pass
+    return peaks
+
+
+def set_tags(name: str, tags: list[str]) -> list[str]:
+    """Replace a block's tag list (used for collections / grouping)."""
+    yaml_path = _yaml_path(name)
+    if not yaml_path.exists():
+        raise FileNotFoundError(f"Block not found: {name}")
+    with open(yaml_path, "r") as f:
+        meta = yaml.safe_load(f) or {}
+    clean = sorted({str(t).strip() for t in tags if str(t).strip()})
+    meta["tags"] = clean
+    with open(yaml_path, "w") as f:
+        yaml.safe_dump(meta, f, sort_keys=False, default_flow_style=False)
+    return clean
+
+
+def rename_block(old: str, new: str) -> str:
+    """Rename a block (and all its sidecars). Returns the new safe name.
+    Raises FileExistsError on collision, FileNotFoundError if missing."""
+    if not new or not new.strip():
+        raise ValueError("New name is empty.")
+    old_safe, new_safe = _safe_name(old), _safe_name(new)
+    if new_safe == old_safe:
+        return new_safe
+    if _yaml_path(new).exists() or _midi_path(new).exists():
+        raise FileExistsError(f"A block named {new_safe!r} already exists.")
+    if not _yaml_path(old).exists():
+        raise FileNotFoundError(f"Block not found: {old}")
+    pairs = [
+        (_midi_path(old), _midi_path(new)),
+        (_yaml_path(old), _yaml_path(new)),
+        (_wav_path(old), _wav_path(new)),
+        (_preview_path(old), _preview_path(new)),
+        (_peaks_path(old), _peaks_path(new)),
+        (BLOCKS_DIR / f"{old_safe}_melody.yaml", BLOCKS_DIR / f"{new_safe}_melody.yaml"),
+    ]
+    for src, dst in pairs:
+        if src.exists():
+            src.rename(dst)
+    yaml_path = _yaml_path(new)
+    with open(yaml_path, "r") as f:
+        meta = yaml.safe_load(f) or {}
+    meta["name"] = new_safe
+    with open(yaml_path, "w") as f:
+        yaml.safe_dump(meta, f, sort_keys=False, default_flow_style=False)
+    return new_safe

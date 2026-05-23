@@ -45,3 +45,15 @@ class SongSaveRequest(BaseModel):
 class SongRenderRequest(BaseModel):
     timeline: list[dict]
     with_pdf: bool = True
+
+
+class SplitRequest(BaseModel):
+    tag: Optional[str] = None        # collection tag for the split sections
+
+
+class RenameRequest(BaseModel):
+    new_name: str
+
+
+class TagsRequest(BaseModel):
+    tags: list[str] = Field(default_factory=list)

@@ -338,7 +338,8 @@ def slice_pm_by_bars(pm: pretty_midi.PrettyMIDI, start_bar: int, end_bar: int,
 
 def split_into_section_blocks(pm: pretty_midi.PrettyMIDI, sections: Iterable[dict],
                               *, tempo: float, time_signature: tuple[int, int],
-                              prefix: str = "", overwrite: bool = False) -> list[str]:
+                              prefix: str = "", overwrite: bool = False,
+                              tag: str | None = None) -> list[str]:
     """Slice ``pm`` into one saved block per section so the parts can be
     mixed and matched on the Compose Song timeline.
 
@@ -366,6 +367,11 @@ def split_into_section_blocks(pm: pretty_midi.PrettyMIDI, sections: Iterable[dic
             _b.save_block(name, sub, tempo=float(tempo),
                           time_signature=(int(time_signature[0]), int(time_signature[1])),
                           bars=e - s + 1, overwrite=overwrite)
+            if tag:
+                try:
+                    _b.set_tags(name, [tag])
+                except Exception:  # noqa: BLE001 — tagging is best-effort
+                    pass
             existing.add(name)
             saved.append(name)
         except (FileExistsError, ValueError) as exc:

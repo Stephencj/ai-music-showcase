@@ -42,8 +42,8 @@ export const generate = (body: GenerateBody) =>
 export const getJob = (id: string) => jget<Job>(`/api/jobs/${id}`);
 export const saveBlockFromJob = (job_id: string, name: string) =>
   jpost<{ name: string }>("/api/blocks/from-job", { job_id, name });
-export const splitJob = (id: string) =>
-  jpost<{ section_blocks: string[] }>(`/api/jobs/${id}/split`);
+export const splitJob = (id: string, tag?: string) =>
+  jpost<{ section_blocks: string[]; tag: string | null }>(`/api/jobs/${id}/split`, tag ? { tag } : {});
 
 // --- Blocks & songs (Compose screen) ---
 export const getBlocks = () => jget<Block[]>("/api/blocks");
@@ -87,6 +87,13 @@ export const mediaUrl = (path: string) => url(path);
 /** Download URL for a block artifact (midi/wav/pdf/stems). */
 export const blockFileUrl = (name: string, kind: "midi" | "wav" | "pdf" | "stems") =>
   url(`/api/blocks/${encodeURIComponent(name)}/${kind}`);
+
+export const getPeaks = (name: string) =>
+  jget<{ peaks: number[] }>(`/api/blocks/${encodeURIComponent(name)}/peaks`).then((r) => r.peaks);
+export const renameBlock = (name: string, new_name: string) =>
+  jpost<{ name: string }>(`/api/blocks/${encodeURIComponent(name)}/rename`, { new_name });
+export const setTags = (name: string, tags: string[]) =>
+  jpost<{ tags: string[] }>(`/api/blocks/${encodeURIComponent(name)}/tags`, { tags });
 
 /** Poll a job to completion, reporting each status to `onProgress`. */
 export async function pollJob(
