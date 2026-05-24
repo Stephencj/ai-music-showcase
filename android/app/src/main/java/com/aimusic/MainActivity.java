@@ -32,7 +32,7 @@ import java.util.Collections;
  */
 public class MainActivity extends Activity {
 
-    private static final String DEFAULT_API = "http://100.64.0.10:7860";
+    private static final String DEFAULT_API = "http://192.168.1.10:7860";
     // Serve the bundled UI over http (not https) so calling the Mac's http
     // API isn't blocked as mixed content (Amazon's WebView enforces that
     // even when "allow mixed content" is set).
@@ -221,7 +221,7 @@ public class MainActivity extends Activity {
         input.setSelection(input.getText().length());
         new AlertDialog.Builder(this)
                 .setTitle("Mac server (API) address")
-                .setMessage("Where to fetch music from — e.g. http://100.64.0.10:7860 (Tailscale) "
+                .setMessage("Where to fetch music from — e.g. http://192.168.1.10:7860 (Tailscale) "
                         + "or http://192.168.1.10:7860 (same Wi-Fi). The app screen is built in; this "
                         + "is only the data connection.")
                 .setView(input)
