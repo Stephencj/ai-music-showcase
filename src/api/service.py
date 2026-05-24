@@ -391,6 +391,104 @@ def list_voices() -> list[str]:
     return voices[:24]
 
 
+def melody_request_params(name: str, lyrics: str) -> dict:
+    """Context for a 'compose a vocal melody from these lyrics' request:
+    per-line syllable counts + the block's key/scale/tempo/meter/bars."""
+    import re
+    from src.daw_integration.generic import blocks as block_store
+    from src.models.vocals.lyrics import count_syllables
+    _, meta = block_store.load_block(name)
+    spec = meta.get("spec") or {}
+    lines = [ln.strip() for ln in (lyrics or "").splitlines() if ln.strip()]
+    syllables = [sum(count_syllables(w) for w in re.findall(r"[A-Za-z']+", ln)) for ln in lines]
+    ts = meta.get("time_signature") or [4, 4]
+    return {
+        "lyrics": lyrics,
+        "lines": lines,
+        "syllables_per_line": syllables,
+        "key": spec.get("key") or "C",
+        "scale": spec.get("scale") or "major",
+        "tempo": float(spec.get("tempo") or meta.get("tempo") or 120.0),
+        "time_signature": [int(ts[0]), int(ts[1])],
+        "bars": int(meta.get("bars") or 0),
+        "sections": [s.get("role") for s in (spec.get("sections") or [])],
+    }
+
+
+def apply_melody_plan(name: str, plan: dict, lyrics: str = "") -> dict:
+    """Write a composed vocal melody (+ optional harmony) into a block,
+    replacing any existing vocal tracks, then re-render the preview. ``plan``
+    is ``{"tempo": bpm, "lead": [[midi, start_beat, dur_beat], ...],
+    "harmony": [...]}`` (beats are converted to seconds at ``tempo``)."""
+    import shutil
+
+    import pretty_midi
+    from src.daw_integration.generic import blocks as block_store
+
+    pm, meta = block_store.load_block(name)
+    tempo = float((plan or {}).get("tempo") or meta.get("tempo") or 120.0)
+    spb = 60.0 / tempo
+
+    # Back up the current MIDI before we overwrite it (cheap insurance).
+    midi_path = block_store._midi_path(name)
+    if midi_path.exists():
+        try:
+            shutil.copy2(midi_path, midi_path.with_suffix(".mid.bak"))
+        except OSError:
+            pass
+
+    # Drop ONLY actual vocal tracks (so they're replaced) — identified by a
+    # voice GM program (Choir/Voice 52-54) or a vocal name. Never an
+    # instrument like piano/guitar/bass, even if it's the highest-pitched
+    # track (that mistake once deleted a block's piano).
+    _voice_programs = {52, 53, 54}
+    _vocal_hints = ("vocal", "choir", "ooh", "aah")
+
+    def _is_vocal(inst) -> bool:
+        nm = (inst.name or "").lower()
+        return (not inst.is_drum) and (
+            inst.program in _voice_programs or any(h in nm for h in _vocal_hints))
+
+    pm.instruments = [i for i in pm.instruments if not _is_vocal(i)]
+
+    def _add(track: str, program: int, notes) -> int:
+        inst = pretty_midi.Instrument(program=program, name=track)
+        for item in notes or []:
+            pitch, start_beat, dur_beat = int(item[0]), float(item[1]), float(item[2])
+            if dur_beat <= 0:
+                continue
+            inst.notes.append(pretty_midi.Note(
+                velocity=90, pitch=max(0, min(127, pitch)),
+                start=start_beat * spb, end=(start_beat + dur_beat) * spb))
+        if inst.notes:
+            pm.instruments.append(inst)
+        return len(inst.notes)
+
+    n_lead = _add("Lead Vocal", 53, (plan or {}).get("lead"))
+    n_harm = _add("Backing Vocals", 52, (plan or {}).get("harmony"))
+    if not n_lead:
+        raise ValueError("melody plan produced no lead notes")
+
+    ts = meta.get("time_signature") or [4, 4]
+    spec = meta.get("spec") or None
+    if spec is not None:
+        insts = list(spec.get("instruments") or [])
+        for iid in (["vocal_lead"] + (["vocal_harmony"] if n_harm else [])):
+            if iid not in insts:
+                insts.append(iid)
+        spec["instruments"] = insts
+    block_store.save_block(
+        name, pm, tempo=tempo, time_signature=(int(ts[0]), int(ts[1])),
+        bars=int(meta.get("bars") or 0), overwrite=True, spec=spec,
+        tags=meta.get("tags"))
+    if lyrics:
+        try:
+            block_store.set_lyrics(name, lyrics)
+        except Exception:  # noqa: BLE001
+            pass
+    return {"lead_notes": n_lead, "harmony_notes": n_harm, "tempo": tempo}
+
+
 def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
                      progress, job_id: str, harmonies: bool = True) -> dict:
     """Render a sung vocal over a block and mix it with the block's

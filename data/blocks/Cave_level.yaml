@@ -5,12 +5,8 @@ time_signature:
 - 4
 bars: 64
 duration_seconds: 170.666496
-created: '2026-05-17T23:33:01'
+created: '2026-05-24T11:41:53'
 instruments:
-- name: Electric Piano
-  program: 4
-  is_drum: false
-  n_notes: 256
 - name: Synth Bass
   program: 38
   is_drum: false
@@ -19,7 +15,15 @@ instruments:
   program: 0
   is_drum: true
   n_notes: 640
-n_notes: 960
+- name: Lead Vocal
+  program: 53
+  is_drum: false
+  n_notes: 12
+- name: Backing Vocals
+  program: 52
+  is_drum: false
+  n_notes: 12
+n_notes: 728
 spec:
   genre: pop
   key: D
@@ -34,6 +38,8 @@ spec:
   - electric_piano
   - synth_bass
   - drum_kit
+  - vocal_lead
+  - vocal_harmony
   sections:
   - start_bar: 0
     end_bar: 63
@@ -41,3 +47,6 @@ spec:
     role: verse
   section: null
   inferred: true
+lyrics: 'deep in the dark we go
+
+  follow the torch light glow'

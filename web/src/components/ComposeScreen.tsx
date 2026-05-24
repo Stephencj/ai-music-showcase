@@ -424,6 +424,7 @@ export default function ComposeScreen({
                     onTags={onTags}
                     onEdit={onEditBlock}
                     onEditInGenerate={onEditInGenerate}
+                    onChanged={refresh}
                     voices={voices}
                     studioVoices={studioVoices}
                     engines={engines}
@@ -450,7 +451,7 @@ export default function ComposeScreen({
 
 function BlockCard({
   block, selectMode, selected, onToggleSel, isFav, onToggleFav,
-  onAdd, onDelete, onRename, onTags, onEdit, onEditInGenerate, voices, studioVoices, engines,
+  onAdd, onDelete, onRename, onTags, onEdit, onEditInGenerate, onChanged, voices, studioVoices, engines,
 }: {
   block: Block;
   selectMode: boolean;
@@ -464,6 +465,7 @@ function BlockCard({
   onTags: (name: string, tags: string[]) => void;
   onEdit: (name: string, body: { mute: string[]; regenerate: string[]; save_as?: string | null }) => Promise<string>;
   onEditInGenerate: (spec: BlockSpec) => void;
+  onChanged: () => void;
   voices: string[];
   studioVoices: string[];
   engines: string[];
@@ -484,6 +486,7 @@ function BlockCard({
   const [engine, setEngine] = useState("");
   const [harmonies, setHarmonies] = useState(true);
   const [drafting, setDrafting] = useState(false);
+  const [composing, setComposing] = useState(false);
   const [vocBusy, setVocBusy] = useState(false);
   const [vocProg, setVocProg] = useState(0);
   const [vocMsg, setVocMsg] = useState("");
@@ -528,6 +531,17 @@ function BlockCard({
       else { setLyrics(r.answer); setVocMsg(""); }
     } catch (e) { setVocMsg(String(e)); }
     finally { setDrafting(false); }
+  }
+  async function onComposeMelody() {
+    if (!lyrics.trim()) return;
+    setComposing(true); setVocMsg("Asking Claude Code to compose a melody for these lyrics…");
+    try {
+      const { request_id } = await api.composeMelody(block.name, lyrics);
+      const r = await api.pollAiRequest(request_id, { timeoutMs: 240000 });
+      if (r.status === "error") setVocMsg(r.error || "Melody compose failed");
+      else { setVocMsg("Melody composed — block updated. Hit 🎤 Sing it."); setNoteCount(null); onChanged(); }
+    } catch (e) { setVocMsg(String(e)); }
+    finally { setComposing(false); }
   }
   async function onSing() {
     if (!lyrics.trim()) return;
@@ -675,6 +689,9 @@ function BlockCard({
               <input className="voc-theme" type="text" placeholder="theme (e.g. summer night)"
                 value={theme} onChange={(e) => setTheme(e.target.value)} />
               <button className="btn ghost sm" disabled={drafting} onClick={onDraft}>{drafting ? "…" : "✨ Draft"}</button>
+              <button className="btn ghost sm" disabled={composing || !lyrics.trim()} onClick={onComposeMelody}
+                title="Claude Code composes a vocal melody + harmony for these lyrics (replaces any existing vocal line)">
+                {composing ? "…" : "🎼 Compose melody"}</button>
             </div>
             <div className="voc-row">
               {engines.length > 1 && (

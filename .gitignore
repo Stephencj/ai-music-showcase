@@ -78,6 +78,7 @@ data/models/
 *.aiff
 *.aif
 *.mid
+*.mid.bak
 *.midi
 
 # Logs

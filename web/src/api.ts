@@ -141,6 +141,10 @@ export async function pollAiRequest(
 }
 export const setLyrics = (name: string, lyrics: string) =>
   jpost<{ ok: boolean }>(`/api/blocks/${encodeURIComponent(name)}/lyrics`, { lyrics });
+// Compose (or regenerate) the vocal melody+harmony from the lyrics, answered
+// by the Claude Code watch-loop. Enqueue, then poll the request id.
+export const composeMelody = (name: string, lyrics: string) =>
+  jpost<{ request_id: string }>(`/api/blocks/${encodeURIComponent(name)}/melody/compose`, { lyrics });
 export const renderVocals = (
   name: string,
   body: { lyrics: string; voice: string; engine: string; harmonies: boolean }

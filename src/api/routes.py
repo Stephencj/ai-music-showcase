@@ -398,6 +398,21 @@ def draft_block_lyrics(name: str, req: LyricsDraftRequest) -> dict:
     return {"request_id": rec["id"]}
 
 
+@router.post("/blocks/{name}/melody/compose")
+def compose_block_melody(name: str, req: SetLyricsRequest) -> dict:
+    """Enqueue a 'compose a vocal melody for these lyrics' request for a
+    Claude Code watch-loop. Replaces any existing vocal tracks when applied
+    (so it doubles as 'regenerate melody from edited lyrics'). Returns
+    ``{request_id}``; poll ``/ai/requests/{id}``."""
+    if not block_store._midi_path(name).exists():
+        raise HTTPException(404, "Block not found")
+    if not req.lyrics.strip():
+        raise HTTPException(400, "Lyrics are empty")
+    params = service.melody_request_params(name, req.lyrics)
+    rec = ai_requests.enqueue("melody", name, params)
+    return {"request_id": rec["id"]}
+
+
 # --- AI request queue (answered by a Claude Code watch-loop) --------------
 @router.get("/ai/requests")
 def list_ai_requests(status: str | None = None) -> dict:
@@ -416,10 +431,21 @@ def get_ai_request(rid: str) -> dict:
 
 @router.post("/ai/requests/{rid}/answer")
 def answer_ai_request(rid: str, req: AiAnswerRequest) -> dict:
-    rec = ai_requests.answer(rid, req.answer, error=req.error)
+    rec = ai_requests.get(rid)
     if rec is None:
         raise HTTPException(404, "Unknown request")
-    return {"ok": True}
+    applied = None
+    # A "melody" answer is a note plan — apply it straight into the block
+    # (write the Lead Vocal / Backing Vocals tracks + re-render).
+    if rec.get("kind") == "melody" and req.answer and not req.error:
+        try:
+            applied = service.apply_melody_plan(
+                rec["block"], req.answer, lyrics=rec.get("params", {}).get("lyrics", ""))
+        except Exception as exc:  # noqa: BLE001
+            ai_requests.answer(rid, None, error=f"melody apply failed: {exc}")
+            raise HTTPException(500, f"melody apply failed: {exc}")
+    ai_requests.answer(rid, req.answer, error=req.error)
+    return {"ok": True, "applied": applied}
 
 
 @router.post("/blocks/{name}/lyrics")
