@@ -391,27 +391,72 @@ def list_voices() -> list[str]:
     return voices[:24]
 
 
+_PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+def _chord_roots_per_bar(pm, tempo: float, beats_per_bar: int, bars: int) -> list:
+    """Best-effort per-bar chord root (note name) from the Chords/Piano track,
+    so a melody can be composed to fit the harmony. None for empty bars."""
+    try:
+        if bars <= 0:
+            return []
+        track = None
+        for inst in pm.instruments:
+            nm = (inst.name or "").lower()
+            if not inst.is_drum and inst.notes and ("chord" in nm or "piano" in nm or "key" in nm):
+                track = inst
+                break
+        if track is None:
+            for inst in pm.instruments:
+                if not inst.is_drum and inst.notes:
+                    track = inst
+                    break
+        if track is None:
+            return []
+        barlen = beats_per_bar * 60.0 / tempo
+        by_bar: dict = {}
+        for n in track.notes:
+            by_bar.setdefault(int(n.start // barlen), []).append(n.pitch)
+        return [_PITCH_NAMES[min(by_bar[b]) % 12] if by_bar.get(b) else None
+                for b in range(bars)]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def melody_request_params(name: str, lyrics: str) -> dict:
-    """Context for a 'compose a vocal melody from these lyrics' request:
-    per-line syllable counts + the block's key/scale/tempo/meter/bars."""
+    """Context for a 'compose a vocal melody from these lyrics' request. Carries
+    everything needed to write a full-song melody that fits the arrangement:
+    per-line syllables, key/scale/tempo/meter/bars, the SECTION BAR RANGES, and
+    the per-bar CHORD roots — so the answerer doesn't have to re-derive them."""
     import re
     from src.daw_integration.generic import blocks as block_store
     from src.models.vocals.lyrics import count_syllables
-    _, meta = block_store.load_block(name)
+    pm, meta = block_store.load_block(name)
     spec = meta.get("spec") or {}
     lines = [ln.strip() for ln in (lyrics or "").splitlines() if ln.strip()]
     syllables = [sum(count_syllables(w) for w in re.findall(r"[A-Za-z']+", ln)) for ln in lines]
     ts = meta.get("time_signature") or [4, 4]
+    tempo = float(spec.get("tempo") or meta.get("tempo") or 120.0)
+    bars = int(meta.get("bars") or 0)
     return {
         "lyrics": lyrics,
         "lines": lines,
         "syllables_per_line": syllables,
         "key": spec.get("key") or "C",
         "scale": spec.get("scale") or "major",
-        "tempo": float(spec.get("tempo") or meta.get("tempo") or 120.0),
+        "tempo": tempo,
         "time_signature": [int(ts[0]), int(ts[1])],
-        "bars": int(meta.get("bars") or 0),
-        "sections": [s.get("role") for s in (spec.get("sections") or [])],
+        "beats_per_bar": int(ts[0]),
+        "bars": bars,
+        # Section bar ranges (start_bar/end_bar) — not just roles — so phrases
+        # can be timed into each section. start_beat of bar B = B * beats_per_bar.
+        "sections": [
+            {"role": s.get("role"), "label": s.get("label"),
+             "start_bar": s.get("start_bar"), "end_bar": s.get("end_bar")}
+            for s in (spec.get("sections") or [])
+        ],
+        # Per-bar chord root from the harmony track, to write a fitting melody.
+        "chords_per_bar": _chord_roots_per_bar(pm, tempo, int(ts[0]), bars),
     }
 
 
