@@ -114,8 +114,31 @@ export const getVoices = () =>
 export const getMelodyInfo = (name: string) =>
   jget<{ total_notes: number; phrase_syllables: number[]; has_lead: boolean }>(
     `/api/blocks/${encodeURIComponent(name)}/melody`);
-export const draftLyrics = (name: string, theme: string) =>
-  jpost<{ lyrics: string }>(`/api/blocks/${encodeURIComponent(name)}/lyrics/draft`, { theme });
+// Lyric drafting is answered by a Claude Code watch-loop (no API key):
+// enqueue a request, then poll until it's answered with fitted lyrics.
+export const requestLyrics = (name: string, theme: string) =>
+  jpost<{ request_id: string }>(`/api/blocks/${encodeURIComponent(name)}/lyrics/draft`, { theme });
+export interface AiRequest {
+  id: string;
+  kind: string;
+  status: "pending" | "answered" | "error";
+  answer: string | null;
+  error: string | null;
+}
+export const getAiRequest = (id: string) => jget<AiRequest>(`/api/ai/requests/${id}`);
+export async function pollAiRequest(
+  id: string,
+  { timeoutMs = 180000, intervalMs = 1500 }: { timeoutMs?: number; intervalMs?: number } = {}
+): Promise<AiRequest> {
+  const start = Date.now();
+  for (;;) {
+    const r = await getAiRequest(id);
+    if (r.status === "answered" || r.status === "error") return r;
+    if (Date.now() - start > timeoutMs)
+      throw new Error("Timed out waiting for Claude Code to answer — is an assistant loop running?");
+    await new Promise((res) => setTimeout(res, intervalMs));
+  }
+}
 export const setLyrics = (name: string, lyrics: string) =>
   jpost<{ ok: boolean }>(`/api/blocks/${encodeURIComponent(name)}/lyrics`, { lyrics });
 export const renderVocals = (

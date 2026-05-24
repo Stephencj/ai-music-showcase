@@ -23,9 +23,10 @@ from src.daw_integration.generic import blocks as block_store
 from src.daw_integration.generic import songs as song_store
 from src.daw_integration.generic.styles import STYLES
 
-from . import arrangement, service
+from . import ai_requests, arrangement, service
 from .jobs import registry
 from .schemas import (
+    AiAnswerRequest,
     EditBlockRequest,
     GenerateRequest,
     LyricsDraftRequest,
@@ -368,12 +369,57 @@ def block_melody(name: str) -> dict:
 
 @router.post("/blocks/{name}/lyrics/draft")
 def draft_block_lyrics(name: str, req: LyricsDraftRequest) -> dict:
+    """Enqueue a lyric-draft request for a Claude Code watch-loop to answer
+    (no API key). Returns ``{request_id}``; the client polls
+    ``/ai/requests/{id}`` until it's answered with the fitted lyrics."""
+    if not block_store._midi_path(name).exists():
+        raise HTTPException(404, "Block not found")
     try:
-        return {"lyrics": service.draft_lyrics(name, req.theme)}
-    except ValueError as exc:
-        raise HTTPException(400, str(exc))
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"Lyric draft failed: {exc}")
+        info = service.melody_info(name)
+    except Exception:  # noqa: BLE001
+        info = {"phrase_syllables": [], "total_notes": 0}
+    try:
+        _, meta = block_store.load_block(name)
+    except Exception:  # noqa: BLE001
+        meta = {}
+    spec = meta.get("spec") or {}
+    params = {
+        "theme": req.theme or "",
+        "phrase_syllables": info.get("phrase_syllables") or [],
+        "total_notes": info.get("total_notes") or 0,
+        "genre": spec.get("genre"),
+        "key": spec.get("key"),
+        "scale": spec.get("scale"),
+        "tempo": spec.get("tempo") or meta.get("tempo"),
+        "sections": [s.get("role") for s in (spec.get("sections") or [])],
+        "current_lyrics": meta.get("lyrics") or "",
+    }
+    rec = ai_requests.enqueue("lyrics", name, params)
+    return {"request_id": rec["id"]}
+
+
+# --- AI request queue (answered by a Claude Code watch-loop) --------------
+@router.get("/ai/requests")
+def list_ai_requests(status: str | None = None) -> dict:
+    """Pending/answered AI requests. A Claude Code session polls
+    ``?status=pending``, composes each answer, and POSTs it back."""
+    return {"requests": ai_requests.list_requests(status)}
+
+
+@router.get("/ai/requests/{rid}")
+def get_ai_request(rid: str) -> dict:
+    rec = ai_requests.get(rid)
+    if rec is None:
+        raise HTTPException(404, "Unknown request")
+    return rec
+
+
+@router.post("/ai/requests/{rid}/answer")
+def answer_ai_request(rid: str, req: AiAnswerRequest) -> dict:
+    rec = ai_requests.answer(rid, req.answer, error=req.error)
+    if rec is None:
+        raise HTTPException(404, "Unknown request")
+    return {"ok": True}
 
 
 @router.post("/blocks/{name}/lyrics")

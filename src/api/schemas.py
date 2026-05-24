@@ -4,7 +4,7 @@ without a second mapping layer to maintain."""
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -78,3 +78,10 @@ class VocalsRequest(BaseModel):
     voice: str = ""               # "" = system default say voice
     engine: str = "rough"         # "rough" now; "studio" when available
     harmonies: bool = True        # stack the block's harmony/backing lines
+
+
+class AiAnswerRequest(BaseModel):
+    """A Claude Code watch-loop's answer to a queued AI request. ``answer``
+    is the content (lyrics string, or a melody plan dict for later kinds)."""
+    answer: Any = None
+    error: Optional[str] = None

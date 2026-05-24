@@ -385,36 +385,6 @@ def list_voices() -> list[str]:
     return voices[:24]
 
 
-def draft_lyrics(name: str, theme: str | None) -> str:
-    """Draft lyrics fitted to the block melody's syllable counts via the
-    OpenAI key in the env. Raises ValueError if no key is configured."""
-    import os
-    import requests
-    key = os.environ.get("OPENAI_API_KEY")
-    if not key:
-        raise ValueError("No OPENAI_API_KEY set — type lyrics manually, or set the key for AI drafts.")
-    counts = melody_info(name)["phrase_syllables"] or [8, 8, 8, 8]
-    spec = ", ".join(str(c) for c in counts)
-    prompt = (
-        f"Write original, singable song lyrics{(' about ' + theme) if theme else ''}. "
-        f"Produce {len(counts)} short lines, one per musical phrase, with approximately "
-        f"these syllable counts per line (in order): {spec}. Keep words simple and natural "
-        f"to sing. Return ONLY the lyrics — one line per phrase, no title, no labels, no quotes."
-    )
-    resp = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers={"Authorization": f"Bearer {key}"},
-        json={
-            "model": os.environ.get("AI_MUSIC_LYRICS_MODEL", "gpt-4o-mini"),
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.9, "max_tokens": 400,
-        },
-        timeout=45,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"].strip()
-
-
 def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
                      progress, job_id: str, harmonies: bool = True) -> dict:
     """Render a sung vocal over a block and mix it with the block's

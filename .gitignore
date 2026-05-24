@@ -160,6 +160,8 @@ data/blocks/*.peaks.json
 data/blocks/*.zip
 # saved vocal takes (generated audio/scores per block)
 data/blocks/*.vocals/
+# AI request queue (answered by a Claude Code watch-loop)
+data/ai_requests/
 
 # Generated Xcode project — regenerate with: cd ios && xcodegen
 ios/AiMusic.xcodeproj/

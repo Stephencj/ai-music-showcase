@@ -520,9 +520,13 @@ function BlockCard({
   }, [open, engine, voiceOptions]);
 
   async function onDraft() {
-    setDrafting(true); setVocMsg("");
-    try { const r = await api.draftLyrics(block.name, theme); setLyrics(r.lyrics); }
-    catch (e) { setVocMsg(String(e)); }
+    setDrafting(true); setVocMsg("Asking Claude Code to draft lyrics…");
+    try {
+      const { request_id } = await api.requestLyrics(block.name, theme);
+      const r = await api.pollAiRequest(request_id);
+      if (r.status === "error" || typeof r.answer !== "string") setVocMsg(r.error || "Lyric draft failed");
+      else { setLyrics(r.answer); setVocMsg(""); }
+    } catch (e) { setVocMsg(String(e)); }
     finally { setDrafting(false); }
   }
   async function onSing() {
