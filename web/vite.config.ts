@@ -16,5 +16,19 @@ export default defineConfig({
       },
     },
   },
+  // `vite preview` serves the built dist (this is what the :5174 cloudflared
+  // tunnel points at). Proxy /api to the Python backend so the deployed PWA
+  // talks to the real engine same-origin.
+  preview: {
+    host: true,          // bind 0.0.0.0 so the LAN / Tailscale phone can reach it
+    port: 5174,
+    strictPort: true,
+    proxy: {
+      "/api": {
+        target: process.env.AI_MUSIC_BACKEND || "http://localhost:7860",
+        changeOrigin: true,
+      },
+    },
+  },
   build: { outDir: "dist", sourcemap: true },
 });
