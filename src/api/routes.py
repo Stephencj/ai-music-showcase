@@ -193,6 +193,7 @@ def list_blocks() -> list[dict]:
             "tags": b.get("tags", []),
             "spec": b.get("spec"),
             "lyrics": b.get("lyrics", ""),
+            "vocal_takes": b.get("_vocal_takes", 0),
             "has_preview": bool(b.get("_preview_path") or b.get("_wav_path")),
             "audio_url": f"/api/blocks/{quote(name)}/audio",
         })
@@ -241,6 +242,32 @@ def block_pdf(name: str) -> FileResponse:
         except Exception as exc:  # noqa: BLE001 — LilyPond optional
             raise HTTPException(503, f"PDF engraving failed: {exc}")
     return _serve(out, "application/zip", download=True)
+
+
+@router.get("/blocks/{name}/vocals")
+def list_block_vocals(name: str) -> dict:
+    """Saved sung takes for a block, newest first (id, created, engine,
+    voice, harmonies, lyrics, files). The client builds artifact URLs from
+    the ``files`` keys via ``/blocks/{name}/vocals/{id}/{role}``."""
+    return {"takes": block_store.list_vocal_takes(name)}
+
+
+@router.get("/blocks/{name}/vocals/{take_id}/{role}")
+def block_vocal_take_file(name: str, take_id: str, role: str) -> FileResponse:
+    p = block_store.vocal_take_file(name, take_id, role)
+    if not p:
+        raise HTTPException(404, "Take artifact not found")
+    if role == "score":
+        return _serve(p, "application/zip", download=True)
+    media = "audio/wav" if p.suffix == ".wav" else "audio/mpeg"
+    return _serve(p, media)
+
+
+@router.delete("/blocks/{name}/vocals/{take_id}")
+def delete_block_vocal_take(name: str, take_id: str) -> dict:
+    if not block_store.delete_vocal_take(name, take_id):
+        raise HTTPException(404, "Take not found")
+    return {"ok": True}
 
 
 @router.get("/blocks/{name}/stems")

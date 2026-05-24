@@ -443,6 +443,33 @@ def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
     # every track in, so it's only safe to reuse when there's nothing to drop.
     from src.models.vocals.lyrics import select_vocal_instruments
     lead_inst, harm_insts = select_vocal_instruments(pm)
+
+    # Engrave a vocal score — lead (with the lyrics under the melody) + any
+    # harmony staves → PDF full score + separate parts, zipped. Soft-fails if
+    # LilyPond is absent. Done before the instrumental prune below mutates pm.
+    pdf_zip = None
+    if lead_inst is not None:
+        try:
+            import pretty_midi
+            spec = _meta.get("spec") or {}
+            vpm = pretty_midi.PrettyMIDI(
+                initial_tempo=float(_meta.get("tempo") or spec.get("tempo") or 120.0))
+            for vi in (lead_inst, *harm_insts):
+                vpm.instruments.append(vi)
+            vocal_mid = job_dir / "vocal_parts.mid"
+            vpm.write(str(vocal_mid))
+            from src.scoring.pdf_export import export_zip
+            pdf_zip = export_zip(
+                vocal_mid, job_dir / "vocal_score.zip",
+                key=str(spec.get("key") or "C"),
+                scale=str(spec.get("scale") or "major"),
+                tempo=float(_meta.get("tempo") or 120.0),
+                title=f"{name} — Vocals", lead_lyrics=lyrics,
+            )
+        except Exception as exc:  # noqa: BLE001 — LilyPond missing / engrave error
+            logger.warning("vocal score export failed for %s: %s", name, exc)
+            pdf_zip = None
+
     drop = {id(lead_inst)} if lead_inst is not None else set()
     if harmonies:
         drop |= {id(i) for i in harm_insts}
@@ -493,12 +520,26 @@ def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
     except Exception:  # noqa: BLE001
         pass
 
+    # Persist this render as a take on the block so the user can re-select or
+    # delete past generations (soft-fail — a save hiccup shouldn't lose the job).
+    take_id = None
+    try:
+        take = block_store.save_vocal_take(
+            name, mix=served_mix, vocal=served_stem,
+            score=str(pdf_zip) if pdf_zip else None,
+            lyrics=lyrics, engine=engine_name, voice=voice, harmonies=harmonies,
+        )
+        take_id = take.get("id")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("could not persist vocal take for %s: %s", name, exc)
+
     progress("Done.", 1.0)
     return {
-        "block": name, "engine": engine_name, "voice": voice,
+        "block": name, "engine": engine_name, "voice": voice, "take_id": take_id,
         "_paths": {
             "audio_mp3": served_mix, "audio_wav": str(mix_wav),
             "vocal_mp3": served_stem,
+            "pdf": str(pdf_zip) if pdf_zip else None,
             "midi": str(block_store._midi_path(name)),
         },
     }

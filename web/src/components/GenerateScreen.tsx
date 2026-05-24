@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../api";
 import type { BlockSpec, Family, GenerateBody, Job, JobResult, Preset } from "../types";
 
@@ -28,6 +28,7 @@ export default function GenerateScreen({
   const [scale, setScale] = useState("major");
   const [tempo, setTempo] = useState(120);
   const [seed, setSeed] = useState("");
+  const [swing, setSwing] = useState<number | null>(null);
   const [sections, setSections] = useState<Set<string>>(new Set());
   const [instruments, setInstruments] = useState<Set<string>>(new Set());
   const [openFams, setOpenFams] = useState<Set<string>>(new Set());
@@ -47,7 +48,11 @@ export default function GenerateScreen({
   const [splitMsg, setSplitMsg] = useState<string | null>(null);
 
   const preset = useMemo(() => presets.find((p) => p.id === presetId), [presets, presetId]);
+  const specApplied = useRef(false);
 
+  // Load presets/instruments/masters. If a block was opened via "Edit in
+  // Generate", apply its exact spec here — synchronously, with the freshly
+  // loaded presets/families — so the default-preset load can't clobber it.
   useEffect(() => {
     (async () => {
       try {
@@ -55,7 +60,13 @@ export default function GenerateScreen({
           api.getPresets(), api.getInstruments(), api.getMasterPresets(),
         ]);
         setPresets(p); setFamilies(f); setMasters(m);
-        if (p.length) applyPreset(p[0], f);
+        if (initialSpec && !specApplied.current) {
+          specApplied.current = true;
+          applySpec(initialSpec, p, f);
+          onSpecConsumed?.();
+        } else if (p.length) {
+          applyPreset(p[0], f);
+        }
       } catch (e) {
         setLoadErr(String(e));
       }
@@ -63,17 +74,12 @@ export default function GenerateScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Prefill the form when a block is opened via "Edit in Generate".
+  // Safety net for when the spec arrives after presets are already loaded
+  // (GenerateScreen already mounted). Applies exactly once.
   useEffect(() => {
-    if (!initialSpec || !presets.length) return;
-    const p = presets.find((x) => x.id === initialSpec.genre);
-    if (p) applyPreset(p);
-    if (initialSpec.key) setKey(initialSpec.key);
-    if (initialSpec.scale) setScale(initialSpec.scale);
-    if (initialSpec.tempo) setTempo(initialSpec.tempo);
-    if (initialSpec.seed != null) setSeed(String(initialSpec.seed));
-    if (initialSpec.instruments?.length) setInstruments(new Set(initialSpec.instruments));
-    if (initialSpec.sections?.length) setSections(new Set(initialSpec.sections.map((s) => s.role)));
+    if (!initialSpec || !presets.length || specApplied.current) return;
+    specApplied.current = true;
+    applySpec(initialSpec, presets, families);
     onSpecConsumed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSpec, presets]);
@@ -98,6 +104,24 @@ export default function GenerateScreen({
     ));
   }
 
+  // Apply a saved block's spec to the form so regenerating reproduces it
+  // (then the user can toggle vocal_lead / vocal_harmony on and re-roll).
+  function applySpec(spec: BlockSpec, ps: Preset[] = presets, fams: Family[] = families) {
+    const p = ps.find((x) => x.id === spec.genre);
+    if (p) applyPreset(p, fams);          // sets genre + preset defaults first
+    if (spec.key) setKey(spec.key);
+    if (spec.scale) setScale(spec.scale);
+    if (spec.tempo) setTempo(spec.tempo);
+    setSeed(spec.seed != null ? String(spec.seed) : "");
+    setSwing(spec.swing ?? null);
+    if (spec.instruments?.length) {
+      const ids = new Set(spec.instruments);
+      setInstruments(ids);
+      setOpenFams(new Set(fams.filter((f) => f.instruments.some((i) => ids.has(i.id))).map((f) => f.family)));
+    }
+    if (spec.sections?.length) setSections(new Set(spec.sections.map((s) => s.role)));
+  }
+
   function toggle(set: Set<string>, v: string, setter: (s: Set<string>) => void) {
     const n = new Set(set);
     n.has(v) ? n.delete(v) : n.add(v);
@@ -113,6 +137,7 @@ export default function GenerateScreen({
       const body: GenerateBody = {
         genre: preset.id, key, scale, tempo: Number(tempo),
         seed: seed.trim() ? Number(seed) : null,
+        swing,
         instruments: [...instruments], sections: [...sections],
         with_pdf: withPdf, with_stems: withStems, master_preset: master,
       };

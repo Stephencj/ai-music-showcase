@@ -22,7 +22,9 @@ the soundfont is missing in some constrained environment.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import logging
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -307,6 +309,11 @@ def list_blocks() -> list[dict]:
             meta["_wav_path"] = str(wav) if wav.exists() else None
             mp3 = yaml_file.with_suffix(".mp3")
             meta["_preview_path"] = str(mp3) if mp3.exists() else None
+            vdir = BLOCKS_DIR / f"{yaml_file.stem}.vocals"
+            meta["_vocal_takes"] = (
+                sum(1 for d in vdir.iterdir() if d.is_dir() and (d / "meta.json").exists())
+                if vdir.exists() else 0
+            )
             meta.setdefault("tags", [])
             out.append(meta)
         except Exception:
@@ -368,9 +375,107 @@ def rerender_block_wav(name: str, sample_rate: int = _DEFAULT_PREVIEW_SR) -> Opt
     return None
 
 
+# --------------------------------------------------------------------------
+# Vocal takes — persisted sung renders per block, so the user can keep,
+# re-select, or delete previous generations. Each take lives at:
+#     data/blocks/<name>.vocals/<take_id>/{mix.mp3, vocal.mp3, score.zip,
+#                                          meta.json}
+# (gitignored audio; meta.json holds the lyrics + engine/voice used).
+# --------------------------------------------------------------------------
+def _vocals_dir(name: str) -> Path:
+    return BLOCKS_DIR / f"{_safe_name(name)}.vocals"
+
+
+def _safe_take_id(take_id: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_-]", "", take_id or "")
+
+
+def save_vocal_take(name: str, *, mix: "Path | str | None" = None,
+                    vocal: "Path | str | None" = None,
+                    score: "Path | str | None" = None,
+                    lyrics: str = "", engine: str = "", voice: str = "",
+                    harmonies: bool = True) -> dict:
+    """Persist one sung render as a dated take under the block. Copies the
+    given mix / vocal-stem / score files in and writes a ``meta.json``.
+    Returns the take's metadata dict (with a unique, sortable ``id``)."""
+    take_id = _dt.datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
+    take_dir = _vocals_dir(name) / take_id
+    take_dir.mkdir(parents=True, exist_ok=True)
+
+    files: dict[str, str] = {}
+    for src, role, default_ext in ((mix, "mix", ".mp3"),
+                                   (vocal, "vocal", ".mp3"),
+                                   (score, "score", ".zip")):
+        if not src:
+            continue
+        sp = Path(src)
+        if not sp.exists():
+            continue
+        dst = take_dir / f"{role}{sp.suffix or default_ext}"
+        try:
+            shutil.copy2(sp, dst)
+            files[role] = dst.name
+        except OSError:
+            logger.warning("could not copy %s into vocal take %s", sp, take_id)
+
+    meta = {
+        "id": take_id,
+        "created": _dt.datetime.now().isoformat(timespec="seconds"),
+        "engine": engine, "voice": voice, "harmonies": bool(harmonies),
+        "lyrics": lyrics, "files": files,
+    }
+    (take_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+    return meta
+
+
+def list_vocal_takes(name: str) -> list[dict]:
+    """All persisted takes for a block, newest first."""
+    base = _vocals_dir(name)
+    if not base.exists():
+        return []
+    takes: list[dict] = []
+    for d in base.iterdir():
+        meta_path = d / "meta.json"
+        if not d.is_dir() or not meta_path.exists():
+            continue
+        try:
+            takes.append(json.loads(meta_path.read_text()))
+        except (OSError, ValueError):
+            continue
+    takes.sort(key=lambda t: str(t.get("created", "")), reverse=True)
+    return takes
+
+
+def vocal_take_file(name: str, take_id: str, role: str) -> Optional[Path]:
+    """Path to a take's ``mix`` / ``vocal`` / ``score`` artifact, or None."""
+    take_dir = _vocals_dir(name) / _safe_take_id(take_id)
+    meta_path = take_dir / "meta.json"
+    if not meta_path.exists():
+        return None
+    try:
+        files = json.loads(meta_path.read_text()).get("files", {})
+    except (OSError, ValueError):
+        return None
+    fn = files.get(role)
+    if not fn:
+        return None
+    p = take_dir / fn
+    return p if p.exists() else None
+
+
+def delete_vocal_take(name: str, take_id: str) -> bool:
+    """Remove one take. Returns True if it existed."""
+    d = _vocals_dir(name) / _safe_take_id(take_id)
+    if d.exists() and d.is_dir():
+        shutil.rmtree(d, ignore_errors=True)
+        return True
+    return False
+
+
 def delete_block(name: str) -> None:
-    """Remove the .mid, .yaml, .wav, .mp3, .peaks.json, and Melody Studio
-    sidecar for a block. Silently ignores missing files."""
+    """Remove the .mid, .yaml, .wav, .mp3, .peaks.json, Melody Studio
+    sidecar, and saved vocal takes for a block. Silently ignores missing
+    files."""
     safe = _safe_name(name)
     sidecar = BLOCKS_DIR / f"{safe}_melody.yaml"
     for p in (_midi_path(name), _yaml_path(name), _wav_path(name),
@@ -380,6 +485,7 @@ def delete_block(name: str) -> None:
                 p.unlink()
         except OSError:
             pass
+    shutil.rmtree(_vocals_dir(name), ignore_errors=True)
 
 
 def _peaks_path(name: str) -> Path:

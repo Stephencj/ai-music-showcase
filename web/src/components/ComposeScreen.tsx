@@ -29,7 +29,7 @@ interface TLItem {
   repeat: number;
 }
 
-type SortKey = "name" | "created" | "tempo" | "bars" | "notes" | "duration";
+type SortKey = "name" | "created" | "tempo" | "bars" | "notes" | "duration" | "vocals";
 const SORTS: Record<SortKey, (a: Block, b: Block) => number> = {
   // all ascending; sortDir flips
   name: (a, b) => a.name.localeCompare(b.name),
@@ -38,9 +38,10 @@ const SORTS: Record<SortKey, (a: Block, b: Block) => number> = {
   bars: (a, b) => (a.bars ?? 0) - (b.bars ?? 0),
   notes: (a, b) => (a.n_notes ?? 0) - (b.n_notes ?? 0),
   duration: (a, b) => (a.duration_seconds ?? 0) - (b.duration_seconds ?? 0),
+  vocals: (a, b) => (a.vocal_takes ?? 0) - (b.vocal_takes ?? 0),
 };
 const DEFAULT_DIR: Record<SortKey, "asc" | "desc"> = {
-  name: "asc", created: "desc", tempo: "desc", bars: "desc", notes: "desc", duration: "desc",
+  name: "asc", created: "desc", tempo: "desc", bars: "desc", notes: "desc", duration: "desc", vocals: "desc",
 };
 const ROLE_RE = /\b(intro|verse|chorus|bridge|outro)\b/i;
 const roleOf = (n: string): string | null => {
@@ -85,6 +86,7 @@ export default function ComposeScreen({
   const [sortDir, setSortDir] = useState<"asc" | "desc">(() => ls.get("compose.sortDir", "asc"));
   const [favs, setFavs] = useState<Set<string>>(() => new Set(ls.get<string[]>("compose.favs", [])));
   const [favOnly, setFavOnly] = useState(false);
+  const [vocalsOnly, setVocalsOnly] = useState(false);
   const [fMeters, setFMeters] = useState<Set<string>>(new Set());
   const [fRoles, setFRoles] = useState<Set<string>>(new Set());
   const [fTags, setFTags] = useState<Set<string>>(new Set());
@@ -230,6 +232,7 @@ export default function ComposeScreen({
     [timeline, blockByName]
   );
   const allTags = useMemo(() => [...new Set(blocks.flatMap((b) => b.tags ?? []))].sort(), [blocks]);
+  const anyVocals = useMemo(() => blocks.some((b) => (b.vocal_takes ?? 0) > 0), [blocks]);
   const allMeters = useMemo(
     () => [...new Set(blocks.map(meterOf).filter((m): m is string => !!m))].sort(),
     [blocks]
@@ -244,13 +247,14 @@ export default function ComposeScreen({
     let arr = blocks.slice();
     if (q) arr = arr.filter((b) => b.name.toLowerCase().includes(q));
     if (favOnly) arr = arr.filter((b) => favs.has(b.name));
+    if (vocalsOnly) arr = arr.filter((b) => (b.vocal_takes ?? 0) > 0);
     if (fMeters.size) arr = arr.filter((b) => { const m = meterOf(b); return !!m && fMeters.has(m); });
     if (fRoles.size) arr = arr.filter((b) => { const r = roleOf(b.name); return !!r && fRoles.has(r); });
     if (fTags.size) arr = arr.filter((b) => (b.tags ?? []).some((t) => fTags.has(t)));
     const cmp = SORTS[sortBy];
     arr.sort((a, b) => (sortDir === "asc" ? cmp(a, b) : -cmp(a, b)));
     return arr;
-  }, [blocks, query, favOnly, favs, fMeters, fRoles, fTags, sortBy, sortDir]);
+  }, [blocks, query, favOnly, vocalsOnly, favs, fMeters, fRoles, fTags, sortBy, sortDir]);
 
   function changeSort(k: SortKey) { setSortBy(k); setSortDir(DEFAULT_DIR[k]); }
   const chipToggle = (set: Set<string>, v: string, setter: (s: Set<string>) => void) => {
@@ -360,6 +364,7 @@ export default function ComposeScreen({
                 <option value="bars">Bars</option>
                 <option value="notes">Notes</option>
                 <option value="duration">Duration</option>
+                <option value="vocals">Vocals</option>
               </select>
               <button className="btn ghost" style={{ width: "auto" }} title="Sort direction"
                 onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}>
@@ -367,10 +372,13 @@ export default function ComposeScreen({
               </button>
             </div>
 
-            {(favs.size > 0 || allMeters.length > 1 || allRoles.length > 0 || allTags.length > 0) && (
+            {(favs.size > 0 || anyVocals || allMeters.length > 1 || allRoles.length > 0 || allTags.length > 0) && (
               <div className="filter-row">
                 {favs.size > 0 && (
                   <button className={"chip" + (favOnly ? " on" : "")} onClick={() => setFavOnly((v) => !v)}>★ Favorites</button>
+                )}
+                {anyVocals && (
+                  <button className={"chip" + (vocalsOnly ? " on" : "")} onClick={() => setVocalsOnly((v) => !v)} title="Only blocks with generated vocals">🎤 Has vocals</button>
                 )}
                 {allMeters.length > 1 && allMeters.map((m) => (
                   <button key={m} className={"chip" + (fMeters.has(m) ? " on" : "")} onClick={() => chipToggle(fMeters, m, setFMeters)}>{m}</button>
@@ -479,16 +487,27 @@ function BlockCard({
   const [vocBusy, setVocBusy] = useState(false);
   const [vocProg, setVocProg] = useState(0);
   const [vocMsg, setVocMsg] = useState("");
-  const [vocUrls, setVocUrls] = useState<{ audio: string | null; vocal?: string | null } | null>(null);
+  const [vocUrls, setVocUrls] = useState<{ audio: string | null; vocal?: string | null; pdf?: string | null } | null>(null);
   const [noteCount, setNoteCount] = useState<number | null>(null);
+  const [takes, setTakes] = useState<api.VocalTake[]>([]);
 
   const voiceOptions = engine === "studio" ? studioVoices : voices;
+
+  const loadTakes = () =>
+    api.listVocalTakes(block.name).then((r) => setTakes(r.takes)).catch(() => setTakes([]));
+  async function onDeleteTake(id: string) {
+    try {
+      await api.deleteVocalTake(block.name, id);
+      setTakes((ts) => ts.filter((t) => t.id !== id));
+    } catch (e) { setVocMsg(String(e)); }
+  }
 
   useEffect(() => {
     if (open && noteCount === null) {
       api.getMelodyInfo(block.name).then((m) => setNoteCount(m.total_notes)).catch(() => setNoteCount(0));
     }
     if (open && !engine && engines.length) setEngine(engines.includes("studio") ? "studio" : engines[0]);
+    if (open) loadTakes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, engines]);
 
@@ -513,7 +532,7 @@ function BlockCard({
       const { job_id } = await api.renderVocals(block.name, { lyrics, voice, engine: engine || "rough", harmonies });
       const job = await api.pollVocal(job_id, (p, m) => { setVocProg(p); setVocMsg(m); });
       if (job.status === "error") setVocMsg(job.error || "Vocal render failed");
-      else if (job.result) setVocUrls({ audio: job.result.urls.audio, vocal: job.result.urls.vocal });
+      else if (job.result) { setVocUrls({ audio: job.result.urls.audio, vocal: job.result.urls.vocal, pdf: job.result.urls.pdf }); loadTakes(); }
     } catch (e) { setVocMsg(String(e)); }
     finally { setVocBusy(false); }
   }
@@ -674,14 +693,27 @@ function BlockCard({
             </div>
             {vocBusy && <div className="progress"><div style={{ width: `${Math.round(vocProg * 100)}%` }} /></div>}
             {vocMsg && !vocUrls && <div className={vocMsg.startsWith("Error") || vocMsg.includes("OPENAI") ? "error" : "progress-msg"}>{vocMsg}</div>}
-            {vocUrls?.audio && (
-              <>
-                <audio controls src={api.mediaUrl(vocUrls.audio)} />
-                <div className="links">
-                  <a href={api.mediaUrl(vocUrls.audio)} download>↓ Mix</a>
-                  {vocUrls.vocal && <a href={api.mediaUrl(vocUrls.vocal)} download>↓ Vocal stem</a>}
-                </div>
-              </>
+            {takes.length > 0 && (
+              <div className="takes">
+                <div className="te-note">Saved takes ({takes.length})</div>
+                {takes.map((t) => (
+                  <div key={t.id} className="take-row">
+                    <audio controls src={api.vocalTakeUrl(block.name, t.id, "mix")} />
+                    <div className="take-info">
+                      <span className="te-note">
+                        {new Date(t.created).toLocaleString()} · {t.engine}
+                        {t.voice ? ` / ${t.voice.replace(/^tiger_/, "")}` : ""}
+                        {t.harmonies ? " · +harm" : ""}
+                      </span>
+                      <div className="links">
+                        {t.files.vocal && <a href={api.vocalTakeUrl(block.name, t.id, "vocal")} download>↓ Stem</a>}
+                        {t.files.score && <a href={api.vocalTakeUrl(block.name, t.id, "score")} download>↓ Score</a>}
+                        <button className="btn ghost sm" onClick={() => onDeleteTake(t.id)} title="Delete this take">🗑 Delete</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 

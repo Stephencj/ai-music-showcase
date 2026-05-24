@@ -97,6 +97,7 @@ export interface Block {
   tags?: string[];
   spec?: BlockSpec | null;
   lyrics?: string;
+  vocal_takes?: number;
   has_preview: boolean;
   audio_url: string;
 }
@@ -125,6 +126,7 @@ export interface GenerateBody {
   scale?: string | null;
   tempo?: number | null;
   seed?: number | null;
+  swing?: number | null;
   instruments: string[];
   sections: string[];
   with_pdf: boolean;

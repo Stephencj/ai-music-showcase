@@ -780,6 +780,30 @@ def score_to_part_pdfs(
     return result
 
 
+def _attach_lead_lyrics(score, lyrics: str) -> None:
+    """Best-effort: write each lyric word under the first note of the
+    syllable group it occupies, on the first (lead) part — the same
+    word→note walk the synth uses, so the printed lyrics line up with the
+    sung melody. Failures are non-fatal (engrave without lyrics)."""
+    try:
+        import re as _re
+
+        from src.models.vocals.lyrics import count_syllables
+        parts = list(score.parts)
+        words = _re.findall(r"[A-Za-z']+", lyrics or "")
+        if not parts or not words:
+            return
+        notes = list(parts[0].recurse().notes)   # Notes/Chords, document order
+        i = wi = 0
+        while i < len(notes):
+            w = words[wi % len(words)]
+            notes[i].lyric = w
+            i += max(1, count_syllables(w))
+            wi += 1
+    except Exception:
+        logger.exception("could not attach lead lyrics — engraving without them")
+
+
 def export_zip(
     midi_path: "Path | str",
     out_zip_path: "Path | str",
@@ -791,6 +815,7 @@ def export_zip(
     progression: Optional[list] = None,
     bars: Optional[int] = None,
     swing: float = 0.0,
+    lead_lyrics: Optional[str] = None,
 ) -> Path:
     """End-to-end: MIDI → engraved PDFs → single ZIP file.
 
@@ -824,6 +849,9 @@ def export_zip(
         midi_path, key=key, scale=scale, tempo=tempo, title=title,
         swing=swing,
     )
+
+    if lead_lyrics:
+        _attach_lead_lyrics(score, lead_lyrics)
 
     chordmode = _progression_to_chordmode(
         progression, key, bars or (len(progression) if progression else 0),

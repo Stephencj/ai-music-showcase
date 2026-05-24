@@ -89,6 +89,25 @@ export const mediaUrl = (path: string) => url(path);
 export const blockFileUrl = (name: string, kind: "midi" | "wav" | "pdf" | "stems") =>
   url(`/api/blocks/${encodeURIComponent(name)}/${kind}`);
 
+// --- Saved vocal takes (persisted sung renders per block) ---
+export interface VocalTake {
+  id: string;
+  created: string;
+  engine: string;
+  voice: string;
+  harmonies: boolean;
+  lyrics: string;
+  files: Record<string, string>; // role ("mix"|"vocal"|"score") -> filename
+}
+export const listVocalTakes = (name: string) =>
+  jget<{ takes: VocalTake[] }>(`/api/blocks/${encodeURIComponent(name)}/vocals`);
+export const vocalTakeUrl = (name: string, takeId: string, role: "mix" | "vocal" | "score") =>
+  url(`/api/blocks/${encodeURIComponent(name)}/vocals/${takeId}/${role}`);
+export async function deleteVocalTake(name: string, takeId: string): Promise<void> {
+  const r = await fetch(url(`/api/blocks/${encodeURIComponent(name)}/vocals/${takeId}`), { method: "DELETE" });
+  if (!r.ok) throw new Error((await r.text()) || r.statusText);
+}
+
 // --- Vocals ---
 export const getVoices = () =>
   jget<{ voices: string[]; engines: string[]; studio_voices?: string[] }>("/api/voices");
