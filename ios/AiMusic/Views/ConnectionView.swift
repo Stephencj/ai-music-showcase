@@ -28,7 +28,7 @@ struct ConnectionView: View {
                         if !discovery.hasSettled {
                             HStack {
                                 ProgressView()
-                                Text("Looking for AI Music Studio on your network…")
+                                Text("Looking for Music Producer on your network…")
                                     .foregroundStyle(.secondary)
                             }
                         } else {
@@ -108,7 +108,7 @@ struct ConnectionView: View {
                         .disabled(!probeIsOK)
                 }
             }
-            .navigationTitle("AI Music Studio")
+            .navigationTitle("Music Producer")
             .onAppear {
                 manualURL = settings.remoteURL.isEmpty ? settings.lanURL : settings.remoteURL
                 tokenField = settings.authToken

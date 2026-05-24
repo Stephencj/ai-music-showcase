@@ -109,7 +109,7 @@ struct MainView: View {
                     }
                 }
             }
-            .navigationTitle("AI Music Studio")
+            .navigationTitle("Music Producer")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

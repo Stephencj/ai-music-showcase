@@ -32,7 +32,7 @@ enum HealthCheckError: LocalizedError {
         case .unauthorized: return "Auth token rejected by the server."
         case .unreachable(let reason): return "Couldn't reach the server: \(reason)."
         case .badResponse(let code): return "Server replied with HTTP \(code)."
-        case .malformed: return "Server reply didn't look like AI Music Studio."
+        case .malformed: return "Server reply didn't look like Music Producer."
         }
     }
 }

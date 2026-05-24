@@ -43,7 +43,7 @@ class MdnsAdvertiser:
         # Bonjour-friendly instance name (avoids dots/spaces in the
         # leading segment; users see this in the iOS picker).
         safe_host = hostname.split(".")[0].replace(" ", "-")
-        instance = instance_name or f"AI Music Studio on {safe_host}"
+        instance = instance_name or f"Music Producer on {safe_host}"
         # Zeroconf appends the service type, so the full name is
         # "<instance>._ai-music._tcp.local."
         full_name = f"{instance}.{SERVICE_TYPE}"

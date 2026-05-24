@@ -1,6 +1,6 @@
 {
-  "name": "AI Music Studio",
-  "short_name": "AI Music",
+  "name": "Music Producer",
+  "short_name": "Music Producer",
   "description": "Generate songs, build blocks, compose — on the proven engine.",
   "start_url": ".",
   "scope": ".",

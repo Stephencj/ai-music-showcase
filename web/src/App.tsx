@@ -14,7 +14,7 @@ export default function App() {
       <header className="topbar">
         <div className="logo">♪</div>
         <div>
-          <h1>AI Music Studio</h1>
+          <h1>Music Producer</h1>
           <div className="sub">Generate · Block · Compose</div>
         </div>
       </header>
