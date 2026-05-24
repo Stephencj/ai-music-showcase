@@ -2,8 +2,14 @@ package com.aimusic;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.SharedPreferences;
+import android.net.nsd.NsdManager;
+import android.net.nsd.NsdServiceInfo;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.webkit.ConsoleMessage;
@@ -41,9 +47,16 @@ public class MainActivity extends Activity {
     private static final String PREFS = "aimusic";
     private static final String KEY_URL = "server_url";
 
+    private static final String SERVICE_TYPE = "_ai-music._tcp.";
+
     private WebView web;
     private WebViewAssetLoader assetLoader;
     private String apiBase = "";
+    private boolean started = false;
+    private NsdManager nsd;
+    private NsdManager.DiscoveryListener discoveryListener;
+    private WifiManager.MulticastLock multicastLock;
+    private final Handler handler = new Handler(Looper.getMainLooper());
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -108,13 +121,73 @@ public class MainActivity extends Activity {
         });
 
         setContentView(web);
+        beginStartup();
+    }
 
-        String api = prefs().getString(KEY_URL, "");
-        if (api.isEmpty()) {
-            promptForUrl();
-        } else {
-            startApp(api);
+    /** Find the Mac automatically via its Bonjour/mDNS service so the app
+     * survives the Mac's IP changing (DHCP). Falls back to the saved/default
+     * address after a short timeout, so it always loads even if discovery
+     * fails (e.g. WebView/OS without working mDNS). */
+    private void beginStartup() {
+        final String fallback = prefs().getString(KEY_URL, "");
+        try {
+            WifiManager wifi = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wifi != null) {
+                multicastLock = wifi.createMulticastLock("aimusic-mdns");
+                multicastLock.setReferenceCounted(true);
+                multicastLock.acquire();
+            }
+            nsd = (NsdManager) getSystemService(Context.NSD_SERVICE);
+            discoveryListener = new NsdManager.DiscoveryListener() {
+                public void onDiscoveryStarted(String t) { }
+                public void onStartDiscoveryFailed(String t, int code) { }
+                public void onDiscoveryStopped(String t) { }
+                public void onStopDiscoveryFailed(String t, int code) { }
+                public void onServiceLost(NsdServiceInfo s) { }
+                public void onServiceFound(NsdServiceInfo info) {
+                    if (info.getServiceType() != null && info.getServiceType().contains("ai-music")) {
+                        try {
+                            nsd.resolveService(info, new NsdManager.ResolveListener() {
+                                public void onResolveFailed(NsdServiceInfo s, int code) { }
+                                public void onServiceResolved(NsdServiceInfo s) {
+                                    String host = s.getHost() != null ? s.getHost().getHostAddress() : null;
+                                    if (host != null) {
+                                        final String url = "http://" + host + ":" + s.getPort();
+                                        handler.post(() -> startWith(url, true));
+                                    }
+                                }
+                            });
+                        } catch (Exception ignored) { }
+                    }
+                }
+            };
+            nsd.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener);
+        } catch (Exception e) {
+            startWith(fallback, false);
+            return;
         }
+        // Don't wait forever on discovery — use the saved address quickly.
+        handler.postDelayed(() -> startWith(fallback, false), 3500);
+    }
+
+    /** Load the app with the resolved/saved API base, exactly once. */
+    private synchronized void startWith(String url, boolean discovered) {
+        if (started) return;
+        started = true;
+        stopDiscovery();
+        if (url == null || url.isEmpty()) {
+            promptForUrl();
+            return;
+        }
+        if (discovered) prefs().edit().putString(KEY_URL, url).apply();
+        startApp(url);   // sets this.apiBase
+        report("startup", (discovered ? "discovered " : "saved ") + url);
+    }
+
+    private void stopDiscovery() {
+        try { if (nsd != null && discoveryListener != null) nsd.stopServiceDiscovery(discoveryListener); } catch (Exception ignored) { }
+        try { if (multicastLock != null && multicastLock.isHeld()) multicastLock.release(); } catch (Exception ignored) { }
+        discoveryListener = null;
     }
 
     /** Remember the API base (injected into index.html as it's served), then
