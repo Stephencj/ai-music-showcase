@@ -351,12 +351,18 @@ def _unique_block_name(block_store, base: str) -> str:
 # Vocals
 # ---------------------------------------------------------------------------
 def melody_info(name: str) -> dict:
-    """Syllable-helper data for a block: notes per phrase + total."""
+    """Syllable-helper data for a block: notes per phrase + total. Uses the
+    SAME lead-selection + monophonic reduction as the vocal render
+    (select_vocal_tracks → monophonic_line), so the phrase syllable counts
+    match the melody that actually gets sung — lyrics fitted to them line up."""
     import pretty_midi
     from src.daw_integration.generic import blocks as block_store
-    from src.models.vocals.lyrics import extract_lead_notes, phrase_syllable_counts
+    from src.models.vocals.lyrics import (
+        monophonic_line, phrase_syllable_counts, select_vocal_tracks,
+    )
     pm = pretty_midi.PrettyMIDI(str(block_store._midi_path(name)))
-    notes = extract_lead_notes(pm)
+    lead, _harms = select_vocal_tracks(pm)
+    notes = monophonic_line(lead)
     return {
         "total_notes": len(notes),
         "phrase_syllables": phrase_syllable_counts(notes),
