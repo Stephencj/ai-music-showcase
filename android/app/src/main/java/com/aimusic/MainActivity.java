@@ -21,7 +21,7 @@ import android.widget.EditText;
  */
 public class MainActivity extends Activity {
 
-    private static final String DEFAULT_URL = "http://192.168.1.10:5174";
+    private static final String DEFAULT_URL = "http://100.64.0.10:5174";
     private static final String PREFS = "aimusic";
     private static final String KEY_URL = "server_url";
 
@@ -60,8 +60,8 @@ public class MainActivity extends Activity {
         input.setSelection(input.getText().length());
         new AlertDialog.Builder(this)
                 .setTitle("Studio server URL")
-                .setMessage("The Mac's address — e.g. http://192.168.1.10:5174 (same Wi-Fi) "
-                        + "or http://100.64.0.10:5174 (Tailscale).")
+                .setMessage("The Mac's address — e.g. http://100.64.0.10:5174 (Tailscale) "
+                        + "or http://192.168.1.10:5174 (same Wi-Fi).")
                 .setView(input)
                 .setCancelable(false)
                 .setPositiveButton("Connect", (d, w) -> {
