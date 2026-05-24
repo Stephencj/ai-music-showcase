@@ -6,18 +6,22 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.webkit.ConsoleMessage;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
+import android.widget.Toast;
 
 /**
- * Minimal WebView wrapper for the AI Music Studio React app. Loads a server
- * URL (the Mac's LAN/Tailscale address, e.g. http://192.168.1.10:5174) and
- * keeps it in SharedPreferences. First launch prompts for the URL (prefilled
- * with the default); the overflow menu lets you change it or reload. No
- * cloudflare, no extra dependencies — pure framework WebView.
+ * WebView wrapper for the AI Music Studio React app. Loads a configurable
+ * server URL (default the Mac's Tailscale address). Surfaces load + JS
+ * errors on screen / as toasts instead of failing to a blank white page,
+ * and disables HTTP caching so a fresh server build always loads.
  */
 public class MainActivity extends Activity {
 
@@ -31,15 +35,44 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        WebView.setWebContentsDebuggingEnabled(true);
         web = new WebView(this);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
-        s.setDomStorageEnabled(true);                 // PWA localStorage (apiBase etc.)
-        s.setMediaPlaybackRequiresUserGesture(false); // let vocal/audio previews play
+        s.setDomStorageEnabled(true);
+        s.setMediaPlaybackRequiresUserGesture(false);
         s.setLoadWithOverviewMode(true);
         s.setUseWideViewPort(true);
-        web.setWebViewClient(new WebViewClient());     // keep navigation inside the app
-        web.setWebChromeClient(new WebChromeClient());
+        s.setCacheMode(WebSettings.LOAD_NO_CACHE);   // always fetch the current build
+
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onReceivedError(WebView v, WebResourceRequest req, WebResourceError err) {
+                if (req != null && req.isForMainFrame()) {
+                    showError("Load error " + err.getErrorCode() + ": " + err.getDescription()
+                            + "\n" + req.getUrl());
+                }
+            }
+
+            @Override
+            public void onReceivedHttpError(WebView v, WebResourceRequest req, WebResourceResponse resp) {
+                if (req != null && req.isForMainFrame()) {
+                    showError("HTTP " + resp.getStatusCode() + "\n" + req.getUrl());
+                }
+            }
+        });
+
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage cm) {
+                if (cm.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    final String m = cm.message() + "  (" + cm.sourceId() + ":" + cm.lineNumber() + ")";
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, m, Toast.LENGTH_LONG).show());
+                }
+                return true;
+            }
+        });
+
         setContentView(web);
 
         String url = prefs().getString(KEY_URL, "");
@@ -48,6 +81,14 @@ public class MainActivity extends Activity {
         } else {
             web.loadUrl(url);
         }
+    }
+
+    private void showError(final String msg) {
+        runOnUiThread(() -> web.loadData(
+                "<html><body style='font:16px -apple-system,sans-serif;padding:1.2em;color:#b00020'>"
+                        + "<h3>Couldn't load the app</h3><pre style='white-space:pre-wrap;word-break:break-word'>"
+                        + msg.replace("<", "&lt;") + "</pre></body></html>",
+                "text/html", "utf-8"));
     }
 
     private SharedPreferences prefs() {
