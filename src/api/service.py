@@ -438,13 +438,27 @@ def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
     _prune_old_job_dirs()
 
     progress("Mixing with the instrumental…", 0.7)
+    # Build the backing WITHOUT the tracks we just sang, so the soundfont
+    # melody / harmony doesn't double the sung vocal. The cached HQ WAV bakes
+    # every track in, so it's only safe to reuse when there's nothing to drop.
+    from src.models.vocals.lyrics import select_vocal_instruments
+    lead_inst, harm_insts = select_vocal_instruments(pm)
+    drop = {id(lead_inst)} if lead_inst is not None else set()
+    if harmonies:
+        drop |= {id(i) for i in harm_insts}
     wav_path = block_store._wav_path(name)
-    if wav_path.exists():
+    if not drop and wav_path.exists():
         inst, isr = sf.read(str(wav_path), dtype="float32")
     else:
-        from src.audio_processing.render.pipeline import render_to_audio
-        r = render_to_audio(midi=block_store._midi_path(name), output_dir=job_dir / "r", with_stems=False)
-        inst, isr = sf.read(str(r.mix_path), dtype="float32")
+        pm.instruments = [i for i in pm.instruments if id(i) not in drop]
+        if pm.instruments:
+            from src.audio_processing.render.pipeline import render_to_audio
+            inst_mid = job_dir / "instrumental.mid"
+            pm.write(str(inst_mid))
+            r = render_to_audio(midi=str(inst_mid), output_dir=job_dir / "inst", with_stems=False)
+            inst, isr = sf.read(str(r.mix_path), dtype="float32")
+        else:
+            inst, isr = np.zeros((1, 2), dtype="float32"), sr
     if voc.size and sr != isr:
         import librosa
         voc = librosa.resample(voc, orig_sr=sr, target_sr=isr)

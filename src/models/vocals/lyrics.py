@@ -44,11 +44,8 @@ def extract_lead_notes(pm) -> list[tuple[int, float, float]]:
 _HARM_HINTS = ("harmony", "backing", "choir", "ooh", "aah", "vocal")
 
 
-def select_vocal_tracks(pm) -> tuple[list, list]:
-    """Return ``(lead_notes, harmonies)`` where harmonies is a list of
-    ``(track_name, notes)``. Lead = the best-scored melodic track; harmonies
-    = other tracks named harmony/backing/vocal/choir (so we don't sing the
-    bass or piano)."""
+def _score_vocal_instruments(pm) -> list:
+    """Rank non-drum tracks by how vocal-like they are (highest first)."""
     scored = []
     for inst in pm.instruments:
         if inst.is_drum or not inst.notes:
@@ -64,18 +61,57 @@ def select_vocal_tracks(pm) -> tuple[list, list]:
         if _BASS_HINT in name:
             score -= 2000.0
         scored.append((score, inst, name))
-    if not scored:
-        return [], []
     scored.sort(key=lambda x: -x[0])
+    return scored
+
+
+def select_vocal_instruments(pm):
+    """The pretty_midi Instruments ``render_vocals`` would sing:
+    ``(lead_instrument | None, [harmony_instruments])``. Same selection as
+    :func:`select_vocal_tracks` but returns the track objects, so callers can
+    exclude them from the instrumental backing (else the soundfont melody /
+    harmony doubles the sung vocal)."""
+    scored = _score_vocal_instruments(pm)
+    if not scored:
+        return None, []
+    lead = scored[0][1]
+    harms = [inst for _, inst, name in scored[1:] if any(h in name for h in _HARM_HINTS)]
+    return lead, harms
+
+
+def select_vocal_tracks(pm) -> tuple[list, list]:
+    """Return ``(lead_notes, harmonies)`` where harmonies is a list of
+    ``(track_name, notes)``. Lead = the best-scored melodic track; harmonies
+    = other tracks named harmony/backing/vocal/choir (so we don't sing the
+    bass or piano)."""
+    lead, harms = select_vocal_instruments(pm)
+    if lead is None:
+        return [], []
 
     def notes_of(inst):
         return sorted([(int(n.pitch), float(n.start), float(n.end)) for n in inst.notes],
                       key=lambda x: x[1])
 
-    lead = notes_of(scored[0][1])
-    harms = [(inst.name, notes_of(inst)) for _, inst, name in scored[1:]
-             if any(h in name for h in _HARM_HINTS)]
-    return lead, harms
+    return notes_of(lead), [(inst.name, notes_of(inst)) for inst in harms]
+
+
+def monophonic_line(notes: list[tuple[int, float, float]], min_dur: float = 0.03
+                    ) -> list[tuple[int, float, float]]:
+    """Collapse possibly-overlapping notes into a non-overlapping, time-ordered
+    line. A monophonic voice can only sing one pitch at a time, and the studio
+    engine renders a line as one contiguous frame sequence — so overlapping
+    notes (a chordal backing/pad) would otherwise be laid end-to-end and drift
+    out of time. On overlap we keep the earlier (higher-pitch on ties) note and
+    start the next when the previous ends, dropping anything with no room left."""
+    out: list[tuple[int, float, float]] = []
+    last_end = -1.0
+    for p, s, e in sorted(notes, key=lambda x: (x[1], -x[0])):
+        s2 = max(s, last_end)
+        if e - s2 < min_dur:
+            continue
+        out.append((p, s2, e))
+        last_end = e
+    return out
 
 
 _HARM_VOWEL = "ooh"

@@ -29,6 +29,13 @@ DEFAULT_VB = PROJECT_ROOT / "data" / "models" / "diffsinger" / "tiger_vb"
 _VOWELS = {"aa", "ae", "ah", "ao", "aw", "ay", "eh", "er", "ey", "ih",
            "iy", "ow", "oy", "uh", "uw", "ax"}
 
+# The CoreML EP fails on long sequences ("Error in dynamically resizing
+# for sequence length"), so render a line in chunks: split on rests (seams
+# fall in silence) and cap each chunk's frame count as a hard backstop.
+# 1200 frames (~14 s) sits safely under the longest known-good single pass.
+_CHUNK_GAP = 0.25          # a rest this long (s) starts a fresh chunk
+_MAX_CHUNK_FRAMES = 1200
+
 
 def available(vb_dir: Path = DEFAULT_VB) -> bool:
     return (vb_dir / "dsacoustic" / "acoustic.onnx").exists() and \
@@ -67,8 +74,11 @@ class StudioEngine(VocalEngine):
                     logger.warning("CoreML init failed for %s (%s) — CPU only", path.name, exc)
             return ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
 
-        self._acoustic = _session(self.vb / "dsacoustic" / "acoustic.onnx")
-        self._vocoder = _session(self.vb / "dsvocoder" / "tgm_hifigan.onnx")
+        self._acoustic_path = self.vb / "dsacoustic" / "acoustic.onnx"
+        self._vocoder_path = self.vb / "dsvocoder" / "tgm_hifigan.onnx"
+        self._acoustic = _session(self._acoustic_path)
+        self._vocoder = _session(self._vocoder_path)
+        self._cpu_only = False   # flips on once CoreML fails a run (see _infer)
 
         cfg = yaml.safe_load(open(self.vb / "dsacoustic" / "dsconfig.yaml"))
         self.sr = int(cfg.get("sample_rate", 44100))
@@ -175,50 +185,98 @@ class StudioEngine(VocalEngine):
 
     # -- full-line render (interface used by render_lead_vocal) ------------
     def render_line(self, segments: list[dict], sr: int) -> tuple[np.ndarray, int]:
-        tokens: list[int] = []
-        durs: list[int] = []
-        f0: list[float] = []
+        # Build chunks of (tokens, durations, f0) split on rests / a frame cap
+        # so each ONNX inference stays short enough for the CoreML EP. Each
+        # chunk records its absolute start time so we can overlay it back onto
+        # the song timeline (the silence between chunks is just the buffer).
+        chunks: list[dict] = []
+        cur: dict | None = None
         prev_end = 0.0
-        prev_hz = 0.0
+
+        def _flush():
+            nonlocal cur
+            if cur and cur["tokens"]:
+                chunks.append(cur)
+            cur = None
+
         for seg in segments:
             gap = seg["start"] - prev_end
-            if gap > 0.03:
-                g = max(1, round(gap / self.frame_sec))
-                tokens.append(self._sp); durs.append(g); f0.extend([0.0] * g)
-                prev_hz = 0.0
+            if cur is not None and gap > _CHUNK_GAP:
+                _flush()
+            note_time = seg["start"]
             groups = self._syllabify(self._phonemes(seg["text"]), len(seg["notes"]))
-            for (midi, ndur), group in zip(seg["notes"], groups):
+            for ni, ((midi, ndur), group) in enumerate(zip(seg["notes"], groups)):
                 nf = max(1, round(ndur / self.frame_sec))
+                if cur is not None and len(cur["f0"]) + nf > _MAX_CHUNK_FRAMES:
+                    _flush()                                   # cap hit → hard split
+                if cur is None:
+                    cur = {"start": note_time, "tokens": [], "durs": [], "f0": []}
+                elif ni == 0 and gap > 0.03:
+                    # short rest before this segment → keep timing with an SP
+                    g = max(1, round(gap / self.frame_sec))
+                    cur["tokens"].append(self._sp); cur["durs"].append(g)
+                    cur["f0"].extend([0.0] * g)
                 hz = float(midi_to_hz(midi))
-                # phoneme tokens + per-phoneme frame durations (sum == nf)
-                for ph, fr in self._allocate(group, nf):
-                    tokens.append(self.ph2id.get(ph, self._fallback_vowel))
-                    durs.append(fr)
+                # phoneme tokens + per-phoneme frame durations. A syllable
+                # with more phonemes than the note has frames (consonant
+                # clusters on a short note) makes _allocate return MORE frames
+                # than nf, so derive the F0 length from the allocation — the
+                # mel (durations) and f0 lengths must agree or inference fails.
+                alloc = self._allocate(group, nf)
+                for ph, fr in alloc:
+                    cur["tokens"].append(self.ph2id.get(ph, self._fallback_vowel))
+                    cur["durs"].append(fr)
+                note_nf = sum(fr for _, fr in alloc)
                 # per-frame F0: hit the note cleanly (no scoop — constant
                 # glides read as out-of-tune "searching"). Add gentle vibrato
                 # on sustained notes for a natural, confident voice.
-                note_f0 = np.full(nf, hz, dtype=float)
-                if ndur >= 0.5 and nf > 8:
-                    tt = np.arange(nf) * self.frame_sec
+                note_f0 = np.full(note_nf, hz, dtype=float)
+                if ndur >= 0.5 and note_nf > 8:
+                    tt = np.arange(note_nf) * self.frame_sec
                     ramp = np.clip((tt - 0.2) / 0.25, 0.0, 1.0)   # ease vibrato in after 0.2 s
                     semis = 0.22 * np.sin(2 * np.pi * 5.5 * tt) * ramp
                     note_f0 = hz * (2.0 ** (semis / 12.0))
-                f0.extend(note_f0.tolist())
-                prev_hz = hz
-            prev_end = seg["start"] + sum(d for _, d in seg["notes"])
+                cur["f0"].extend(note_f0.tolist())
+                prev_end = note_time + ndur
+                note_time = prev_end
+        _flush()
 
-        if not tokens:
+        if not chunks:
             return np.zeros(0, dtype=np.float32), self.sr
-        n_frames = len(f0)
-        wave = self._infer(np.array(tokens, np.int64), np.array(durs, np.int64),
-                           np.array(f0, np.float32), n_frames)
-        if sr != self.sr and wave.size:
-            import librosa
-            wave = librosa.resample(wave, orig_sr=self.sr, target_sr=sr)
-            return wave.astype(np.float32), sr
-        return wave.astype(np.float32), self.sr
 
-    def _infer(self, tokens, durs, f0, n_frames) -> np.ndarray:
+        total = prev_end + 0.3
+        out = np.zeros(int(total * self.sr) + self.sr, dtype=np.float32)
+        fade = max(1, int(0.002 * self.sr))                    # 2 ms edges → no seam clicks
+        for ch in chunks:
+            nf = len(ch["f0"])
+            wave = self._infer(np.array(ch["tokens"], np.int64), np.array(ch["durs"], np.int64),
+                               np.array(ch["f0"], np.float32), nf)
+            if wave.size > 2 * fade:
+                wave[:fade] *= np.linspace(0.0, 1.0, fade, dtype=np.float32)
+                wave[-fade:] *= np.linspace(1.0, 0.0, fade, dtype=np.float32)
+            i0 = int(ch["start"] * self.sr)
+            i1 = min(len(out), i0 + len(wave))
+            if i1 > i0:
+                out[i0:i1] += wave[: i1 - i0]
+        out = out[: int(total * self.sr)]
+
+        if sr != self.sr and out.size:
+            import librosa
+            out = librosa.resample(out, orig_sr=self.sr, target_sr=sr)
+            return out.astype(np.float32), sr
+        return out.astype(np.float32), self.sr
+
+    def _force_cpu(self) -> None:
+        """Rebuild both ONNX sessions on CPU. The CoreML EP can fail at *run*
+        time (not just init) — e.g. 'dynamically resizing for sequence length'
+        when its compile cache is unwritable / disk is tight — so we drop to
+        CPU once and stay there for the rest of the render (reliable, slower)."""
+        import onnxruntime as ort
+        self._acoustic = ort.InferenceSession(str(self._acoustic_path), providers=["CPUExecutionProvider"])
+        self._vocoder = ort.InferenceSession(str(self._vocoder_path), providers=["CPUExecutionProvider"])
+        self._cpu_only = True
+
+    def _run(self, tokens, durs, f0, n_frames) -> np.ndarray:
         spk = np.tile(self._spk, (n_frames, 1))[None].astype(np.float32)
         mel = self._acoustic.run(["mel"], {
             "tokens": tokens[None],
@@ -232,6 +290,16 @@ class StudioEngine(VocalEngine):
         })[0]
         wave = self._vocoder.run(["waveform"], {"mel": mel, "f0": f0[None]})[0]
         return np.asarray(wave).reshape(-1)
+
+    def _infer(self, tokens, durs, f0, n_frames) -> np.ndarray:
+        try:
+            return self._run(tokens, durs, f0, n_frames)
+        except Exception as exc:  # noqa: BLE001
+            if self._cpu_only:
+                raise
+            logger.warning("studio inference failed on CoreML (%s) — falling back to CPU", exc)
+            self._force_cpu()
+            return self._run(tokens, durs, f0, n_frames)
 
     # Per-segment path isn't used (render_line handles the whole line), but
     # satisfy the interface.

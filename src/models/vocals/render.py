@@ -12,6 +12,7 @@ from .lyrics import (
     align_words_to_notes,
     extract_lead_notes,
     harmony_vowel_segments,
+    monophonic_line,
     select_vocal_tracks,
 )
 
@@ -93,6 +94,7 @@ def render_vocals(midi, lyrics, *, sr: int = 44100, voice: str = "",
     if not lead_notes or not text.strip():
         return np.zeros(0, dtype=np.float32), sr
 
+    lead_notes = monophonic_line(lead_notes)
     lead_notes, shift = _transpose_to_singable(lead_notes)
     eng = engine or RoughEngine(voice)
     total = float(midi.get_end_time())
@@ -102,7 +104,7 @@ def render_vocals(midi, lyrics, *, sr: int = 44100, voice: str = "",
 
     if harmonies and harms:
         for _name, hnotes in harms:
-            ht = [(p + shift, s, e) for (p, s, e) in hnotes]
+            ht = monophonic_line([(p + shift, s, e) for (p, s, e) in hnotes])
             h, _ = _render_segments(eng, harmony_vowel_segments(ht), sr, total)
             if h.size == 0:
                 continue
