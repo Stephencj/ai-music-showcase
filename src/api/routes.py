@@ -448,6 +448,20 @@ def answer_ai_request(rid: str, req: AiAnswerRequest) -> dict:
     return {"ok": True, "applied": applied}
 
 
+@router.get("/app/android")
+def download_android_apk() -> FileResponse:
+    """Serve the Android APK with the correct package MIME so the tablet's
+    installer recognizes it (a bare .apk URL downloads as a generic zip)."""
+    apk = service.API_OUT.parent / "AiMusic.apk"
+    if not apk.exists():
+        raise HTTPException(404, "APK not available")
+    return FileResponse(
+        str(apk),
+        media_type="application/vnd.android.package-archive",
+        filename="AiMusic.apk",
+    )
+
+
 @router.post("/blocks/{name}/lyrics")
 def set_block_lyrics(name: str, req: SetLyricsRequest) -> dict:
     try:
