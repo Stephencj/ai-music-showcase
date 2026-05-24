@@ -448,6 +448,24 @@ def answer_ai_request(rid: str, req: AiAnswerRequest) -> dict:
     return {"ok": True, "applied": applied}
 
 
+@router.post("/clientlog")
+def client_log(entry: dict) -> dict:
+    """Sink for client-side diagnostics (the Android app POSTs its WebView
+    console / fetch errors + apiBase here) so they're readable server-side
+    at data/outputs/clientlog.jsonl — no need to be the user's eyes."""
+    import json as _json
+    import time as _time
+    try:
+        p = service.API_OUT.parent / "clientlog.jsonl"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        rec = {"ts": _time.strftime("%Y-%m-%d %H:%M:%S"), **entry}
+        with open(p, "a") as f:
+            f.write(_json.dumps(rec)[:4000] + "\n")
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True}
+
+
 @router.get("/app/android")
 def download_android_apk() -> FileResponse:
     """Serve the Android APK with the correct package MIME so the tablet's

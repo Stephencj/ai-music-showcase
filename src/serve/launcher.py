@@ -86,8 +86,12 @@ def launch(blocks: gr.Blocks, *,
         from fastapi.middleware.cors import CORSMiddleware
         api.add_middleware(
             CORSMiddleware,
-            # Just the bundled Android app's virtual origin — not "*".
-            allow_origins=["https://appassets.androidplatform.net"],
+            # Just the bundled Android app's virtual origin (served over http
+            # to match the http API — see MainActivity) — not "*".
+            allow_origins=[
+                "http://appassets.androidplatform.net",
+                "https://appassets.androidplatform.net",
+            ],
             allow_methods=["*"],
             allow_headers=["*"],
             allow_credentials=False,
