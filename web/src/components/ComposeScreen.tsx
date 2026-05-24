@@ -474,6 +474,7 @@ function BlockCard({
   const [theme, setTheme] = useState("");
   const [voice, setVoice] = useState("");
   const [engine, setEngine] = useState("");
+  const [harmonies, setHarmonies] = useState(true);
   const [drafting, setDrafting] = useState(false);
   const [vocBusy, setVocBusy] = useState(false);
   const [vocProg, setVocProg] = useState(0);
@@ -509,7 +510,7 @@ function BlockCard({
     if (!lyrics.trim()) return;
     setVocBusy(true); setVocUrls(null); setVocProg(0); setVocMsg("Starting…");
     try {
-      const { job_id } = await api.renderVocals(block.name, { lyrics, voice, engine: engine || "rough" });
+      const { job_id } = await api.renderVocals(block.name, { lyrics, voice, engine: engine || "rough", harmonies });
       const job = await api.pollVocal(job_id, (p, m) => { setVocProg(p); setVocMsg(m); });
       if (job.status === "error") setVocMsg(job.error || "Vocal render failed");
       else if (job.result) setVocUrls({ audio: job.result.urls.audio, vocal: job.result.urls.vocal });
@@ -666,6 +667,7 @@ function BlockCard({
                   <option key={v} value={v}>{v.replace(/^tiger_/, "")}</option>
                 ))}
               </select>
+              <button className={"chip" + (harmonies ? " on" : "")} onClick={() => setHarmonies((h) => !h)} title="Stack harmony/backing lines">＋harmonies</button>
               <button className="btn secondary sm" disabled={vocBusy || !lyrics.trim()} onClick={onSing}>
                 {vocBusy ? "Singing…" : "🎤 Sing it"}
               </button>

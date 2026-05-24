@@ -41,6 +41,59 @@ def extract_lead_notes(pm) -> list[tuple[int, float, float]]:
                   key=lambda x: x[1])
 
 
+_HARM_HINTS = ("harmony", "backing", "choir", "ooh", "aah", "vocal")
+
+
+def select_vocal_tracks(pm) -> tuple[list, list]:
+    """Return ``(lead_notes, harmonies)`` where harmonies is a list of
+    ``(track_name, notes)``. Lead = the best-scored melodic track; harmonies
+    = other tracks named harmony/backing/vocal/choir (so we don't sing the
+    bass or piano)."""
+    scored = []
+    for inst in pm.instruments:
+        if inst.is_drum or not inst.notes:
+            continue
+        name = (inst.name or "").lower()
+        score = float(np.mean([n.pitch for n in inst.notes]))
+        if "lead" in name or "melody" in name:
+            score += 2000.0                       # the true lead wins
+        elif "vocal" in name:
+            score += 400.0
+        if any(h in name for h in ("harmony", "backing", "choir")):
+            score -= 800.0                        # rank harmonies below the lead
+        if _BASS_HINT in name:
+            score -= 2000.0
+        scored.append((score, inst, name))
+    if not scored:
+        return [], []
+    scored.sort(key=lambda x: -x[0])
+
+    def notes_of(inst):
+        return sorted([(int(n.pitch), float(n.start), float(n.end)) for n in inst.notes],
+                      key=lambda x: x[1])
+
+    lead = notes_of(scored[0][1])
+    harms = [(inst.name, notes_of(inst)) for _, inst, name in scored[1:]
+             if any(h in name for h in _HARM_HINTS)]
+    return lead, harms
+
+
+_HARM_VOWEL = "ooh"
+
+
+def harmony_vowel_segments(notes: list[tuple[int, float, float]],
+                           vowel: str = _HARM_VOWEL) -> list[dict]:
+    """Turn harmony/backing notes into wordless vowel segments ("ooh"),
+    one per note, placed at the note's own start time. The notes share the
+    lead's MIDI timeline, so the backing voices land *under* the lead at the
+    right moments and pitches — no lyric re-distribution, no syllable
+    mismatch. (We keep one segment per note rather than slurring a phrase so
+    each ooh stays locked to its note; the render packs a group's notes
+    contiguously, which would drift sustained groups off the beat.)"""
+    return [{"text": vowel, "notes": [(p, max(0.05, e - s))], "start": s}
+            for (p, s, e) in notes]
+
+
 def count_syllables(word: str) -> int:
     """Heuristic English syllable count (vowel groups, minus silent-e)."""
     w = re.sub(r"[^a-z]", "", word.lower())

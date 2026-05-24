@@ -1,0 +1,43 @@
+name: Sweet_motown_style
+tempo: 98.0
+time_signature:
+- 4
+- 4
+bars: 80
+duration_seconds: 195.91808
+created: '2026-05-23T15:49:07'
+instruments:
+- name: Electric Piano
+  program: 4
+  is_drum: false
+  n_notes: 960
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 80
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 800
+n_notes: 1840
+spec:
+  genre: pop
+  key: G#
+  scale: major
+  tempo: 98.0
+  time_signature:
+  - 4
+  - 4
+  seed: null
+  swing: null
+  instruments:
+  - electric_piano
+  - electric_bass
+  - drum_kit
+  sections:
+  - start_bar: 0
+    end_bar: 79
+    label: Section
+    role: verse
+  section: null
+  inferred: true

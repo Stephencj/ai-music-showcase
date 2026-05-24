@@ -1,0 +1,56 @@
+name: Hallmark_Presents
+tempo: 124.0
+time_signature:
+- 4
+- 4
+bars: 8
+duration_seconds: 15.483839999999999
+created: '2026-05-13T20:02:44'
+instruments:
+- name: Melody
+  program: 0
+  is_drum: false
+  n_notes: 36
+- name: Chords
+  program: 0
+  is_drum: false
+  n_notes: 32
+- name: Bass
+  program: 33
+  is_drum: false
+  n_notes: 16
+- name: Drums
+  program: 0
+  is_drum: true
+  n_notes: 96
+- name: Melody Harm 1
+  program: 0
+  is_drum: false
+  n_notes: 16
+- name: Melody Harm 2
+  program: 0
+  is_drum: false
+  n_notes: 16
+- name: Melody Harm 3
+  program: 0
+  is_drum: false
+  n_notes: 16
+n_notes: 228
+spec:
+  genre: pop
+  key: F
+  scale: major
+  tempo: 124.0
+  time_signature:
+  - 4
+  - 4
+  seed: null
+  swing: null
+  instruments: []
+  sections:
+  - start_bar: 0
+    end_bar: 7
+    label: Section
+    role: verse
+  section: null
+  inferred: true

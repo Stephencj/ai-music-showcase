@@ -1,0 +1,56 @@
+name: Yellow_raincoat_chorus
+tempo: 78.0
+time_signature:
+- 4
+- 4
+bars: 16
+duration_seconds: 49.251699
+created: '2026-05-12T22:19:40'
+instruments:
+- name: Melody
+  program: 0
+  is_drum: false
+  n_notes: 48
+- name: Chords
+  program: 0
+  is_drum: false
+  n_notes: 80
+- name: Bass
+  program: 33
+  is_drum: false
+  n_notes: 64
+- name: Drums
+  program: 0
+  is_drum: true
+  n_notes: 336
+- name: Melody Harm 1
+  program: 0
+  is_drum: false
+  n_notes: 48
+- name: Melody Harm 2
+  program: 0
+  is_drum: false
+  n_notes: 48
+- name: Melody Harm 3
+  program: 0
+  is_drum: false
+  n_notes: 48
+n_notes: 672
+spec:
+  genre: pop
+  key: B
+  scale: minor
+  tempo: 78.0
+  time_signature:
+  - 4
+  - 4
+  seed: null
+  swing: null
+  instruments: []
+  sections:
+  - start_bar: 0
+    end_bar: 15
+    label: Section
+    role: verse
+  section: null
+  inferred: true

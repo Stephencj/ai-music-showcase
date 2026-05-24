@@ -1,0 +1,53 @@
+name: 33_Ballad
+tempo: 72.0
+time_signature:
+- 4
+- 4
+bars: 80
+duration_seconds: 266.66656
+created: '2026-05-18T01:02:24'
+instruments:
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 881
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 192
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 984
+- name: String Section
+  program: 48
+  is_drum: false
+  n_notes: 2548
+- name: Backing Vocals
+  program: 52
+  is_drum: false
+  n_notes: 456
+n_notes: 5061
+spec:
+  genre: pop
+  key: C
+  scale: major
+  tempo: 72.0
+  time_signature:
+  - 4
+  - 4
+  seed: null
+  swing: null
+  instruments:
+  - drum_kit
+  - electric_bass
+  - piano
+  - string_section
+  - vocal_harmony
+  sections:
+  - start_bar: 0
+    end_bar: 79
+    label: Section
+    role: verse
+  section: null
+  inferred: true

@@ -156,6 +156,8 @@ ios/build/
 ._.DS_Store
 # block waveform-peak sidecars (generated)
 data/blocks/*.peaks.json
+# block score-export bundles (generated: full_score.pdf + parts)
+data/blocks/*.zip
 
 # Generated Xcode project — regenerate with: cd ios && xcodegen
 ios/AiMusic.xcodeproj/

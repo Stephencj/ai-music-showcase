@@ -1,0 +1,48 @@
+name: Funkin_jazz_n_shiiiiiit
+tempo: 90.0
+time_signature:
+- 4
+- 4
+bars: 64
+duration_seconds: 116.64037922727273
+created: '2026-05-18T00:11:18'
+instruments:
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 585
+- name: Upright Bass
+  program: 32
+  is_drum: false
+  n_notes: 288
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 976
+- name: Tenor Sax
+  program: 66
+  is_drum: false
+  n_notes: 389
+n_notes: 2238
+spec:
+  genre: pop
+  key: D
+  scale: minor
+  tempo: 90.0
+  time_signature:
+  - 4
+  - 4
+  seed: null
+  swing: null
+  instruments:
+  - drum_kit
+  - upright_bass
+  - piano
+  - sax_tenor
+  sections:
+  - start_bar: 0
+    end_bar: 63
+    label: Section
+    role: verse
+  section: null
+  inferred: true

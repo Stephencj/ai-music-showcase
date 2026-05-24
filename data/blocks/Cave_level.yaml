@@ -1,0 +1,43 @@
+name: Cave_level
+tempo: 90.0
+time_signature:
+- 4
+- 4
+bars: 64
+duration_seconds: 170.666496
+created: '2026-05-17T23:33:01'
+instruments:
+- name: Electric Piano
+  program: 4
+  is_drum: false
+  n_notes: 256
+- name: Synth Bass
+  program: 38
+  is_drum: false
+  n_notes: 64
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 640
+n_notes: 960
+spec:
+  genre: pop
+  key: D
+  scale: minor
+  tempo: 90.0
+  time_signature:
+  - 4
+  - 4
+  seed: null
+  swing: null
+  instruments:
+  - electric_piano
+  - synth_bass
+  - drum_kit
+  sections:
+  - start_bar: 0
+    end_bar: 63
+    label: Section
+    role: verse
+  section: null
+  inferred: true

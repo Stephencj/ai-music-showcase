@@ -194,12 +194,16 @@ class StudioEngine(VocalEngine):
                 for ph, fr in self._allocate(group, nf):
                     tokens.append(self.ph2id.get(ph, self._fallback_vowel))
                     durs.append(fr)
-                # per-frame F0 for this note: a short glide (portamento) from
-                # the previous pitch, then hold — sung note transitions, not steps.
-                glide = min(4, nf // 3) if prev_hz > 0 else 0
-                if glide > 0:
-                    f0.extend(np.linspace(prev_hz, hz, glide, endpoint=False).tolist())
-                f0.extend([hz] * (nf - glide))
+                # per-frame F0: hit the note cleanly (no scoop — constant
+                # glides read as out-of-tune "searching"). Add gentle vibrato
+                # on sustained notes for a natural, confident voice.
+                note_f0 = np.full(nf, hz, dtype=float)
+                if ndur >= 0.5 and nf > 8:
+                    tt = np.arange(nf) * self.frame_sec
+                    ramp = np.clip((tt - 0.2) / 0.25, 0.0, 1.0)   # ease vibrato in after 0.2 s
+                    semis = 0.22 * np.sin(2 * np.pi * 5.5 * tt) * ramp
+                    note_f0 = hz * (2.0 ** (semis / 12.0))
+                f0.extend(note_f0.tolist())
                 prev_hz = hz
             prev_end = seg["start"] + sum(d for _, d in seg["notes"])
 

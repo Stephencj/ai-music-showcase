@@ -77,3 +77,4 @@ class VocalsRequest(BaseModel):
     lyrics: str
     voice: str = ""               # "" = system default say voice
     engine: str = "rough"         # "rough" now; "studio" when available
+    harmonies: bool = True        # stack the block's harmony/backing lines

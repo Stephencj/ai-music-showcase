@@ -366,7 +366,7 @@ def render_block_vocals(name: str, req: VocalsRequest) -> dict:
         raise HTTPException(400, "Lyrics are empty")
     job = registry.create()
     registry.run(job, lambda progress: service.run_block_vocals(
-        name, req.lyrics, req.voice, req.engine, progress, job.id))
+        name, req.lyrics, req.voice, req.engine, progress, job.id, req.harmonies))
     return {"job_id": job.id}
 
 

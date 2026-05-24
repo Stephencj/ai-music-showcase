@@ -9,7 +9,7 @@ See ``render_lead_vocal`` for the top-level entry point.
 """
 
 from .engine import RoughEngine, VocalEngine  # noqa: F401
-from .render import render_lead_vocal  # noqa: F401
+from .render import render_lead_vocal, render_vocals  # noqa: F401
 
 
 def studio_available() -> bool:

@@ -24,3 +24,21 @@ instruments:
   is_drum: true
   n_notes: 48
 n_notes: 116
+spec:
+  genre: pop
+  key: C
+  scale: major
+  tempo: 120.0
+  time_signature:
+  - 4
+  - 4
+  seed: null
+  swing: null
+  instruments: []
+  sections:
+  - start_bar: 0
+    end_bar: 3
+    label: Section
+    role: verse
+  section: null
+  inferred: true

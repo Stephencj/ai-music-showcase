@@ -99,8 +99,10 @@ export const draftLyrics = (name: string, theme: string) =>
   jpost<{ lyrics: string }>(`/api/blocks/${encodeURIComponent(name)}/lyrics/draft`, { theme });
 export const setLyrics = (name: string, lyrics: string) =>
   jpost<{ ok: boolean }>(`/api/blocks/${encodeURIComponent(name)}/lyrics`, { lyrics });
-export const renderVocals = (name: string, body: { lyrics: string; voice: string; engine: string }) =>
-  jpost<{ job_id: string }>(`/api/blocks/${encodeURIComponent(name)}/vocals`, body);
+export const renderVocals = (
+  name: string,
+  body: { lyrics: string; voice: string; engine: string; harmonies: boolean }
+) => jpost<{ job_id: string }>(`/api/blocks/${encodeURIComponent(name)}/vocals`, body);
 
 interface VocalJob {
   status: "pending" | "running" | "done" | "error";

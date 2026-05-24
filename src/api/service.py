@@ -416,13 +416,13 @@ def draft_lyrics(name: str, theme: str | None) -> str:
 
 
 def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
-                     progress, job_id: str) -> dict:
+                     progress, job_id: str, harmonies: bool = True) -> dict:
     """Render a sung vocal over a block and mix it with the block's
     instrumental. Reuses the block's existing HQ WAV when present."""
     import numpy as np
     import soundfile as sf
     from src.daw_integration.generic import blocks as block_store
-    from src.models.vocals import RoughEngine, get_engine, render_lead_vocal
+    from src.models.vocals import RoughEngine, get_engine, render_vocals
 
     pm, _meta = block_store.load_block(name)
     progress("Synthesizing vocal…", 0.25)
@@ -431,7 +431,7 @@ def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
     except Exception as exc:  # noqa: BLE001 — studio voicebank missing etc.
         logger.warning("vocal engine %r unavailable (%s) — using rough", engine_name, exc)
         engine = RoughEngine(voice or "")
-    voc, sr = render_lead_vocal(pm, lyrics, voice=voice or "", engine=engine)
+    voc, sr = render_vocals(pm, lyrics, voice=voice or "", engine=engine, harmonies=harmonies)
 
     job_dir = API_OUT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
