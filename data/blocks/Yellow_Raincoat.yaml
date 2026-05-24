@@ -1,0 +1,53 @@
+name: Yellow_Raincoat
+tempo: 80.0
+time_signature:
+- 4
+- 4
+bars: 80
+duration_seconds: 240.0
+created: '2026-05-24T15:42:30'
+instruments:
+- name: Chords
+  program: 0
+  is_drum: false
+  n_notes: 1707
+- name: Chords Stab
+  program: 0
+  is_drum: false
+  n_notes: 160
+- name: Bass
+  program: 33
+  is_drum: false
+  n_notes: 312
+- name: Drums
+  program: 0
+  is_drum: true
+  n_notes: 1244
+- name: Lead Vocal
+  program: 53
+  is_drum: false
+  n_notes: 337
+- name: Backing Vocals
+  program: 52
+  is_drum: false
+  n_notes: 337
+n_notes: 4097
+lyrics: "You said you would stay, but the sky turned gray,\nPromises fade like the\
+  \ forecast changed.\nNow I am standing here in the pouring tears,\nDrenched in the\
+  \ mess of our wasted years.\nBut I won\u2019t drown in the sound of goodbye,\nI\u2019\
+  ve got a light in the dark of the night\u2014\nYou left me out in the rain again,\n\
+  But I\u2019ve got my yellow raincoat, my friend.\nWe could still dance through the\
+  \ storm if we try,\nUnder the clouds, love won\u2019t die.\nOh-oh-oh, with my yellow\
+  \ raincoat on,\nMaybe we\u2019ll find where we went wrong.\nEvery fight was a thunder\
+  \ crash,\nEvery silence just lightning flash.\nBut I\u2019m not scared of a little\
+  \ pain,\nIf it means we might find our way again.\nSo let\u2019s rewrite our story\u2019\
+  s end,\nArmor up and let\u2019s pretend\u2014\nYou left me out in the rain again,\n\
+  But I\u2019ve got my yellow raincoat, my friend.\nWe could still dance through the\
+  \ storm if we try,\nUnder the clouds, love won\u2019t die.\nOh-oh-oh, with my yellow\
+  \ raincoat on,\nMaybe we\u2019ll find where we went wrong.\nOoh, it\u2019s not perfect,\
+  \ but it\u2019s enough,\nOoh, love is tough, but so is us.\nZip it up, hold me tight,\n\
+  Maybe we\u2019ll make it through the night.\nYou left me out in the rain again,\n\
+  But I\u2019ve got my yellow raincoat, my friend.\nWe could still dance through the\
+  \ storm if we try,\nUnder the clouds, love won\u2019t die.\nOh-oh-oh, with my yellow\
+  \ raincoat on,\nMaybe we\u2019ll find where we belong.\nYellow raincoat, keep me\
+  \ dry,\nMaybe we\u2019ll make it\u2014let\u2019s try.\n"

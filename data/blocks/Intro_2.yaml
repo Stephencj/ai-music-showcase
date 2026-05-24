@@ -1,0 +1,63 @@
+name: Intro_2
+tempo: 92.0
+time_signature:
+- 4
+- 4
+bars: 4
+duration_seconds: 10.434782608695652
+created: '2026-05-24T14:53:36'
+instruments:
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 32
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 5
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 17
+- name: String Section
+  program: 48
+  is_drum: false
+  n_notes: 24
+n_notes: 78
+spec:
+  genre: rap_2000s
+  key: C
+  scale: minor
+  tempo: 92.0
+  time_signature:
+  - 4
+  - 4
+  seed: 810851
+  swing: null
+  instruments:
+  - drum_kit
+  - electric_bass
+  - piano
+  - string_section
+  sections:
+  - start_bar: 0
+    end_bar: 3
+    label: Intro
+    role: intro
+  - start_bar: 4
+    end_bar: 19
+    label: Verse
+    role: verse
+  - start_bar: 20
+    end_bar: 27
+    label: Chorus
+    role: chorus
+  - start_bar: 28
+    end_bar: 31
+    label: Outro
+    role: outro
+  section:
+    start_bar: 0
+    end_bar: 3
+tags:
+- rap_2000s 810851
