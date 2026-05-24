@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="font:15px -apple-system,sans-serif;padding:1em;background:#0f1020;color:#eee">
+<h2>WebView diagnostics</h2>
+<pre id="o" style="white-space:pre-wrap;word-break:break-word"></pre>
+<script>
+/* Intentionally plain ES5 so it runs even on a very old WebView. */
+var o = document.getElementById("o");
+function log(s){ o.appendChild(document.createTextNode(s + "\n")); }
+log("UA: " + navigator.userAgent);
+log("ES modules supported: " + ("noModule" in document.createElement("script")));
+log("Promise: " + (typeof Promise));
+log("fetch: " + (typeof fetch));
+log("localStorage: " + (typeof localStorage));
+try { new Function("var f = (a) => a?.b ?? 1; return f({});")(); log("modern syntax (=> ?. ??): OK"); }
+catch (e) { log("modern syntax (=> ?. ??): FAIL — " + e.message); }
+if (typeof fetch !== "undefined") {
+  fetch("/api/blocks").then(function(r){ log("api /blocks: HTTP " + r.status); })
+    .catch(function(e){ log("api /blocks: ERROR " + e); });
+} else { log("api test skipped (no fetch)"); }
+window.onerror = function(m){ log("JS ERROR: " + m); };
+</script>
+</body>
+</html>
