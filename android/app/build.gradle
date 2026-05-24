@@ -10,8 +10,8 @@ android {
         applicationId 'com.aimusic'
         minSdk 24
         targetSdk 34
-        versionCode 2
-        versionName '1.1'
+        versionCode 3
+        versionName '1.2'
     }
 
     buildTypes {
@@ -24,4 +24,10 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+dependencies {
+    // WebViewAssetLoader (serve bundled web over a virtual https origin) +
+    // addDocumentStartJavaScript (inject the API base before the app runs).
+    implementation 'androidx.webkit:webkit:1.11.0'
 }

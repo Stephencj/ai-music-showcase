@@ -78,6 +78,23 @@ def launch(blocks: gr.Blocks, *,
         # only used by the `share=True` fallback path above.
         api.add_middleware(IPAwareAuthMiddleware, token=token)
 
+    # CORS so the bundled Android app (loaded from a virtual https origin)
+    # can call /api cross-origin. Added AFTER the auth middleware so it wraps
+    # OUTERMOST and answers preflight OPTIONS before auth sees them. Auth is
+    # still enforced (by IP / token) on the actual requests.
+    try:
+        from fastapi.middleware.cors import CORSMiddleware
+        api.add_middleware(
+            CORSMiddleware,
+            # Just the bundled Android app's virtual origin — not "*".
+            allow_origins=["https://appassets.androidplatform.net"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+            allow_credentials=False,
+        )
+    except Exception:
+        logger.exception("could not add CORS middleware")
+
     # Thin REST API for the cross-platform frontend — calls the same engine
     # functions the Gradio buttons call. Mounted before the Gradio app so
     # /api/* resolves here; inherits the token middleware above.
