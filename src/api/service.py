@@ -618,7 +618,13 @@ def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
         o[: len(a)] = a
         return o
 
-    mix = _pad(inst) * 0.85 + _pad(vstereo) * 0.95
+    # Make the band leave room for the lead (presence-band dip + sidechain
+    # ducking under the vocal) so the lyric stays intelligible, then sit the
+    # vocal slightly hotter on top.
+    if vstereo.size > 1:
+        from src.models.vocals.render import carve_for_vocal
+        inst = carve_for_vocal(inst, voc, isr)
+    mix = _pad(inst) * 0.82 + _pad(vstereo) * 1.0
     peak = float(np.max(np.abs(mix))) if mix.size else 0.0
     if peak > 0:
         mix = mix * (0.97 / peak)

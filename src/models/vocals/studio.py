@@ -161,12 +161,12 @@ class StudioEngine(VocalEngine):
         """Natural-ish consonant length in frames (~12 ms/frame) by type."""
         t = self.ph_type.get(ph, "")
         if t == "stop":
-            return 2                                   # ~23 ms — plosive
+            return 3                                   # ~35 ms — plosive, a touch crisper
         if t in ("fricative", "affricate"):
-            return 5                                   # ~58 ms — sustained noise
+            return 7                                   # ~82 ms — sibilants need to be heard
         if t in ("nasal", "liquid", "approximant", "semivowel", "glide"):
-            return 4
-        return 3
+            return 5
+        return 4
 
     def _allocate(self, group: list[str], n_frames: int) -> list[tuple[str, int]]:
         n_frames = max(n_frames, len(group))

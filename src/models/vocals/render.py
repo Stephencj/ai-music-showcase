@@ -119,16 +119,63 @@ def render_vocals(midi, lyrics, *, sr: int = 44100, voice: str = "",
 
 
 def _apply_fx(audio: np.ndarray, sr: int) -> np.ndarray:
-    """Light vocal chain: high-pass, gentle compression, a touch of reverb."""
+    """Vocal chain tuned for intelligibility: trim low mud, even it out, then
+    lift the presence band (consonant clarity) and add air, with only a hint of
+    reverb so the words stay forward instead of smearing. The SVS vocoder rolls
+    off the highs, which is what makes raw output sound muffled/"deaf"; this
+    puts the diction back."""
     try:
-        from pedalboard import Compressor, Gain, HighpassFilter, Pedalboard, Reverb
+        from pedalboard import (Compressor, Gain, HighpassFilter, HighShelfFilter,
+                                 PeakFilter, Pedalboard, Reverb)
         board = Pedalboard([
-            HighpassFilter(cutoff_frequency_hz=90.0),
-            Compressor(threshold_db=-18.0, ratio=3.0, attack_ms=5.0, release_ms=120.0),
-            Reverb(room_size=0.25, wet_level=0.12, dry_level=0.9, width=0.8),
-            Gain(gain_db=1.5),
+            # Settings chosen by the ASR intelligibility benchmark (see
+            # intelligibility.py): this "v2" curve scored best for word
+            # readability; pushing presence/air harder ("v3") looked brighter
+            # but the recognizer read FEWER words — it smeared diction.
+            HighpassFilter(cutoff_frequency_hz=120.0),                  # cut rumble/mud
+            PeakFilter(cutoff_frequency_hz=280.0, gain_db=-3.0, q=1.0),  # un-box the low-mids
+            PeakFilter(cutoff_frequency_hz=480.0, gain_db=-3.0, q=1.3),  # kill "woolly" mud (the muffle)
+            Compressor(threshold_db=-20.0, ratio=3.5, attack_ms=4.0, release_ms=110.0),
+            PeakFilter(cutoff_frequency_hz=3400.0, gain_db=6.0, q=0.9),  # PRESENCE: consonants
+            PeakFilter(cutoff_frequency_hz=6000.0, gain_db=4.0, q=1.1),  # definition / consonant edge
+            HighShelfFilter(cutoff_frequency_hz=8500.0, gain_db=5.0),    # air / breath
+            Reverb(room_size=0.16, wet_level=0.05, dry_level=0.97, width=0.7),  # minimal smear
+            Gain(gain_db=2.0),
         ])
         return board(audio.astype(np.float32), sr)
     except Exception as exc:  # noqa: BLE001
         logger.warning("vocal FX skipped: %s", exc)
         return audio
+
+
+def carve_for_vocal(inst: np.ndarray, voc: np.ndarray, sr: int,
+                    carve_hz: float = 2600.0, carve_db: float = -4.0,
+                    duck_db: float = 4.5) -> np.ndarray:
+    """Make the instrumental leave room for the lead so the lyric is clear:
+    (1) a static dip in the band's presence region (frequency separation), and
+    (2) gentle sidechain ducking — pull the band down by up to ``duck_db`` while
+    the vocal is sounding (level separation). ``inst`` is (n, ch); ``voc`` is the
+    vocal (mono or stereo) used only to derive the ducking envelope."""
+    inst = inst.astype(np.float32)
+    try:
+        from pedalboard import PeakFilter, Pedalboard
+        inst = Pedalboard([PeakFilter(cutoff_frequency_hz=carve_hz,
+                                      gain_db=carve_db, q=1.2)])(inst, sr)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("instrumental carve skipped: %s", exc)
+    if voc is None or getattr(voc, "size", 0) == 0:
+        return inst
+    v = voc if voc.ndim == 1 else voc.mean(axis=1)
+    env = np.abs(v).astype(np.float32)
+    win = max(1, int(sr * 0.08))                       # ~80 ms attack/release smoothing
+    env = np.convolve(env, np.ones(win, np.float32) / win, mode="same")
+    if env.max() > 0:
+        env = env / env.max()
+    floor = 10.0 ** (-abs(duck_db) / 20.0)             # gain at full vocal level
+    gain = 1.0 - (1.0 - floor) * env
+    n = len(inst)
+    if len(gain) < n:
+        gain = np.pad(gain, (0, n - len(gain)), constant_values=1.0)
+    else:
+        gain = gain[:n]
+    return inst * gain[:, None] if inst.ndim == 2 else inst * gain[:len(inst)]
