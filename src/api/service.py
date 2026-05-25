@@ -912,6 +912,106 @@ def run_autotune(name: str, audio_path: str, progress, job_id: str, *,
     }
 
 
+def _default_progression(scale: str) -> list[str]:
+    minor = (scale or "").lower() in (
+        "minor", "natural_minor", "aeolian", "dorian", "phrygian",
+        "harmonic_minor", "melodic_minor")
+    return ["i", "VI", "III", "VII"] if minor else ["I", "V", "vi", "IV"]
+
+
+def generate_part(req) -> dict:
+    """Generate ONE DAW-channel part (MIDI note-list + optional rendered WAV)
+    that fits the given musical context — the host-agnostic brain the VST/DAW
+    bridges call. ``req`` is a GeneratePartRequest."""
+    import shutil
+    import uuid
+    from src.daw_integration.generic.midi_export import MidiExporter
+    from src.daw_integration.generic.styles import STYLES
+
+    ts = req.time_signature or [4, 4]
+    tempo = float(req.tempo or 120.0)
+    bars = max(1, int(req.bars or 4))
+    key, scale = (req.key or "C"), (req.scale or "major")
+    target = (req.target or "melody").lower()
+    preset = STYLES.get(req.genre or "")
+    prog = list(req.progression) or _default_progression(scale)
+    prog = (prog * (bars // len(prog) + 1))[:bars]      # cover every bar
+
+    midi = MidiExporter(tempo=tempo, time_signature=(int(ts[0]), int(ts[1])))
+    if target == "chords":
+        midi.add_chord_progression(
+            key=key, progression=prog, bars=bars, scale_name=scale,
+            voicing=(preset.voicing if preset else "triad"),
+            rhythm=(preset.chord_rhythm if preset else "pad"))
+        track_name = "Chords"
+    elif target == "bass":
+        midi.add_bass_line(
+            key=key, progression=prog, bars=bars, scale_name=scale,
+            pattern=(preset.bass_pattern if preset else "root_fifth"), seed=req.seed)
+        track_name = "Bass"
+    elif target in ("melody", "lead"):
+        midi.add_melody(
+            key=key, scale_name=scale, bars=bars, progression=prog,
+            melody_style=(preset.melody_style if preset else "motif"),
+            seed=req.seed, track_name="Melody")
+        track_name = "Melody"
+    elif target == "drums":
+        midi.add_drum_pattern(
+            pattern=(preset.drum_pattern if preset else "basic_rock"),
+            bars=bars, seed=req.seed)
+        track_name = "Drums"
+    else:
+        raise ValueError(f"unknown target {target!r} (chords|bass|melody|lead|drums)")
+
+    track = next((t for t in midi.tracks if t.name == track_name),
+                 midi.tracks[-1] if midi.tracks else None)
+    spb = 60.0 / tempo
+    notes = [[int(n.pitch), round(n.start / spb, 4), round(max(0.01, n.end - n.start) / spb, 4)]
+             for n in (track.notes if track else [])]
+
+    parts_root = API_OUT / "_parts"
+    parts_root.mkdir(parents=True, exist_ok=True)
+    # prune: keep the 30 newest part dirs (WAVs add up; disk runs tight)
+    olds = sorted([d for d in parts_root.iterdir() if d.is_dir()],
+                  key=lambda p: p.stat().st_mtime)[:-30]
+    for d in olds:
+        shutil.rmtree(d, ignore_errors=True)
+
+    part_id = uuid.uuid4().hex[:12]
+    part_dir = parts_root / part_id
+    part_dir.mkdir(parents=True, exist_ok=True)
+    midi.save(part_dir / "part.mid")
+
+    out = {
+        "part_id": part_id, "target": target, "tempo": tempo, "bars": bars,
+        "time_signature": [int(ts[0]), int(ts[1])], "key": key, "scale": scale,
+        "progression": prog, "n_notes": len(notes), "notes": notes,
+        "midi_url": f"/api/parts/{part_id}/part.mid",
+    }
+    if (req.output or "both") in ("wav", "both"):
+        try:
+            from src.audio_processing.render.pipeline import render_to_audio
+            from src.daw_integration.generic import blocks as block_store
+            r = render_to_audio(midi=str(part_dir / "part.mid"),
+                                output_dir=part_dir / "render", with_stems=False)
+            wav = part_dir / "part.wav"
+            shutil.copy2(r.mix_path, wav)
+            mp3 = part_dir / "part.mp3"
+            served = "part.mp3" if block_store.write_preview_mp3(wav, mp3) else "part.wav"
+            out["wav_url"] = f"/api/parts/{part_id}/{served}"
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("part WAV render failed: %s", exc)
+    return out
+
+
+def part_file(part_id: str, filename: str):
+    """Path to a generated part's artifact (validated), or None."""
+    if filename not in ("part.mid", "part.wav", "part.mp3"):
+        return None
+    p = API_OUT / "_parts" / part_id / filename
+    return p if p.exists() else None
+
+
 def _save_unique_block(block_store, base_name: str, pm, *,
                        tempo: float, time_signature, bars: int,
                        spec: dict | None = None) -> str:

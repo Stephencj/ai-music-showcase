@@ -29,6 +29,7 @@ from .schemas import (
     AiAnswerRequest,
     EditBlockRequest,
     GenerateRequest,
+    GeneratePartRequest,
     LyricsDraftRequest,
     PhoneticRequest,
     RenameRequest,
@@ -560,6 +561,27 @@ async def autotune_block(
     registry.run(job, lambda progress: service.run_autotune(
         name, tmp.name, progress, job.id, mode=mode, strength=strength, to_key=to_key))
     return {"job_id": job.id}
+
+
+@router.post("/generate-part")
+def generate_part_route(req: GeneratePartRequest) -> dict:
+    """Generate ONE DAW-channel part (MIDI note-list + optional rendered WAV)
+    that fits the given musical context. Host-agnostic — the VST/DAW bridges
+    (Reaper/Ableton/VST3) all call this."""
+    try:
+        return service.generate_part(req)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@router.get("/parts/{part_id}/{filename}")
+def get_part_file(part_id: str, filename: str) -> FileResponse:
+    p = service.part_file(part_id, filename)
+    if p is None:
+        raise HTTPException(404, "Part artifact not found")
+    media = ("audio/midi" if filename.endswith(".mid")
+             else "audio/mpeg" if filename.endswith(".mp3") else "audio/wav")
+    return _serve(p, media, download=filename.endswith(".mid"))
 
 
 @router.post("/phonetic")

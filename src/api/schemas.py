@@ -30,6 +30,24 @@ class GenerateRequest(BaseModel):
     split_into_blocks: bool = False        # one block per section (mix & match)
 
 
+class GeneratePartRequest(BaseModel):
+    """DAW-channel part generation (VST/host bridge). Given musical context,
+    generate ONE part that fits — MIDI note-list (+ optional rendered WAV)."""
+    target: str = "melody"          # chords | bass | melody | lead | drums
+    key: str = "C"
+    scale: str = "major"
+    tempo: float = 120.0
+    time_signature: list[int] = Field(default_factory=lambda: [4, 4])
+    bars: int = 4
+    progression: list[str] = Field(default_factory=list)   # roman chords/bar; [] → default for key
+    genre: Optional[str] = None     # pulls style defaults (melody_style/drum/bass/voicing)
+    output: str = "both"            # midi | wav | both
+    seed: Optional[int] = None
+    # The other channels' parts (role + note-list), so generation can fit what's
+    # already there. v1 records them for context; complement logic builds on it.
+    existing_parts: list[dict] = Field(default_factory=list)
+
+
 class SaveBlockFromJobRequest(BaseModel):
     job_id: str
     name: str
