@@ -74,5 +74,29 @@ class GeneratePartTests(unittest.TestCase):
         self.assertIsNone(service.part_file(r["part_id"], "../../etc/passwd"))
 
 
+class PartOptionsTests(unittest.TestCase):
+    def test_shape_has_all_targets_and_defaults(self):
+        po = service.part_options()
+        for t in ("chords", "bass", "drums", "melody", "lead"):
+            self.assertIn(t, po)
+            for mod in po[t].values():
+                self.assertTrue(mod["options"], "modifier has options")
+                self.assertIn(mod["default"], mod["options"], "default is a valid option")
+
+    def test_chords_and_melody_have_two_modifiers(self):
+        po = service.part_options()
+        self.assertEqual(set(po["chords"].keys()), {"voicing", "rhythm"})
+        self.assertEqual(set(po["melody"].keys()), {"style", "phrase_shape"})
+        self.assertEqual(set(po["bass"].keys()), {"pattern"})
+
+    def test_modifiers_are_accepted_by_generate(self):
+        r = _gen(target="chords", key="C", bars=2, progression=["I", "V"],
+                 voicing="seventh", chord_rhythm="charleston")
+        self.assertGreater(r["n_notes"], 0)
+        r = _gen(target="melody", key="C", bars=4, progression=["I", "V", "vi", "IV"],
+                 melody_style="blues", phrase_shape="rise", seed=1)
+        self.assertGreater(r["n_notes"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

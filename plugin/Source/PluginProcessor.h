@@ -62,8 +62,13 @@ public:
     double tempo { 120.0 };
     int bars { 4 };
 
-    // Blocking HTTP round-trip — call from a background thread.
+    // Per-part modifiers (set by the editor; only the ones relevant to the
+    // current target are sent). Valid values come from fetchOptions().
+    juce::String voicing, chordRhythm, bassPattern, drumPattern, melodyStyle, phraseShape;
+
+    // Blocking HTTP round-trips — call from a background thread.
     GenResult generate();
+    juce::var fetchOptions();   // GET /api/part-options (smart-dropdown choices)
 
 private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AIPartGeneratorProcessor)

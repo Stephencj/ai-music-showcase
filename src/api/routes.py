@@ -574,6 +574,13 @@ def generate_part_route(req: GeneratePartRequest) -> dict:
         raise HTTPException(400, str(exc))
 
 
+@router.get("/part-options")
+def part_options_route() -> dict:
+    """Valid per-part modifier choices (voicing/rhythm/pattern/style/phrase) for
+    the plugin's smart dropdown — keyed by target, each with options + default."""
+    return service.part_options()
+
+
 @router.get("/parts/{part_id}/{filename}")
 def get_part_file(part_id: str, filename: str) -> FileResponse:
     p = service.part_file(part_id, filename)

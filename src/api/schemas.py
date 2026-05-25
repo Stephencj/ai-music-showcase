@@ -41,6 +41,14 @@ class GeneratePartRequest(BaseModel):
     bars: int = 4
     progression: list[str] = Field(default_factory=list)   # roman chords/bar; [] → default for key
     genre: Optional[str] = None     # pulls style defaults (melody_style/drum/bass/voicing)
+    # Per-part modifiers (override the genre/preset default for that part).
+    # Valid values come from GET /api/part-options.
+    voicing: Optional[str] = None        # chords
+    chord_rhythm: Optional[str] = None   # chords
+    bass_pattern: Optional[str] = None   # bass
+    drum_pattern: Optional[str] = None   # drums
+    melody_style: Optional[str] = None   # melody / lead
+    phrase_shape: Optional[str] = None   # melody / lead
     output: str = "both"            # midi | wav | both
     seed: Optional[int] = None
     # The other channels' parts (role + note-list), so generation can fit what's

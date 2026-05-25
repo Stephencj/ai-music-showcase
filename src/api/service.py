@@ -937,28 +937,33 @@ def generate_part(req) -> dict:
     prog = list(req.progression) or _default_progression(scale)
     prog = (prog * (bars // len(prog) + 1))[:bars]      # cover every bar
 
+    # Per-part modifiers: explicit request value > genre/preset default > builtin.
+    voicing = req.voicing or (preset.voicing if preset else "triad")
+    chord_rhythm = req.chord_rhythm or (preset.chord_rhythm if preset else "pad")
+    bass_pattern = req.bass_pattern or (preset.bass_pattern if preset else "root_fifth")
+    drum_pattern = req.drum_pattern or (preset.drum_pattern if preset else "basic_rock")
+    melody_style = req.melody_style or (preset.melody_style if preset else "motif")
+    phrase_shape = req.phrase_shape or "arc"
+
     midi = MidiExporter(tempo=tempo, time_signature=(int(ts[0]), int(ts[1])))
     if target == "chords":
         midi.add_chord_progression(
             key=key, progression=prog, bars=bars, scale_name=scale,
-            voicing=(preset.voicing if preset else "triad"),
-            rhythm=(preset.chord_rhythm if preset else "pad"))
+            voicing=voicing, rhythm=chord_rhythm)
         track_name = "Chords"
     elif target == "bass":
         midi.add_bass_line(
             key=key, progression=prog, bars=bars, scale_name=scale,
-            pattern=(preset.bass_pattern if preset else "root_fifth"), seed=req.seed)
+            pattern=bass_pattern, seed=req.seed)
         track_name = "Bass"
     elif target in ("melody", "lead"):
         midi.add_melody(
             key=key, scale_name=scale, bars=bars, progression=prog,
-            melody_style=(preset.melody_style if preset else "motif"),
+            melody_style=melody_style, phrase_shape=phrase_shape,
             seed=req.seed, track_name="Melody")
         track_name = "Melody"
     elif target == "drums":
-        midi.add_drum_pattern(
-            pattern=(preset.drum_pattern if preset else "basic_rock"),
-            bars=bars, seed=req.seed)
+        midi.add_drum_pattern(pattern=drum_pattern, bars=bars, seed=req.seed)
         track_name = "Drums"
     else:
         raise ValueError(f"unknown target {target!r} (chords|bass|melody|lead|drums)")
@@ -1010,6 +1015,48 @@ def part_file(part_id: str, filename: str):
         return None
     p = API_OUT / "_parts" / part_id / filename
     return p if p.exists() else None
+
+
+# Per-part modifier choices (mirror the web app's curated lists / the engine).
+_PO_VOICINGS = ["triad", "seventh", "ninth", "sixth", "add9", "sus2", "sus4",
+                "power", "open5", "drop2", "quartal", "quintal", "shell",
+                "rootless", "sus4_add9"]
+_PO_CHORD_RHYTHMS = ["pad", "pulse_quarter", "stabs_8th", "charleston",
+                     "funk_comp", "disco_stabs", "off_skank", "dotted_8ths",
+                     "elton_octaves", "van_halen_chug", "waltz_strum",
+                     "compound_6_8_strum", "tresillo", "clave_son_3side",
+                     "clave_son_2side", "rumba_clave", "bossa_comp", "montuno_2_3",
+                     "arpeggio_up", "arpeggio_down", "arpeggio_16th", "alberti"]
+_PO_BASS = ["root", "root_fifth", "walking", "walking_swing", "funk_16ths",
+            "offbeat", "disco_octave", "palm_mute_8ths", "flea_slap", "geddy_lee",
+            "bootsy_slap", "waltz_bass", "tumbao", "reggaeton_dembow_bass"]
+_PO_MELODY_STYLES = ["motif", "riff", "chord_tone", "pentatonic", "blues",
+                     "raga_yaman", "maqam_hijaz", "gamelan_slendro", "hirajoshi",
+                     "random"]
+_PO_PHRASE_SHAPES = ["arc", "rise", "fall", "valley", "plateau", "call_response"]
+
+
+def part_options() -> dict:
+    """The valid per-part modifier choices for the VST/DAW "smart dropdown".
+    Drum patterns come straight from the engine's 4/4 source of truth; the rest
+    mirror the curated lists. Each modifier carries its options + a default."""
+    from src.daw_integration.generic.midi_export import DRUM_PATTERNS_4_4
+    return {
+        "chords": {
+            "voicing": {"options": _PO_VOICINGS, "default": "triad"},
+            "rhythm":  {"options": _PO_CHORD_RHYTHMS, "default": "pad"},
+        },
+        "bass":   {"pattern": {"options": _PO_BASS, "default": "root_fifth"}},
+        "drums":  {"pattern": {"options": list(DRUM_PATTERNS_4_4.keys()), "default": "basic_rock"}},
+        "melody": {
+            "style":        {"options": _PO_MELODY_STYLES, "default": "motif"},
+            "phrase_shape": {"options": _PO_PHRASE_SHAPES, "default": "arc"},
+        },
+        "lead": {
+            "style":        {"options": _PO_MELODY_STYLES, "default": "motif"},
+            "phrase_shape": {"options": _PO_PHRASE_SHAPES, "default": "arc"},
+        },
+    }
 
 
 def _save_unique_block(block_store, base_name: str, pm, *,

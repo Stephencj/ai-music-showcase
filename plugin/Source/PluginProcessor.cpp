@@ -24,6 +24,12 @@ void AIPartGeneratorProcessor::getStateInformation (juce::MemoryBlock& dest)
     o->setProperty ("progression", progression);
     o->setProperty ("tempo", tempo);
     o->setProperty ("bars", bars);
+    o->setProperty ("voicing", voicing);
+    o->setProperty ("chordRhythm", chordRhythm);
+    o->setProperty ("bassPattern", bassPattern);
+    o->setProperty ("drumPattern", drumPattern);
+    o->setProperty ("melodyStyle", melodyStyle);
+    o->setProperty ("phraseShape", phraseShape);
     const auto s = juce::JSON::toString (juce::var (o));
     dest.replaceAll (s.toRawUTF8(), s.getNumBytesAsUTF8());
 }
@@ -41,6 +47,12 @@ void AIPartGeneratorProcessor::setStateInformation (const void* data, int sizeIn
         progression = o->getProperty ("progression").toString();
         tempo       = (double) o->getProperty ("tempo");
         bars        = (int) o->getProperty ("bars");
+        voicing     = o->getProperty ("voicing").toString();
+        chordRhythm = o->getProperty ("chordRhythm").toString();
+        bassPattern = o->getProperty ("bassPattern").toString();
+        drumPattern = o->getProperty ("drumPattern").toString();
+        melodyStyle = o->getProperty ("melodyStyle").toString();
+        phraseShape = o->getProperty ("phraseShape").toString();
     }
 }
 
@@ -76,6 +88,16 @@ AIPartGeneratorProcessor::GenResult AIPartGeneratorProcessor::generate()
     body->setProperty ("output", "both");
     if (genre.isNotEmpty())
         body->setProperty ("genre", genre);
+
+    // Per-part modifiers (the backend applies only those relevant to `target`).
+    auto addIf = [body] (const char* k, const juce::String& v)
+        { if (v.isNotEmpty()) body->setProperty (k, v); };
+    addIf ("voicing", voicing);
+    addIf ("chord_rhythm", chordRhythm);
+    addIf ("bass_pattern", bassPattern);
+    addIf ("drum_pattern", drumPattern);
+    addIf ("melody_style", melodyStyle);
+    addIf ("phrase_shape", phraseShape);
 
     juce::Array<juce::var> prog;
     for (auto& tok : juce::StringArray::fromTokens (progression, " ,", ""))
@@ -132,6 +154,17 @@ AIPartGeneratorProcessor::GenResult AIPartGeneratorProcessor::generate()
     r.message = r.ok ? ("Generated " + juce::String (r.nNotes) + " notes — drag onto a track.")
                      : "Generation returned no artifacts.";
     return r;
+}
+
+juce::var AIPartGeneratorProcessor::fetchOptions()
+{
+    juce::URL url (serverBase + "/api/part-options");
+    auto opts = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress)
+                    .withConnectionTimeoutMs (15000);
+    std::unique_ptr<juce::InputStream> s (url.createInputStream (opts));
+    if (s == nullptr)
+        return {};
+    return juce::JSON::parse (s->readEntireStreamAsString());
 }
 
 // JUCE plugin entry point.

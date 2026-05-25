@@ -33,6 +33,7 @@ AIPartGeneratorEditor::AIPartGeneratorEditor (AIPartGeneratorProcessor& p)
 
     targetBox.addItemList ({ "chords", "bass", "melody", "lead", "drums" }, 1);
     targetBox.setText (proc.target, juce::dontSendNotification);
+    targetBox.onChange = [this] { updateModifiers(); };
     addAndMakeVisible (targetBox);
 
     genreBox.addItemList ({ "(auto)", "pop_full_song", "rock_anthem_full",
@@ -40,6 +41,15 @@ AIPartGeneratorEditor::AIPartGeneratorEditor (AIPartGeneratorProcessor& p)
                             "hip_hop_full", "country_full", "disco_full" }, 1);
     genreBox.setSelectedItemIndex (0, juce::dontSendNotification);
     addAndMakeVisible (genreBox);
+
+    // Smart per-part modifier dropdowns — contents fetched from the backend,
+    // re-shaped by updateModifiers() when the Part changes.
+    addAndMakeVisible (mod1Box);
+    addAndMakeVisible (mod2Box);
+    styleLabel (mod1Lbl, "");
+    styleLabel (mod2Lbl, "");
+    addAndMakeVisible (mod1Lbl);
+    addAndMakeVisible (mod2Lbl);
 
     keyEdit.setText (proc.key);          addAndMakeVisible (keyEdit);
     tempoEdit.setText (juce::String (proc.tempo, 1)); addAndMakeVisible (tempoEdit);
@@ -74,7 +84,83 @@ AIPartGeneratorEditor::AIPartGeneratorEditor (AIPartGeneratorProcessor& p)
     status.setJustificationType (juce::Justification::topLeft);
     addAndMakeVisible (status);
 
-    setSize (420, 320);
+    setSize (420, 380);
+    fetchOptions();        // populate the smart dropdowns for the current part
+}
+
+void AIPartGeneratorEditor::fetchOptions()
+{
+    auto* pp = &proc;
+    juce::Component::SafePointer<AIPartGeneratorEditor> safe (this);
+    juce::Thread::launch ([pp, safe]() mutable
+    {
+        auto opts = pp->fetchOptions();
+        juce::MessageManager::callAsync ([safe, opts]() mutable
+        {
+            if (auto* e = safe.getComponent())
+            {
+                e->partOptions = opts;
+                e->updateModifiers();
+            }
+        });
+    });
+}
+
+// Re-shape the two modifier dropdowns for the selected part, populating their
+// contents from the fetched options. chords → Voicing + Rhythm; bass/drums →
+// Pattern (one box); melody/lead → Style + Phrase.
+void AIPartGeneratorEditor::updateModifiers()
+{
+    auto fill = [] (juce::ComboBox& box, juce::Label& lbl, const juce::var& modObj,
+                    const juce::String& labelText, const juce::String& current)
+    {
+        lbl.setText (labelText, juce::dontSendNotification);
+        box.clear (juce::dontSendNotification);
+        box.setVisible (true);
+        lbl.setVisible (true);
+        if (auto* o = modObj.getDynamicObject())
+        {
+            int id = 1;
+            if (auto* arr = o->getProperty ("options").getArray())
+                for (auto& v : *arr)
+                    box.addItem (v.toString(), id++);
+            const auto want = current.isNotEmpty() ? current : o->getProperty ("default").toString();
+            for (int i = 0; i < box.getNumItems(); ++i)
+                if (box.getItemText (i) == want) { box.setSelectedItemIndex (i, juce::dontSendNotification); break; }
+            if (box.getSelectedId() == 0 && box.getNumItems() > 0)
+                box.setSelectedItemIndex (0, juce::dontSendNotification);
+        }
+    };
+    auto hide = [] (juce::ComboBox& box, juce::Label& lbl)
+        { box.setVisible (false); lbl.setVisible (false); };
+
+    const auto target = targetBox.getText();
+    auto* root = partOptions.getDynamicObject();
+    const juce::var t = (root != nullptr) ? root->getProperty (target) : juce::var();
+    auto* to = t.getDynamicObject();
+    if (to == nullptr) { hide (mod1Box, mod1Lbl); hide (mod2Box, mod2Lbl); return; }
+
+    if (target == "chords")
+    {
+        fill (mod1Box, mod1Lbl, to->getProperty ("voicing"), "Voicing", proc.voicing);
+        fill (mod2Box, mod2Lbl, to->getProperty ("rhythm"),  "Rhythm",  proc.chordRhythm);
+    }
+    else if (target == "bass")
+    {
+        fill (mod1Box, mod1Lbl, to->getProperty ("pattern"), "Pattern", proc.bassPattern);
+        hide (mod2Box, mod2Lbl);
+    }
+    else if (target == "drums")
+    {
+        fill (mod1Box, mod1Lbl, to->getProperty ("pattern"), "Pattern", proc.drumPattern);
+        hide (mod2Box, mod2Lbl);
+    }
+    else // melody / lead
+    {
+        fill (mod1Box, mod1Lbl, to->getProperty ("style"),        "Style",  proc.melodyStyle);
+        fill (mod2Box, mod2Lbl, to->getProperty ("phrase_shape"), "Phrase", proc.phraseShape);
+    }
+    resized();   // visibility changed → relayout so the rows show/hide
 }
 
 void AIPartGeneratorEditor::pushSettings()
@@ -87,6 +173,16 @@ void AIPartGeneratorEditor::pushSettings()
     proc.bars   = juce::jmax (1, barsEdit.getText().getIntValue());
     proc.progression = progEdit.getText();
     proc.serverBase  = serverEdit.getText().trim().trimCharactersAtEnd ("/");
+
+    // Per-part modifiers from the smart dropdowns (blank if options not loaded
+    // → backend uses defaults). Only the ones for this target are populated.
+    proc.voicing = proc.chordRhythm = proc.bassPattern
+        = proc.drumPattern = proc.melodyStyle = proc.phraseShape = {};
+    const auto m1 = mod1Box.getText(), m2 = mod2Box.getText();
+    if      (proc.target == "chords") { proc.voicing = m1; proc.chordRhythm = m2; }
+    else if (proc.target == "bass")   { proc.bassPattern = m1; }
+    else if (proc.target == "drums")  { proc.drumPattern = m1; }
+    else                              { proc.melodyStyle = m1; proc.phraseShape = m2; }
 }
 
 void AIPartGeneratorEditor::runGenerate()
@@ -137,6 +233,8 @@ void AIPartGeneratorEditor::resized()
     };
     row (targetLbl, targetBox);
     row (genreLbl,  genreBox);
+    if (mod1Box.isVisible()) row (mod1Lbl, mod1Box);
+    if (mod2Box.isVisible()) row (mod2Lbl, mod2Box);
     row (keyLbl,    keyEdit);
     row (tempoLbl,  tempoEdit);
     row (barsLbl,   barsEdit);
