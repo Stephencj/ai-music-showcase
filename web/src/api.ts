@@ -164,6 +164,27 @@ export const getPhonetic = (lyrics: string) =>
 export const getSectionVoices = (name: string) =>
   jget<{ sections: import("./types").SectionVoice[] }>(
     `/api/blocks/${encodeURIComponent(name)}/section-voices`);
+// Download the composed vocal melody as a MIDI guide (for your DAW's Auto-Tune).
+export const vocalGuideUrl = (name: string) =>
+  url(`/api/blocks/${encodeURIComponent(name)}/vocal-guide.mid`);
+// Pitch-correct a recorded/uploaded vocal onto the block's melody (or its key).
+// Returns a job id; poll with pollVocal (same result shape as a vocal render).
+export const autotuneBlock = async (
+  name: string,
+  file: Blob,
+  opts: { mode?: string; strength?: number; toKey?: boolean } = {}
+): Promise<{ job_id: string }> => {
+  const fname = (file as File).name
+    || (file.type.includes("webm") ? "take.webm" : file.type.includes("ogg") ? "take.ogg" : "take.wav");
+  const fd = new FormData();
+  fd.append("file", file, fname);
+  fd.append("mode", opts.mode ?? "natural");
+  fd.append("strength", String(opts.strength ?? 0.85));
+  fd.append("to_key", String(opts.toKey ?? false));
+  const r = await fetch(url(`/api/blocks/${encodeURIComponent(name)}/autotune`), { method: "POST", body: fd });
+  if (!r.ok) throw new Error((await r.text()) || r.statusText);
+  return r.json();
+};
 
 interface VocalJob {
   status: "pending" | "running" | "done" | "error";

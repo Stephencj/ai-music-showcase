@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import pretty_midi
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from src.composition import instruments as instruments_mod
@@ -513,6 +513,18 @@ def render_block_vocals(name: str, req: VocalsRequest) -> dict:
     return {"job_id": job.id}
 
 
+@router.get("/blocks/{name}/vocal-guide.mid")
+def block_vocal_guide(name: str) -> FileResponse:
+    """Download the block's composed vocal melody as a MIDI guide — point your
+    DAW's Auto-Tune/Melodyne at it to tune a real take onto the composed line."""
+    if not block_store._midi_path(name).exists():
+        raise HTTPException(404, "Block not found")
+    p = service.vocal_guide_midi(name)
+    if p is None:
+        raise HTTPException(404, "No composed vocal melody yet — compose a melody first")
+    return _serve(p, "audio/midi", download=True)
+
+
 @router.get("/blocks/{name}/section-voices")
 def block_section_voices(name: str) -> dict:
     """Per-section voice info for the per-section engine picker: each section
@@ -521,6 +533,33 @@ def block_section_voices(name: str) -> dict:
     if not block_store._midi_path(name).exists():
         raise HTTPException(404, "Block not found")
     return {"sections": service.section_voices(name)}
+
+
+@router.post("/blocks/{name}/autotune")
+async def autotune_block(
+    name: str,
+    file: UploadFile = File(...),
+    mode: str = Form("natural"),        # "natural" (correct toward) | "hard" (snap)
+    strength: float = Form(0.85),       # natural-mode amount, 0–1
+    to_key: bool = Form(False),         # tune to key/scale instead of the melody
+) -> dict:
+    """Pitch-correct an uploaded/recorded vocal onto the block's composed
+    melody (or its key/scale). Returns a job id; poll like a vocal render."""
+    import os
+    import tempfile
+    if not block_store._midi_path(name).exists():
+        raise HTTPException(404, "Block not found")
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Empty audio upload")
+    suffix = os.path.splitext(file.filename or "")[1] or ".wav"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    tmp.write(data)
+    tmp.close()
+    job = registry.create()
+    registry.run(job, lambda progress: service.run_autotune(
+        name, tmp.name, progress, job.id, mode=mode, strength=strength, to_key=to_key))
+    return {"job_id": job.id}
 
 
 @router.post("/phonetic")

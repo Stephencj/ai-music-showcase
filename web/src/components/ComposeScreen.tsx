@@ -499,6 +499,14 @@ function BlockCard({
   const [vocUrls, setVocUrls] = useState<{ audio: string | null; vocal?: string | null; pdf?: string | null } | null>(null);
   const [noteCount, setNoteCount] = useState<number | null>(null);
   const [takes, setTakes] = useState<api.VocalTake[]>([]);
+  // Auto-tune: pitch-correct a recorded/uploaded vocal onto the composed melody.
+  const [showAutotune, setShowAutotune] = useState(false);
+  const [atMode, setAtMode] = useState<"natural" | "hard">("natural");
+  const [atStrength, setAtStrength] = useState(0.85);
+  const [atToKey, setAtToKey] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   const voiceOptions = engine === "studio" ? studioVoices : voices;
 
@@ -571,6 +579,33 @@ function BlockCard({
     catch (e) { setVocMsg(String(e)); }
     finally { setPhonBusy(false); }
   }
+  // --- Auto-tune: send a recorded/uploaded vocal to be tuned onto the melody ---
+  async function runAutotune(file: Blob) {
+    setVocBusy(true); setVocUrls(null); setVocProg(0); setVocMsg("Tuning vocal to the melody…");
+    try {
+      const { job_id } = await api.autotuneBlock(block.name, file,
+        { mode: atMode, strength: atStrength, toKey: atToKey });
+      const job = await api.pollVocal(job_id, (p, m) => { setVocProg(p); setVocMsg(m); });
+      if (job.status === "error") setVocMsg(job.error || "Auto-tune failed");
+      else if (job.result) { setVocUrls({ audio: job.result.urls.audio, vocal: job.result.urls.vocal, pdf: job.result.urls.pdf }); loadTakes(); setVocMsg(""); }
+    } catch (e) { setVocMsg(String(e)); }
+    finally { setVocBusy(false); }
+  }
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+        if (blob.size) runAutotune(blob);
+      };
+      mr.start(); recRef.current = mr; setRecording(true);
+    } catch (e) { setVocMsg("Mic access failed: " + String(e)); }
+  }
+  function stopRecording() { recRef.current?.stop(); setRecording(false); }
   async function onSing() {
     if (!lyrics.trim()) return;
     setVocBusy(true); setVocUrls(null); setVocProg(0); setVocMsg("Starting…");
@@ -746,10 +781,45 @@ function BlockCard({
               <button className={"chip" + (harmonies ? " on" : "")} onClick={() => setHarmonies((h) => !h)} title="Stack harmony/backing lines">＋harmonies</button>
               <button className={"chip" + (clarity ? " on" : "")} onClick={() => setClarity((c) => !c)} title="Clarity mode: cap high notes, gap words, de-melisma for clearer diction (trades a little melody)">✦clarity</button>
               <button className={"chip" + (showPhonetic ? " on" : "")} onClick={() => setShowPhonetic((s) => !s)} title="Edit how each word is pronounced (ARPABET) to fix the voice's diction">🗣 phonetic</button>
+              <button className={"chip" + (showAutotune ? " on" : "")} onClick={() => setShowAutotune((s) => !s)} title="Auto-tune your own recorded/uploaded vocal onto the composed melody">🎚 auto-tune</button>
               <button className="btn secondary sm" disabled={vocBusy || !lyrics.trim()} onClick={onSing}>
                 {vocBusy ? "Singing…" : "🎤 Sing it"}
               </button>
             </div>
+            {showAutotune && (
+              <div className="autotune-panel">
+                <div className="te-note">Auto-tune your own voice onto the composed melody — record or upload a take. (Sing along to a take so the timing lines up.)</div>
+                <div className="at-row">
+                  {!recording ? (
+                    <button className="btn secondary sm" disabled={vocBusy} onClick={startRecording}>● Record</button>
+                  ) : (
+                    <button className="btn sm danger" onClick={stopRecording}>■ Stop &amp; tune</button>
+                  )}
+                  <label className="btn ghost sm" style={{ cursor: "pointer" }}>
+                    ↥ Upload take
+                    <input type="file" accept="audio/*" style={{ display: "none" }} disabled={vocBusy}
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) runAutotune(f); e.currentTarget.value = ""; }} />
+                  </label>
+                  <a className="btn ghost sm" href={api.vocalGuideUrl(block.name)} title="Download the composed melody as MIDI to tune in your own DAW">↓ MIDI guide</a>
+                  {recording && <span className="te-note rec-dot">recording…</span>}
+                </div>
+                <div className="at-row">
+                  <select value={atMode} onChange={(e) => setAtMode(e.target.value as "natural" | "hard")} title="Correction strength">
+                    <option value="natural">Natural</option>
+                    <option value="hard">Hard (snap)</option>
+                  </select>
+                  {atMode === "natural" && (
+                    <label className="te-note">amount&nbsp;
+                      <input type="range" min={0.3} max={1} step={0.05} value={atStrength}
+                        onChange={(e) => setAtStrength(Number(e.target.value))} />
+                      &nbsp;{Math.round(atStrength * 100)}%
+                    </label>
+                  )}
+                  <button className={"chip" + (atToKey ? " on" : "")} onClick={() => setAtToKey((k) => !k)}
+                    title="Tune to the song's key/scale instead of the exact melody">to key</button>
+                </div>
+              </div>
+            )}
             {perSection && sectionVoices && (
               <div className="section-voices">
                 <div className="te-note">Voice per section — rap dense verses (TTS), sing the rest (SVS). ✦clarity still applies to Sing sections.</div>

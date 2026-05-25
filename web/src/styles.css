@@ -302,6 +302,11 @@ audio { width: 100%; margin: 8px 0 12px; }
 .sv-hint { color: var(--accent-2); }
 .sv-toggle { display: flex; gap: 4px; flex-shrink: 0; }
 .sv-toggle .chip { padding: 2px 8px; font-size: 12px; }
+.autotune-panel { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 10px; background: var(--bg-2); }
+.at-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.at-row .te-note { display: inline-flex; align-items: center; }
+.rec-dot { color: var(--danger); animation: rec-blink 1s steps(2, start) infinite; }
+@keyframes rec-blink { to { opacity: 0.3; } }
 .voc-row { display: flex; gap: 8px; align-items: center; }
 .voc-row > input, .voc-row > select { flex: 1; min-width: 0; }
 .voc-theme { padding: 9px 10px; }

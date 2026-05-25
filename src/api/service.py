@@ -436,6 +436,37 @@ def section_voices(name: str) -> list[dict]:
     return out
 
 
+def vocal_guide_midi(name: str):
+    """Write the block's composed vocal (Lead + any harmonies) to a standalone
+    MIDI **guide** — the target a user loads into their own DAW's Auto-Tune /
+    Melodyne to tune a real take onto the composed melody. Returns the file
+    path, or ``None`` if the block has no vocal melody yet."""
+    import pretty_midi
+    from src.daw_integration.generic import blocks as block_store
+    from src.models.vocals.lyrics import select_vocal_instruments
+
+    pm, meta = block_store.load_block(name)
+    lead, harms = select_vocal_instruments(pm)
+    if lead is None:
+        return None
+    out = pretty_midi.PrettyMIDI(initial_tempo=float(meta.get("tempo") or 120.0))
+
+    def _copy(inst, track_name, program):
+        ni = pretty_midi.Instrument(program=program, name=track_name)
+        ni.notes = [pretty_midi.Note(velocity=n.velocity, pitch=n.pitch,
+                                     start=n.start, end=n.end) for n in inst.notes]
+        return ni
+
+    out.instruments.append(_copy(lead, "Lead Vocal Guide", 53))
+    for h in harms:
+        out.instruments.append(_copy(h, h.name or "Harmony Guide", 52))
+    guide_dir = API_OUT / "_guides"
+    guide_dir.mkdir(parents=True, exist_ok=True)
+    path = guide_dir / f"{block_store._safe_name(name)}_vocal_guide.mid"
+    out.write(str(path))
+    return path
+
+
 def list_voices() -> list[str]:
     """Clear English macOS ``say`` voices (filters out the novelty ones)."""
     import subprocess
@@ -774,6 +805,110 @@ def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
             "pdf": str(pdf_zip) if pdf_zip else None,
             "midi": str(block_store._midi_path(name)),
         },
+    }
+
+
+def run_autotune(name: str, audio_path: str, progress, job_id: str, *,
+                 mode: str = "natural", strength: float = 0.85,
+                 to_key: bool = False) -> dict:
+    """Pitch-correct an uploaded/recorded vocal onto the block's composed
+    melody (or its key/scale) and mix it with the instrumental, saved as a
+    take. The tuned **real voice** replaces the synth one — so the backing is
+    built without the synth vocal tracks (no doubling)."""
+    import librosa
+    import numpy as np
+    import soundfile as sf
+    from src.daw_integration.generic import blocks as block_store
+    from src.models.vocals.autotune import autotune, targets_from_block
+    from src.models.vocals.lyrics import select_vocal_instruments
+    from src.models.vocals.render import carve_for_vocal
+
+    pm, meta = block_store.load_block(name)
+    spec = meta.get("spec") or {}
+    key, scale = (spec.get("key") or "C"), (spec.get("scale") or "major")
+
+    progress("Loading take…", 0.15)
+    vocal, sr = librosa.load(audio_path, sr=None, mono=True)   # handles wav/webm/m4a via ffmpeg
+    vocal = np.asarray(vocal, dtype=np.float32)
+
+    targets = None if to_key else (targets_from_block(name) or None)
+    progress("Tuning to the melody…" if targets else "Tuning to the key…", 0.4)
+    voc = autotune(vocal, sr, targets=targets, key=key, scale=scale,
+                   mode=mode, strength=strength)
+    try:
+        from src.models.vocals.render import _apply_fx
+        voc = _apply_fx(voc, sr)              # presence/clarity vocal chain
+    except Exception:  # noqa: BLE001
+        pass
+
+    job_dir = API_OUT / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    _prune_old_job_dirs()
+
+    progress("Mixing with the instrumental…", 0.7)
+    # Backing WITHOUT the synth vocal tracks, so they don't double the real voice.
+    lead_inst, harm_insts = select_vocal_instruments(pm)
+    drop = {id(i) for i in harm_insts}
+    if lead_inst is not None:
+        drop.add(id(lead_inst))
+    wav_path = block_store._wav_path(name)
+    if not drop and wav_path.exists():
+        inst, isr = sf.read(str(wav_path), dtype="float32")
+    else:
+        pm.instruments = [i for i in pm.instruments if id(i) not in drop]
+        if pm.instruments:
+            from src.audio_processing.render.pipeline import render_to_audio
+            inst_mid = job_dir / "instrumental.mid"
+            pm.write(str(inst_mid))
+            r = render_to_audio(midi=str(inst_mid), output_dir=job_dir / "inst", with_stems=False)
+            inst, isr = sf.read(str(r.mix_path), dtype="float32")
+        else:
+            inst, isr = np.zeros((1, 2), dtype="float32"), sr
+    if voc.size and sr != isr:
+        voc = librosa.resample(voc, orig_sr=sr, target_sr=isr)
+    if inst.ndim == 1:
+        inst = np.stack([inst, inst], axis=1)
+    vstereo = np.stack([voc, voc], axis=1) if voc.size else np.zeros((1, 2), dtype=np.float32)
+    n = max(len(inst), len(vstereo))
+
+    def _pad(a):
+        o = np.zeros((n, 2), dtype=np.float32)
+        o[: len(a)] = a
+        return o
+
+    if vstereo.size > 1:
+        inst = carve_for_vocal(inst, voc, isr)
+    mix = _pad(inst) * 0.82 + _pad(vstereo) * 1.0
+    peak = float(np.max(np.abs(mix))) if mix.size else 0.0
+    if peak > 0:
+        mix = mix * (0.97 / peak)
+    mix_wav = job_dir / "vocal_mix.wav"
+    sf.write(str(mix_wav), mix, isr)
+    mix_mp3 = job_dir / "vocal_mix.mp3"
+    served_mix = str(mix_mp3) if block_store.write_preview_mp3(mix_wav, mix_mp3) else str(mix_wav)
+
+    served_stem = None
+    if voc.size:
+        stem_wav = job_dir / "vocal.wav"
+        sf.write(str(stem_wav), voc, isr)
+        stem_mp3 = job_dir / "vocal.mp3"
+        served_stem = str(stem_mp3) if block_store.write_preview_mp3(stem_wav, stem_mp3) else str(stem_wav)
+
+    take_id = None
+    try:
+        take = block_store.save_vocal_take(
+            name, mix=served_mix, vocal=served_stem,
+            lyrics=meta.get("lyrics") or "", engine="autotune",
+            voice=("to-key" if targets is None else "to-melody"))
+        take_id = take.get("id")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("could not persist autotune take for %s: %s", name, exc)
+
+    progress("Done.", 1.0)
+    return {
+        "block": name, "engine": "autotune", "take_id": take_id,
+        "_paths": {"audio_mp3": served_mix, "audio_wav": str(mix_wav),
+                   "vocal_mp3": served_stem, "midi": str(block_store._midi_path(name))},
     }
 
 
