@@ -1,0 +1,2 @@
+# CMake build dir (includes the fetched JUCE + built VST3/AU/Standalone — large)
+build/
