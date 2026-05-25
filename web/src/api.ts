@@ -98,6 +98,7 @@ export interface VocalTake {
   harmonies: boolean;
   clarity?: boolean;
   phonetic?: string;
+  section_engines?: { start_bar: number; end_bar: number; engine: string }[];
   lyrics: string;
   files: Record<string, string>; // role ("mix"|"vocal"|"score") -> filename
 }
@@ -147,14 +148,22 @@ export const setLyrics = (name: string, lyrics: string) =>
 // by the Claude Code watch-loop. Enqueue, then poll the request id.
 export const composeMelody = (name: string, lyrics: string) =>
   jpost<{ request_id: string }>(`/api/blocks/${encodeURIComponent(name)}/melody/compose`, { lyrics });
+export interface SectionEngine { start_bar: number; end_bar: number; engine: string }
 export const renderVocals = (
   name: string,
-  body: { lyrics: string; voice: string; engine: string; harmonies: boolean; clarity?: boolean; phonetic?: string }
+  body: {
+    lyrics: string; voice: string; engine: string; harmonies: boolean;
+    clarity?: boolean; phonetic?: string; section_engines?: SectionEngine[];
+  }
 ) => jpost<{ job_id: string }>(`/api/blocks/${encodeURIComponent(name)}/vocals`, body);
 // Auto-generate the editable ARPABET ("phonetic version") of a lyric so the
 // user can tweak per-word diction before re-singing.
 export const getPhonetic = (lyrics: string) =>
   jpost<{ phonetic: string }>(`/api/phonetic`, { lyrics });
+// Per-section voice info (density + suggested engine) for per-section switching.
+export const getSectionVoices = (name: string) =>
+  jget<{ sections: import("./types").SectionVoice[] }>(
+    `/api/blocks/${encodeURIComponent(name)}/section-voices`);
 
 interface VocalJob {
   status: "pending" | "running" | "done" | "error";

@@ -497,10 +497,21 @@ def render_block_vocals(name: str, req: VocalsRequest) -> dict:
     if not req.lyrics.strip():
         raise HTTPException(400, "Lyrics are empty")
     job = registry.create()
+    section_engines = [se.model_dump() for se in req.section_engines]
     registry.run(job, lambda progress: service.run_block_vocals(
         name, req.lyrics, req.voice, req.engine, progress, job.id,
-        req.harmonies, req.clarity, req.phonetic))
+        req.harmonies, req.clarity, req.phonetic, section_engines))
     return {"job_id": job.id}
+
+
+@router.get("/blocks/{name}/section-voices")
+def block_section_voices(name: str) -> dict:
+    """Per-section voice info for the per-section engine picker: each section
+    with its vocal-line density and a suggested engine (rough for rap-like
+    sections). Empty list when the block has no section structure."""
+    if not block_store._midi_path(name).exists():
+        raise HTTPException(404, "Block not found")
+    return {"sections": service.section_voices(name)}
 
 
 @router.post("/phonetic")

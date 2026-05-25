@@ -73,6 +73,13 @@ class SetLyricsRequest(BaseModel):
     lyrics: str = ""
 
 
+class SectionEngine(BaseModel):
+    """A song section sung by a specific engine (per-section voice switching)."""
+    start_bar: int                # inclusive bar range, as in BlockSpec.sections
+    end_bar: int
+    engine: str                   # "studio" (sung) | "rough" (rap/TTS)
+
+
 class VocalsRequest(BaseModel):
     lyrics: str
     voice: str = ""               # "" = system default say voice
@@ -84,6 +91,8 @@ class VocalsRequest(BaseModel):
     phonetic: str = ""            # optional edited ARPABET version (one
                                   # bracketed group per word) — sing these
                                   # phonemes instead of g2p on the spelling
+    section_engines: list[SectionEngine] = []  # per-section voice map; empty =
+                                  # use `engine` for the whole song
 
 
 class PhoneticRequest(BaseModel):

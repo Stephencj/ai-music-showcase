@@ -370,6 +370,51 @@ def melody_info(name: str) -> dict:
     }
 
 
+# Fast/dense vocal lines (rap) read far better on the rough/TTS engine than the
+# studio SVS, so we suggest "rough" for sections whose median sung note is short.
+_DENSE_NOTE_SEC = 0.18
+_DENSE_MIN_NOTES = 4
+
+
+def section_voices(name: str) -> list[dict]:
+    """Per-section voice info for the per-section engine picker: each
+    ``spec.sections`` entry with how dense its vocal line is and a suggested
+    engine (``rough`` for dense/rap-like sections, else ``studio``). Returns
+    ``[]`` when the block has no section structure to switch between."""
+    from src.daw_integration.generic import blocks as block_store
+    from src.models.vocals.lyrics import monophonic_line, select_vocal_tracks
+
+    pm, meta = block_store.load_block(name)
+    spec = meta.get("spec") or {}
+    sections = spec.get("sections") or []
+    if not sections:
+        return []
+    ts = meta.get("time_signature") or [4, 4]
+    tempo = float(spec.get("tempo") or meta.get("tempo") or 120.0)
+    barlen = int(ts[0]) * 60.0 / tempo
+
+    lead, _harms = select_vocal_tracks(pm)
+    notes = monophonic_line(lead)  # (pitch, start, end) in seconds
+
+    out: list[dict] = []
+    for s in sections:
+        sb, eb = int(s.get("start_bar") or 0), int(s.get("end_bar") or 0)
+        t0, t1 = sb * barlen, (eb + 1) * barlen
+        durs = sorted(e - st for (_p, st, e) in notes if t0 <= st < t1)
+        n = len(durs)
+        median = durs[n // 2] if n else 0.0
+        dense = n >= _DENSE_MIN_NOTES and median < _DENSE_NOTE_SEC
+        out.append({
+            "label": s.get("label") or s.get("role") or "Section",
+            "role": s.get("role") or "verse",
+            "start_bar": sb, "end_bar": eb,
+            "n_notes": n,
+            "dense": dense,
+            "suggested": "rough" if dense else "studio",
+        })
+    return out
+
+
 def list_voices() -> list[str]:
     """Clear English macOS ``say`` voices (filters out the novelty ones)."""
     import subprocess
@@ -543,13 +588,20 @@ def phonetic_for_lyrics(lyrics: str) -> str:
 
 def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
                      progress, job_id: str, harmonies: bool = True,
-                     clarity: bool = False, phonetic: str = "") -> dict:
+                     clarity: bool = False, phonetic: str = "",
+                     section_engines: "list | None" = None) -> dict:
     """Render a sung vocal over a block and mix it with the block's
-    instrumental. Reuses the block's existing HQ WAV when present."""
+    instrumental. Reuses the block's existing HQ WAV when present.
+
+    ``section_engines`` is an optional per-section voice map (each item has
+    ``start_bar``/``end_bar``/``engine``) — sections sing with their own engine
+    (rap verses on rough/TTS, hooks on the studio SVS) while ``engine_name`` is
+    the fallback for anything uncovered."""
     import numpy as np
     import soundfile as sf
     from src.daw_integration.generic import blocks as block_store
     from src.models.vocals import RoughEngine, get_engine, render_vocals
+    from src.models.vocals.render import section_time_ranges
 
     pm, _meta = block_store.load_block(name)
     progress("Synthesizing vocal…", 0.25)
@@ -558,8 +610,31 @@ def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
     except Exception as exc:  # noqa: BLE001 — studio voicebank missing etc.
         logger.warning("vocal engine %r unavailable (%s) — using rough", engine_name, exc)
         engine = RoughEngine(voice or "")
+
+    # Resolve a per-section engine map into render_vocals' engine_ranges,
+    # caching one engine object per distinct name (studio is a shared singleton).
+    engine_ranges = None
+    if section_engines:
+        ts = _meta.get("time_signature") or [4, 4]
+        tempo = float((_meta.get("spec") or {}).get("tempo") or _meta.get("tempo") or 120.0)
+        _cache: dict[str, object] = {}
+
+        def _resolve(nm: str):
+            if nm not in _cache:
+                try:
+                    _cache[nm] = get_engine(nm, voice)
+                except Exception:  # noqa: BLE001
+                    _cache[nm] = engine
+            return _cache[nm]
+
+        rows = [(se["start_bar"], se["end_bar"], se["engine"])
+                for se in section_engines]
+        engine_ranges = [(t0, t1, _resolve(nm))
+                         for (t0, t1, nm) in section_time_ranges(rows, tempo, int(ts[0]))]
+
     voc, sr = render_vocals(pm, lyrics, voice=voice or "", engine=engine,
-                            harmonies=harmonies, clarity=clarity, phonetic=phonetic)
+                            harmonies=harmonies, clarity=clarity, phonetic=phonetic,
+                            engine_ranges=engine_ranges)
 
     job_dir = API_OUT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -662,7 +737,7 @@ def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
             name, mix=served_mix, vocal=served_stem,
             score=str(pdf_zip) if pdf_zip else None,
             lyrics=lyrics, engine=engine_name, voice=voice, harmonies=harmonies,
-            clarity=clarity, phonetic=phonetic,
+            clarity=clarity, phonetic=phonetic, section_engines=section_engines or [],
         )
         take_id = take.get("id")
     except Exception as exc:  # noqa: BLE001

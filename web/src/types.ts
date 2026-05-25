@@ -42,6 +42,16 @@ export interface SectionInfo {
   bars: number;
 }
 
+export interface SectionVoice {
+  label: string;
+  role: string;
+  start_bar: number;
+  end_bar: number;
+  n_notes: number;
+  dense: boolean;
+  suggested: string; // "studio" | "rough"
+}
+
 export interface JobResult {
   seed: number;
   genre: string;

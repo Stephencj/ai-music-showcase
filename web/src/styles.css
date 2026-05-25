@@ -295,6 +295,13 @@ audio { width: 100%; margin: 8px 0 12px; }
   border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+.section-voices { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.sv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 8px; border-radius: 8px; background: var(--bg-2); }
+.sv-label { font-size: 12px; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-role { color: var(--muted); }
+.sv-hint { color: var(--accent-2); }
+.sv-toggle { display: flex; gap: 4px; flex-shrink: 0; }
+.sv-toggle .chip { padding: 2px 8px; font-size: 12px; }
 .voc-row { display: flex; gap: 8px; align-items: center; }
 .voc-row > input, .voc-row > select { flex: 1; min-width: 0; }
 .voc-theme { padding: 9px 10px; }

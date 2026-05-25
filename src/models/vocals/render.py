@@ -168,6 +168,20 @@ def render_vocals(midi, lyrics, *, sr: int = 44100, voice: str = "",
     return _finish(bus, sr, fx)
 
 
+def section_time_ranges(sections, tempo: float, beats_per_bar: int
+                        ) -> list[tuple[float, float, str]]:
+    """Convert per-section ``(start_bar, end_bar, engine_name)`` rows into the
+    ``(start_sec, end_sec, engine_name)`` ranges that feed ``engine_ranges``.
+    Section bar ranges are **inclusive** (e.g. an "Intro 0–3" is 4 bars), so a
+    section spans ``[start_bar, end_bar+1)`` bars of time. ``end_sec`` is open,
+    matching ``render_vocals``'s ``t0 <= start < t1`` test."""
+    barlen = beats_per_bar * 60.0 / float(tempo or 120.0)
+    out: list[tuple[float, float, str]] = []
+    for start_bar, end_bar, name in sections:
+        out.append((start_bar * barlen, (end_bar + 1) * barlen, name))
+    return out
+
+
 def _apply_fx(audio: np.ndarray, sr: int) -> np.ndarray:
     """Vocal chain tuned for intelligibility: trim low mud, even it out, then
     lift the presence band (consonant clarity) and add air, with only a hint of

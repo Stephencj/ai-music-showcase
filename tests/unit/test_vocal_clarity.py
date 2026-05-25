@@ -21,6 +21,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.models.vocals.lyrics import (  # noqa: E402
     align_words_to_notes, apply_clarity, parse_phonetic, to_phonetic,
 )
+from src.models.vocals.render import section_time_ranges  # noqa: E402
 from src.models.vocals.repair import unclear_word_indices  # noqa: E402
 
 
@@ -97,6 +98,26 @@ class PhoneticLayerTests(unittest.TestCase):
         # two words, only one pron group → guard skips the override (no desync)
         segs = align_words_to_notes("hi there", notes, pron=[["hh", "ay"]])
         self.assertNotIn("phonemes", segs[0])
+
+
+class SectionEngineRangeTests(unittest.TestCase):
+    def test_inclusive_end_bar_to_open_time_range(self):
+        # 104 bpm, 4/4 → barlen = 4*60/104 = 2.3077 s. "Intro 0–3" is 4 bars.
+        ranges = section_time_ranges([(0, 3, "rough"), (4, 19, "studio")], 104.0, 4)
+        self.assertEqual(len(ranges), 2)
+        self.assertAlmostEqual(ranges[0][0], 0.0, places=4)
+        self.assertAlmostEqual(ranges[0][1], 4 * (4 * 60 / 104), places=4)   # 0..bar4
+        self.assertEqual(ranges[0][2], "rough")
+        # verse starts exactly where intro ends (contiguous, no gap/overlap)
+        self.assertAlmostEqual(ranges[1][0], ranges[0][1], places=6)
+        self.assertAlmostEqual(ranges[1][1], 20 * (4 * 60 / 104), places=4)  # ..bar20
+
+    def test_three_four_meter(self):
+        ranges = section_time_ranges([(0, 1, "studio")], 120.0, 3)  # barlen=1.5s, 2 bars
+        self.assertAlmostEqual(ranges[0][1], 3.0, places=6)
+
+    def test_empty(self):
+        self.assertEqual(section_time_ranges([], 120.0, 4), [])
 
 
 class RepairLocatorTests(unittest.TestCase):

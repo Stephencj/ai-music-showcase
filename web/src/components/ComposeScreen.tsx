@@ -19,7 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import * as api from "../api";
-import type { Block, BlockSpec, SongRenderResult } from "../types";
+import type { Block, BlockSpec, SectionVoice, SongRenderResult } from "../types";
 import Waveform from "./Waveform";
 import Sparkline from "./Sparkline";
 
@@ -489,6 +489,8 @@ function BlockCard({
   const [phonetic, setPhonetic] = useState("");
   const [showPhonetic, setShowPhonetic] = useState(false);
   const [phonBusy, setPhonBusy] = useState(false);
+  const [sectionVoices, setSectionVoices] = useState<SectionVoice[] | null>(null);
+  const [sectionEngines, setSectionEngines] = useState<string[]>([]);
   const [drafting, setDrafting] = useState(false);
   const [composing, setComposing] = useState(false);
   const [vocBusy, setVocBusy] = useState(false);
@@ -514,9 +516,18 @@ function BlockCard({
       api.getMelodyInfo(block.name).then((m) => setNoteCount(m.total_notes)).catch(() => setNoteCount(0));
     }
     if (open && !engine && engines.length) setEngine(engines.includes("studio") ? "studio" : engines[0]);
+    if (open && sectionVoices === null) {
+      api.getSectionVoices(block.name)
+        .then((r) => { setSectionVoices(r.sections); setSectionEngines(r.sections.map((s) => s.suggested)); })
+        .catch(() => setSectionVoices([]));
+    }
     if (open) loadTakes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, engines]);
+
+  // Per-section switching only makes sense when there are multiple sections and
+  // the studio SVS is available (otherwise everything is the rough engine).
+  const perSection = !!sectionVoices && sectionVoices.length >= 2 && engines.length > 1;
 
   // Pick a sensible default voice for the current engine.
   useEffect(() => {
@@ -560,7 +571,11 @@ function BlockCard({
     try {
       // only send the phonetic override when the editor is open and filled
       const phon = showPhonetic && phonetic.trim() ? phonetic : "";
-      const { job_id } = await api.renderVocals(block.name, { lyrics, voice, engine: engine || "rough", harmonies, clarity, phonetic: phon });
+      // when per-section is active, send each section's engine (default to studio)
+      const section_engines = perSection && sectionVoices
+        ? sectionVoices.map((s, i) => ({ start_bar: s.start_bar, end_bar: s.end_bar, engine: sectionEngines[i] || "studio" }))
+        : undefined;
+      const { job_id } = await api.renderVocals(block.name, { lyrics, voice, engine: engine || "rough", harmonies, clarity, phonetic: phon, section_engines });
       const job = await api.pollVocal(job_id, (p, m) => { setVocProg(p); setVocMsg(m); });
       if (job.status === "error") setVocMsg(job.error || "Vocal render failed");
       else if (job.result) { setVocUrls({ audio: job.result.urls.audio, vocal: job.result.urls.vocal, pdf: job.result.urls.pdf }); loadTakes(); }
@@ -707,7 +722,7 @@ function BlockCard({
                 {composing ? "…" : "🎼 Compose melody"}</button>
             </div>
             <div className="voc-row">
-              {engines.length > 1 && (
+              {engines.length > 1 && !perSection && (
                 <select value={engine} onChange={(e) => setEngine(e.target.value)} title="Voice engine">
                   {engines.map((en) => (
                     <option key={en} value={en}>{en === "studio" ? "Studio (real SVS)" : "Rough (demo)"}</option>
@@ -727,6 +742,29 @@ function BlockCard({
                 {vocBusy ? "Singing…" : "🎤 Sing it"}
               </button>
             </div>
+            {perSection && sectionVoices && (
+              <div className="section-voices">
+                <div className="te-note">Voice per section — rap dense verses (TTS), sing the rest (SVS). ✦clarity still applies to Sing sections.</div>
+                {sectionVoices.map((s, i) => (
+                  <div key={`${s.start_bar}-${i}`} className="sv-row">
+                    <span className="sv-label">
+                      {s.label} <span className="sv-role">({s.role}) · bars {s.start_bar}–{s.end_bar}</span>
+                      {s.dense && <span className="sv-hint" title="Fast/dense vocal line — reads better as Rap"> · dense</span>}
+                    </span>
+                    <span className="sv-toggle">
+                      <button
+                        className={"chip" + (sectionEngines[i] !== "rough" ? " on" : "")}
+                        onClick={() => setSectionEngines((a) => a.map((e, j) => (j === i ? "studio" : e)))}
+                      >🎤 Sing</button>
+                      <button
+                        className={"chip" + (sectionEngines[i] === "rough" ? " on" : "")}
+                        onClick={() => setSectionEngines((a) => a.map((e, j) => (j === i ? "rough" : e)))}
+                      >🗣 Rap</button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             {showPhonetic && (
               <div className="phonetic-editor">
                 <div className="te-note">
@@ -760,6 +798,7 @@ function BlockCard({
                         {t.harmonies ? " · +harm" : ""}
                         {t.clarity ? " · ✦clarity" : ""}
                         {t.phonetic ? " · 🗣" : ""}
+                        {(() => { const n = (t.section_engines ?? []).filter((s) => s.engine === "rough").length; return n ? ` · rap×${n}` : ""; })()}
                       </span>
                       <div className="links">
                         {t.files.vocal && <a href={api.vocalTakeUrl(block.name, t.id, "vocal")} download>↓ Stem</a>}
