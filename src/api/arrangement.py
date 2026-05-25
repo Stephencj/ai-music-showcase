@@ -43,10 +43,20 @@ def build_sections(genre: str, roles: list[str]) -> list[dict]:
     arrangement. Bar-lengths/labels come from the template when present."""
     wanted = [r for r in SECTION_ORDER if r in set(roles)]
     template = _template_for(genre)
+    template_roles = {s.get("role") for s in template}
 
+    # Keep the genre's FULL arrangement — with its repeated verses/choruses,
+    # i.e. its real (~3-minute) length — when nothing is chosen OR the caller
+    # kept exactly the genre's native sections (the generate UI's default
+    # selects every native role). Collapsing to one-of-each-role here is what
+    # silently halved a "full song" (pop_full_song 80 → 48 bars) and starved
+    # the vocal line/lyric of phrases. A strict subset still builds a reduced
+    # custom arrangement below.
+    if template and (not wanted or set(wanted) == template_roles):
+        return [dict(s) for s in template]
     if not wanted:
-        # Full default arrangement (already contiguous) when nothing chosen.
-        return template or _from_roles(list(SECTION_ORDER), {})
+        # No template (unknown genre) and nothing chosen → generic sketch.
+        return _from_roles(list(SECTION_ORDER), {})
 
     by_role: dict[str, tuple[int, str]] = {}
     for s in template:

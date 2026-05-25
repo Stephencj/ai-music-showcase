@@ -203,5 +203,46 @@ class DefaultBarsBackwardCompatTests(unittest.TestCase):
             )
 
 
+class BuildSectionsFullLengthTests(unittest.TestCase):
+    """``build_sections`` must keep a full-song preset's true length when the
+    caller keeps all native sections (the generate UI selects every native role
+    by default). Regression for the bug where selecting every section collapsed
+    pop_full_song 80→48 bars — silently halving the song and starving the
+    vocal line / lyric of phrases."""
+
+    @staticmethod
+    def _bars(secs):
+        return sum(s["end_bar"] - s["start_bar"] + 1 for s in secs)
+
+    def test_empty_roles_returns_full_length(self):
+        from src.api.arrangement import build_sections
+        secs = build_sections("pop_full_song", [])
+        self.assertEqual(self._bars(secs), STYLES["pop_full_song"].default_bars)
+
+    def test_all_native_roles_keeps_repeats_and_length(self):
+        from src.api.arrangement import build_sections, available_sections
+        native = [s["role"] for s in available_sections("pop_full_song") if s["native"]]
+        secs = build_sections("pop_full_song", native)
+        self.assertEqual(self._bars(secs), 80)            # not the collapsed 48
+        roles = [s["role"] for s in secs]
+        self.assertGreaterEqual(roles.count("verse"), 2)  # Verse 1 + Verse 2 kept
+        self.assertGreaterEqual(roles.count("chorus"), 2)
+
+    def test_every_full_song_preset_is_full_length_on_native(self):
+        from src.api.arrangement import build_sections, available_sections
+        for k in FULL_SONG_KEYS:
+            native = [s["role"] for s in available_sections(k) if s["native"]]
+            secs = build_sections(k, native)
+            self.assertEqual(
+                self._bars(secs), STYLES[k].default_bars,
+                f"{k}: keeping all native sections should yield full length")
+
+    def test_strict_subset_builds_reduced_song(self):
+        from src.api.arrangement import build_sections
+        secs = build_sections("pop_full_song", ["verse", "chorus"])
+        self.assertEqual({s["role"] for s in secs}, {"verse", "chorus"})
+        self.assertLess(self._bars(secs), 80)             # genuinely shorter
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
