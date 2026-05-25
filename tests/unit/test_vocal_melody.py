@@ -53,9 +53,10 @@ class MelodyFromLyricsTests(unittest.TestCase):
         self.assertEqual(len(plan["lead"]), sum(syls))
 
     def test_all_notes_in_key(self):
-        scale = set(build_scale("F#", "major"))
+        # in-key by pitch class (octave may shift in the singable-register pass)
+        pcs = {m % 12 for m in build_scale("F#", "major")}
         plan = self._plan([8, 8, 8, 8])
-        self.assertTrue(all(m in scale for m, _, _ in plan["lead"]))
+        self.assertTrue(all(m % 12 in pcs for m, _, _ in plan["lead"]))
 
     def test_notes_strictly_time_ordered(self):
         plan = self._plan([6, 9, 11, 7, 5, 8])
@@ -88,9 +89,46 @@ class MelodyFromLyricsTests(unittest.TestCase):
         self.assertEqual(len(plan["lead"]), 10)
 
     def test_different_key(self):
-        scale = set(build_scale("C", "major"))
+        pcs = {m % 12 for m in build_scale("C", "major")}
         plan = self._plan([8, 8, 8, 8], key="C", scale="major")
-        self.assertTrue(all(m in scale for m, _, _ in plan["lead"]))
+        self.assertTrue(all(m % 12 in pcs for m, _, _ in plan["lead"]))
+
+
+class RefitTests(unittest.TestCase):
+    """_refit must hit the target count exactly, preserve time order, and not
+    drop/overlap (so one note per syllable survives monophonic reduction)."""
+
+    def _ordered_nonoverlap(self, notes):
+        for i in range(len(notes) - 1):
+            if notes[i][1] + notes[i][2] > notes[i + 1][1] + 1e-6:
+                return False
+            if notes[i + 1][1] < notes[i][1]:
+                return False
+        return True
+
+    def test_merge_down_to_target(self):
+        from src.composition.vocal_melody import _refit
+        notes = [[60, 0.0, 0.5], [62, 0.5, 0.5], [64, 1.0, 0.5], [65, 1.5, 0.5]]
+        out = _refit(notes, 2)
+        self.assertEqual(len(out), 2)
+        self.assertTrue(self._ordered_nonoverlap(out))
+
+    def test_split_up_to_target(self):
+        from src.composition.vocal_melody import _refit
+        out = _refit([[60, 0.0, 2.0]], 4)
+        self.assertEqual(len(out), 4)
+        self.assertTrue(self._ordered_nonoverlap(out))
+        self.assertTrue(all(p == 60 for p, _, _ in out))   # split repeats the pitch
+
+    def test_exact_passthrough(self):
+        from src.composition.vocal_melody import _refit
+        notes = [[60, 0.0, 0.5], [62, 0.5, 0.5]]
+        self.assertEqual(_refit(notes, 2), notes)
+
+    def test_empty_and_zero(self):
+        from src.composition.vocal_melody import _refit
+        self.assertEqual(_refit([], 5), [])
+        self.assertEqual(_refit([[60, 0.0, 1.0]], 0), [])
 
 
 if __name__ == "__main__":

@@ -508,6 +508,7 @@ def melody_request_params(name: str, lyrics: str) -> dict:
         "lyrics": lyrics,
         "lines": lines,
         "syllables_per_line": syllables,
+        "genre": spec.get("genre"),   # drives the engine's melody style/techniques
         "key": spec.get("key") or "C",
         "scale": spec.get("scale") or "major",
         "tempo": tempo,
