@@ -372,27 +372,36 @@ def block_melody(name: str) -> dict:
 def draft_block_lyrics(name: str, req: LyricsDraftRequest) -> dict:
     """Enqueue a lyric-draft request for a Claude Code watch-loop to answer
     (no API key). Returns ``{request_id}``; the client polls
-    ``/ai/requests/{id}`` until it's answered with the fitted lyrics."""
+    ``/ai/requests/{id}`` until it's answered.
+
+    Lyrics are written to the song's **structure** (its sections and their bar
+    lengths), NOT fitted to a melody — generation is instrumental and the vocal
+    melody is composed from the lyrics afterwards (workflow: generate
+    instrumental → write lyrics → write the melody to the lyrics)."""
     if not block_store._midi_path(name).exists():
         raise HTTPException(404, "Block not found")
-    try:
-        info = service.melody_info(name)
-    except Exception:  # noqa: BLE001
-        info = {"phrase_syllables": [], "total_notes": 0}
     try:
         _, meta = block_store.load_block(name)
     except Exception:  # noqa: BLE001
         meta = {}
     spec = meta.get("spec") or {}
+    ts = meta.get("time_signature") or [4, 4]
+    sections = [
+        {"role": s.get("role"), "label": s.get("label"),
+         "bars": int(s.get("end_bar") or 0) - int(s.get("start_bar") or 0) + 1}
+        for s in (spec.get("sections") or [])
+    ]
     params = {
         "theme": req.theme or "",
-        "phrase_syllables": info.get("phrase_syllables") or [],
-        "total_notes": info.get("total_notes") or 0,
         "genre": spec.get("genre"),
         "key": spec.get("key"),
         "scale": spec.get("scale"),
         "tempo": spec.get("tempo") or meta.get("tempo"),
-        "sections": [s.get("role") for s in (spec.get("sections") or [])],
+        "time_signature": [int(ts[0]), int(ts[1])],
+        "bars": int(meta.get("bars") or 0),
+        # Write the lyric to THIS structure (role + bar length per section). No
+        # syllable target — the melody is composed to the lyric afterwards.
+        "sections": sections,
         "current_lyrics": meta.get("lyrics") or "",
     }
     rec = ai_requests.enqueue("lyrics", name, params)

@@ -56,9 +56,12 @@ export default function GenerateScreen({
   useEffect(() => {
     (async () => {
       try {
-        const [p, f, m] = await Promise.all([
+        const [p, fRaw, m] = await Promise.all([
           api.getPresets(), api.getInstruments(), api.getMasterPresets(),
         ]);
+        // Generation is instrumental — vocals are added later in Compose
+        // (write lyrics → compose melody), so hide the vocal family here.
+        const f = fRaw.filter((fam) => fam.family !== "vocal");
         setPresets(p); setFamilies(f); setMasters(m);
         if (initialSpec && !specApplied.current) {
           specApplied.current = true;
@@ -96,7 +99,8 @@ export default function GenerateScreen({
     setTempo(p.tempo || 120);
     const native = p.sections.filter((s) => s.native).map((s) => s.role);
     setSections(new Set(native.length ? native : p.sections.map((s) => s.role)));
-    const def = p.default_instruments?.length ? p.default_instruments : defaultTrio(fams);
+    const def = (p.default_instruments?.length ? p.default_instruments : defaultTrio(fams))
+      .filter((id) => id !== "vocal_lead" && id !== "vocal_harmony");  // instrumental-first
     const defSet = new Set(def);
     setInstruments(new Set(def));
     setOpenFams(new Set(
@@ -104,8 +108,9 @@ export default function GenerateScreen({
     ));
   }
 
-  // Apply a saved block's spec to the form so regenerating reproduces it
-  // (then the user can toggle vocal_lead / vocal_harmony on and re-roll).
+  // Apply a saved block's spec to the form so regenerating reproduces it.
+  // Vocals are dropped here — generation is instrumental; the vocal melody is
+  // (re)composed from the lyrics in Compose.
   function applySpec(spec: BlockSpec, ps: Preset[] = presets, fams: Family[] = families) {
     const p = ps.find((x) => x.id === spec.genre);
     if (p) applyPreset(p, fams);          // sets genre + preset defaults first
@@ -115,7 +120,7 @@ export default function GenerateScreen({
     setSeed(spec.seed != null ? String(spec.seed) : "");
     setSwing(spec.swing ?? null);
     if (spec.instruments?.length) {
-      const ids = new Set(spec.instruments);
+      const ids = new Set(spec.instruments.filter((id) => id !== "vocal_lead" && id !== "vocal_harmony"));
       setInstruments(ids);
       setOpenFams(new Set(fams.filter((f) => f.instruments.some((i) => ids.has(i.id))).map((f) => f.family)));
     }

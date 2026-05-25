@@ -31,6 +31,26 @@ def _prune_old_job_dirs(keep: int = _KEEP_RECENT_JOBS) -> None:
         shutil.rmtree(old, ignore_errors=True)
 
 
+def _instrumental_only(ids, fallback=None):
+    """Drop vocal-family instruments. Song generation is **instrumental-first**:
+    a generated song carries no vocal line — the sung melody is composed later
+    from the lyrics (workflow: generate instrumental → write lyrics → write the
+    melody to the lyrics). Returns a tuple of ids, or ``None`` to defer to the
+    composer's defaults. When stripping empties the selection, falls back to
+    ``fallback`` (also de-vocalised)."""
+    from src.composition.instruments import INSTRUMENT_REGISTRY
+
+    def is_vocal(i):
+        inst = INSTRUMENT_REGISTRY.get(i)
+        return inst is not None and getattr(inst, "family", None) == "vocal"
+
+    kept = [i for i in (ids or []) if not is_vocal(i)]
+    if kept:
+        return tuple(kept)
+    fb = [i for i in (fallback or []) if not is_vocal(i)]
+    return tuple(fb) or None
+
+
 def run_generation(req, progress, job_id: str) -> dict:
     """Compose → HQ render → (optional) PDF → (optional) save/split blocks.
 
@@ -72,7 +92,8 @@ def run_generation(req, progress, job_id: str) -> dict:
         genre=genre,
         sections=secs,
         seed=seed,
-        enabled_instruments=tuple(req.instruments) or None,
+        # instrumental-first: never bake in a vocal track (added later from lyrics)
+        enabled_instruments=_instrumental_only(req.instruments, preset.default_instruments),
         key=req.key, scale=req.scale, tempo=req.tempo,
         bars=req.bars, swing=req.swing,
         output_dir=job_dir,
