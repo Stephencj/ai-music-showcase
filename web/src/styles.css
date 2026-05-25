@@ -286,6 +286,15 @@ audio { width: 100%; margin: 8px 0 12px; }
   padding: 8px 10px; border-radius: 10px; background: var(--bg-2);
   border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text);
 }
+.phonetic-editor { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.phonetic-editor .te-note { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.phonetic-editor .btn.ghost.sm { width: auto; padding: 2px 8px; font-size: 12px; }
+.phonetic-text {
+  width: 100%; resize: vertical; font-size: 13px; line-height: 1.5;
+  padding: 8px 10px; border-radius: 10px; background: var(--bg-2);
+  border: 1px solid rgba(255, 255, 255, 0.1); color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 .voc-row { display: flex; gap: 8px; align-items: center; }
 .voc-row > input, .voc-row > select { flex: 1; min-width: 0; }
 .voc-theme { padding: 9px 10px; }

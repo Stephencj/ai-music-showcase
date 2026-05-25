@@ -163,7 +163,8 @@ def phrase_syllable_counts(notes: list[tuple[int, float, float]], gap: float = 0
     return [len(p) for p in phrase_notes(notes, gap=gap)]
 
 
-def align_words_to_notes(text: str, notes: list[tuple[int, float, float]]) -> list[dict]:
+def align_words_to_notes(text: str, notes: list[tuple[int, float, float]],
+                         pron: "list[list[str]] | None" = None) -> list[dict]:
     """Map words to consecutive notes by syllable count.
 
     Returns segments ``{text, notes: [(midi, dur_seconds)], start}`` — one
@@ -171,6 +172,14 @@ def align_words_to_notes(text: str, notes: list[tuple[int, float, float]]) -> li
     out before the notes do, it loops from the top (so the line keeps
     singing real words rather than collapsing to "ah"). When the lyric is
     matched to the melody's syllable count (the UI's job), there's no loop.
+
+    ``pron`` is an optional **pronunciation layer**: a positional list of
+    per-word phoneme lists (ARPABET, lowercase) aligned to the words of
+    ``text``. When given, each segment carries ``phonemes`` so the engine
+    sings those instead of running g2p on the spelling — this is the editable
+    "phonetic version" of the lyric (see :func:`to_phonetic`). Note counts
+    still come from the *displayed* word's syllables, so a phoneme edit can't
+    desync the melody.
     """
     words = re.findall(r"[A-Za-z']+", text or "")
     if not words:
@@ -185,11 +194,164 @@ def align_words_to_notes(text: str, notes: list[tuple[int, float, float]]) -> li
         grp = notes[i:i + syl]
         if not grp:
             break
-        segs.append({
+        seg = {
             "text": w,
             "notes": [(p, max(0.05, e - s)) for (p, s, e) in grp],
             "start": grp[0][1],
-        })
+        }
+        if pron and len(pron) == len(words):
+            phs = pron[wi % len(pron)]
+            if phs:
+                seg["phonemes"] = list(phs)
+        segs.append(seg)
         i += len(grp)
         wi += 1
     return segs
+
+
+def _fold_below(midi: int, ceiling: int) -> int:
+    """Drop ``midi`` by whole octaves until it sits at/under ``ceiling``."""
+    while midi > ceiling:
+        midi -= 12
+    return midi
+
+
+def apply_clarity(segments: list[dict], *, ceiling: int = 71,
+                  register: str = "fold", min_word_gap: float = 0.10,
+                  demelisma: bool = True, max_trim_frac: float = 0.35,
+                  min_sustain: float = 0.18) -> list[dict]:
+    """Render-time **clarity transform** on aligned word segments — trade a
+    little melodic faithfulness for ASR-measurable intelligibility *without*
+    moving any word onset, so the vocal stays locked to the backing track.
+
+    Levers (each independently controllable, all measured against
+    :mod:`intelligibility`):
+
+    * **register cap** — high, bright notes are the worst case for the SVS's
+      diction (the fast, repeated-C#5 chorus). ``register="fold"`` drops only
+      the notes above ``ceiling`` MIDI by whole octaves; ``"shift"`` moves the
+      *whole* line down by octave steps until its loudest peak sits at/under
+      ``ceiling`` (keeps the melodic contour intact); ``"off"`` leaves pitch
+      alone.
+    * **de-melisma** — merge consecutive same-pitch notes inside one word into
+      a single sustained note. (:func:`align_words_to_notes` is one note per
+      syllable, so this merges *same-pitch adjacent syllables*; empirically it
+      reads clearer on sung lines — fewer re-attacks on words like "ba-by" held
+      on one pitch — so it's on by default. The density guard below disables it
+      on fast lines, where merging would slur syllables.)
+
+    **Density guard** (``min_sustain``): clarity's gap + de-melisma assume
+    sustained, *sung* notes. On a fast/dense line (rap, 16th-notes) they gut
+    the words — and rap wants the rough/TTS engine, not clarity — so when the
+    line's median note is shorter than ``min_sustain`` we keep only the
+    (harmless) register cap. Clarity is a sung-line tool; this stops the
+    UI toggle from wrecking a dense line.
+    * **inter-word gap** — trim the tail of each word's last note so there is
+      at least ``min_word_gap`` seconds of silence before the next word's
+      onset. The studio engine renders that as a short rest (an ``SP`` token),
+      separating words that otherwise run together. Onsets never move (the
+      note is only shortened, and never below 0.08 s), so timing is preserved.
+      ``max_trim_frac`` caps how much of a note the gap may eat (default 35 %),
+      so dense/fast lines (rap, 16th-notes) degrade gracefully instead of being
+      gutted — clarity is a *sung*-line tool; rap wants the rough/TTS engine.
+
+    Returns a new segment list; the input is not mutated.
+    """
+    if not segments:
+        return segments
+
+    # --- density guard: on a fast/dense line, keep only the register cap ---
+    durs = sorted(d for seg in segments for _, d in seg["notes"])
+    if durs:
+        median = durs[len(durs) // 2]
+        if median < min_sustain:
+            min_word_gap, demelisma = 0.0, False
+
+    # --- register cap -----------------------------------------------------
+    shift = 0
+    if register == "shift":
+        peak = max((m for seg in segments for m, _ in seg["notes"]), default=0)
+        while peak + shift > ceiling:
+            shift -= 12
+
+    out: list[dict] = []
+    for seg in segments:
+        notes = list(seg["notes"])
+        if register == "shift" and shift:
+            notes = [(m + shift, d) for m, d in notes]
+        elif register == "fold":
+            notes = [(_fold_below(m, ceiling), d) for m, d in notes]
+        if demelisma:
+            merged: list[tuple[int, float]] = []
+            for m, d in notes:
+                if merged and merged[-1][0] == m:
+                    pm, pd = merged[-1]
+                    merged[-1] = (pm, pd + d)
+                else:
+                    merged.append((m, d))
+            notes = merged
+        out.append({**seg, "notes": notes})
+
+    # --- inter-word gap (trim the previous word's tail) -------------------
+    if min_word_gap > 0:
+        for cur, nxt in zip(out, out[1:]):
+            if not cur["notes"]:
+                continue
+            end = cur["start"] + sum(d for _, d in cur["notes"])
+            deficit = min_word_gap - (nxt["start"] - end)
+            if deficit <= 0:
+                continue
+            m, d = cur["notes"][-1]
+            # never shorten below 80 ms, nor eat more than max_trim_frac of the
+            # note (so fast/dense lines aren't gutted into choppy fragments)
+            trim = min(deficit, d - 0.08, max_trim_frac * d)
+            if trim > 0:
+                cur["notes"][-1] = (m, d - trim)
+    return out
+
+
+_G2P_SINGLETON = None
+
+
+def _g2p_arpabet(word: str) -> list[str]:
+    """ARPABET phonemes for a word (lowercased, stress digits stripped)."""
+    global _G2P_SINGLETON
+    if _G2P_SINGLETON is None:
+        import nltk
+        for res in ("averaged_perceptron_tagger_eng", "cmudict"):
+            try:
+                nltk.download(res, quiet=True)
+            except Exception:  # noqa: BLE001
+                pass
+        from g2p_en import G2p
+        _G2P_SINGLETON = G2p()
+    out = []
+    for tok in _G2P_SINGLETON(word):
+        t = "".join(c for c in tok if c.isalpha()).lower()
+        if t:
+            out.append(t)
+    return out
+
+
+def to_phonetic(text: str) -> str:
+    """Convert normal lyrics to an editable **phonetic version**: each word
+    becomes a bracketed ARPABET group, line breaks preserved. e.g.
+    ``"forever"`` → ``"[f er eh v er]"``. This is the auto-generated layer the
+    user can then tweak per word to fix the SVS's diction; feed it back through
+    :func:`parse_phonetic` + ``align_words_to_notes(pron=...)``."""
+    lines_out = []
+    for line in (text or "").splitlines():
+        words = re.findall(r"[A-Za-z']+", line)
+        groups = [f"[{' '.join(_g2p_arpabet(w))}]" for w in words]
+        lines_out.append(" ".join(groups))
+    return "\n".join(lines_out)
+
+
+def parse_phonetic(phonetic: str) -> list[list[str]]:
+    """Parse a phonetic version (``[f er]  [s eh d]`` …) into a positional
+    list of per-word phoneme lists, across all lines — the ``pron`` argument
+    for :func:`align_words_to_notes`."""
+    out: list[list[str]] = []
+    for m in re.findall(r"\[([^\]]*)\]", phonetic or ""):
+        out.append([p for p in m.lower().split() if p])
+    return out

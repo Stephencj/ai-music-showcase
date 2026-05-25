@@ -485,6 +485,10 @@ function BlockCard({
   const [voice, setVoice] = useState("");
   const [engine, setEngine] = useState("");
   const [harmonies, setHarmonies] = useState(true);
+  const [clarity, setClarity] = useState(false);
+  const [phonetic, setPhonetic] = useState("");
+  const [showPhonetic, setShowPhonetic] = useState(false);
+  const [phonBusy, setPhonBusy] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [composing, setComposing] = useState(false);
   const [vocBusy, setVocBusy] = useState(false);
@@ -543,11 +547,20 @@ function BlockCard({
     } catch (e) { setVocMsg(String(e)); }
     finally { setComposing(false); }
   }
+  async function onPhonetic() {
+    if (!lyrics.trim()) return;
+    setPhonBusy(true); setShowPhonetic(true);
+    try { setPhonetic((await api.getPhonetic(lyrics)).phonetic); }
+    catch (e) { setVocMsg(String(e)); }
+    finally { setPhonBusy(false); }
+  }
   async function onSing() {
     if (!lyrics.trim()) return;
     setVocBusy(true); setVocUrls(null); setVocProg(0); setVocMsg("Starting…");
     try {
-      const { job_id } = await api.renderVocals(block.name, { lyrics, voice, engine: engine || "rough", harmonies });
+      // only send the phonetic override when the editor is open and filled
+      const phon = showPhonetic && phonetic.trim() ? phonetic : "";
+      const { job_id } = await api.renderVocals(block.name, { lyrics, voice, engine: engine || "rough", harmonies, clarity, phonetic: phon });
       const job = await api.pollVocal(job_id, (p, m) => { setVocProg(p); setVocMsg(m); });
       if (job.status === "error") setVocMsg(job.error || "Vocal render failed");
       else if (job.result) { setVocUrls({ audio: job.result.urls.audio, vocal: job.result.urls.vocal, pdf: job.result.urls.pdf }); loadTakes(); }
@@ -708,10 +721,30 @@ function BlockCard({
                 ))}
               </select>
               <button className={"chip" + (harmonies ? " on" : "")} onClick={() => setHarmonies((h) => !h)} title="Stack harmony/backing lines">＋harmonies</button>
+              <button className={"chip" + (clarity ? " on" : "")} onClick={() => setClarity((c) => !c)} title="Clarity mode: cap high notes, gap words, de-melisma for clearer diction (trades a little melody)">✦clarity</button>
+              <button className={"chip" + (showPhonetic ? " on" : "")} onClick={() => setShowPhonetic((s) => !s)} title="Edit how each word is pronounced (ARPABET) to fix the voice's diction">🗣 phonetic</button>
               <button className="btn secondary sm" disabled={vocBusy || !lyrics.trim()} onClick={onSing}>
                 {vocBusy ? "Singing…" : "🎤 Sing it"}
               </button>
             </div>
+            {showPhonetic && (
+              <div className="phonetic-editor">
+                <div className="te-note">
+                  Phonetic version (ARPABET, one [group] per word) — overrides how the voice pronounces each word.
+                  <button className="btn ghost sm" disabled={phonBusy || !lyrics.trim()} onClick={onPhonetic}>
+                    {phonBusy ? "Generating…" : phonetic.trim() ? "↻ regenerate from lyrics" : "✨ generate from lyrics"}
+                  </button>
+                </div>
+                <textarea
+                  className="phonetic-text"
+                  rows={4}
+                  spellCheck={false}
+                  placeholder="e.g.  [y uw] [b r ow k] [m ay] [hh aa r t]   — click “generate from lyrics” to start, then tweak."
+                  value={phonetic}
+                  onChange={(e) => setPhonetic(e.target.value)}
+                />
+              </div>
+            )}
             {vocBusy && <div className="progress"><div style={{ width: `${Math.round(vocProg * 100)}%` }} /></div>}
             {vocMsg && !vocUrls && <div className={vocMsg.startsWith("Error") || vocMsg.includes("OPENAI") ? "error" : "progress-msg"}>{vocMsg}</div>}
             {takes.length > 0 && (
@@ -725,6 +758,8 @@ function BlockCard({
                         {new Date(t.created).toLocaleString()} · {t.engine}
                         {t.voice ? ` / ${t.voice.replace(/^tiger_/, "")}` : ""}
                         {t.harmonies ? " · +harm" : ""}
+                        {t.clarity ? " · ✦clarity" : ""}
+                        {t.phonetic ? " · 🗣" : ""}
                       </span>
                       <div className="links">
                         {t.files.vocal && <a href={api.vocalTakeUrl(block.name, t.id, "vocal")} download>↓ Stem</a>}

@@ -10,9 +10,11 @@ import numpy as np
 from .engine import RoughEngine, VocalEngine
 from .lyrics import (
     align_words_to_notes,
+    apply_clarity,
     extract_lead_notes,
     harmony_vowel_segments,
     monophonic_line,
+    parse_phonetic,
     select_vocal_tracks,
 )
 
@@ -82,10 +84,34 @@ def render_lead_vocal(midi, lyrics, *, sr: int = 44100, voice: str = "",
 
 def render_vocals(midi, lyrics, *, sr: int = 44100, voice: str = "",
                   engine: VocalEngine | None = None, fx: bool = True,
-                  harmonies: bool = False) -> tuple[np.ndarray, int]:
+                  harmonies: bool = False,
+                  clarity: bool | dict = False,
+                  engine_ranges: "list[tuple[float, float, VocalEngine]] | None" = None,
+                  phonetic: str = "") -> tuple[np.ndarray, int]:
     """Render the lead vocal and, optionally, stack the block's harmony/
     backing lines underneath it as wordless "ooh" voices (same octave shift,
-    time-locked to the lead)."""
+    time-locked to the lead).
+
+    ``clarity`` toggles the intelligibility transform on the lead line (see
+    :func:`src.models.vocals.lyrics.apply_clarity`): pass ``True`` for the
+    defaults or a dict of overrides (``ceiling``, ``register``,
+    ``min_word_gap``, ``demelisma``). Harmonies are wordless, so the transform
+    only touches the lead.
+
+    ``engine_ranges`` enables a **per-section engine map**: a list of
+    ``(start_sec, end_sec, engine)`` — each lead word is sung by the engine
+    whose range covers its onset, falling back to ``engine`` elsewhere. This is
+    how a song can sing its hooks with the studio SVS (richer timbre) but rap
+    its dense verses with the rough/TTS engine (far clearer diction on fast
+    words — measured ~97 % vs ~72 % readable). Each engine renders its own
+    words and they are summed on the shared timeline.
+
+    ``phonetic`` is an optional edited **phonetic version** of the lyric (one
+    bracketed ARPABET group per word, see :func:`lyrics.to_phonetic`). When
+    given and its word count matches the lyric, the engine sings those phonemes
+    instead of running g2p on the spelling — the user's per-word diction fix.
+    Note counts still come from the displayed words, so an edit can't desync
+    the melody."""
     import pretty_midi
     if not isinstance(midi, pretty_midi.PrettyMIDI):
         midi = pretty_midi.PrettyMIDI(str(midi))
@@ -99,8 +125,32 @@ def render_vocals(midi, lyrics, *, sr: int = 44100, voice: str = "",
     eng = engine or RoughEngine(voice)
     total = float(midi.get_end_time())
 
-    bus, sr = _render_segments(eng, align_words_to_notes(text, lead_notes), sr, total)
-    bus = bus.astype(np.float32)
+    pron = parse_phonetic(phonetic) if phonetic.strip() else None
+    segs = align_words_to_notes(text, lead_notes, pron=pron)
+    if clarity:
+        segs = apply_clarity(segs, **(clarity if isinstance(clarity, dict) else {}))
+
+    if engine_ranges:
+        # Partition words by which range covers their onset, render each group
+        # with its own engine, and sum on the shared timeline.
+        def _pick(start: float) -> VocalEngine:
+            for t0, t1, e in engine_ranges:
+                if t0 <= start < t1:
+                    return e
+            return eng
+        groups: dict[int, tuple[VocalEngine, list]] = {}
+        for s in segs:
+            e = _pick(s["start"])
+            groups.setdefault(id(e), (e, []))[1].append(s)
+        bus = np.zeros(int(total * sr) + sr, dtype=np.float32)
+        for e, gsegs in groups.values():
+            part, sr = _render_segments(e, gsegs, sr, total)
+            n = min(len(bus), len(part))
+            bus[:n] += part[:n].astype(np.float32)
+        bus = bus[: int(total * sr) + int(0.3 * sr)]
+    else:
+        bus, sr = _render_segments(eng, segs, sr, total)
+        bus = bus.astype(np.float32)
 
     if harmonies and harms:
         for _name, hnotes in harms:

@@ -534,8 +534,16 @@ def apply_melody_plan(name: str, plan: dict, lyrics: str = "") -> dict:
     return {"lead_notes": n_lead, "harmony_notes": n_harm, "tempo": tempo}
 
 
+def phonetic_for_lyrics(lyrics: str) -> str:
+    """Auto-generate the editable phonetic (ARPABET) version of a lyric — the
+    layer the user tweaks per word to fix the SVS's diction."""
+    from src.models.vocals.lyrics import to_phonetic
+    return to_phonetic(lyrics or "")
+
+
 def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
-                     progress, job_id: str, harmonies: bool = True) -> dict:
+                     progress, job_id: str, harmonies: bool = True,
+                     clarity: bool = False, phonetic: str = "") -> dict:
     """Render a sung vocal over a block and mix it with the block's
     instrumental. Reuses the block's existing HQ WAV when present."""
     import numpy as np
@@ -550,7 +558,8 @@ def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
     except Exception as exc:  # noqa: BLE001 — studio voicebank missing etc.
         logger.warning("vocal engine %r unavailable (%s) — using rough", engine_name, exc)
         engine = RoughEngine(voice or "")
-    voc, sr = render_vocals(pm, lyrics, voice=voice or "", engine=engine, harmonies=harmonies)
+    voc, sr = render_vocals(pm, lyrics, voice=voice or "", engine=engine,
+                            harmonies=harmonies, clarity=clarity, phonetic=phonetic)
 
     job_dir = API_OUT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -653,6 +662,7 @@ def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
             name, mix=served_mix, vocal=served_stem,
             score=str(pdf_zip) if pdf_zip else None,
             lyrics=lyrics, engine=engine_name, voice=voice, harmonies=harmonies,
+            clarity=clarity, phonetic=phonetic,
         )
         take_id = take.get("id")
     except Exception as exc:  # noqa: BLE001

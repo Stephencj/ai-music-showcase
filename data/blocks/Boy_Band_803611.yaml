@@ -1,0 +1,79 @@
+name: Boy_Band_803611
+tempo: 104.0
+time_signature:
+- 4
+- 4
+bars: 32
+duration_seconds: 73.846144
+created: '2026-05-24T19:29:05'
+instruments:
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 504
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 104
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 436
+- name: Lead Vocal
+  program: 53
+  is_drum: false
+  n_notes: 88
+- name: Backing Vocals
+  program: 52
+  is_drum: false
+  n_notes: 88
+n_notes: 1220
+spec:
+  genre: boy_band
+  key: A
+  scale: major
+  tempo: 104.0
+  time_signature:
+  - 4
+  - 4
+  seed: 803611
+  swing: null
+  instruments:
+  - drum_kit
+  - electric_bass
+  - piano
+  - vocal_lead
+  - vocal_harmony
+  sections:
+  - start_bar: 0
+    end_bar: 3
+    label: Intro
+    role: intro
+  - start_bar: 4
+    end_bar: 19
+    label: Verse
+    role: verse
+  - start_bar: 20
+    end_bar: 27
+    label: Chorus
+    role: chorus
+  - start_bar: 28
+    end_bar: 31
+    label: Outro
+    role: outro
+  section: null
+lyrics: 'Oh, oh, oh yeah, here we go,
+
+  You said forever, then you turned and walked away,
+
+  Left me with nothing but the lies you used to say.
+
+  You broke my heart, so baby, now just go away,
+
+  I''m done with crying over every yesterday.
+
+  Take back the love you gave, I don''t need it anymore,
+
+  Don''t come knocking on my door.
+
+  So go, go, go, just go away from me.'

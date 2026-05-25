@@ -30,6 +30,7 @@ from .schemas import (
     EditBlockRequest,
     GenerateRequest,
     LyricsDraftRequest,
+    PhoneticRequest,
     RenameRequest,
     SaveBlockFromJobRequest,
     SetLyricsRequest,
@@ -497,8 +498,16 @@ def render_block_vocals(name: str, req: VocalsRequest) -> dict:
         raise HTTPException(400, "Lyrics are empty")
     job = registry.create()
     registry.run(job, lambda progress: service.run_block_vocals(
-        name, req.lyrics, req.voice, req.engine, progress, job.id, req.harmonies))
+        name, req.lyrics, req.voice, req.engine, progress, job.id,
+        req.harmonies, req.clarity, req.phonetic))
     return {"job_id": job.id}
+
+
+@router.post("/phonetic")
+def make_phonetic(req: PhoneticRequest) -> dict:
+    """Auto-generate the editable ARPABET version of a lyric (one bracketed
+    group per word) so the user can tweak per-word diction before re-singing."""
+    return {"phonetic": service.phonetic_for_lyrics(req.lyrics)}
 
 
 @router.get("/jobs/{job_id}/vocal")

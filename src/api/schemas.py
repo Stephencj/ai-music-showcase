@@ -78,6 +78,16 @@ class VocalsRequest(BaseModel):
     voice: str = ""               # "" = system default say voice
     engine: str = "rough"         # "rough" now; "studio" when available
     harmonies: bool = True        # stack the block's harmony/backing lines
+    clarity: bool = False         # intelligibility transform: cap register,
+                                  # gap words, de-melisma (trades a little
+                                  # melody for clearer diction)
+    phonetic: str = ""            # optional edited ARPABET version (one
+                                  # bracketed group per word) — sing these
+                                  # phonemes instead of g2p on the spelling
+
+
+class PhoneticRequest(BaseModel):
+    lyrics: str                   # → auto-generated, editable ARPABET version
 
 
 class AiAnswerRequest(BaseModel):

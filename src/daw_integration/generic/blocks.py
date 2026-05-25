@@ -394,7 +394,8 @@ def save_vocal_take(name: str, *, mix: "Path | str | None" = None,
                     vocal: "Path | str | None" = None,
                     score: "Path | str | None" = None,
                     lyrics: str = "", engine: str = "", voice: str = "",
-                    harmonies: bool = True) -> dict:
+                    harmonies: bool = True, clarity: bool = False,
+                    phonetic: str = "") -> dict:
     """Persist one sung render as a dated take under the block. Copies the
     given mix / vocal-stem / score files in and writes a ``meta.json``.
     Returns the take's metadata dict (with a unique, sortable ``id``)."""
@@ -422,6 +423,7 @@ def save_vocal_take(name: str, *, mix: "Path | str | None" = None,
         "id": take_id,
         "created": _dt.datetime.now().isoformat(timespec="seconds"),
         "engine": engine, "voice": voice, "harmonies": bool(harmonies),
+        "clarity": bool(clarity), "phonetic": phonetic or "",
         "lyrics": lyrics, "files": files,
     }
     (take_dir / "meta.json").write_text(json.dumps(meta, indent=2))

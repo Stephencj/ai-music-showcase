@@ -1,0 +1,47 @@
+name: Boy_Band_Clarity
+tempo: 104.0
+time_signature:
+- 4
+- 4
+bars: 80
+duration_seconds: 184.61535999999998
+created: '2026-05-24T20:15:35'
+instruments:
+- name: Chords
+  program: 25
+  is_drum: false
+  n_notes: 1412
+- name: Bass
+  program: 33
+  is_drum: false
+  n_notes: 396
+- name: Drums
+  program: 0
+  is_drum: true
+  n_notes: 1225
+- name: Lead Vocal
+  program: 53
+  is_drum: false
+  n_notes: 333
+- name: Backing Vocals
+  program: 52
+  is_drum: false
+  n_notes: 333
+n_notes: 3699
+lyrics: "Oh, oh, oh yeah, here we go,\nYou said forever, then you turned and walked\
+  \ away,\nLeft me with nothing but the lies you used to say.\nI gave you all my heart,\
+  \ you threw it on the floor,\nNow I don't want it back, I'm walking out the door.\n\
+  And every tear I cried just made me stronger,\nI won't be waiting for you any longer\u2014\
+  \nYou broke my heart, so baby, now just go away,\nI'm done with crying over every\
+  \ yesterday.\nTake back the love you gave, I don't need it anymore,\nSo go, go,\
+  \ go, just go away from me.\nYou're calling up my phone at two a.m. again,\nBut\
+  \ I erased the memory of where we'd been,\nThis time I'm letting go, I'm finally\
+  \ free.\nAnd every tear I cried just made me stronger,\nI won't be waiting for you\
+  \ any longer\u2014\nYou broke my heart, so baby, now just go away,\nI'm done with\
+  \ crying over every yesterday.\nTake back the love you gave, I don't need it anymore,\n\
+  So go, go, go, just go away from me.\nI used to think that I would never make it\
+  \ through,\nBut look at me right now, I'm better without you,\nNo more lonely nights,\
+  \ no more asking why,\nThis is my goodbye.\nYou broke my heart, so baby, now just\
+  \ go away,\nI'm done with crying over every yesterday.\nTake back the love you gave,\
+  \ I don't need it anymore,\nSo go, go, go, just go away from me.\nSo go, go, go\
+  \ away,\nJust go away from me."

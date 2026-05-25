@@ -96,6 +96,8 @@ export interface VocalTake {
   engine: string;
   voice: string;
   harmonies: boolean;
+  clarity?: boolean;
+  phonetic?: string;
   lyrics: string;
   files: Record<string, string>; // role ("mix"|"vocal"|"score") -> filename
 }
@@ -147,8 +149,12 @@ export const composeMelody = (name: string, lyrics: string) =>
   jpost<{ request_id: string }>(`/api/blocks/${encodeURIComponent(name)}/melody/compose`, { lyrics });
 export const renderVocals = (
   name: string,
-  body: { lyrics: string; voice: string; engine: string; harmonies: boolean }
+  body: { lyrics: string; voice: string; engine: string; harmonies: boolean; clarity?: boolean; phonetic?: string }
 ) => jpost<{ job_id: string }>(`/api/blocks/${encodeURIComponent(name)}/vocals`, body);
+// Auto-generate the editable ARPABET ("phonetic version") of a lyric so the
+// user can tweak per-word diction before re-singing.
+export const getPhonetic = (lyrics: string) =>
+  jpost<{ phonetic: string }>(`/api/phonetic`, { lyrics });
 
 interface VocalJob {
   status: "pending" | "running" | "done" | "error";

@@ -204,7 +204,11 @@ class StudioEngine(VocalEngine):
             if cur is not None and gap > _CHUNK_GAP:
                 _flush()
             note_time = seg["start"]
-            groups = self._syllabify(self._phonemes(seg["text"]), len(seg["notes"]))
+            # Prefer an explicit phoneme override (the editable "phonetic
+            # version" of the lyric); fall back to g2p on the spelling.
+            phs = [p for p in (seg.get("phonemes") or []) if p in self.ph2id] \
+                or self._phonemes(seg["text"])
+            groups = self._syllabify(phs, len(seg["notes"]))
             for ni, ((midi, ndur), group) in enumerate(zip(seg["notes"], groups)):
                 nf = max(1, round(ndur / self.frame_sec))
                 if cur is not None and len(cur["f0"]) + nf > _MAX_CHUNK_FRAMES:
