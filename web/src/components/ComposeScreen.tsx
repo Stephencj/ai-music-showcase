@@ -537,13 +537,19 @@ function BlockCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, engine, voiceOptions]);
 
+  // Persist the lyrics to the block (best-effort) so a reload/rename can't
+  // drop them — drafts and edits otherwise live only in this textarea until
+  // "Sing it" saves them.
+  async function saveLyricsToBlock(text: string) {
+    try { await api.setLyrics(block.name, text); } catch { /* non-fatal */ }
+  }
   async function onDraft() {
     setDrafting(true); setVocMsg("Asking Claude Code to draft lyrics…");
     try {
       const { request_id } = await api.requestLyrics(block.name, theme);
       const r = await api.pollAiRequest(request_id);
       if (r.status === "error" || typeof r.answer !== "string") setVocMsg(r.error || "Lyric draft failed");
-      else { setLyrics(r.answer); setVocMsg(""); }
+      else { setLyrics(r.answer); setVocMsg(""); saveLyricsToBlock(r.answer); }
     } catch (e) { setVocMsg(String(e)); }
     finally { setDrafting(false); }
   }
@@ -712,7 +718,9 @@ function BlockCard({
               {noteCount != null && noteCount > 0 && <span className="te-note">~{noteCount} notes to sing</span>}
             </div>
             <textarea className="lyrics-area" rows={3} value={lyrics}
-              onChange={(e) => setLyrics(e.target.value)} placeholder="Lyrics… (or draft with AI)" />
+              onChange={(e) => setLyrics(e.target.value)}
+              onBlur={() => { if (lyrics.trim()) saveLyricsToBlock(lyrics); }}
+              placeholder="Lyrics… (or draft with AI)" />
             <div className="voc-row">
               <input className="voc-theme" type="text" placeholder="theme (e.g. summer night)"
                 value={theme} onChange={(e) => setTheme(e.target.value)} />
