@@ -20,6 +20,7 @@ private:
     void rebuildBankList();   // sync the row components to proc.bank
     void toggleRow (int index);
     void deleteRow (int index);
+    void clearBank();
     void refreshGlyphs();
     void timerCallback() override;
 
@@ -29,8 +30,11 @@ private:
     juce::ComboBox targetBox, genreBox, mod1Box, mod2Box;
     juce::TextEditor keyEdit, tempoEdit, barsEdit, progEdit, serverEdit;
     juce::Label    targetLbl, genreLbl, keyLbl, tempoLbl, barsLbl, progLbl, serverLbl, mod1Lbl, mod2Lbl;
+    juce::Slider   octaveSlider, densitySlider;
+    juce::Label    octaveLbl, densityLbl;
     juce::TextButton generateBtn { "Generate" };
     juce::Label    status, bankTitle;
+    juce::TextButton clearBtn { "Clear bank" };
 
     juce::var partOptions;
 

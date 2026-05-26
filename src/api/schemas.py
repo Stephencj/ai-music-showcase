@@ -49,6 +49,8 @@ class GeneratePartRequest(BaseModel):
     drum_pattern: Optional[str] = None   # drums
     melody_style: Optional[str] = None   # melody / lead
     phrase_shape: Optional[str] = None   # melody / lead
+    octave: Optional[int] = None         # chords / bass / melody / lead
+    note_density: Optional[float] = None # bass / melody / lead / drums (0–1)
     output: str = "both"            # midi | wav | both
     seed: Optional[int] = None
     # The other channels' parts (role + note-list), so generation can fit what's

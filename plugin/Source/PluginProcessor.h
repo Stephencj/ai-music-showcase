@@ -68,6 +68,8 @@ public:
     double tempo { 120.0 };
     int    bars { 4 };
     juce::String voicing, chordRhythm, bassPattern, drumPattern, melodyStyle, phraseShape;
+    int    octave { -1 };          // -1 = unset (engine default); chords/bass/melody/lead
+    double noteDensity { -1.0 };   // -1 = unset; bass/melody/lead/drums (0–1)
 
     // ---- the bank (message-thread owned) ----------------------------------
     juce::OwnedArray<BankItem> bank;     // accessed only on the message thread

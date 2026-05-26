@@ -79,6 +79,18 @@ AIPartBankEditor::AIPartBankEditor (AIPartBankProcessor& p)
     styleLabel (mod1Lbl, ""); styleLabel (mod2Lbl, "");
     addAndMakeVisible (mod1Lbl); addAndMakeVisible (mod2Lbl);
 
+    octaveSlider.setRange (1, 5, 1);
+    octaveSlider.setValue (3, juce::dontSendNotification);
+    octaveSlider.setSliderStyle (juce::Slider::IncDecButtons);
+    octaveSlider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 42, 20);
+    addAndMakeVisible (octaveSlider);
+    densitySlider.setRange (0.2, 1.0, 0.05);
+    densitySlider.setValue (0.6, juce::dontSendNotification);
+    densitySlider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 46, 20);
+    addAndMakeVisible (densitySlider);
+    styleLabel (octaveLbl, "Octave"); styleLabel (densityLbl, "Density");
+    addAndMakeVisible (octaveLbl); addAndMakeVisible (densityLbl);
+
     keyEdit.setText (proc.key.isNotEmpty() ? proc.key : "C"); addAndMakeVisible (keyEdit);
     tempoEdit.setText (juce::String (proc.tempo > 0 ? proc.tempo : 120.0, 1)); addAndMakeVisible (tempoEdit);
     barsEdit.setText (juce::String (proc.bars > 0 ? proc.bars : 4)); addAndMakeVisible (barsEdit);
@@ -106,11 +118,13 @@ AIPartBankEditor::AIPartBankEditor (AIPartBankProcessor& p)
     bankTitle.setText ("Bank", juce::dontSendNotification);
     bankTitle.setFont (juce::Font (13.0f, juce::Font::bold));
     addAndMakeVisible (bankTitle);
+    clearBtn.onClick = [this] { clearBank(); };
+    addAndMakeVisible (clearBtn);
     bankViewport.setViewedComponent (&bankContainer, false);
     bankViewport.setScrollBarsShown (true, false);
     addAndMakeVisible (bankViewport);
 
-    setSize (470, 560);
+    setSize (470, 620);
     rebuildBankList();
     fetchOptions();
     startTimerHz (8);
@@ -135,6 +149,9 @@ void AIPartBankEditor::pushSettings()
     else if (proc.target == "bass")   { proc.bassPattern = m1; }
     else if (proc.target == "drums")  { proc.drumPattern = m1; }
     else                              { proc.melodyStyle = m1; proc.phraseShape = m2; }
+
+    proc.octave      = octaveSlider.isVisible()  ? (int) octaveSlider.getValue() : -1;
+    proc.noteDensity = densitySlider.isVisible() ? densitySlider.getValue()      : -1.0;
 }
 
 void AIPartBankEditor::runGenerate()
@@ -203,6 +220,8 @@ void AIPartBankEditor::updateModifiers()
     auto hide = [] (juce::ComboBox& box, juce::Label& lbl) { box.setVisible (false); lbl.setVisible (false); };
 
     const auto target = targetBox.getText();
+    octaveLbl.setVisible (target != "drums");   octaveSlider.setVisible (target != "drums");
+    densityLbl.setVisible (target != "chords"); densitySlider.setVisible (target != "chords");
     auto* root = partOptions.getDynamicObject();
     const juce::var t = (root != nullptr) ? root->getProperty (target) : juce::var();
     auto* to = t.getDynamicObject();
@@ -271,6 +290,20 @@ void AIPartBankEditor::deleteRow (int index)
     rebuildBankList();
 }
 
+void AIPartBankEditor::clearBank()
+{
+   #if AIPG_MIDI_FX
+    proc.armItem (nullptr);
+   #else
+    proc.stopPlayback();
+   #endif
+    activeIndex = -1;
+    for (auto* it : proc.bank) { it->midiFile.deleteFile(); it->wavFile.deleteFile(); }
+    proc.bank.clear();
+    rebuildBankList();
+    status.setText ("Bank cleared.", juce::dontSendNotification);
+}
+
 void AIPartBankEditor::refreshGlyphs()
 {
     for (int i = 0; i < rows.size(); ++i)
@@ -312,6 +345,8 @@ void AIPartBankEditor::resized()
     row (genreLbl,  genreBox);
     if (mod1Box.isVisible()) row (mod1Lbl, mod1Box);
     if (mod2Box.isVisible()) row (mod2Lbl, mod2Box);
+    if (octaveSlider.isVisible())  row (octaveLbl, octaveSlider);
+    if (densitySlider.isVisible()) row (densityLbl, densitySlider);
     row (keyLbl,    keyEdit);
     row (tempoLbl,  tempoEdit);
     row (barsLbl,   barsEdit);
@@ -322,7 +357,9 @@ void AIPartBankEditor::resized()
     generateBtn.setBounds (r.removeFromTop (28));
     status.setBounds (r.removeFromTop (32));
     r.removeFromTop (4);
-    bankTitle.setBounds (r.removeFromTop (20));
+    auto bt = r.removeFromTop (22);
+    clearBtn.setBounds (bt.removeFromRight (90));
+    bankTitle.setBounds (bt);
     bankViewport.setBounds (r);
 
     // keep the bank rows sized to the viewport width

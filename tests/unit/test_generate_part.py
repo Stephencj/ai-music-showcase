@@ -97,6 +97,21 @@ class PartOptionsTests(unittest.TestCase):
                  melody_style="blues", phrase_shape="rise", seed=1)
         self.assertGreater(r["n_notes"], 0)
 
+    def test_octave_shifts_register(self):
+        lo = _gen(target="chords", bars=2, progression=["I", "V"], octave=2)
+        hi = _gen(target="chords", bars=2, progression=["I", "V"], octave=4)
+        self.assertLess(min(p for p, _, _ in lo["notes"]), min(p for p, _, _ in hi["notes"]))
+
+    def test_note_density_changes_count(self):
+        sparse = _gen(target="melody", bars=4, progression=["I", "IV", "V", "I"],
+                      seed=1, note_density=0.4)
+        dense = _gen(target="melody", bars=4, progression=["I", "IV", "V", "I"],
+                     seed=1, note_density=0.95)
+        self.assertLess(sparse["n_notes"], dense["n_notes"])
+        # drums honor density too
+        self.assertLess(_gen(target="drums", bars=2, seed=1, note_density=0.5)["n_notes"],
+                        _gen(target="drums", bars=2, seed=1, note_density=1.0)["n_notes"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -945,25 +945,41 @@ def generate_part(req) -> dict:
     melody_style = req.melody_style or (preset.melody_style if preset else "motif")
     phrase_shape = req.phrase_shape or "arc"
 
+    octave = int(req.octave) if req.octave is not None else None
+    dens = float(req.note_density) if req.note_density is not None else None
+
     midi = MidiExporter(tempo=tempo, time_signature=(int(ts[0]), int(ts[1])))
     if target == "chords":
-        midi.add_chord_progression(
-            key=key, progression=prog, bars=bars, scale_name=scale,
-            voicing=voicing, rhythm=chord_rhythm)
+        kw = dict(key=key, progression=prog, bars=bars, scale_name=scale,
+                  voicing=voicing, rhythm=chord_rhythm)
+        if octave is not None:
+            kw["octave"] = octave
+        midi.add_chord_progression(**kw)
         track_name = "Chords"
     elif target == "bass":
-        midi.add_bass_line(
-            key=key, progression=prog, bars=bars, scale_name=scale,
-            pattern=bass_pattern, seed=req.seed)
+        kw = dict(key=key, progression=prog, bars=bars, scale_name=scale,
+                  pattern=bass_pattern, seed=req.seed)
+        if octave is not None:
+            kw["octave"] = octave
+        if dens is not None:
+            kw["density"] = dens
+        midi.add_bass_line(**kw)
         track_name = "Bass"
     elif target in ("melody", "lead"):
-        midi.add_melody(
-            key=key, scale_name=scale, bars=bars, progression=prog,
-            melody_style=melody_style, phrase_shape=phrase_shape,
-            seed=req.seed, track_name="Melody")
+        kw = dict(key=key, scale_name=scale, bars=bars, progression=prog,
+                  melody_style=melody_style, phrase_shape=phrase_shape,
+                  seed=req.seed, track_name="Melody")
+        if octave is not None:
+            kw["octave"] = octave
+        if dens is not None:
+            kw["note_density"] = dens
+        midi.add_melody(**kw)
         track_name = "Melody"
     elif target == "drums":
-        midi.add_drum_pattern(pattern=drum_pattern, bars=bars, seed=req.seed)
+        kw = dict(pattern=drum_pattern, bars=bars, seed=req.seed)
+        if dens is not None:
+            kw["density"] = dens
+        midi.add_drum_pattern(**kw)
         track_name = "Drums"
     else:
         raise ValueError(f"unknown target {target!r} (chords|bass|melody|lead|drums)")

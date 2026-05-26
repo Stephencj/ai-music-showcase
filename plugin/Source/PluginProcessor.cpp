@@ -173,6 +173,8 @@ AIPartBankProcessor::GenResult AIPartBankProcessor::generate()
     addIf ("voicing", voicing);       addIf ("chord_rhythm", chordRhythm);
     addIf ("bass_pattern", bassPattern); addIf ("drum_pattern", drumPattern);
     addIf ("melody_style", melodyStyle); addIf ("phrase_shape", phraseShape);
+    if (octave > 0)       body->setProperty ("octave", octave);
+    if (noteDensity > 0.0) body->setProperty ("note_density", noteDensity);
     juce::Array<juce::var> prog;
     for (auto& tok : juce::StringArray::fromTokens (progression, " ,", ""))
         if (tok.trim().isNotEmpty()) prog.add (tok.trim());
