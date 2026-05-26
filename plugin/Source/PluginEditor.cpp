@@ -1,19 +1,5 @@
 #include "PluginEditor.h"
 
-// A button you drag to drop its file (the generated .mid / .wav) onto a track.
-struct AIPartGeneratorEditor::FileDragSource : public juce::TextButton
-{
-    using juce::TextButton::TextButton;
-    juce::File file;
-
-    void mouseDrag (const juce::MouseEvent&) override
-    {
-        if (file.existsAsFile())
-            juce::DragAndDropContainer::performExternalDragDropOfFiles (
-                { file.getFullPathName() }, /*canMove*/ false, this);
-    }
-};
-
 namespace
 {
     void styleLabel (juce::Label& l, const juce::String& text)
@@ -22,160 +8,126 @@ namespace
         l.setFont (juce::Font (13.0f));
         l.setJustificationType (juce::Justification::centredLeft);
     }
+
+    // A button you drag to drop its file (the item's .mid / .wav) onto a track.
+    struct FileDragSource : public juce::TextButton
+    {
+        using juce::TextButton::TextButton;
+        juce::File file;
+        void mouseDrag (const juce::MouseEvent&) override
+        {
+            if (file.existsAsFile())
+                juce::DragAndDropContainer::performExternalDragDropOfFiles (
+                    { file.getFullPathName() }, false, this);
+        }
+    };
 }
 
-AIPartGeneratorEditor::AIPartGeneratorEditor (AIPartGeneratorProcessor& p)
+// One row in the bank: label + play/arm + drag MIDI + drag WAV + delete.
+struct AIPartBankEditor::BankRow : public juce::Component
+{
+    juce::Label label;
+    juce::TextButton playBtn;
+    FileDragSource midiDrag { "MIDI" }, wavDrag { "WAV" };
+    juce::TextButton delBtn { "x" };
+
+    explicit BankRow (BankItem& item)
+    {
+        label.setText (item.label, juce::dontSendNotification);
+        label.setFont (juce::Font (12.0f));
+        addAndMakeVisible (label);
+        addAndMakeVisible (playBtn);
+        midiDrag.file = item.midiFile; midiDrag.setEnabled (item.midiFile.existsAsFile());
+        wavDrag.file  = item.wavFile;  wavDrag.setEnabled (item.wavFile.existsAsFile());
+        midiDrag.setTooltip ("Drag MIDI onto a track");
+        wavDrag.setTooltip ("Drag the rendered audio onto a track");
+        addAndMakeVisible (midiDrag);
+        addAndMakeVisible (wavDrag);
+        addAndMakeVisible (delBtn);
+    }
+
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (1);
+        delBtn.setBounds   (r.removeFromRight (26));
+        wavDrag.setBounds  (r.removeFromRight (46).reduced (1, 0));
+        midiDrag.setBounds (r.removeFromRight (50).reduced (1, 0));
+        playBtn.setBounds  (r.removeFromRight (48).reduced (1, 0));
+        label.setBounds    (r);
+    }
+};
+
+AIPartBankEditor::AIPartBankEditor (AIPartBankProcessor& p)
     : juce::AudioProcessorEditor (&p), proc (p)
 {
-    title.setText ("AI Part Generator", juce::dontSendNotification);
-    title.setFont (juce::Font (18.0f, juce::Font::bold));
+    title.setText (proc.getName(), juce::dontSendNotification);
+    title.setFont (juce::Font (17.0f, juce::Font::bold));
     addAndMakeVisible (title);
 
     targetBox.addItemList ({ "chords", "bass", "melody", "lead", "drums" }, 1);
-    targetBox.setText (proc.target, juce::dontSendNotification);
+    targetBox.setText (proc.target.isNotEmpty() ? proc.target : "melody", juce::dontSendNotification);
     targetBox.onChange = [this] { updateModifiers(); };
     addAndMakeVisible (targetBox);
 
-    genreBox.addItemList ({ "(auto)", "pop_full_song", "rock_anthem_full",
-                            "funk_full_song", "soul_motown_full", "blues_12bar_full",
-                            "hip_hop_full", "country_full", "disco_full" }, 1);
+    genreBox.addItemList ({ "(auto)", "pop_full_song", "rock_anthem_full", "funk_full_song",
+                            "soul_motown_full", "blues_12bar_full", "hip_hop_full",
+                            "country_full", "disco_full" }, 1);
     genreBox.setSelectedItemIndex (0, juce::dontSendNotification);
     addAndMakeVisible (genreBox);
 
-    // Smart per-part modifier dropdowns — contents fetched from the backend,
-    // re-shaped by updateModifiers() when the Part changes.
-    addAndMakeVisible (mod1Box);
-    addAndMakeVisible (mod2Box);
-    styleLabel (mod1Lbl, "");
-    styleLabel (mod2Lbl, "");
-    addAndMakeVisible (mod1Lbl);
-    addAndMakeVisible (mod2Lbl);
+    addAndMakeVisible (mod1Box); addAndMakeVisible (mod2Box);
+    styleLabel (mod1Lbl, ""); styleLabel (mod2Lbl, "");
+    addAndMakeVisible (mod1Lbl); addAndMakeVisible (mod2Lbl);
 
-    keyEdit.setText (proc.key);          addAndMakeVisible (keyEdit);
-    tempoEdit.setText (juce::String (proc.tempo, 1)); addAndMakeVisible (tempoEdit);
-    barsEdit.setText (juce::String (proc.bars)); addAndMakeVisible (barsEdit);
-    progEdit.setText (proc.progression); progEdit.setTextToShowWhenEmpty ("e.g. I V vi IV  (blank = key default)", juce::Colours::grey);
+    keyEdit.setText (proc.key.isNotEmpty() ? proc.key : "C"); addAndMakeVisible (keyEdit);
+    tempoEdit.setText (juce::String (proc.tempo > 0 ? proc.tempo : 120.0, 1)); addAndMakeVisible (tempoEdit);
+    barsEdit.setText (juce::String (proc.bars > 0 ? proc.bars : 4)); addAndMakeVisible (barsEdit);
+    progEdit.setText (proc.progression);
+    progEdit.setTextToShowWhenEmpty ("e.g. I V vi IV  (blank = key default)", juce::Colours::grey);
     addAndMakeVisible (progEdit);
     serverEdit.setText (proc.serverBase); addAndMakeVisible (serverEdit);
 
-    styleLabel (targetLbl, "Part");      addAndMakeVisible (targetLbl);
-    styleLabel (genreLbl,  "Style");     addAndMakeVisible (genreLbl);
-    styleLabel (keyLbl,    "Key");       addAndMakeVisible (keyLbl);
-    styleLabel (tempoLbl,  "Tempo");     addAndMakeVisible (tempoLbl);
-    styleLabel (barsLbl,   "Bars");      addAndMakeVisible (barsLbl);
-    styleLabel (progLbl,   "Chords");    addAndMakeVisible (progLbl);
-    styleLabel (serverLbl, "Server");    addAndMakeVisible (serverLbl);
+    styleLabel (targetLbl, "Part");   addAndMakeVisible (targetLbl);
+    styleLabel (genreLbl,  "Style");  addAndMakeVisible (genreLbl);
+    styleLabel (keyLbl,    "Key");    addAndMakeVisible (keyLbl);
+    styleLabel (tempoLbl,  "Tempo");  addAndMakeVisible (tempoLbl);
+    styleLabel (barsLbl,   "Bars");   addAndMakeVisible (barsLbl);
+    styleLabel (progLbl,   "Chords"); addAndMakeVisible (progLbl);
+    styleLabel (serverLbl, "Server"); addAndMakeVisible (serverLbl);
 
     generateBtn.onClick = [this] { runGenerate(); };
     addAndMakeVisible (generateBtn);
 
-    midiDrag = std::make_unique<FileDragSource> ("MIDI");
-    wavDrag  = std::make_unique<FileDragSource> ("WAV");
-    midiDrag->setEnabled (false);
-    wavDrag->setEnabled (false);
-    midiDrag->setTooltip ("Drag onto a track to drop the generated MIDI");
-    wavDrag->setTooltip ("Drag onto a track to drop the rendered audio");
-    addAndMakeVisible (*midiDrag);
-    addAndMakeVisible (*wavDrag);
-
-    status.setText ("Set the part + context, then Generate. Needs Music Producer running.",
-                    juce::dontSendNotification);
     status.setFont (juce::Font (12.0f));
     status.setJustificationType (juce::Justification::topLeft);
+    status.setText ("Set the part + context, then Generate to add to the bank.", juce::dontSendNotification);
     addAndMakeVisible (status);
 
-    setSize (420, 380);
-    fetchOptions();        // populate the smart dropdowns for the current part
+    bankTitle.setText ("Bank", juce::dontSendNotification);
+    bankTitle.setFont (juce::Font (13.0f, juce::Font::bold));
+    addAndMakeVisible (bankTitle);
+    bankViewport.setViewedComponent (&bankContainer, false);
+    bankViewport.setScrollBarsShown (true, false);
+    addAndMakeVisible (bankViewport);
+
+    setSize (470, 560);
+    rebuildBankList();
+    fetchOptions();
+    startTimerHz (8);
 }
 
-void AIPartGeneratorEditor::fetchOptions()
-{
-    auto* pp = &proc;
-    juce::Component::SafePointer<AIPartGeneratorEditor> safe (this);
-    juce::Thread::launch ([pp, safe]() mutable
-    {
-        auto opts = pp->fetchOptions();
-        juce::MessageManager::callAsync ([safe, opts]() mutable
-        {
-            if (auto* e = safe.getComponent())
-            {
-                e->partOptions = opts;
-                e->updateModifiers();
-            }
-        });
-    });
-}
+AIPartBankEditor::~AIPartBankEditor() { stopTimer(); }
 
-// Re-shape the two modifier dropdowns for the selected part, populating their
-// contents from the fetched options. chords → Voicing + Rhythm; bass/drums →
-// Pattern (one box); melody/lead → Style + Phrase.
-void AIPartGeneratorEditor::updateModifiers()
-{
-    auto fill = [] (juce::ComboBox& box, juce::Label& lbl, const juce::var& modObj,
-                    const juce::String& labelText, const juce::String& current)
-    {
-        lbl.setText (labelText, juce::dontSendNotification);
-        box.clear (juce::dontSendNotification);
-        box.setVisible (true);
-        lbl.setVisible (true);
-        if (auto* o = modObj.getDynamicObject())
-        {
-            int id = 1;
-            if (auto* arr = o->getProperty ("options").getArray())
-                for (auto& v : *arr)
-                    box.addItem (v.toString(), id++);
-            const auto want = current.isNotEmpty() ? current : o->getProperty ("default").toString();
-            for (int i = 0; i < box.getNumItems(); ++i)
-                if (box.getItemText (i) == want) { box.setSelectedItemIndex (i, juce::dontSendNotification); break; }
-            if (box.getSelectedId() == 0 && box.getNumItems() > 0)
-                box.setSelectedItemIndex (0, juce::dontSendNotification);
-        }
-    };
-    auto hide = [] (juce::ComboBox& box, juce::Label& lbl)
-        { box.setVisible (false); lbl.setVisible (false); };
-
-    const auto target = targetBox.getText();
-    auto* root = partOptions.getDynamicObject();
-    const juce::var t = (root != nullptr) ? root->getProperty (target) : juce::var();
-    auto* to = t.getDynamicObject();
-    if (to == nullptr) { hide (mod1Box, mod1Lbl); hide (mod2Box, mod2Lbl); return; }
-
-    if (target == "chords")
-    {
-        fill (mod1Box, mod1Lbl, to->getProperty ("voicing"), "Voicing", proc.voicing);
-        fill (mod2Box, mod2Lbl, to->getProperty ("rhythm"),  "Rhythm",  proc.chordRhythm);
-    }
-    else if (target == "bass")
-    {
-        fill (mod1Box, mod1Lbl, to->getProperty ("pattern"), "Pattern", proc.bassPattern);
-        hide (mod2Box, mod2Lbl);
-    }
-    else if (target == "drums")
-    {
-        fill (mod1Box, mod1Lbl, to->getProperty ("pattern"), "Pattern", proc.drumPattern);
-        hide (mod2Box, mod2Lbl);
-    }
-    else // melody / lead
-    {
-        fill (mod1Box, mod1Lbl, to->getProperty ("style"),        "Style",  proc.melodyStyle);
-        fill (mod2Box, mod2Lbl, to->getProperty ("phrase_shape"), "Phrase", proc.phraseShape);
-    }
-    resized();   // visibility changed → relayout so the rows show/hide
-}
-
-void AIPartGeneratorEditor::pushSettings()
+void AIPartBankEditor::pushSettings()
 {
     proc.target = targetBox.getText();
     proc.genre  = (genreBox.getSelectedItemIndex() <= 0) ? juce::String() : genreBox.getText();
     proc.key    = keyEdit.getText().trim();
-    proc.tempo  = tempoEdit.getText().getDoubleValue();
-    if (proc.tempo <= 0) proc.tempo = 120.0;
+    proc.tempo  = tempoEdit.getText().getDoubleValue(); if (proc.tempo <= 0) proc.tempo = 120.0;
     proc.bars   = juce::jmax (1, barsEdit.getText().getIntValue());
     proc.progression = progEdit.getText();
     proc.serverBase  = serverEdit.getText().trim().trimCharactersAtEnd ("/");
 
-    // Per-part modifiers from the smart dropdowns (blank if options not loaded
-    // → backend uses defaults). Only the ones for this target are populated.
     proc.voicing = proc.chordRhythm = proc.bassPattern
         = proc.drumPattern = proc.melodyStyle = proc.phraseShape = {};
     const auto m1 = mod1Box.getText(), m2 = mod2Box.getText();
@@ -185,51 +137,176 @@ void AIPartGeneratorEditor::pushSettings()
     else                              { proc.melodyStyle = m1; proc.phraseShape = m2; }
 }
 
-void AIPartGeneratorEditor::runGenerate()
+void AIPartBankEditor::runGenerate()
 {
     pushSettings();
     generateBtn.setEnabled (false);
-    midiDrag->setEnabled (false);
-    wavDrag->setEnabled (false);
     status.setText ("Generating…", juce::dontSendNotification);
 
-    auto* pp = &proc;                                   // processor outlives the editor
-    juce::Component::SafePointer<AIPartGeneratorEditor> safe (this);
+    auto* pp = &proc;
+    juce::Component::SafePointer<AIPartBankEditor> safe (this);
     juce::Thread::launch ([pp, safe]() mutable
     {
         auto res = pp->generate();
-        juce::MessageManager::callAsync ([safe, res]() mutable
+        std::shared_ptr<BankItem> item (res.ok ? res.item.release() : nullptr);
+        const auto msg = res.message;
+        juce::MessageManager::callAsync ([safe, item, msg]() mutable
         {
             if (auto* e = safe.getComponent())
             {
-                e->status.setText (res.message, juce::dontSendNotification);
-                e->midiDrag->file = res.midiFile;
-                e->wavDrag->file  = res.wavFile;
-                e->midiDrag->setEnabled (res.midiFile.existsAsFile());
-                e->wavDrag->setEnabled (res.wavFile.existsAsFile());
+                if (item != nullptr)
+                {
+                    e->proc.bank.add (new BankItem (*item));
+                    e->rebuildBankList();
+                }
+                e->status.setText (msg, juce::dontSendNotification);
                 e->generateBtn.setEnabled (true);
             }
         });
     });
 }
 
-void AIPartGeneratorEditor::paint (juce::Graphics& g)
+void AIPartBankEditor::fetchOptions()
+{
+    auto* pp = &proc;
+    juce::Component::SafePointer<AIPartBankEditor> safe (this);
+    juce::Thread::launch ([pp, safe]() mutable
+    {
+        auto opts = pp->fetchOptions();
+        juce::MessageManager::callAsync ([safe, opts]() mutable
+        {
+            if (auto* e = safe.getComponent()) { e->partOptions = opts; e->updateModifiers(); }
+        });
+    });
+}
+
+void AIPartBankEditor::updateModifiers()
+{
+    auto fill = [] (juce::ComboBox& box, juce::Label& lbl, const juce::var& modObj,
+                    const juce::String& labelText, const juce::String& current)
+    {
+        lbl.setText (labelText, juce::dontSendNotification);
+        box.clear (juce::dontSendNotification);
+        box.setVisible (true); lbl.setVisible (true);
+        if (auto* o = modObj.getDynamicObject())
+        {
+            int id = 1;
+            if (auto* arr = o->getProperty ("options").getArray())
+                for (auto& v : *arr) box.addItem (v.toString(), id++);
+            const auto want = current.isNotEmpty() ? current : o->getProperty ("default").toString();
+            for (int i = 0; i < box.getNumItems(); ++i)
+                if (box.getItemText (i) == want) { box.setSelectedItemIndex (i, juce::dontSendNotification); break; }
+            if (box.getSelectedId() == 0 && box.getNumItems() > 0)
+                box.setSelectedItemIndex (0, juce::dontSendNotification);
+        }
+    };
+    auto hide = [] (juce::ComboBox& box, juce::Label& lbl) { box.setVisible (false); lbl.setVisible (false); };
+
+    const auto target = targetBox.getText();
+    auto* root = partOptions.getDynamicObject();
+    const juce::var t = (root != nullptr) ? root->getProperty (target) : juce::var();
+    auto* to = t.getDynamicObject();
+    if (to == nullptr) { hide (mod1Box, mod1Lbl); hide (mod2Box, mod2Lbl); resized(); return; }
+
+    if (target == "chords")
+    {
+        fill (mod1Box, mod1Lbl, to->getProperty ("voicing"), "Voicing", proc.voicing);
+        fill (mod2Box, mod2Lbl, to->getProperty ("rhythm"),  "Rhythm",  proc.chordRhythm);
+    }
+    else if (target == "bass")  { fill (mod1Box, mod1Lbl, to->getProperty ("pattern"), "Pattern", proc.bassPattern); hide (mod2Box, mod2Lbl); }
+    else if (target == "drums") { fill (mod1Box, mod1Lbl, to->getProperty ("pattern"), "Pattern", proc.drumPattern); hide (mod2Box, mod2Lbl); }
+    else
+    {
+        fill (mod1Box, mod1Lbl, to->getProperty ("style"),        "Style",  proc.melodyStyle);
+        fill (mod2Box, mod2Lbl, to->getProperty ("phrase_shape"), "Phrase", proc.phraseShape);
+    }
+    resized();
+}
+
+void AIPartBankEditor::rebuildBankList()
+{
+    rows.clear();
+    for (int i = 0; i < proc.bank.size(); ++i)
+    {
+        auto* row = new BankRow (*proc.bank[i]);
+        row->playBtn.onClick = [this, i] { toggleRow (i); };
+        row->delBtn.onClick  = [this, i] { deleteRow (i); };
+        bankContainer.addAndMakeVisible (row);
+        rows.add (row);
+    }
+    const int rowH = 26;
+    bankContainer.setSize (juce::jmax (10, bankViewport.getWidth() - 8), juce::jmax (1, rows.size() * rowH));
+    for (int i = 0; i < rows.size(); ++i)
+        rows[i]->setBounds (0, i * rowH, bankContainer.getWidth(), rowH);
+    refreshGlyphs();
+}
+
+void AIPartBankEditor::toggleRow (int index)
+{
+    if (! juce::isPositiveAndBelow (index, proc.bank.size())) return;
+    auto* item = proc.bank[index];
+#if AIPG_MIDI_FX
+    if (activeIndex == index) { proc.armItem (nullptr); activeIndex = -1; }
+    else                      { proc.armItem (item);    activeIndex = index; }
+#else
+    if (activeIndex == index && proc.isPlaying()) { proc.stopPlayback(); activeIndex = -1; }
+    else                                          { proc.playItem (*item); activeIndex = index; }
+#endif
+    refreshGlyphs();
+}
+
+void AIPartBankEditor::deleteRow (int index)
+{
+    if (! juce::isPositiveAndBelow (index, proc.bank.size())) return;
+    if (activeIndex == index)
+    {
+       #if AIPG_MIDI_FX
+        proc.armItem (nullptr);
+       #else
+        proc.stopPlayback();
+       #endif
+        activeIndex = -1;
+    }
+    proc.bank.remove (index);   // OwnedArray deletes the item
+    rebuildBankList();
+}
+
+void AIPartBankEditor::refreshGlyphs()
+{
+    for (int i = 0; i < rows.size(); ++i)
+    {
+       #if AIPG_MIDI_FX
+        rows[i]->playBtn.setButtonText (i == activeIndex ? "On" : "Arm");
+       #else
+        rows[i]->playBtn.setButtonText (i == activeIndex ? "Stop" : "Play");
+       #endif
+    }
+}
+
+void AIPartBankEditor::timerCallback()
+{
+#if ! AIPG_MIDI_FX
+    if (activeIndex >= 0 && ! proc.isPlaying()) { activeIndex = -1; refreshGlyphs(); }
+#endif
+}
+
+void AIPartBankEditor::paint (juce::Graphics& g)
 {
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
 }
 
-void AIPartGeneratorEditor::resized()
+void AIPartBankEditor::resized()
 {
     auto r = getLocalBounds().reduced (12);
-    title.setBounds (r.removeFromTop (28));
-    r.removeFromTop (6);
+    title.setBounds (r.removeFromTop (26));
+    r.removeFromTop (4);
 
     auto row = [&r] (juce::Label& lbl, juce::Component& field)
     {
-        auto line = r.removeFromTop (26);
-        lbl.setBounds (line.removeFromLeft (64));
+        auto line = r.removeFromTop (24);
+        lbl.setBounds (line.removeFromLeft (60));
         field.setBounds (line);
-        r.removeFromTop (4);
+        r.removeFromTop (3);
     };
     row (targetLbl, targetBox);
     row (genreLbl,  genreBox);
@@ -241,13 +318,16 @@ void AIPartGeneratorEditor::resized()
     row (progLbl,   progEdit);
     row (serverLbl, serverEdit);
 
-    r.removeFromTop (6);
-    generateBtn.setBounds (r.removeFromTop (30));
-    r.removeFromTop (6);
+    r.removeFromTop (4);
+    generateBtn.setBounds (r.removeFromTop (28));
+    status.setBounds (r.removeFromTop (32));
+    r.removeFromTop (4);
+    bankTitle.setBounds (r.removeFromTop (20));
+    bankViewport.setBounds (r);
 
-    auto drags = r.removeFromTop (28);
-    midiDrag->setBounds (drags.removeFromLeft (drags.getWidth() / 2).reduced (2, 0));
-    wavDrag->setBounds (drags.reduced (2, 0));
-    r.removeFromTop (6);
-    status.setBounds (r);
+    // keep the bank rows sized to the viewport width
+    const int rowH = 26;
+    bankContainer.setSize (juce::jmax (10, bankViewport.getWidth() - 8), juce::jmax (1, rows.size() * rowH));
+    for (int i = 0; i < rows.size(); ++i)
+        rows[i]->setBounds (0, i * rowH, bankContainer.getWidth(), rowH);
 }

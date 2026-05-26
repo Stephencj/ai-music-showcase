@@ -1,51 +1,56 @@
-# AI Part Generator — VST3 / AU plugin
+# AI Part Bank — VST3 / AU plugin
 
-A thin **bridge** plugin: it doesn't synthesize anything itself — it calls the
-local Music Producer backend (`POST /api/generate-part` on `:7860`) to generate
-**one part that fits** the musical context you set, then lets you **drag the
-resulting MIDI and rendered WAV onto a track**. The composition + render stay in
-the Python backend; the plugin is just UI + DAW I/O.
+A per-channel **bank of generated parts**. It's an **effect**, not an instrument,
+so your real instrument stays on the channel. Each **Generate** calls the local
+Music Producer backend (`POST /api/generate-part`) and adds an item to the bank
+— MIDI + a rendered WAV + the note list, labelled by its settings. You can
+audition items, **drag** the MIDI/WAV onto tracks, and the bank **saves with the
+project**.
 
-Loads in **Ableton Live (incl. Intro), Logic Pro (AU), and Cakewalk (VST3)** —
-the common-denominator path, since those DAWs don't let a plugin read other
-tracks' MIDI. (The richer "read every track" version needs Ableton **Suite**'s
-Max for Live — deferred.)
+Two variants are built from one codebase:
+
+| | **AI Part Bank** (Audio-FX) | **AI Part Bank (MIDI FX)** |
+|---|---|---|
+| Where it goes | Insert on **any** channel — instrument or audio | MIDI-FX slot, **before** an instrument |
+| Audition | Plays the item's **WAV** through the plugin (layered) | **Arms** the item; its notes play **through your instrument** on the host timeline |
+| Drag MIDI / WAV out | ✅ | ✅ (MIDI is the point; WAV still draggable) |
+| Your real instrument | untouched | the one this feeds |
 
 ## Build (macOS)
-Requires CMake ≥ 3.22 and a C++ toolchain (Xcode command-line tools). JUCE is
-fetched automatically.
-
+CMake ≥ 3.22 + Xcode command-line tools. JUCE is fetched automatically.
 ```bash
 cd plugin
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release -j
 ```
+Both variants auto-install to `~/Library/Audio/Plug-Ins/` (VST3 + AU). The
+Audio-FX variant also builds a Standalone app for quick testing.
 
-Outputs (copied to your user plugin folders automatically via
-`COPY_PLUGIN_AFTER_BUILD`):
-- VST3 → `~/Library/Audio/Plug-Ins/VST3/AI Part Generator.vst3`
-- AU   → `~/Library/Audio/Plug-Ins/Components/AI Part Generator.component`
-- a Standalone app under `build/` for quick testing without a DAW.
-
-In Logic/Live you may need to rescan plugins (Live trusts new VST3/AU after a
-restart; Logic runs `auval` on first launch).
+For **Cakewalk (Windows)**, build the same project on Windows (the source is
+cross-platform → Windows VST3).
 
 ## Use
-1. Make sure **Music Producer is running** (the backend on `http://127.0.0.1:7860`).
-2. Insert **AI Part Generator** on a track (as an instrument).
-3. Pick the **Part** (chords / bass / melody / lead / drums), set **Key**,
-   **Tempo**, **Bars**, an optional **Style**, and a **Chords** progression in
-   roman numerals (e.g. `I V vi IV`; blank = a sensible default for the key).
-4. Hit **Generate**. When it finishes, the **MIDI** and **WAV** buttons light
-   up — **drag** either onto a track to drop the part in.
+1. Make sure **Music Producer is running** (`http://127.0.0.1:7860`).
+2. Insert the plugin on a track:
+   - **Audio-FX** → an insert/audio-FX slot (any track). Your instrument stays.
+   - **MIDI-FX** → the MIDI-FX slot *before* the instrument.
+3. Set **Part** (chords/bass/melody/lead/drums) + **Key/Tempo/Bars**, optional
+   **Style**, the per-part modifier dropdowns (Voicing/Rhythm/Pattern/Style/
+   Phrase), and a **Chords** progression (`I V vi IV`; blank = key default).
+4. **Generate** → a new item appears in the **Bank**.
+5. Per bank item:
+   - **Audio-FX:** **Play** auditions its WAV. Drag **MIDI** onto your
+     instrument track / **WAV** onto an audio track. **x** deletes.
+   - **MIDI-FX:** **Arm** it, then press play in your DAW — its notes drive the
+     instrument on this channel, looping to a whole bar. Drag still works.
 
-`Server` defaults to `http://127.0.0.1:7860`; change it if your backend runs
-elsewhere. Settings persist with the project.
+`Server` defaults to `http://127.0.0.1:7860`. The bank's artifacts live under
+`~/Library/Application Support/AI Part Bank/` and are referenced from the saved
+project state.
 
-## Notes / roadmap
-- v1 delivers parts by **drag-out** (universal across DAWs). Live MIDI playthrough
-  and host tempo/key auto-fill are planned follow-ups.
-- Reading the *other* channels for richer style-fit isn't possible from a generic
-  plugin (DAW API limitation); that's the Ableton-Suite / Max-for-Live path.
-- The backend endpoint (`/api/generate-part`) is host-agnostic and fully tested,
-  so this plugin, a future M4L device, and any script all share the same brain.
+## Notes
+- MIDI-FX live emit is timed to the host transport and loops to the part's bar
+  length — the newer, less-tested path; the drag-out works regardless.
+- Reading the *other* channels for richer style-fit needs Ableton Suite's Max
+  for Live (deferred). The backend `/api/generate-part` is host-agnostic and
+  tested, so every front-end shares the same brain.

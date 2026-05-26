@@ -2,36 +2,43 @@
 
 #include "PluginProcessor.h"
 
-class AIPartGeneratorEditor : public juce::AudioProcessorEditor
+class AIPartBankEditor : public juce::AudioProcessorEditor,
+                         private juce::Timer
 {
 public:
-    explicit AIPartGeneratorEditor (AIPartGeneratorProcessor&);
-    ~AIPartGeneratorEditor() override = default;
+    explicit AIPartBankEditor (AIPartBankProcessor&);
+    ~AIPartBankEditor() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
 
 private:
-    void pushSettings();     // read the UI into the processor
-    void runGenerate();      // kick the background round-trip
-    void fetchOptions();     // load smart-dropdown choices from the backend
-    void updateModifiers();  // re-shape the modifier dropdowns for the part
+    void pushSettings();      // read the UI into the processor
+    void runGenerate();       // background round-trip → add a bank item
+    void fetchOptions();      // smart-dropdown choices
+    void updateModifiers();   // re-shape modifier dropdowns for the part
+    void rebuildBankList();   // sync the row components to proc.bank
+    void toggleRow (int index);
+    void deleteRow (int index);
+    void refreshGlyphs();
+    void timerCallback() override;
 
-    AIPartGeneratorProcessor& proc;
+    AIPartBankProcessor& proc;
 
     juce::Label    title;
     juce::ComboBox targetBox, genreBox, mod1Box, mod2Box;
     juce::TextEditor keyEdit, tempoEdit, barsEdit, progEdit, serverEdit;
-    juce::Label    targetLbl, genreLbl, keyLbl, tempoLbl, barsLbl, progLbl, serverLbl;
-    juce::Label    mod1Lbl, mod2Lbl;
+    juce::Label    targetLbl, genreLbl, keyLbl, tempoLbl, barsLbl, progLbl, serverLbl, mod1Lbl, mod2Lbl;
     juce::TextButton generateBtn { "Generate" };
-    juce::Label    status;
+    juce::Label    status, bankTitle;
 
-    juce::var partOptions;   // GET /api/part-options result (per target)
+    juce::var partOptions;
 
-    // Drag handles for the generated artifacts (drag onto a track).
-    struct FileDragSource;
-    std::unique_ptr<FileDragSource> midiDrag, wavDrag;
+    struct BankRow;
+    juce::Viewport bankViewport;
+    juce::Component bankContainer;
+    juce::OwnedArray<BankRow> rows;
+    int activeIndex { -1 };   // auditioning (audio-FX) / armed (MIDI-FX)
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AIPartGeneratorEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AIPartBankEditor)
 };
