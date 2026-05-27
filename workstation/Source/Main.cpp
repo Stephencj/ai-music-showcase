@@ -46,6 +46,33 @@ struct KnobLookAndFeel : public LookAndFeel_V4
 
 inline KnobLookAndFeel& knobLAF() { static KnobLookAndFeel l; return l; }
 
+// A matching vertical fader: a slim groove with a filled level + a capped thumb.
+struct FaderLookAndFeel : public LookAndFeel_V4
+{
+    void drawLinearSlider (Graphics& g, int x, int y, int w, int h,
+                           float sliderPos, float minSliderPos, float maxSliderPos,
+                           const Slider::SliderStyle style, Slider& s) override
+    {
+        if (style != Slider::LinearVertical)
+        { LookAndFeel_V4::drawLinearSlider (g, x, y, w, h, sliderPos, minSliderPos, maxSliderPos, style, s); return; }
+
+        const float cx = x + w * 0.5f;
+        const float top = (float) y, bot = (float) (y + h);
+        const auto groove = Rectangle<float> (cx - 3.5f, top, 7.0f, (float) h);
+
+        g.setColour (Colour (0xff262a31)); g.fillRoundedRectangle (groove, 3.5f);
+        g.setColour (Colour (0xff3b5bdb)); g.fillRoundedRectangle (cx - 3.5f, sliderPos, 7.0f, bot - sliderPos, 3.5f);
+        g.setColour (Colour (0xff5b6477)); g.drawRoundedRectangle (groove, 3.5f, 1.0f);
+
+        const auto cap = Rectangle<float> (cx - (w - 2) * 0.5f, sliderPos - 8.0f, (float) (w - 2), 16.0f);
+        g.setColour (Colour (0xff32363f)); g.fillRoundedRectangle (cap, 3.0f);
+        g.setColour (Colour (0xff8fa0ff)); g.drawRoundedRectangle (cap, 3.0f, 1.4f);
+        g.setColour (Colour (0xffcdd6ff)); g.fillRect (cap.getX() + 3.0f, cap.getCentreY() - 1.0f, cap.getWidth() - 6.0f, 2.0f);
+    }
+};
+
+inline FaderLookAndFeel& faderLAF() { static FaderLookAndFeel l; return l; }
+
 //==============================================================================
 class MainComponent : public Component,
                       private Thread
@@ -256,6 +283,11 @@ private:
             regen.onClick = onRegen;
             addAndMakeVisible (mute); addAndMakeVisible (solo); addAndMakeVisible (regen);
 
+            setupDisclosure (instrDisc,  instrOpen);
+            setupDisclosure (preampDisc, preampOpen);
+            setupDisclosure (eqDisc,     eqOpen);
+            setupDisclosure (compDisc,   compOpen);
+
             // Instrument
             instrLbl.setText (e.drum ? "Drum Kit" : "Instrument", dontSendNotification);
             section (instrLbl);
@@ -312,22 +344,33 @@ private:
                 compKnob[3].setValue (e.comp->releaseMs.getCurrentValue(), dontSendNotification);
             }
 
-            // Channel out
+            // Channel: a vertical fader (volume) + pan knob
             chanLbl.setText ("Channel", dontSendNotification); section (chanLbl);
-            addKnob (volKnob, volLbl, "Vol", -48, 6, 0.1, [this] { if (auto* v = entry.track->getVolumePlugin()) v->setVolumeDb ((float) volKnob.getValue()); });
+            volLbl.setText ("Vol", dontSendNotification); volLbl.setJustificationType (Justification::centred); volLbl.setFont (FontOptions (11.0f)); addAndMakeVisible (volLbl);
+            volFader.setSliderStyle (Slider::LinearVertical);
+            volFader.setRange (-48.0, 6.0, 0.1);
+            volFader.setTextBoxStyle (Slider::TextBoxBelow, false, 60, 14);
+            volFader.setColour (Slider::textBoxOutlineColourId, Colours::transparentBlack);
+            volFader.setLookAndFeel (&faderLAF());
+            volFader.onValueChange = [this] { if (auto* v = entry.track->getVolumePlugin()) v->setVolumeDb ((float) volFader.getValue()); };
+            addAndMakeVisible (volFader);
             addKnob (panKnob, panLbl, "Pan", -1, 1, 0.01, [this] { if (auto* v = entry.track->getVolumePlugin()) v->setPan ((float) panKnob.getValue()); });
-            if (auto* v = e.track->getVolumePlugin()) { volKnob.setValue (v->getVolumeDb(), dontSendNotification); panKnob.setValue (v->getPan(), dontSendNotification); }
+            if (auto* v = e.track->getVolumePlugin()) { volFader.setValue (v->getVolumeDb(), dontSendNotification); panKnob.setValue (v->getPan(), dontSendNotification); }
+
+            updateVisibility();
         }
+
+        std::function<void()> onLayout;
 
         int preferredHeight() const
         {
             auto rows = [] (int k) { return (k + perRow - 1) / perRow; };
             int h = 6 + 22 /*name*/ + 26 /*btns*/;
-            h += SH + (entry.synth ? 26 : 0) + rows (nInstr) * KH;     // instrument (+ template box for synth)
-            h += SH + rows (2) * KH;                                   // preamp
-            h += SH + rows (3) * KH;                                   // eq
-            h += SH + rows (4) * KH;                                   // comp
-            h += SH + rows (2) * KH;                                   // channel out
+            h += SH + (instrOpen  ? ((entry.synth ? 26 : 0) + rows (nInstr) * KH) : 0);
+            h += SH + (preampOpen ? rows (2) * KH : 0);
+            h += SH + (eqOpen     ? rows (3) * KH : 0);
+            h += SH + (compOpen   ? rows (4) * KH : 0);
+            h += SH + 126;                                             // channel (fader + pan)
             return h + 8;
         }
 
@@ -340,19 +383,26 @@ private:
             solo.setBounds (btns.removeFromRight (26)); btns.removeFromRight (4);
             mute.setBounds (btns.removeFromRight (26));
 
-            instrLbl.setBounds (r.removeFromTop (SH));
-            if (entry.synth) templateBox.setBounds (r.removeFromTop (24).reduced (2, 1));
-            layoutKnobs (r, instrKnob, instrLbl_, nInstr);
+            headerRow (r, instrDisc, &instrLbl, nullptr);
+            if (instrOpen)
+            {
+                if (entry.synth) templateBox.setBounds (r.removeFromTop (24).reduced (2, 1));
+                layoutKnobs (r, instrKnob, instrLbl_, nInstr);
+            }
+            headerRow (r, preampDisc, nullptr, &preampOn);
+            if (preampOpen) layoutKnobs (r, preampKnob, preampLbl, 2);
+            headerRow (r, eqDisc, nullptr, &eqOn);
+            if (eqOpen) layoutKnobs (r, eqKnob, eqLbl, 3);
+            headerRow (r, compDisc, nullptr, &compOn);
+            if (compOpen) layoutKnobs (r, compKnob, compLbl, 4);
 
-            preampOn.setBounds (r.removeFromTop (SH));
-            layoutKnobs (r, preampKnob, preampLbl, 2);
-            eqOn.setBounds (r.removeFromTop (SH));
-            layoutKnobs (r, eqKnob, eqLbl, 3);
-            compOn.setBounds (r.removeFromTop (SH));
-            layoutKnobs (r, compKnob, compLbl, 4);
             chanLbl.setBounds (r.removeFromTop (SH));
-            Slider* vp[2] = { &volKnob, &panKnob }; Label* vpl[2] = { &volLbl, &panLbl };
-            layoutKnobsP (r, vp, vpl, 2);
+            auto chan = r.removeFromTop (126);
+            auto left = chan.removeFromLeft (chan.getWidth() / 2);
+            volLbl.setBounds (left.removeFromTop (13));
+            volFader.setBounds (left.reduced (6, 0));
+            panLbl.setBounds (chan.removeFromTop (13));
+            panKnob.setBounds (chan.removeFromTop (KH));
         }
 
         void paint (Graphics& g) override
@@ -363,6 +413,33 @@ private:
 
     private:
         void section (Label& l) { l.setJustificationType (Justification::centredLeft); l.setFont (FontOptions (12.0f, Font::bold)); l.setColour (Label::textColourId, Colour (0xff8fa0ff)); addAndMakeVisible (l); }
+
+        void setupDisclosure (TextButton& b, bool& openFlag)
+        {
+            b.onClick = [this, &openFlag] { openFlag = ! openFlag; updateVisibility(); if (onLayout) onLayout(); };
+            addAndMakeVisible (b);
+        }
+
+        void headerRow (Rectangle<int>& r, TextButton& disc, Label* lbl, ToggleButton* tog)
+        {
+            auto row = r.removeFromTop (SH);
+            disc.setBounds (row.removeFromLeft (20)); row.removeFromLeft (2);
+            if (lbl) lbl->setBounds (row);
+            if (tog) tog->setBounds (row);
+        }
+
+        void updateVisibility()
+        {
+            instrDisc.setButtonText  (instrOpen  ? "v" : ">");
+            preampDisc.setButtonText (preampOpen ? "v" : ">");
+            eqDisc.setButtonText     (eqOpen     ? "v" : ">");
+            compDisc.setButtonText   (compOpen   ? "v" : ">");
+            if (entry.synth) templateBox.setVisible (instrOpen);
+            for (int i = 0; i < nInstr; ++i) { instrKnob[i].setVisible (instrOpen); instrLbl_[i].setVisible (instrOpen); }
+            for (int i = 0; i < 2; ++i) { preampKnob[i].setVisible (preampOpen); preampLbl[i].setVisible (preampOpen); }
+            for (int i = 0; i < 3; ++i) { eqKnob[i].setVisible (eqOpen); eqLbl[i].setVisible (eqOpen); }
+            for (int i = 0; i < 4; ++i) { compKnob[i].setVisible (compOpen); compLbl[i].setVisible (compOpen); }
+        }
 
         void addKnob (Slider& s, Label& l, const String& nm, double lo, double hi, double step, std::function<void()> cb)
         {
@@ -420,13 +497,15 @@ private:
         TrackEntry entry;
         Label name, instrLbl, chanLbl;
         TextButton mute, solo, regen;
+        TextButton instrDisc, preampDisc, eqDisc, compDisc;
+        bool instrOpen = true, preampOpen = true, eqOpen = true, compOpen = true;
         ComboBox templateBox;
         te::AutomatableParameter::Ptr instrParam[7];
         Slider instrKnob[7]; Label instrLbl_[7]; int nInstr = 0;
         ToggleButton preampOn; Slider preampKnob[2]; Label preampLbl[2];
         ToggleButton eqOn;     Slider eqKnob[3];     Label eqLbl[3];
         ToggleButton compOn;   Slider compKnob[4];   Label compLbl[4];
-        Slider volKnob, panKnob; Label volLbl, panLbl;
+        Slider volFader, panKnob; Label volLbl, panLbl;
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChannelColumn)
     };
 
@@ -434,15 +513,13 @@ private:
     void rebuildColumns()
     {
         columns.clear();
-        int maxH = 200;
         for (int i = 0; i < (int) entries.size(); ++i)
         {
             auto* col = new ChannelColumn (entries[(size_t) i], [this, i] { regenerateTrack (i); });
+            col->onLayout = [this] { layoutColumns(); };
             mixerContainer.addAndMakeVisible (col);
             columns.add (col);
-            maxH = jmax (maxH, col->preferredHeight());
         }
-        columnHeight = maxH;
         layoutColumns();
         refreshStatus();
     }
@@ -450,6 +527,9 @@ private:
     void layoutColumns()
     {
         const int w = ChannelColumn::colW;
+        int maxH = 200;
+        for (auto* c : columns) maxH = jmax (maxH, c->preferredHeight());   // collapsing a section changes this
+        columnHeight = maxH;
         for (int i = 0; i < columns.size(); ++i)
             columns[i]->setBounds (i * w, 0, w, columnHeight);
         mixerContainer.setSize (jmax (mixerViewport.getWidth(), columns.size() * w),
