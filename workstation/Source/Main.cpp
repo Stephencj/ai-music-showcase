@@ -1,14 +1,11 @@
 /*
-    AI Workstation — Tracktion Engine app: generate a song, see/select each
-    track, and shape it with our own instrument + a channel strip (EQ + Comp).
+    AI Workstation — Tracktion Engine app.
 
-    "Generate Song" -> /api/generate-arrangement:
-      * melodic parts (Chords/Bass/Melody) come back as MIDI -> our AI Synth,
-      * Drums are rendered to a WAV on their own audio track.
-    Each track carries an EqualiserPlugin + CompressorPlugin (off by default).
-    The Tracks panel lists every track (name · template · notes, mute/solo);
-    selecting one binds the right-hand channel strip (instrument macros + EQ +
-    Compressor) to THAT track.
+    Generate a multi-track song (Chords/Bass/Melody through our AI Synth, Drums
+    through our AI Drum Kit), then mix it like a real desk: a vertical CHANNEL
+    COLUMN per track, controls as rotary knobs (click-drag up/down), stacked
+    Instrument -> Preamp -> EQ -> Compressor -> Volume/Pan. A timeline up top
+    shows clips + a playhead (click to seek). Save/Load, per-track Regenerate.
 */
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -39,10 +36,9 @@ public:
         header.setText ("AI Workstation", dontSendNotification);
         header.setFont (FontOptions (19.0f, Font::bold));
         addAndMakeVisible (header);
-        status.setJustificationType (Justification::topLeft);
+        status.setJustificationType (Justification::centredLeft);
         addAndMakeVisible (status);
 
-        // --- generation row ---
         auto field = [this] (TextEditor& e, Label& l, const String& name, const String& val)
         {
             l.setText (name, dontSendNotification); l.setJustificationType (Justification::centredRight); addAndMakeVisible (l);
@@ -56,81 +52,14 @@ public:
         generateButton.onClick = [this] { generateSong(); };
         addAndMakeVisible (generateButton);
 
-        // --- tracks panel ---
-        tracksTitle.setText ("Tracks", dontSendNotification);
-        tracksTitle.setFont (FontOptions (15.0f, Font::bold));
-        addAndMakeVisible (tracksTitle);
-        tracksViewport.setViewedComponent (&tracksContainer, false);
-        tracksViewport.setScrollBarsShown (true, false);
-        addAndMakeVisible (tracksViewport);
+        timeline.getEdit = [this] { return edit.get(); };
+        timeline.onSeek  = [this] (double sec) { if (edit) edit->getTransport().setPosition (te::TimePosition::fromSeconds (sec)); };
+        addAndMakeVisible (timeline);
 
-        // --- channel strip (scrollable) lives in stripContent ---
-        addAndMakeVisible (stripViewport);
-        stripViewport.setViewedComponent (&stripContent, false);
-        stripViewport.setScrollBarsShown (true, false);
+        addAndMakeVisible (mixerViewport);
+        mixerViewport.setViewedComponent (&mixerContainer, false);
+        mixerViewport.setScrollBarsShown (true, true);
 
-        instrTitle.setText ("Instrument", dontSendNotification);
-        instrTitle.setFont (FontOptions (15.0f, Font::bold));
-        stripContent.addAndMakeVisible (instrTitle);
-        templateLbl.setText ("Template", dontSendNotification);
-        templateLbl.setJustificationType (Justification::centredRight);
-        stripContent.addAndMakeVisible (templateLbl);
-        for (int i = 0; i < 4; ++i) templateBox.addItem (tewk::AISynthPlugin::templateName (i), i + 1);
-        templateBox.onChange = [this]
-        {
-            if (synth != nullptr) { synth->selectTemplate ((tewk::InstrTemplate) (templateBox.getSelectedId() - 1)); syncMacrosToUI(); updateRowText (selected); }
-        };
-        stripContent.addAndMakeVisible (templateBox);
-
-        const char* mn[NumMacros] = { "Tone", "Shape", "Attack", "Release", "Space", "Move", "Level" };
-        for (int i = 0; i < NumMacros; ++i)
-            makeSlider (macroSlider[i], macroLbl[i], mn[i], 0.0, 1.0, 0.001,
-                        [this, i] { if (auto p = paramFor (i)) p->setParameter ((float) macroSlider[i].getValue(), sendNotification); });
-
-        // Channel section (volume + pan) at the very top of the strip
-        chanTitle.setText ("Channel", dontSendNotification);
-        chanTitle.setFont (FontOptions (15.0f, Font::bold));
-        stripContent.addAndMakeVisible (chanTitle);
-        makeSlider (volSlider, volLbl, "Volume dB", -48.0, 6.0, 0.1,
-                    [this] { if (auto* t = curTrack()) if (auto* v = t->getVolumePlugin()) v->setVolumeDb ((float) volSlider.getValue()); });
-        makeSlider (panSlider, panLbl, "Pan", -1.0, 1.0, 0.01,
-                    [this] { if (auto* t = curTrack()) if (auto* v = t->getVolumePlugin()) v->setPan ((float) panSlider.getValue()); });
-
-        // Master volume (lives by the transport, not in the per-track strip)
-        masterLbl.setText ("Master", dontSendNotification);
-        masterLbl.setJustificationType (Justification::centredRight);
-        addAndMakeVisible (masterLbl);
-        masterSlider.setSliderStyle (Slider::LinearHorizontal);
-        masterSlider.setRange (-48.0, 6.0, 0.1);
-        masterSlider.setTextBoxStyle (Slider::TextBoxRight, false, 50, 22);
-        masterSlider.onValueChange = [this] { if (auto m = edit->getMasterVolumePlugin()) m->setVolumeDb ((float) masterSlider.getValue()); };
-        addAndMakeVisible (masterSlider);
-
-        // Preamp section (first in the chain) — toggle doubles as header / on-off
-        preampOn.setButtonText ("Preamp");
-        preampOn.onClick = [this] { if (auto* pp = curPreamp()) pp->setEnabled (preampOn.getToggleState()); };
-        stripContent.addAndMakeVisible (preampOn);
-        makeSlider (preampSlider[0], preampLbl[0], "Drive",  0.0, 1.0, 0.001, [this] { applyPreamp(); });
-        makeSlider (preampSlider[1], preampLbl[1], "Output", 0.0, 1.0, 0.001, [this] { applyPreamp(); });
-
-        // EQ section (the toggle doubles as the section header / on-off)
-        eqOn.setButtonText ("EQ");
-        eqOn.onClick = [this] { if (auto* e = curEq()) e->setEnabled (eqOn.getToggleState()); };
-        stripContent.addAndMakeVisible (eqOn);
-        const char* en[3] = { "Low dB", "Mid dB", "High dB" };
-        for (int i = 0; i < 3; ++i)
-            makeSlider (eqSlider[i], eqLbl[i], en[i], -20.0, 20.0, 0.1, [this, i] { applyEq (i); });
-
-        // Compressor section
-        compOn.setButtonText ("Compressor");
-        compOn.onClick = [this] { if (auto* c = curComp()) c->setEnabled (compOn.getToggleState()); };
-        stripContent.addAndMakeVisible (compOn);
-        makeSlider (compSlider[0], compLbl[0], "Thresh dB", -40.0, 0.0, 0.5, [this] { applyComp(); });
-        makeSlider (compSlider[1], compLbl[1], "Ratio",       1.0, 20.0, 0.1, [this] { applyComp(); });
-        makeSlider (compSlider[2], compLbl[2], "Attack ms",   0.3, 200.0, 0.5, [this] { applyComp(); });
-        makeSlider (compSlider[3], compLbl[3], "Release ms", 10.0, 300.0, 1.0, [this] { applyComp(); });
-
-        // --- transport + info ---
         auto button = [this] (TextButton& b, const String& t, std::function<void()> fn)
         { b.setButtonText (t); b.onClick = std::move (fn); addAndMakeVisible (b); };
         button (playButton, "Play", [this] { playFromStart(); });
@@ -140,18 +69,23 @@ public:
         button (loadButton, "Load", [this] { loadProject(); });
         button (scanButton, "Scan AU", [this] { startScan(); });
 
+        masterLbl.setText ("Master", dontSendNotification);
+        masterLbl.setJustificationType (Justification::centredRight);
+        addAndMakeVisible (masterLbl);
+        masterKnob.setSliderStyle (Slider::RotaryVerticalDrag);
+        masterKnob.setRange (-48.0, 6.0, 0.1);
+        masterKnob.setTextBoxStyle (Slider::TextBoxRight, false, 50, 22);
+        masterKnob.onValueChange = [this] { if (auto m = edit->getMasterVolumePlugin()) m->setVolumeDb ((float) masterKnob.getValue()); };
+        addAndMakeVisible (masterKnob);
+
         info.setMultiLine (true); info.setReadOnly (true);
         info.setFont (FontOptions (Font::getDefaultMonospacedFontName(), 12.0f, Font::plain));
-        info.setText ("Press \"Generate Song\" to build a multi-track arrangement. Click a track to edit its instrument + EQ + Compressor.",
+        info.setText ("Press \"Generate Song\" to build a multi-track arrangement. Each track gets a channel column.",
                       dontSendNotification);
         addAndMakeVisible (info);
 
-        timeline.getEdit = [this] { return edit.get(); };
-        timeline.onSeek  = [this] (double sec) { if (edit) edit->getTransport().setPosition (te::TimePosition::fromSeconds (sec)); };
-        addAndMakeVisible (timeline);
-
         buildInstrumentAndPhrase();
-        setSize (980, 820);
+        setSize (1120, 880);
     }
 
     ~MainComponent() override
@@ -162,9 +96,9 @@ public:
 
     void resized() override
     {
-        auto r = getLocalBounds().reduced (16);
+        auto r = getLocalBounds().reduced (14);
         header.setBounds (r.removeFromTop (26));
-        status.setBounds (r.removeFromTop (40));
+        status.setBounds (r.removeFromTop (22));
         r.removeFromTop (6);
 
         auto genRow = r.removeFromTop (28);
@@ -175,32 +109,26 @@ public:
         generateButton.setBounds (genRow.removeFromLeft (130));
         r.removeFromTop (10);
 
-        timeline.setBounds (r.removeFromTop (120));
+        timeline.setBounds (r.removeFromTop (110));
         r.removeFromTop (10);
 
-        auto bottom = r.removeFromBottom (150);
-        auto transport = bottom.removeFromTop (30);
+        auto transport = r.removeFromBottom (34);
         for (auto* b : { &playButton, &stopButton, &renderButton, &saveButton, &loadButton, &scanButton })
         { b->setBounds (transport.removeFromLeft (80)); transport.removeFromLeft (5); }
-        masterSlider.setBounds (transport.removeFromRight (150));
+        masterKnob.setBounds (transport.removeFromRight (150));
         masterLbl.setBounds (transport.removeFromRight (56));
-        bottom.removeFromTop (8);
-        info.setBounds (bottom);
 
-        auto left = r.removeFromLeft (340);
-        tracksTitle.setBounds (left.removeFromTop (22));
-        tracksViewport.setBounds (left);
-        layoutTrackRows();
+        auto infoArea = r.removeFromBottom (78);
+        info.setBounds (infoArea);
+        r.removeFromBottom (6);
 
-        r.removeFromLeft (16);
-        stripViewport.setBounds (r);
-        layoutStrip();
+        mixerViewport.setBounds (r);
+        layoutColumns();
     }
 
     void paint (Graphics& g) override { g.fillAll (getLookAndFeel().findColour (ResizableWindow::backgroundColourId)); }
 
 private:
-    enum { NumMacros = 7 };
     const String serverBase { "http://127.0.0.1:7860" };
 
     struct TrackEntry
@@ -214,51 +142,11 @@ private:
         String role; int notes = 0;
     };
 
-    void makeSlider (Slider& s, Label& l, const String& name, double lo, double hi, double step, std::function<void()> onChange)
-    {
-        l.setText (name, dontSendNotification); l.setJustificationType (Justification::centredRight);
-        stripContent.addAndMakeVisible (l);
-        s.setSliderStyle (Slider::LinearHorizontal);
-        s.setRange (lo, hi, step);
-        s.setTextBoxStyle (Slider::TextBoxRight, false, 56, 22);
-        s.onValueChange = std::move (onChange);
-        stripContent.addAndMakeVisible (s);
-    }
-
-    //== selectable track row ==================================================
-    struct TrackRow : public Component
-    {
-        TrackRow (int i, std::function<void(int)> onSel) : index (i), select (std::move (onSel))
-        {
-            mute.setButtonText ("M");  mute.setClickingTogglesState (true);  addAndMakeVisible (mute);
-            solo.setButtonText ("S");  solo.setClickingTogglesState (true);  addAndMakeVisible (solo);
-            regen.setButtonText ("Regen"); addAndMakeVisible (regen);
-        }
-        void mouseDown (const MouseEvent&) override { if (select) select (index); }
-        void resized() override
-        {
-            auto a = getLocalBounds().reduced (4);
-            solo.setBounds (a.removeFromRight (26)); a.removeFromRight (4);
-            mute.setBounds (a.removeFromRight (26)); a.removeFromRight (6);
-            regen.setBounds (a.removeFromRight (54));
-            textArea = a;
-        }
-        void paint (Graphics& g) override
-        {
-            g.fillAll (selected ? Colour (0xff3b5bdb) : Colour (0xff343434));
-            g.setColour (Colours::white); g.setFont (FontOptions (14.0f));
-            g.drawText (text, textArea.reduced (6, 0), Justification::centredLeft);
-        }
-        int index; std::function<void(int)> select;
-        bool selected = false; String text; Rectangle<int> textArea;
-        TextButton mute, solo, regen;
-    };
-
-    //== timeline: lanes + clips + moving playhead =============================
+    //== timeline ==============================================================
     struct Timeline : public Component, private Timer
     {
         std::function<te::Edit*()> getEdit;
-        std::function<void(double)> onSeek;     // click-to-seek (seconds)
+        std::function<void(double)> onSeek;
         Timeline() { startTimerHz (30); }
         ~Timeline() override { stopTimer(); }
         void timerCallback() override { repaint(); }
@@ -281,17 +169,15 @@ private:
 
             const double bpm = edit->tempoSequence.getTempo (0) != nullptr ? edit->tempoSequence.getTempo (0)->getBpm() : 120.0;
             auto secToBeat = [bpm] (double s) { return s * bpm / 60.0; };
-
             double totalBeats = 8.0;
             for (auto* t : tracks)
                 for (auto* c : t->getClips())
                     totalBeats = juce::jmax (totalBeats, secToBeat (c->getPosition().getEnd().inSeconds()));
+            lastBpm = bpm; lastBeats = totalBeats;
 
-            lastBpm = bpm; lastBeats = totalBeats;     // for click-to-seek
             const float laneH = (float) getHeight() / (float) n;
             const float trackW = (float) (getWidth() - labelW);
             auto beatToX = [&] (double b) { return labelW + (float) (b / juce::jmax (1.0, totalBeats)) * trackW; };
-
             for (int i = 0; i < n; ++i)
             {
                 const float y = i * laneH;
@@ -308,7 +194,6 @@ private:
                     g.fillRoundedRectangle (x1 + 1.0f, y + 3.0f, juce::jmax (2.0f, x2 - x1 - 2.0f), laneH - 6.0f, 3.0f);
                 }
             }
-
             const float px = beatToX (secToBeat (edit->getTransport().getPosition().inSeconds()));
             g.setColour (Colours::yellow);
             g.drawLine (px, 0.0f, px, (float) getHeight(), 1.5f);
@@ -316,144 +201,227 @@ private:
 
         static constexpr int labelW = 72;
         double lastBpm = 120.0, lastBeats = 8.0;
-
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Timeline)
     };
 
-    void rebuildTrackList()
+    //== a per-track channel column (all controls as knobs) ====================
+    struct ChannelColumn : public Component
     {
-        trackRows.clear();
-        tracksContainer.removeAllChildren();
+        static constexpr int KH = 56, SH = 20, perRow = 3, colW = 232;
+
+        ChannelColumn (TrackEntry e, std::function<void()> onRegen) : entry (e)
+        {
+            name.setText (e.role, dontSendNotification);
+            name.setJustificationType (Justification::centred);
+            name.setFont (FontOptions (15.0f, Font::bold));
+            addAndMakeVisible (name);
+
+            mute.setButtonText ("M");  mute.setClickingTogglesState (true);
+            mute.setToggleState (e.track->isMuted (false), dontSendNotification);
+            mute.onClick = [this] { entry.track->setMute (mute.getToggleState()); };
+            solo.setButtonText ("S");  solo.setClickingTogglesState (true);
+            solo.setToggleState (e.track->isSolo (false), dontSendNotification);
+            solo.onClick = [this] { entry.track->setSolo (solo.getToggleState()); };
+            regen.setButtonText ("Regen");
+            regen.onClick = onRegen;
+            addAndMakeVisible (mute); addAndMakeVisible (solo); addAndMakeVisible (regen);
+
+            // Instrument
+            instrLbl.setText (e.drum ? "Drum Kit" : "Instrument", dontSendNotification);
+            section (instrLbl);
+            if (e.synth != nullptr)
+            {
+                for (int i = 0; i < 4; ++i) templateBox.addItem (tewk::AISynthPlugin::templateName (i), i + 1);
+                templateBox.setSelectedId (e.synth->getTemplateIndex() + 1, dontSendNotification);
+                templateBox.onChange = [this] { entry.synth->selectTemplate ((tewk::InstrTemplate) (templateBox.getSelectedId() - 1)); loadInstrumentKnobs(); };
+                addAndMakeVisible (templateBox);
+
+                const char* mn[7] = { "Tone", "Shape", "Attack", "Release", "Space", "Move", "Level" };
+                te::AutomatableParameter::Ptr mp[7] = { e.synth->tone, e.synth->shape, e.synth->attack, e.synth->release, e.synth->space, e.synth->move, e.synth->level };
+                nInstr = 7;
+                for (int i = 0; i < nInstr; ++i) { instrParam[i] = mp[i]; bindParamKnob (i, mn[i]); }
+            }
+            else if (e.drum != nullptr)
+            {
+                const char* mn[2] = { "Tone", "Decay" };
+                te::AutomatableParameter::Ptr mp[2] = { e.drum->tone, e.drum->decay };
+                nInstr = 2;
+                for (int i = 0; i < nInstr; ++i) { instrParam[i] = mp[i]; bindParamKnob (i, mn[i]); }
+            }
+
+            // Preamp
+            preampOn.setButtonText ("Preamp"); preampOn.onClick = [this] { if (entry.preamp) entry.preamp->setEnabled (preampOn.getToggleState()); };
+            if (e.preamp) preampOn.setToggleState (e.preamp->isEnabled(), dontSendNotification);
+            addAndMakeVisible (preampOn);
+            addKnob (preampKnob[0], preampLbl[0], "Drive",  0, 1, 0.001, [this] { if (entry.preamp) entry.preamp->drive->setParameter  ((float) preampKnob[0].getValue(), sendNotification); });
+            addKnob (preampKnob[1], preampLbl[1], "Output", 0, 1, 0.001, [this] { if (entry.preamp) entry.preamp->output->setParameter ((float) preampKnob[1].getValue(), sendNotification); });
+            if (e.preamp) { preampKnob[0].setValue (e.preamp->drive->getCurrentValue(), dontSendNotification); preampKnob[1].setValue (e.preamp->output->getCurrentValue(), dontSendNotification); }
+
+            // EQ
+            eqOn.setButtonText ("EQ"); eqOn.onClick = [this] { if (entry.eq) entry.eq->setEnabled (eqOn.getToggleState()); };
+            if (e.eq) eqOn.setToggleState (e.eq->isEnabled(), dontSendNotification);
+            addAndMakeVisible (eqOn);
+            addKnob (eqKnob[0], eqLbl[0], "Low",  -20, 20, 0.1, [this] { if (entry.eq) entry.eq->setLowGain  ((float) eqKnob[0].getValue()); });
+            addKnob (eqKnob[1], eqLbl[1], "Mid",  -20, 20, 0.1, [this] { if (entry.eq) entry.eq->setMidGain1 ((float) eqKnob[1].getValue()); });
+            addKnob (eqKnob[2], eqLbl[2], "High", -20, 20, 0.1, [this] { if (entry.eq) entry.eq->setHighGain ((float) eqKnob[2].getValue()); });
+            if (e.eq) { eqKnob[0].setValue (e.eq->loGain->getCurrentValue(), dontSendNotification); eqKnob[1].setValue (e.eq->midGain1->getCurrentValue(), dontSendNotification); eqKnob[2].setValue (e.eq->hiGain->getCurrentValue(), dontSendNotification); }
+
+            // Compressor
+            compOn.setButtonText ("Comp"); compOn.onClick = [this] { if (entry.comp) entry.comp->setEnabled (compOn.getToggleState()); };
+            if (e.comp) compOn.setToggleState (e.comp->isEnabled(), dontSendNotification);
+            addAndMakeVisible (compOn);
+            addKnob (compKnob[0], compLbl[0], "Thresh", -40, 0, 0.5, [this] { applyComp(); });
+            addKnob (compKnob[1], compLbl[1], "Ratio",   1, 20, 0.1, [this] { applyComp(); });
+            addKnob (compKnob[2], compLbl[2], "Attack", 0.3, 200, 0.5, [this] { applyComp(); });
+            addKnob (compKnob[3], compLbl[3], "Release", 10, 300, 1, [this] { applyComp(); });
+            if (e.comp)
+            {
+                compKnob[0].setValue (Decibels::gainToDecibels (e.comp->thresholdGain.getCurrentValue()), dontSendNotification);
+                compKnob[1].setValue (1.0 / jmax (0.05f, e.comp->ratio.getCurrentValue()), dontSendNotification);
+                compKnob[2].setValue (e.comp->attackMs.getCurrentValue(), dontSendNotification);
+                compKnob[3].setValue (e.comp->releaseMs.getCurrentValue(), dontSendNotification);
+            }
+
+            // Channel out
+            chanLbl.setText ("Channel", dontSendNotification); section (chanLbl);
+            addKnob (volKnob, volLbl, "Vol", -48, 6, 0.1, [this] { if (auto* v = entry.track->getVolumePlugin()) v->setVolumeDb ((float) volKnob.getValue()); });
+            addKnob (panKnob, panLbl, "Pan", -1, 1, 0.01, [this] { if (auto* v = entry.track->getVolumePlugin()) v->setPan ((float) panKnob.getValue()); });
+            if (auto* v = e.track->getVolumePlugin()) { volKnob.setValue (v->getVolumeDb(), dontSendNotification); panKnob.setValue (v->getPan(), dontSendNotification); }
+        }
+
+        int preferredHeight() const
+        {
+            auto rows = [] (int k) { return (k + perRow - 1) / perRow; };
+            int h = 6 + 22 /*name*/ + 26 /*btns*/;
+            h += SH + (entry.synth ? 26 : 0) + rows (nInstr) * KH;     // instrument (+ template box for synth)
+            h += SH + rows (2) * KH;                                   // preamp
+            h += SH + rows (3) * KH;                                   // eq
+            h += SH + rows (4) * KH;                                   // comp
+            h += SH + rows (2) * KH;                                   // channel out
+            return h + 8;
+        }
+
+        void resized() override
+        {
+            auto r = getLocalBounds().reduced (6, 4);
+            name.setBounds (r.removeFromTop (22));
+            auto btns = r.removeFromTop (24);
+            regen.setBounds (btns.removeFromLeft (60)); btns.removeFromLeft (6);
+            solo.setBounds (btns.removeFromRight (26)); btns.removeFromRight (4);
+            mute.setBounds (btns.removeFromRight (26));
+
+            instrLbl.setBounds (r.removeFromTop (SH));
+            if (entry.synth) templateBox.setBounds (r.removeFromTop (24).reduced (2, 1));
+            layoutKnobs (r, instrKnob, instrLbl_, nInstr);
+
+            preampOn.setBounds (r.removeFromTop (SH));
+            layoutKnobs (r, preampKnob, preampLbl, 2);
+            eqOn.setBounds (r.removeFromTop (SH));
+            layoutKnobs (r, eqKnob, eqLbl, 3);
+            compOn.setBounds (r.removeFromTop (SH));
+            layoutKnobs (r, compKnob, compLbl, 4);
+            chanLbl.setBounds (r.removeFromTop (SH));
+            Slider* vp[2] = { &volKnob, &panKnob }; Label* vpl[2] = { &volLbl, &panLbl };
+            layoutKnobsP (r, vp, vpl, 2);
+        }
+
+        void paint (Graphics& g) override
+        {
+            g.setColour (Colour (0xff2a2a2a)); g.fillRoundedRectangle (getLocalBounds().toFloat().reduced (2), 4.0f);
+            g.setColour (Colour (0xff444444)); g.drawRoundedRectangle (getLocalBounds().toFloat().reduced (2), 4.0f, 1.0f);
+        }
+
+    private:
+        void section (Label& l) { l.setJustificationType (Justification::centredLeft); l.setFont (FontOptions (12.0f, Font::bold)); l.setColour (Label::textColourId, Colour (0xff8fa0ff)); addAndMakeVisible (l); }
+
+        void addKnob (Slider& s, Label& l, const String& nm, double lo, double hi, double step, std::function<void()> cb)
+        {
+            l.setText (nm, dontSendNotification); l.setJustificationType (Justification::centred); l.setFont (FontOptions (11.0f)); addAndMakeVisible (l);
+            s.setSliderStyle (Slider::RotaryVerticalDrag);
+            s.setRange (lo, hi, step);
+            s.setTextBoxStyle (Slider::TextBoxBelow, false, 60, 15);
+            s.onValueChange = std::move (cb);
+            addAndMakeVisible (s);
+        }
+
+        void bindParamKnob (int i, const String& nm)
+        {
+            addKnob (instrKnob[i], instrLbl_[i], nm, 0, 1, 0.001, [this, i] { if (instrParam[i] != nullptr) instrParam[i]->setParameter ((float) instrKnob[i].getValue(), sendNotification); });
+            if (instrParam[i] != nullptr) instrKnob[i].setValue (instrParam[i]->getCurrentValue(), dontSendNotification);
+        }
+
+        void loadInstrumentKnobs() { for (int i = 0; i < nInstr; ++i) if (instrParam[i] != nullptr) instrKnob[i].setValue (instrParam[i]->getCurrentValue(), dontSendNotification); }
+
+        void applyComp()
+        {
+            if (entry.comp == nullptr) return;
+            entry.comp->thresholdGain.setParameter (jlimit (0.01f, 1.0f, Decibels::decibelsToGain ((float) compKnob[0].getValue())), sendNotification);
+            entry.comp->ratio.setParameter (jlimit (0.0f, 0.95f, 1.0f / jmax (1.0f, (float) compKnob[1].getValue())), sendNotification);
+            entry.comp->attackMs.setParameter ((float) compKnob[2].getValue(), sendNotification);
+            entry.comp->releaseMs.setParameter ((float) compKnob[3].getValue(), sendNotification);
+        }
+
+        void layoutKnobs (Rectangle<int>& area, Slider* knobs, Label* labels, int count)
+        {
+            Slider* ps[8]; Label* pl[8];
+            for (int i = 0; i < count; ++i) { ps[i] = &knobs[i]; pl[i] = &labels[i]; }
+            layoutKnobsP (area, ps, pl, count);
+        }
+        void layoutKnobsP (Rectangle<int>& area, Slider** knobs, Label** labels, int count)
+        {
+            int i = 0;
+            while (i < count)
+            {
+                auto row = area.removeFromTop (KH);
+                const int inRow = jmin (perRow, count - i);
+                const int cw = row.getWidth() / perRow;
+                for (int k = 0; k < inRow; ++k)
+                {
+                    auto cell = row.removeFromLeft (cw);
+                    labels[i]->setBounds (cell.removeFromTop (13));
+                    knobs[i]->setBounds (cell);
+                    ++i;
+                }
+            }
+        }
+
+        TrackEntry entry;
+        Label name, instrLbl, chanLbl;
+        TextButton mute, solo, regen;
+        ComboBox templateBox;
+        te::AutomatableParameter::Ptr instrParam[7];
+        Slider instrKnob[7]; Label instrLbl_[7]; int nInstr = 0;
+        ToggleButton preampOn; Slider preampKnob[2]; Label preampLbl[2];
+        ToggleButton eqOn;     Slider eqKnob[3];     Label eqLbl[3];
+        ToggleButton compOn;   Slider compKnob[4];   Label compLbl[4];
+        Slider volKnob, panKnob; Label volLbl, panLbl;
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChannelColumn)
+    };
+
+    //== columns ===============================================================
+    void rebuildColumns()
+    {
+        columns.clear();
+        int maxH = 200;
         for (int i = 0; i < (int) entries.size(); ++i)
         {
-            auto* row = new TrackRow (i, [this] (int idx) { selectTrack (idx); });
-            auto* tr = entries[(size_t) i].track;
-            row->mute.setToggleState (tr->isMuted (false), dontSendNotification);
-            row->mute.onClick = [tr, row] { tr->setMute (row->mute.getToggleState()); };
-            row->solo.setToggleState (tr->isSolo (false), dontSendNotification);
-            row->solo.onClick = [tr, row] { tr->setSolo (row->solo.getToggleState()); };
-            row->regen.onClick = [this, i] { regenerateTrack (i); };
-            row->selected = (i == selected);
-            tracksContainer.addAndMakeVisible (row);
-            trackRows.add (row);
-            updateRowText (i);
+            auto* col = new ChannelColumn (entries[(size_t) i], [this, i] { regenerateTrack (i); });
+            mixerContainer.addAndMakeVisible (col);
+            columns.add (col);
+            maxH = jmax (maxH, col->preferredHeight());
         }
-        layoutTrackRows();
-    }
-
-    void layoutTrackRows()
-    {
-        const int h = 36, gap = 3;
-        const int w = jmax (40, tracksViewport.getWidth() - (tracksViewport.isVerticalScrollBarShown() ? 14 : 2));
-        for (int i = 0; i < trackRows.size(); ++i) trackRows[i]->setBounds (0, i * (h + gap), w, h);
-        tracksContainer.setSize (w, jmax (1, (int) trackRows.size()) * (h + gap));
-    }
-
-    void updateRowText (int i)
-    {
-        if (i < 0 || i >= (int) entries.size() || i >= trackRows.size()) return;
-        auto& e = entries[(size_t) i];
-        const String tmpl = e.synth ? String (tewk::AISynthPlugin::templateName (e.synth->getTemplateIndex())) : String ("audio");
-        const String detail = e.notes < 0 ? String ("WAV") : (String (e.notes) + " notes");
-        trackRows[i]->text = e.role + "    " + tmpl + "    " + detail;
-        trackRows[i]->repaint();
-    }
-
-    void selectTrack (int i)
-    {
-        if (i < 0 || i >= (int) entries.size()) return;
-        selected = i;
-        synth = entries[(size_t) i].synth;
-        for (int k = 0; k < trackRows.size(); ++k) { trackRows[k]->selected = (k == i); trackRows[k]->repaint(); }
-
-        const bool hasSynth = (synth != nullptr);
-        templateBox.setEnabled (hasSynth);
-        for (int m = 0; m < NumMacros; ++m) macroSlider[m].setEnabled (hasSynth);
-        if (hasSynth) templateBox.setSelectedId (synth->getTemplateIndex() + 1, dontSendNotification);
-        syncMacrosToUI();
-
-        if (auto* t = curTrack())
-            if (auto* v = t->getVolumePlugin())
-            {
-                volSlider.setValue (v->getVolumeDb(), dontSendNotification);
-                panSlider.setValue (v->getPan(), dontSendNotification);
-            }
-        if (auto* pp = curPreamp())
-        {
-            preampOn.setToggleState (pp->isEnabled(), dontSendNotification);
-            preampSlider[0].setValue (pp->drive->getCurrentValue(), dontSendNotification);
-            preampSlider[1].setValue (pp->output->getCurrentValue(), dontSendNotification);
-        }
-        if (auto* e = curEq())
-        {
-            eqOn.setToggleState (e->isEnabled(), dontSendNotification);
-            eqSlider[0].setValue (e->loGain->getCurrentValue(), dontSendNotification);
-            eqSlider[1].setValue (e->midGain1->getCurrentValue(), dontSendNotification);
-            eqSlider[2].setValue (e->hiGain->getCurrentValue(), dontSendNotification);
-        }
-        if (auto* c = curComp())
-        {
-            compOn.setToggleState (c->isEnabled(), dontSendNotification);
-            compSlider[0].setValue (Decibels::gainToDecibels (c->thresholdGain.getCurrentValue()), dontSendNotification);
-            compSlider[1].setValue (1.0 / jmax (0.05f, c->ratio.getCurrentValue()), dontSendNotification);
-            compSlider[2].setValue (c->attackMs.getCurrentValue(), dontSendNotification);
-            compSlider[3].setValue (c->releaseMs.getCurrentValue(), dontSendNotification);
-        }
+        columnHeight = maxH;
+        layoutColumns();
         refreshStatus();
     }
 
-    bool selValid() const { return selected >= 0 && selected < (int) entries.size(); }
-    te::AudioTrack*       curTrack()  { return selValid() ? entries[(size_t) selected].track  : nullptr; }
-    tewk::AIPreampPlugin* curPreamp() { return selValid() ? entries[(size_t) selected].preamp : nullptr; }
-    te::EqualiserPlugin*  curEq()     { return selValid() ? entries[(size_t) selected].eq   : nullptr; }
-    te::CompressorPlugin* curComp()   { return selValid() ? entries[(size_t) selected].comp : nullptr; }
-
-    void applyPreamp()
+    void layoutColumns()
     {
-        if (auto* pp = curPreamp())
-        {
-            pp->drive->setParameter ((float) preampSlider[0].getValue(), sendNotification);
-            pp->output->setParameter ((float) preampSlider[1].getValue(), sendNotification);
-        }
-    }
-
-    void applyEq (int band)
-    {
-        if (auto* e = curEq())
-        {
-            const float v = (float) eqSlider[band].getValue();
-            if (band == 0) e->setLowGain (v); else if (band == 1) e->setMidGain1 (v); else e->setHighGain (v);
-        }
-    }
-
-    void applyComp()
-    {
-        if (auto* c = curComp())
-        {
-            c->thresholdGain.setParameter (jlimit (0.01f, 1.0f, Decibels::decibelsToGain ((float) compSlider[0].getValue())), sendNotification);
-            c->ratio.setParameter (jlimit (0.0f, 0.95f, 1.0f / jmax (1.0f, (float) compSlider[1].getValue())), sendNotification);
-            c->attackMs.setParameter ((float) compSlider[2].getValue(), sendNotification);
-            c->releaseMs.setParameter ((float) compSlider[3].getValue(), sendNotification);
-        }
-    }
-
-    //== instrument plumbing ===================================================
-    te::AutomatableParameter::Ptr paramFor (int i) const
-    {
-        if (synth == nullptr) return {};
-        switch (i)
-        {
-            case 0: return synth->tone;   case 1: return synth->shape;
-            case 2: return synth->attack; case 3: return synth->release;
-            case 4: return synth->space;  case 5: return synth->move;
-            case 6: return synth->level;  default: return {};
-        }
-    }
-
-    void syncMacrosToUI()
-    {
-        for (int i = 0; i < NumMacros; ++i)
-            if (auto p = paramFor (i)) macroSlider[i].setValue (p->getCurrentValue(), dontSendNotification);
+        const int w = ChannelColumn::colW;
+        for (int i = 0; i < columns.size(); ++i)
+            columns[i]->setBounds (i * w, 0, w, columnHeight);
+        mixerContainer.setSize (jmax (mixerViewport.getWidth(), columns.size() * w),
+                                jmax (mixerViewport.getHeight() - 2, columnHeight));
     }
 
     void refreshStatus()
@@ -461,44 +429,31 @@ private:
         auto* dev = engine.getDeviceManager().deviceManager.getCurrentAudioDevice();
         String s;
         s << "Engine up    |    Tracks: " << (int) entries.size()
-          << "    |    Selected: " << (selected >= 0 && selected < (int) entries.size() ? entries[(size_t) selected].role : String ("-")) << "\n";
-        s << "Audio out: " << (dev != nullptr ? dev->getName() : String ("(none)"));
+          << "    |    Audio out: " << (dev != nullptr ? dev->getName() : String ("(none)"));
         status.setText (s, dontSendNotification);
     }
 
-    void reloadMaster()
-    {
-        if (auto m = edit->getMasterVolumePlugin()) masterSlider.setValue (m->getVolumeDb(), dontSendNotification);
-    }
+    void reloadMaster() { if (auto m = edit->getMasterVolumePlugin()) masterKnob.setValue (m->getVolumeDb(), dontSendNotification); }
 
     //== edit building =========================================================
-    te::AudioTrack* getOrInsertAudioTrackAt (int index)
-    {
-        edit->ensureNumberOfAudioTracks (index + 1);
-        return te::getAudioTracks (*edit)[index];
-    }
+    te::AudioTrack* getOrInsertAudioTrackAt (int index) { edit->ensureNumberOfAudioTracks (index + 1); return te::getAudioTracks (*edit)[index]; }
 
     template <typename T>
     T* insertPluginOfType (te::AudioTrack* track, const char* type, int index)
     {
         if (auto p = edit->getPluginCache().createNewPlugin (type, {}))
-        {
-            auto* tp = dynamic_cast<T*> (p.get());
-            track->pluginList.insertPlugin (p, index, nullptr);
-            return tp;
-        }
+        { auto* tp = dynamic_cast<T*> (p.get()); track->pluginList.insertPlugin (p, index, nullptr); return tp; }
         return nullptr;
     }
 
-    // Every track gets Preamp -> EQ -> Compressor (off by default) after its source.
     void addChannelStrip (TrackEntry& e, int baseIndex)
     {
         e.preamp = insertPluginOfType<tewk::AIPreampPlugin> (e.track, tewk::AIPreampPlugin::xmlTypeName, baseIndex);
         e.eq     = insertPluginOfType<te::EqualiserPlugin>  (e.track, te::EqualiserPlugin::xmlTypeName,  baseIndex + 1);
         e.comp   = insertPluginOfType<te::CompressorPlugin> (e.track, te::CompressorPlugin::xmlTypeName, baseIndex + 2);
-        if (e.preamp != nullptr) e.preamp->setEnabled (false);
-        if (e.eq     != nullptr) e.eq->setEnabled (false);
-        if (e.comp   != nullptr) e.comp->setEnabled (false);
+        if (e.preamp) e.preamp->setEnabled (false);
+        if (e.eq)     e.eq->setEnabled (false);
+        if (e.comp)   e.comp->setEnabled (false);
     }
 
     int addNotes (te::AudioTrack* track, const String& name, const var& notes, double minLenBeats)
@@ -506,61 +461,18 @@ private:
         auto* arr = notes.getArray();
         if (arr == nullptr || arr->isEmpty()) return 0;
         double maxEnd = minLenBeats;
-        for (auto& n : *arr)
-            if (auto* a = n.getArray()) if (a->size() >= 3) maxEnd = jmax (maxEnd, (double) (*a)[1] + (double) (*a)[2]);
+        for (auto& nv : *arr) if (auto* a = nv.getArray()) if (a->size() >= 3) maxEnd = jmax (maxEnd, (double) (*a)[1] + (double) (*a)[2]);
         const auto range = edit->tempoSequence.toTime ({ te::BeatPosition::fromBeats (0.0), te::BeatPosition::fromBeats (maxEnd) });
         int count = 0;
         if (auto* clip = dynamic_cast<te::MidiClip*> (track->insertNewClip (te::TrackItem::Type::midi, name, range, nullptr)))
         {
             auto& seq = clip->getSequence(); auto* um = &edit->getUndoManager();
-            for (auto& n : *arr)
-                if (auto* a = n.getArray()) if (a->size() >= 3)
-                { seq.addNote ((int) (*a)[0], te::BeatPosition::fromBeats ((double) (*a)[1]),
-                               te::BeatDuration::fromBeats (jmax (0.05, (double) (*a)[2])), 92, 0, um); ++count; }
+            for (auto& nv : *arr) if (auto* a = nv.getArray()) if (a->size() >= 3)
+            { seq.addNote ((int) (*a)[0], te::BeatPosition::fromBeats ((double) (*a)[1]), te::BeatDuration::fromBeats (jmax (0.05, (double) (*a)[2])), 92, 0, um); ++count; }
         }
         return count;
     }
 
-    // Build one track from a role + its notes: pick the instrument (Drums -> our
-    // drum kit, else the synth), add its channel strip, drop in the notes.
-    void buildTrack (int idx, const String& role, const var& notes)
-    {
-        auto* track = getOrInsertAudioTrackAt (idx);
-        track->setName (role);
-
-        TrackEntry e;
-        e.track = track;
-        if (role.equalsIgnoreCase ("Drums"))
-            e.drum = insertPluginOfType<tewk::AIDrumKitPlugin> (track, tewk::AIDrumKitPlugin::xmlTypeName, 0);
-        else
-        {
-            e.synth = insertPluginOfType<tewk::AISynthPlugin> (track, tewk::AISynthPlugin::xmlTypeName, 0);
-            if (e.synth != nullptr) e.synth->selectTemplate (templateForRole (role));
-        }
-        e.role  = role;
-        e.notes = addNotes (track, role, notes, genBars * 4.0);
-        addChannelStrip (e, 1);          // Preamp -> EQ -> Comp after the instrument
-        entries.push_back (e);
-    }
-
-    void buildInstrumentAndPhrase()
-    {
-        entries.clear();
-        genBars = 2;                      // the starter demo is 2 bars
-        Array<var> arr;
-        auto add = [&] (int p, double s, double l) { arr.add (var (Array<var> { p, s, l })); };
-        for (double bar = 0.0; bar < 8.0; bar += 4.0) { add (48, bar, 4.0); add (51, bar, 4.0); add (55, bar, 4.0); }
-        const int a[] = { 60, 63, 67, 70, 67, 63, 67, 70 };
-        for (int i = 0; i < 8; ++i) add (a[i], (double) i, 0.9);
-        buildTrack (0, "Chords", var (arr));
-
-        selected = 0; synth = entries.empty() ? nullptr : entries[0].synth;
-        rebuildTrackList();
-        selectTrack (0);
-        reloadMaster();
-    }
-
-    //== generation ============================================================
     static tewk::InstrTemplate templateForRole (const String& role)
     {
         if (role.equalsIgnoreCase ("Bass"))   return tewk::InstrTemplate::bass;
@@ -569,6 +481,39 @@ private:
         return tewk::InstrTemplate::pluck;
     }
 
+    void buildTrack (int idx, const String& role, const var& notes)
+    {
+        auto* track = getOrInsertAudioTrackAt (idx);
+        track->setName (role);
+        TrackEntry e; e.track = track;
+        if (role.equalsIgnoreCase ("Drums"))
+            e.drum = insertPluginOfType<tewk::AIDrumKitPlugin> (track, tewk::AIDrumKitPlugin::xmlTypeName, 0);
+        else
+        {
+            e.synth = insertPluginOfType<tewk::AISynthPlugin> (track, tewk::AISynthPlugin::xmlTypeName, 0);
+            if (e.synth) e.synth->selectTemplate (templateForRole (role));
+        }
+        e.role = role;
+        e.notes = addNotes (track, role, notes, genBars * 4.0);
+        addChannelStrip (e, 1);
+        entries.push_back (e);
+    }
+
+    void buildInstrumentAndPhrase()
+    {
+        entries.clear();
+        genBars = 2;
+        Array<var> arr;
+        auto add = [&] (int p, double s, double l) { arr.add (var (Array<var> { p, s, l })); };
+        for (double bar = 0.0; bar < 8.0; bar += 4.0) { add (48, bar, 4.0); add (51, bar, 4.0); add (55, bar, 4.0); }
+        const int a[] = { 60, 63, 67, 70, 67, 63, 67, 70 };
+        for (int i = 0; i < 8; ++i) add (a[i], (double) i, 0.9);
+        buildTrack (0, "Chords", var (arr));
+        rebuildColumns();
+        reloadMaster();
+    }
+
+    //== generation ============================================================
     String makeBody (const StringArray& parts, const String& output, int seed) const
     {
         DynamicObject::Ptr b = new DynamicObject();
@@ -589,7 +534,6 @@ private:
         genSeed = Random::getSystemRandom().nextInt (1000000);
         generateButton.setEnabled (false);
         info.setText ("Generating arrangement...", dontSendNotification);
-
         const auto url = serverBase + "/api/generate-arrangement";
         const auto payload = makeBody ({ "chords", "bass", "melody", "drums" }, "midi", genSeed);
         Component::SafePointer<MainComponent> safe (this);
@@ -607,50 +551,31 @@ private:
     void onArrangement (const var& resp)
     {
         if (! resp.isObject() || ! resp.hasProperty ("tracks"))
-        {
-            info.setText ("Generation failed (backend on " + serverBase + " not reachable).", dontSendNotification);
-            generateButton.setEnabled (true);
-            return;
-        }
+        { info.setText ("Generation failed (backend on " + serverBase + " not reachable).", dontSendNotification); generateButton.setEnabled (true); return; }
 
         stopPlayback();
+        columns.clear();                         // drop old columns before the edit goes away
         const double tempo = (double) resp.getProperty ("tempo", 120.0);
         genBars = (int) resp.getProperty ("bars", 8);
-
         edit = te::Edit::createSingleTrackEdit (engine);
         if (auto* t0 = edit->tempoSequence.getTempo (0)) t0->setBpm (tempo);
 
         entries.clear();
-        synth = nullptr;
         StringArray built;
         if (auto* tracks = resp.getProperty ("tracks", var()).getArray())
             for (auto& tv : *tracks)
-            {
-                const String role = tv.getProperty ("track", "").toString();
-                buildTrack ((int) entries.size(), role, tv.getProperty ("notes", var()));   // Drums -> drum kit, rest -> synth
-                built.add (role);
-            }
+            { const String role = tv.getProperty ("track", "").toString(); buildTrack ((int) entries.size(), role, tv.getProperty ("notes", var())); built.add (role); }
 
-        selected = 0;
-        synth = entries.empty() ? nullptr : entries[0].synth;
-        rebuildTrackList();
-        if (! entries.empty()) selectTrack (0);
+        rebuildColumns();
         reloadMaster();
-        refreshStatus();
-
         edit->getTransport().ensureContextAllocated();
         edit->getTransport().playFromStart (true);
         generateButton.setEnabled (true);
-        info.setText ("Generated " + String ((int) entries.size()) + " tracks: " + built.joinIntoString (", ")
-                      + " @ " + String (tempo, 0) + " bpm. Click a track to edit it.", dontSendNotification);
+        info.setText ("Generated " + String ((int) entries.size()) + " tracks: " + built.joinIntoString (", ") + " @ " + String (tempo, 0) + " bpm.", dontSendNotification);
     }
 
-    //== regenerate a single track =============================================
-    void clearTrackClips (te::AudioTrack* track)
-    {
-        juce::Array<te::Clip*> clips (track->getClips());   // copy — we mutate while iterating
-        for (auto* c : clips) c->removeFromParent();
-    }
+    //== regenerate one track ==================================================
+    void clearTrackClips (te::AudioTrack* track) { juce::Array<te::Clip*> clips (track->getClips()); for (auto* c : clips) c->removeFromParent(); }
 
     void regenerateTrack (int i)
     {
@@ -659,9 +584,6 @@ private:
         const String role = entries[(size_t) i].role;
         const int seed = Random::getSystemRandom().nextInt (1000000);
         info.setText ("Regenerating " + role + "...", dontSendNotification);
-
-        // every part is MIDI now (drums too), so regen is uniform: re-roll just
-        // this role with a new seed and swap its clip.
         const auto url = serverBase + "/api/generate-arrangement";
         const auto payload = makeBody ({ role.toLowerCase() }, "midi", seed);
         Component::SafePointer<MainComponent> safe (this);
@@ -680,17 +602,13 @@ private:
     {
         if (! resp.isObject()) { info.setText ("Regen failed.", dontSendNotification); return; }
         var notes;
-        if (auto* tracks = resp.getProperty ("tracks", var()).getArray())
-            if (! tracks->isEmpty()) notes = (*tracks)[0].getProperty ("notes", var());
-
+        if (auto* tracks = resp.getProperty ("tracks", var()).getArray()) if (! tracks->isEmpty()) notes = (*tracks)[0].getProperty ("notes", var());
         clearTrackClips (track);
         const int n = addNotes (track, role, notes, genBars * 4.0);
-        for (size_t k = 0; k < entries.size(); ++k)
-            if (entries[k].track == track) { entries[k].notes = n; updateRowText ((int) k); }
         info.setText ("Regenerated " + role + " (" + String (n) + " notes).", dontSendNotification);
     }
 
-    //== transport / render ====================================================
+    //== transport / render / save / load ======================================
     void playFromStart() { auto& t = edit->getTransport(); t.ensureContextAllocated(); t.playFromStart (true); }
     void stopPlayback()  { if (edit) edit->getTransport().stop (false, false); }
 
@@ -702,50 +620,32 @@ private:
         info.setText (ok ? ("Rendered: " + out.getFullPathName()) : "Render failed.", dontSendNotification);
     }
 
-    //== save / load ===========================================================
     void saveProject()
     {
         auto fc = std::make_shared<FileChooser> ("Save project",
-                      File::getSpecialLocation (File::userDocumentsDirectory).getChildFile ("song.tracktionedit"),
-                      "*.tracktionedit");
+                      File::getSpecialLocation (File::userDocumentsDirectory).getChildFile ("song.tracktionedit"), "*.tracktionedit");
         fc->launchAsync (FileBrowserComponent::saveMode | FileBrowserComponent::warnAboutOverwriting,
-            [this, fc] (const FileChooser& c)
-            {
-                auto f = c.getResult();
-                if (f == File()) return;
+            [this, fc] (const FileChooser& c) { auto f = c.getResult(); if (f == File()) return;
                 const bool ok = te::EditFileOperations (*edit).writeToFile (f, false);
-                info.setText (ok ? ("Saved: " + f.getFullPathName()) : "Save failed.", dontSendNotification);
-            });
+                info.setText (ok ? ("Saved: " + f.getFullPathName()) : "Save failed.", dontSendNotification); });
     }
 
     void loadProject()
     {
-        auto fc = std::make_shared<FileChooser> ("Load project",
-                      File::getSpecialLocation (File::userDocumentsDirectory), "*.tracktionedit");
+        auto fc = std::make_shared<FileChooser> ("Load project", File::getSpecialLocation (File::userDocumentsDirectory), "*.tracktionedit");
         fc->launchAsync (FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles,
-            [this, fc] (const FileChooser& c)
-            {
-                auto f = c.getResult();
-                if (f == File() || ! f.existsAsFile()) return;
-                stopPlayback();
-                if (auto loaded = te::loadEditFromFile (engine, f))
-                {
-                    edit = std::move (loaded);
-                    rebuildEntriesFromEdit();
-                    info.setText ("Loaded: " + f.getFullPathName(), dontSendNotification);
-                }
-                else info.setText ("Load failed.", dontSendNotification);
-            });
+            [this, fc] (const FileChooser& c) { auto f = c.getResult(); if (f == File() || ! f.existsAsFile()) return;
+                stopPlayback(); columns.clear();
+                if (auto loaded = te::loadEditFromFile (engine, f)) { edit = std::move (loaded); rebuildEntriesFromEdit(); info.setText ("Loaded: " + f.getFullPathName(), dontSendNotification); }
+                else info.setText ("Load failed.", dontSendNotification); });
     }
 
-    // After loading, re-discover each track's instrument + channel-strip plugins.
     void rebuildEntriesFromEdit()
     {
         entries.clear();
         for (auto* track : te::getAudioTracks (*edit))
         {
-            TrackEntry e;
-            e.track  = track;
+            TrackEntry e; e.track = track;
             e.synth  = track->pluginList.findFirstPluginOfType<tewk::AISynthPlugin>();
             e.drum   = track->pluginList.findFirstPluginOfType<tewk::AIDrumKitPlugin>();
             e.preamp = track->pluginList.findFirstPluginOfType<tewk::AIPreampPlugin>();
@@ -753,34 +653,22 @@ private:
             e.comp   = track->pluginList.findFirstPluginOfType<te::CompressorPlugin>();
             e.role   = track->getName();
             int n = 0; bool midi = false;
-            for (auto* clip : track->getClips())
-                if (auto* mc = dynamic_cast<te::MidiClip*> (clip)) { midi = true; n += mc->getSequence().getNumNotes(); }
+            for (auto* clip : track->getClips()) if (auto* mc = dynamic_cast<te::MidiClip*> (clip)) { midi = true; n += mc->getSequence().getNumNotes(); }
             e.notes = midi ? n : -1;
             entries.push_back (e);
         }
-        selected = 0;
-        synth = entries.empty() ? nullptr : entries[0].synth;
-        rebuildTrackList();
-        if (! entries.empty()) selectTrack (0);
+        rebuildColumns();
         reloadMaster();
-        refreshStatus();
     }
 
     //== AU scan ===============================================================
-    void startScan()
-    {
-        if (isThreadRunning()) return;
-        scanButton.setEnabled (false);
-        info.setText ("Scanning Audio Units...\n", dontSendNotification);
-        startThread();
-    }
+    void startScan() { if (isThreadRunning()) return; scanButton.setEnabled (false); info.setText ("Scanning Audio Units...\n", dontSendNotification); startThread(); }
 
     void run() override
     {
         auto& pm = engine.getPluginManager();
         AudioPluginFormat* au = nullptr;
-        for (auto* f : pm.pluginFormatManager.getFormats())
-            if (f->getName().containsIgnoreCase ("AudioUnit")) au = f;
+        for (auto* f : pm.pluginFormatManager.getFormats()) if (f->getName().containsIgnoreCase ("AudioUnit")) au = f;
         if (au != nullptr)
         {
             auto dead = engine.getTemporaryFileManager().getTempDirectory().getChildFile ("dead_plugins.txt");
@@ -791,72 +679,24 @@ private:
         for (const auto& d : pm.knownPluginList.getTypes()) if (d.isInstrument) ins.add (d.name + "  [" + d.pluginFormatName + "]");
         ins.sort (true);
         Component::SafePointer<MainComponent> safe (this);
-        MessageManager::callAsync ([safe, ins]
-        {
-            if (safe == nullptr) return;
-            safe->info.setText (ins.isEmpty() ? String ("No AU instruments found.")
-                : String (ins.size()) + " AU instrument(s):\n\n" + ins.joinIntoString ("\n"), dontSendNotification);
-            safe->scanButton.setEnabled (true);
-        });
-    }
-
-    //== channel-strip layout ==================================================
-    void layoutStrip()
-    {
-        const int w = jmax (80, stripViewport.getWidth() - (stripViewport.isVerticalScrollBarShown() ? 16 : 2));
-        const int rh = 26, gap = 4, lblW = 70, sec = 12;
-        int y = 0;
-        auto row = [&] (Component& l, Component& c) { l.setBounds (0, y, lblW, rh); c.setBounds (lblW + 6, y, w - lblW - 6, rh); y += rh + gap; };
-
-        chanTitle.setBounds (0, y, w, 22); y += 24;
-        row (volLbl, volSlider);
-        row (panLbl, panSlider);
-
-        y += sec;
-        instrTitle.setBounds (0, y, w, 22); y += 24;
-        templateLbl.setBounds (0, y, lblW, rh); templateBox.setBounds (lblW + 6, y, jmin (160, w - lblW - 6), rh); y += rh + gap;
-        for (int i = 0; i < NumMacros; ++i) row (macroLbl[i], macroSlider[i]);
-
-        y += sec;
-        preampOn.setBounds (0, y, w, 22); y += 26;
-        for (int i = 0; i < 2; ++i) row (preampLbl[i], preampSlider[i]);
-
-        y += sec;
-        eqOn.setBounds (0, y, w, 22); y += 26;
-        for (int i = 0; i < 3; ++i) row (eqLbl[i], eqSlider[i]);
-
-        y += sec;
-        compOn.setBounds (0, y, w, 22); y += 26;
-        for (int i = 0; i < 4; ++i) row (compLbl[i], compSlider[i]);
-
-        stripContent.setSize (w, y + 8);
+        MessageManager::callAsync ([safe, ins] { if (safe == nullptr) return;
+            safe->info.setText (ins.isEmpty() ? String ("No AU instruments found.") : String (ins.size()) + " AU instrument(s):\n\n" + ins.joinIntoString ("\n"), dontSendNotification);
+            safe->scanButton.setEnabled (true); });
     }
 
     te::Engine engine { "AI Workstation" };
     std::unique_ptr<te::Edit> edit;
     std::vector<TrackEntry> entries;
-    tewk::AISynthPlugin* synth = nullptr;
-    int selected = 0;
-    int genSeed = 1, genBars = 8;
+    int genSeed = 1, genBars = 8, columnHeight = 600;
 
-    Label      header, status, tracksTitle, instrTitle;
-    Label      keyLbl, tempoLbl, barsLbl, genreLbl, templateLbl;
+    Label      header, status, masterLbl;
+    Label      keyLbl, tempoLbl, barsLbl, genreLbl;
     TextEditor keyEdit, tempoEdit, barsEdit, genreEdit;
     TextButton generateButton;
-
     Timeline   timeline;
-    Viewport   tracksViewport;     Component tracksContainer;
-    OwnedArray<TrackRow> trackRows;
-
-    Viewport   stripViewport;      Component stripContent;
-    Label      chanTitle, volLbl, panLbl;  Slider volSlider, panSlider;
-    Label      masterLbl;          Slider masterSlider;
-    ComboBox   templateBox;
-    Label      macroLbl[NumMacros]; Slider macroSlider[NumMacros];
-    ToggleButton preampOn; Label preampLbl[2]; Slider preampSlider[2];
-    ToggleButton eqOn;   Label eqLbl[3];   Slider eqSlider[3];
-    ToggleButton compOn; Label compLbl[4]; Slider compSlider[4];
-
+    Viewport   mixerViewport;  Component mixerContainer;
+    OwnedArray<ChannelColumn> columns;
+    Slider     masterKnob;
     TextButton playButton, stopButton, renderButton, saveButton, loadButton, scanButton;
     TextEditor info;
 
@@ -879,8 +719,7 @@ public:
     {
     public:
         explicit MainWindow (const String& name)
-            : DocumentWindow (name, Desktop::getInstance().getDefaultLookAndFeel().findColour (ResizableWindow::backgroundColourId),
-                              DocumentWindow::allButtons)
+            : DocumentWindow (name, Desktop::getInstance().getDefaultLookAndFeel().findColour (ResizableWindow::backgroundColourId), DocumentWindow::allButtons)
         {
             setUsingNativeTitleBar (true);
             setContentOwned (new MainComponent(), true);
