@@ -303,8 +303,9 @@ private:
     //== a per-track channel column (all controls as knobs) ====================
     struct ChannelColumn : public Component
     {
-        // Groups are ~one original knob tall; sections fill the full (thinner) column width.
-        static constexpr int SH = 20, perRow = 3, colW = 188, DPH = 82, DTH = 82, CHAN = 200;
+        // Every section is two cells wide. A diagonal pair = one cell; a 3-tier
+        // group spans both cells. Instrument uses two rows (Space/Move on row 2).
+        static constexpr int SH = 22, colW = 170, DPH = 82, DTH = 82, CHAN = 200;
 
         ChannelColumn (TrackEntry e, std::function<void()> onRegen) : entry (e)
         {
@@ -329,8 +330,6 @@ private:
             setupDisclosure (compDisc,   compOpen);
 
             // Instrument — synth: Tone/Shape, Attack/Release, Space/Move (Level moves to Preamp). Drum: Tone/Decay.
-            instrLbl.setText (e.drum ? "Drum Kit" : "Instrument", dontSendNotification);
-            section (instrLbl);
             if (e.synth != nullptr)
             {
                 for (int i = 0; i < 4; ++i) templateBox.addItem (tewk::AISynthPlugin::templateName (i), i + 1);
@@ -352,7 +351,7 @@ private:
             }
 
             // Preamp — Drive/Output, plus the instrument Level lumped in (synth only) as a 3-tier group.
-            preampOn.setButtonText ("Preamp"); preampOn.onClick = [this] { if (entry.preamp) entry.preamp->setEnabled (preampOn.getToggleState()); };
+            preampOn.onClick = [this] { if (entry.preamp) entry.preamp->setEnabled (preampOn.getToggleState()); };
             if (e.preamp) preampOn.setToggleState (e.preamp->isEnabled(), dontSendNotification);
             addAndMakeVisible (preampOn);
             addGroupKnob (preampKnob[0], preampLbl[0], "Drive",  0, 1, 0.001, [this] { if (entry.preamp) entry.preamp->drive->setParameter  ((float) preampKnob[0].getValue(), sendNotification); });
@@ -365,7 +364,7 @@ private:
             }
 
             // EQ — Low/Mid/High as one 3-tier diagonal group.
-            eqOn.setButtonText ("EQ"); eqOn.onClick = [this] { if (entry.eq) entry.eq->setEnabled (eqOn.getToggleState()); };
+            eqOn.onClick = [this] { if (entry.eq) entry.eq->setEnabled (eqOn.getToggleState()); };
             if (e.eq) eqOn.setToggleState (e.eq->isEnabled(), dontSendNotification);
             addAndMakeVisible (eqOn);
             addGroupKnob (eqKnob[0], eqLbl[0], "Low",  -20, 20, 0.1, [this] { if (entry.eq) entry.eq->setLowGain  ((float) eqKnob[0].getValue()); });
@@ -374,7 +373,7 @@ private:
             if (e.eq) { eqKnob[0].setValue (e.eq->loGain->getCurrentValue(), dontSendNotification); eqKnob[1].setValue (e.eq->midGain1->getCurrentValue(), dontSendNotification); eqKnob[2].setValue (e.eq->hiGain->getCurrentValue(), dontSendNotification); }
 
             // Compressor — Thresh/Ratio and Attack/Release as two diagonal pairs.
-            compOn.setButtonText ("Comp"); compOn.onClick = [this] { if (entry.comp) entry.comp->setEnabled (compOn.getToggleState()); };
+            compOn.onClick = [this] { if (entry.comp) entry.comp->setEnabled (compOn.getToggleState()); };
             if (e.comp) compOn.setToggleState (e.comp->isEnabled(), dontSendNotification);
             addAndMakeVisible (compOn);
             addGroupKnob (compKnob[0], compLbl[0], "Thresh", -40, 0, 0.5, [this] { applyComp(); });
@@ -410,7 +409,7 @@ private:
         int preferredHeight() const
         {
             int h = 6 + 22 /*name*/ + 26 /*btns*/;
-            h += SH + (instrOpen  ? ((entry.synth ? 24 : 0) + DPH) : 0);   // synth: 3 pairs row; drum: 1 pair
+            h += SH + (instrOpen  ? (entry.synth ? 24 + 2 * DPH : DPH) : 0);   // synth: template + 2 rows; drum: 1 pair
             h += SH + (preampOpen ? (entry.synth ? DTH : DPH) : 0);        // synth: Drive/Output/Level triple
             h += SH + (eqOpen     ? DTH : 0);                              // Low/Mid/High triple
             h += SH + (compOpen   ? DPH : 0);                              // two pairs in one row
@@ -427,23 +426,27 @@ private:
             solo.setBounds (btns.removeFromRight (26)); btns.removeFromRight (4);
             mute.setBounds (btns.removeFromRight (26));
 
-            headerRow (r, instrDisc, &instrLbl, nullptr);
+            headerRow (r, instrDisc, nullptr);
             if (instrOpen)
             {
                 if (entry.synth) templateBox.setBounds (r.removeFromTop (24).reduced (2, 1));
-                auto row = r.removeFromTop (DPH);
                 if (entry.synth)
                 {
-                    const int cw = row.getWidth() / 3;
-                    diagPair (row.removeFromLeft (cw), instrKnob[0], instrLbl_[0], instrKnob[1], instrLbl_[1]);
-                    diagPair (row.removeFromLeft (cw), instrKnob[2], instrLbl_[2], instrKnob[3], instrLbl_[3]);
-                    diagPair (row,                     instrKnob[4], instrLbl_[4], instrKnob[5], instrLbl_[5]);
+                    auto row1 = r.removeFromTop (DPH);              // Tone/Shape | Attack/Release
+                    const int half = row1.getWidth() / 2;
+                    diagPair (row1.removeFromLeft (half), instrKnob[0], instrLbl_[0], instrKnob[1], instrLbl_[1]);
+                    diagPair (row1,                       instrKnob[2], instrLbl_[2], instrKnob[3], instrLbl_[3]);
+                    auto row2 = r.removeFromTop (DPH);              // Space/Move on its own line
+                    diagPair (row2.removeFromLeft (half), instrKnob[4], instrLbl_[4], instrKnob[5], instrLbl_[5]);
                 }
                 else if (entry.drum)
-                    diagPair (row, instrKnob[0], instrLbl_[0], instrKnob[1], instrLbl_[1]);
+                {
+                    auto row = r.removeFromTop (DPH);
+                    diagPair (row.removeFromLeft (row.getWidth() / 2), instrKnob[0], instrLbl_[0], instrKnob[1], instrLbl_[1]);
+                }
             }
 
-            headerRow (r, preampDisc, nullptr, &preampOn);
+            headerRow (r, preampDisc, &preampOn);
             if (preampOpen)
             {
                 auto area = r.removeFromTop (DTH);                  // full width
@@ -457,7 +460,7 @@ private:
                     diagPair (area, preampKnob[0], preampLbl[0], preampKnob[1], preampLbl[1]);
             }
 
-            headerRow (r, eqDisc, nullptr, &eqOn);
+            headerRow (r, eqDisc, &eqOn);
             if (eqOpen)
             {
                 auto area = r.removeFromTop (DTH);                  // full width
@@ -466,7 +469,7 @@ private:
                 diagN (area, k, l, 3);
             }
 
-            headerRow (r, compDisc, nullptr, &compOn);
+            headerRow (r, compDisc, &compOn);
             if (compOpen)
             {
                 auto row = r.removeFromTop (DPH);
@@ -495,24 +498,30 @@ private:
 
         void setupDisclosure (TextButton& b, bool& openFlag)
         {
+            b.setColour (TextButton::buttonColourId, Colours::transparentBlack);
+            b.setColour (TextButton::buttonOnColourId, Colours::transparentBlack);
+            b.setColour (TextButton::textColourOffId, Colour (0xff8fa0ff));
+            b.setColour (TextButton::textColourOnId,  Colour (0xff8fa0ff));
             b.onClick = [this, &openFlag] { openFlag = ! openFlag; updateVisibility(); if (onLayout) onLayout(); };
             addAndMakeVisible (b);
         }
 
-        void headerRow (Rectangle<int>& r, TextButton& disc, Label* lbl, ToggleButton* tog)
+        // Header bar: the whole "▾ Name" button toggles collapse; an enable
+        // checkbox (FX sections) sits at the right edge.
+        void headerRow (Rectangle<int>& r, TextButton& disc, ToggleButton* enable)
         {
             auto row = r.removeFromTop (SH);
-            disc.setBounds (row.removeFromLeft (20)); row.removeFromLeft (2);
-            if (lbl) lbl->setBounds (row);
-            if (tog) tog->setBounds (row);
+            if (enable != nullptr) enable->setBounds (row.removeFromRight (24));
+            disc.setBounds (row);
         }
 
         void updateVisibility()
         {
-            instrDisc.setButtonText  (instrOpen  ? "v" : ">");
-            preampDisc.setButtonText (preampOpen ? "v" : ">");
-            eqDisc.setButtonText     (eqOpen     ? "v" : ">");
-            compDisc.setButtonText   (compOpen   ? "v" : ">");
+            auto arrow = [] (bool open) { return open ? String (CharPointer_UTF8 ("\xe2\x96\xbe  ")) : String (CharPointer_UTF8 ("\xe2\x96\xb8  ")); };
+            instrDisc.setButtonText  (arrow (instrOpen)  + (entry.drum ? "Drum Kit" : "Instrument"));
+            preampDisc.setButtonText (arrow (preampOpen) + "Preamp");
+            eqDisc.setButtonText     (arrow (eqOpen)     + "EQ");
+            compDisc.setButtonText   (arrow (compOpen)   + "Comp");
             if (entry.synth) templateBox.setVisible (instrOpen);
             for (int i = 0; i < nInstr; ++i) { instrKnob[i].setVisible (instrOpen); instrLbl_[i].setVisible (instrOpen); }
             for (int i = 0; i < 2; ++i) { preampKnob[i].setVisible (preampOpen); preampLbl[i].setVisible (preampOpen); }
@@ -601,7 +610,7 @@ private:
         }
 
         TrackEntry entry;
-        Label name, instrLbl, chanLbl;
+        Label name, chanLbl;
         TextButton mute, solo, regen;
         TextButton instrDisc, preampDisc, eqDisc, compDisc;
         bool instrOpen = true, preampOpen = false, eqOpen = false, compOpen = false;
