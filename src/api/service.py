@@ -1066,7 +1066,7 @@ def generate_arrangement(req) -> dict:
     for t in midi.tracks:
         ns = [[int(n.pitch), round(n.start / spb, 4), round(max(0.01, n.end - n.start) / spb, 4)]
               for n in t.notes]
-        tracks.append({"track": t.name, "n_notes": len(ns)})
+        tracks.append({"track": t.name, "n_notes": len(ns), "notes": ns})
         merged += ns
     merged.sort(key=lambda x: x[1])
 
