@@ -15,6 +15,7 @@
 #include <tracktion_engine/tracktion_engine.h>
 #include "AISynthPlugin.h"
 #include "AIPreampPlugin.h"
+#include "AIDrumKitPlugin.h"
 
 namespace te = tracktion;
 using namespace juce;
@@ -30,6 +31,7 @@ public:
         pm.initialise();
         pm.createBuiltInType<tewk::AISynthPlugin>();
         pm.createBuiltInType<tewk::AIPreampPlugin>();
+        pm.createBuiltInType<tewk::AIDrumKitPlugin>();
         engine.getDeviceManager().initialise (0, 2);
 
         edit = te::Edit::createSingleTrackEdit (engine);
@@ -145,6 +147,7 @@ public:
         addAndMakeVisible (info);
 
         timeline.getEdit = [this] { return edit.get(); };
+        timeline.onSeek  = [this] (double sec) { if (edit) edit->getTransport().setPosition (te::TimePosition::fromSeconds (sec)); };
         addAndMakeVisible (timeline);
 
         buildInstrumentAndPhrase();
@@ -204,6 +207,7 @@ private:
     {
         te::AudioTrack* track = nullptr;
         tewk::AISynthPlugin* synth = nullptr;
+        tewk::AIDrumKitPlugin* drum = nullptr;
         tewk::AIPreampPlugin* preamp = nullptr;
         te::EqualiserPlugin* eq = nullptr;
         te::CompressorPlugin* comp = nullptr;
@@ -254,9 +258,17 @@ private:
     struct Timeline : public Component, private Timer
     {
         std::function<te::Edit*()> getEdit;
+        std::function<void(double)> onSeek;     // click-to-seek (seconds)
         Timeline() { startTimerHz (30); }
         ~Timeline() override { stopTimer(); }
         void timerCallback() override { repaint(); }
+
+        void mouseDown (const MouseEvent& e) override
+        {
+            if (e.x <= labelW || lastBeats <= 0.0 || onSeek == nullptr) return;
+            const double beat = (double) (e.x - labelW) / (double) jmax (1, getWidth() - labelW) * lastBeats;
+            onSeek (lastBpm > 0.0 ? beat * 60.0 / lastBpm : 0.0);
+        }
 
         void paint (Graphics& g) override
         {
@@ -275,7 +287,7 @@ private:
                 for (auto* c : t->getClips())
                     totalBeats = juce::jmax (totalBeats, secToBeat (c->getPosition().getEnd().inSeconds()));
 
-            const int labelW = 72;
+            lastBpm = bpm; lastBeats = totalBeats;     // for click-to-seek
             const float laneH = (float) getHeight() / (float) n;
             const float trackW = (float) (getWidth() - labelW);
             auto beatToX = [&] (double b) { return labelW + (float) (b / juce::jmax (1.0, totalBeats)) * trackW; };
@@ -301,6 +313,9 @@ private:
             g.setColour (Colours::yellow);
             g.drawLine (px, 0.0f, px, (float) getHeight(), 1.5f);
         }
+
+        static constexpr int labelW = 72;
+        double lastBpm = 120.0, lastBeats = 8.0;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Timeline)
     };
@@ -506,25 +521,40 @@ private:
         return count;
     }
 
+    // Build one track from a role + its notes: pick the instrument (Drums -> our
+    // drum kit, else the synth), add its channel strip, drop in the notes.
+    void buildTrack (int idx, const String& role, const var& notes)
+    {
+        auto* track = getOrInsertAudioTrackAt (idx);
+        track->setName (role);
+
+        TrackEntry e;
+        e.track = track;
+        if (role.equalsIgnoreCase ("Drums"))
+            e.drum = insertPluginOfType<tewk::AIDrumKitPlugin> (track, tewk::AIDrumKitPlugin::xmlTypeName, 0);
+        else
+        {
+            e.synth = insertPluginOfType<tewk::AISynthPlugin> (track, tewk::AISynthPlugin::xmlTypeName, 0);
+            if (e.synth != nullptr) e.synth->selectTemplate (templateForRole (role));
+        }
+        e.role  = role;
+        e.notes = addNotes (track, role, notes, genBars * 4.0);
+        addChannelStrip (e, 1);          // Preamp -> EQ -> Comp after the instrument
+        entries.push_back (e);
+    }
+
     void buildInstrumentAndPhrase()
     {
         entries.clear();
-        auto* track = getOrInsertAudioTrackAt (0);
-        track->setName ("Demo");
-        auto* sp = insertPluginOfType<tewk::AISynthPlugin> (track, tewk::AISynthPlugin::xmlTypeName, 0);
-        if (sp != nullptr) sp->selectTemplate (tewk::InstrTemplate::pad);
-
+        genBars = 2;                      // the starter demo is 2 bars
         Array<var> arr;
         auto add = [&] (int p, double s, double l) { arr.add (var (Array<var> { p, s, l })); };
         for (double bar = 0.0; bar < 8.0; bar += 4.0) { add (48, bar, 4.0); add (51, bar, 4.0); add (55, bar, 4.0); }
         const int a[] = { 60, 63, 67, 70, 67, 63, 67, 70 };
         for (int i = 0; i < 8; ++i) add (a[i], (double) i, 0.9);
-        int n = addNotes (track, "Demo", var (arr), 8.0);
+        buildTrack (0, "Chords", var (arr));
 
-        TrackEntry e { track, sp, nullptr, nullptr, nullptr, "Demo", n };
-        addChannelStrip (e, 1);
-        entries.push_back (e);
-        selected = 0; synth = sp;
+        selected = 0; synth = entries.empty() ? nullptr : entries[0].synth;
         rebuildTrackList();
         selectTrack (0);
         reloadMaster();
@@ -558,10 +588,10 @@ private:
     {
         genSeed = Random::getSystemRandom().nextInt (1000000);
         generateButton.setEnabled (false);
-        info.setText ("Generating arrangement (melodic parts)...", dontSendNotification);
+        info.setText ("Generating arrangement...", dontSendNotification);
 
         const auto url = serverBase + "/api/generate-arrangement";
-        const auto payload = makeBody ({ "chords", "bass", "melody" }, "midi", genSeed);
+        const auto payload = makeBody ({ "chords", "bass", "melody", "drums" }, "midi", genSeed);
         Component::SafePointer<MainComponent> safe (this);
         Thread::launch ([safe, url, payload]
         {
@@ -594,23 +624,12 @@ private:
         synth = nullptr;
         StringArray built;
         if (auto* tracks = resp.getProperty ("tracks", var()).getArray())
-        {
             for (auto& tv : *tracks)
             {
                 const String role = tv.getProperty ("track", "").toString();
-                if (role.equalsIgnoreCase ("Drums")) continue;     // drums come back as audio (pass 2)
-
-                auto* track = getOrInsertAudioTrackAt ((int) entries.size());
-                track->setName (role);
-                auto* sp = insertPluginOfType<tewk::AISynthPlugin> (track, tewk::AISynthPlugin::xmlTypeName, 0);
-                if (sp != nullptr) sp->selectTemplate (templateForRole (role));
-                int n = addNotes (track, role, tv.getProperty ("notes", var()), genBars * 4.0);
-                TrackEntry e { track, sp, nullptr, nullptr, nullptr, role, n };
-                addChannelStrip (e, 1);
-                entries.push_back (e);
+                buildTrack ((int) entries.size(), role, tv.getProperty ("notes", var()));   // Drums -> drum kit, rest -> synth
                 built.add (role);
             }
-        }
 
         selected = 0;
         synth = entries.empty() ? nullptr : entries[0].synth;
@@ -618,62 +637,12 @@ private:
         if (! entries.empty()) selectTrack (0);
         reloadMaster();
         refreshStatus();
-        info.setText ("Built " + built.joinIntoString (", ") + " @ " + String (tempo, 0) + " bpm. Rendering drums...", dontSendNotification);
 
-        fetchDrums();
-    }
-
-    void fetchDrums()
-    {
-        const auto url     = serverBase + "/api/generate-arrangement";
-        const auto payload = makeBody ({ "drums" }, "wav", genSeed);
-        const auto base    = serverBase;
-        Component::SafePointer<MainComponent> safe (this);
-        Thread::launch ([safe, url, payload, base]
-        {
-            File wavFile;
-            juce::URL u = juce::URL (url).withPOSTData (payload);
-            auto opts = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
-                            .withExtraHeaders ("Content-Type: application/json").withConnectionTimeoutMs (120000);
-            if (auto s = u.createInputStream (opts))
-            {
-                auto resp = JSON::parse (s->readEntireStreamAsString());
-                const String pid = resp.getProperty ("part_id", "").toString();
-                if (pid.isNotEmpty())
-                {
-                    juce::URL wu (base + "/api/parts/" + pid + "/part.wav");
-                    auto f = File::getSpecialLocation (File::tempDirectory).getChildFile ("ai_ws_drums_" + pid + ".wav");
-                    if (auto ws = wu.createInputStream (juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress).withConnectionTimeoutMs (120000)))
-                    {
-                        MemoryBlock mb; ws->readIntoMemoryBlock (mb);
-                        if (mb.getSize() > 0 && f.replaceWithData (mb.getData(), mb.getSize())) wavFile = f;
-                    }
-                }
-            }
-            MessageManager::callAsync ([safe, wavFile] { if (safe != nullptr) safe->addDrumsTrack (wavFile); });
-        });
-    }
-
-    void addDrumsTrack (const File& wav)
-    {
-        if (wav.existsAsFile() && wav.getSize() > 0)
-        {
-            auto* track = getOrInsertAudioTrackAt ((int) entries.size());
-            track->setName ("Drums");
-            const auto range = edit->tempoSequence.toTime ({ te::BeatPosition::fromBeats (0.0), te::BeatPosition::fromBeats (genBars * 4.0) });
-            track->insertWaveClip ("Drums", wav, te::ClipPosition { range }, false);
-            TrackEntry e { track, nullptr, nullptr, nullptr, nullptr, "Drums", -1 };
-            addChannelStrip (e, 0);   // no instrument, Preamp+EQ+Comp at the front
-            entries.push_back (e);
-            rebuildTrackList();
-        }
-
-        refreshStatus();
         edit->getTransport().ensureContextAllocated();
         edit->getTransport().playFromStart (true);
         generateButton.setEnabled (true);
-        info.setText ("Full arrangement: " + String ((int) entries.size())
-                      + " tracks (drums = rendered audio). Click a track for its instrument + EQ + Compressor.", dontSendNotification);
+        info.setText ("Generated " + String ((int) entries.size()) + " tracks: " + built.joinIntoString (", ")
+                      + " @ " + String (tempo, 0) + " bpm. Click a track to edit it.", dontSendNotification);
     }
 
     //== regenerate a single track =============================================
@@ -691,51 +660,23 @@ private:
         const int seed = Random::getSystemRandom().nextInt (1000000);
         info.setText ("Regenerating " + role + "...", dontSendNotification);
 
-        if (role.equalsIgnoreCase ("Drums"))
+        // every part is MIDI now (drums too), so regen is uniform: re-roll just
+        // this role with a new seed and swap its clip.
+        const auto url = serverBase + "/api/generate-arrangement";
+        const auto payload = makeBody ({ role.toLowerCase() }, "midi", seed);
+        Component::SafePointer<MainComponent> safe (this);
+        Thread::launch ([safe, url, payload, track, role]
         {
-            const auto url = serverBase + "/api/generate-arrangement";
-            const auto payload = makeBody ({ "drums" }, "wav", seed);
-            const auto base = serverBase;
-            Component::SafePointer<MainComponent> safe (this);
-            Thread::launch ([safe, url, payload, base, track]
-            {
-                File wavFile;
-                juce::URL u = juce::URL (url).withPOSTData (payload);
-                auto opts = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
-                                .withExtraHeaders ("Content-Type: application/json").withConnectionTimeoutMs (120000);
-                if (auto s = u.createInputStream (opts))
-                {
-                    auto resp = JSON::parse (s->readEntireStreamAsString());
-                    const String pid = resp.getProperty ("part_id", "").toString();
-                    if (pid.isNotEmpty())
-                    {
-                        juce::URL wu (base + "/api/parts/" + pid + "/part.wav");
-                        auto f = File::getSpecialLocation (File::tempDirectory).getChildFile ("ai_ws_drums_" + pid + ".wav");
-                        if (auto ws = wu.createInputStream (juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress).withConnectionTimeoutMs (120000)))
-                        { MemoryBlock mb; ws->readIntoMemoryBlock (mb); if (mb.getSize() > 0 && f.replaceWithData (mb.getData(), mb.getSize())) wavFile = f; }
-                    }
-                }
-                MessageManager::callAsync ([safe, wavFile, track] { if (safe != nullptr) safe->applyDrumRegen (track, wavFile); });
-            });
-        }
-        else
-        {
-            const auto url = serverBase + "/api/generate-arrangement";
-            const auto payload = makeBody ({ role.toLowerCase() }, "midi", seed);
-            Component::SafePointer<MainComponent> safe (this);
-            Thread::launch ([safe, url, payload, track, role]
-            {
-                var resp;
-                juce::URL u = juce::URL (url).withPOSTData (payload);
-                auto opts = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
-                                .withExtraHeaders ("Content-Type: application/json").withConnectionTimeoutMs (120000);
-                if (auto s = u.createInputStream (opts)) resp = JSON::parse (s->readEntireStreamAsString());
-                MessageManager::callAsync ([safe, resp, track, role] { if (safe != nullptr) safe->applyMelodicRegen (track, role, resp); });
-            });
-        }
+            var resp;
+            juce::URL u = juce::URL (url).withPOSTData (payload);
+            auto opts = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
+                            .withExtraHeaders ("Content-Type: application/json").withConnectionTimeoutMs (120000);
+            if (auto s = u.createInputStream (opts)) resp = JSON::parse (s->readEntireStreamAsString());
+            MessageManager::callAsync ([safe, resp, track, role] { if (safe != nullptr) safe->applyRegen (track, role, resp); });
+        });
     }
 
-    void applyMelodicRegen (te::AudioTrack* track, const String& role, const var& resp)
+    void applyRegen (te::AudioTrack* track, const String& role, const var& resp)
     {
         if (! resp.isObject()) { info.setText ("Regen failed.", dontSendNotification); return; }
         var notes;
@@ -747,18 +688,6 @@ private:
         for (size_t k = 0; k < entries.size(); ++k)
             if (entries[k].track == track) { entries[k].notes = n; updateRowText ((int) k); }
         info.setText ("Regenerated " + role + " (" + String (n) + " notes).", dontSendNotification);
-    }
-
-    void applyDrumRegen (te::AudioTrack* track, const File& wav)
-    {
-        if (wav.existsAsFile() && wav.getSize() > 0)
-        {
-            clearTrackClips (track);
-            const auto range = edit->tempoSequence.toTime ({ te::BeatPosition::fromBeats (0.0), te::BeatPosition::fromBeats (genBars * 4.0) });
-            track->insertWaveClip ("Drums", wav, te::ClipPosition { range }, false);
-            info.setText ("Regenerated Drums.", dontSendNotification);
-        }
-        else info.setText ("Drum regen failed.", dontSendNotification);
     }
 
     //== transport / render ====================================================
@@ -818,6 +747,7 @@ private:
             TrackEntry e;
             e.track  = track;
             e.synth  = track->pluginList.findFirstPluginOfType<tewk::AISynthPlugin>();
+            e.drum   = track->pluginList.findFirstPluginOfType<tewk::AIDrumKitPlugin>();
             e.preamp = track->pluginList.findFirstPluginOfType<tewk::AIPreampPlugin>();
             e.eq     = track->pluginList.findFirstPluginOfType<te::EqualiserPlugin>();
             e.comp   = track->pluginList.findFirstPluginOfType<te::CompressorPlugin>();
