@@ -264,7 +264,8 @@ private:
     //== a per-track channel column (all controls as knobs) ====================
     struct ChannelColumn : public Component
     {
-        static constexpr int KH = 78, SH = 20, perRow = 3, colW = 232;
+        // Diagonal group sizes: a PAIR fits one cell, a TRIPLE spans two cells.
+        static constexpr int SH = 20, perRow = 3, colW = 232, DPH = 92, DTH = 104, CHAN = 210;
 
         ChannelColumn (TrackEntry e, std::function<void()> onRegen) : entry (e)
         {
@@ -288,7 +289,7 @@ private:
             setupDisclosure (eqDisc,     eqOpen);
             setupDisclosure (compDisc,   compOpen);
 
-            // Instrument
+            // Instrument — synth: Tone/Shape, Attack/Release, Space/Move (Level moves to Preamp). Drum: Tone/Decay.
             instrLbl.setText (e.drum ? "Drum Kit" : "Instrument", dontSendNotification);
             section (instrLbl);
             if (e.synth != nullptr)
@@ -298,9 +299,9 @@ private:
                 templateBox.onChange = [this] { entry.synth->selectTemplate ((tewk::InstrTemplate) (templateBox.getSelectedId() - 1)); loadInstrumentKnobs(); };
                 addAndMakeVisible (templateBox);
 
-                const char* mn[7] = { "Tone", "Shape", "Attack", "Release", "Space", "Move", "Level" };
-                te::AutomatableParameter::Ptr mp[7] = { e.synth->tone, e.synth->shape, e.synth->attack, e.synth->release, e.synth->space, e.synth->move, e.synth->level };
-                nInstr = 7;
+                const char* mn[6] = { "Tone", "Shape", "Attack", "Release", "Space", "Move" };
+                te::AutomatableParameter::Ptr mp[6] = { e.synth->tone, e.synth->shape, e.synth->attack, e.synth->release, e.synth->space, e.synth->move };
+                nInstr = 6;
                 for (int i = 0; i < nInstr; ++i) { instrParam[i] = mp[i]; bindParamKnob (i, mn[i]); }
             }
             else if (e.drum != nullptr)
@@ -311,31 +312,36 @@ private:
                 for (int i = 0; i < nInstr; ++i) { instrParam[i] = mp[i]; bindParamKnob (i, mn[i]); }
             }
 
-            // Preamp
+            // Preamp — Drive/Output, plus the instrument Level lumped in (synth only) as a 3-tier group.
             preampOn.setButtonText ("Preamp"); preampOn.onClick = [this] { if (entry.preamp) entry.preamp->setEnabled (preampOn.getToggleState()); };
             if (e.preamp) preampOn.setToggleState (e.preamp->isEnabled(), dontSendNotification);
             addAndMakeVisible (preampOn);
-            addKnob (preampKnob[0], preampLbl[0], "Drive",  0, 1, 0.001, [this] { if (entry.preamp) entry.preamp->drive->setParameter  ((float) preampKnob[0].getValue(), sendNotification); });
-            addKnob (preampKnob[1], preampLbl[1], "Output", 0, 1, 0.001, [this] { if (entry.preamp) entry.preamp->output->setParameter ((float) preampKnob[1].getValue(), sendNotification); });
+            addGroupKnob (preampKnob[0], preampLbl[0], "Drive",  0, 1, 0.001, [this] { if (entry.preamp) entry.preamp->drive->setParameter  ((float) preampKnob[0].getValue(), sendNotification); });
+            addGroupKnob (preampKnob[1], preampLbl[1], "Output", 0, 1, 0.001, [this] { if (entry.preamp) entry.preamp->output->setParameter ((float) preampKnob[1].getValue(), sendNotification); });
             if (e.preamp) { preampKnob[0].setValue (e.preamp->drive->getCurrentValue(), dontSendNotification); preampKnob[1].setValue (e.preamp->output->getCurrentValue(), dontSendNotification); }
+            if (e.synth)
+            {
+                addGroupKnob (levelKnob, levelLbl, "Level", 0, 1, 0.001, [this] { entry.synth->level->setParameter ((float) levelKnob.getValue(), sendNotification); });
+                levelKnob.setValue (e.synth->level->getCurrentValue(), dontSendNotification);
+            }
 
-            // EQ
+            // EQ — Low/Mid/High as one 3-tier diagonal group.
             eqOn.setButtonText ("EQ"); eqOn.onClick = [this] { if (entry.eq) entry.eq->setEnabled (eqOn.getToggleState()); };
             if (e.eq) eqOn.setToggleState (e.eq->isEnabled(), dontSendNotification);
             addAndMakeVisible (eqOn);
-            addKnob (eqKnob[0], eqLbl[0], "Low",  -20, 20, 0.1, [this] { if (entry.eq) entry.eq->setLowGain  ((float) eqKnob[0].getValue()); });
-            addKnob (eqKnob[1], eqLbl[1], "Mid",  -20, 20, 0.1, [this] { if (entry.eq) entry.eq->setMidGain1 ((float) eqKnob[1].getValue()); });
-            addKnob (eqKnob[2], eqLbl[2], "High", -20, 20, 0.1, [this] { if (entry.eq) entry.eq->setHighGain ((float) eqKnob[2].getValue()); });
+            addGroupKnob (eqKnob[0], eqLbl[0], "Low",  -20, 20, 0.1, [this] { if (entry.eq) entry.eq->setLowGain  ((float) eqKnob[0].getValue()); });
+            addGroupKnob (eqKnob[1], eqLbl[1], "Mid",  -20, 20, 0.1, [this] { if (entry.eq) entry.eq->setMidGain1 ((float) eqKnob[1].getValue()); });
+            addGroupKnob (eqKnob[2], eqLbl[2], "High", -20, 20, 0.1, [this] { if (entry.eq) entry.eq->setHighGain ((float) eqKnob[2].getValue()); });
             if (e.eq) { eqKnob[0].setValue (e.eq->loGain->getCurrentValue(), dontSendNotification); eqKnob[1].setValue (e.eq->midGain1->getCurrentValue(), dontSendNotification); eqKnob[2].setValue (e.eq->hiGain->getCurrentValue(), dontSendNotification); }
 
-            // Compressor
+            // Compressor — Thresh/Ratio and Attack/Release as two diagonal pairs.
             compOn.setButtonText ("Comp"); compOn.onClick = [this] { if (entry.comp) entry.comp->setEnabled (compOn.getToggleState()); };
             if (e.comp) compOn.setToggleState (e.comp->isEnabled(), dontSendNotification);
             addAndMakeVisible (compOn);
-            addKnob (compKnob[0], compLbl[0], "Thresh", -40, 0, 0.5, [this] { applyComp(); });
-            addKnob (compKnob[1], compLbl[1], "Ratio",   1, 20, 0.1, [this] { applyComp(); });
-            addKnob (compKnob[2], compLbl[2], "Attack", 0.3, 200, 0.5, [this] { applyComp(); });
-            addKnob (compKnob[3], compLbl[3], "Release", 10, 300, 1, [this] { applyComp(); });
+            addGroupKnob (compKnob[0], compLbl[0], "Thresh", -40, 0, 0.5, [this] { applyComp(); });
+            addGroupKnob (compKnob[1], compLbl[1], "Ratio",   1, 20, 0.1, [this] { applyComp(); });
+            addGroupKnob (compKnob[2], compLbl[2], "Attack", 0.3, 200, 0.5, [this] { applyComp(); });
+            addGroupKnob (compKnob[3], compLbl[3], "Release", 10, 300, 1, [this] { applyComp(); });
             if (e.comp)
             {
                 compKnob[0].setValue (Decibels::gainToDecibels (e.comp->thresholdGain.getCurrentValue()), dontSendNotification);
@@ -344,8 +350,9 @@ private:
                 compKnob[3].setValue (e.comp->releaseMs.getCurrentValue(), dontSendNotification);
             }
 
-            // Channel: a vertical fader (volume) + pan knob
+            // Channel — Pan over the Volume fader.
             chanLbl.setText ("Channel", dontSendNotification); section (chanLbl);
+            addKnob (panKnob, panLbl, "Pan", -1, 1, 0.01, [this] { if (auto* v = entry.track->getVolumePlugin()) v->setPan ((float) panKnob.getValue()); });
             volLbl.setText ("Vol", dontSendNotification); volLbl.setJustificationType (Justification::centred); volLbl.setFont (FontOptions (11.0f)); addAndMakeVisible (volLbl);
             volFader.setSliderStyle (Slider::LinearVertical);
             volFader.setRange (-48.0, 6.0, 0.1);
@@ -354,7 +361,6 @@ private:
             volFader.setLookAndFeel (&faderLAF());
             volFader.onValueChange = [this] { if (auto* v = entry.track->getVolumePlugin()) v->setVolumeDb ((float) volFader.getValue()); };
             addAndMakeVisible (volFader);
-            addKnob (panKnob, panLbl, "Pan", -1, 1, 0.01, [this] { if (auto* v = entry.track->getVolumePlugin()) v->setPan ((float) panKnob.getValue()); });
             if (auto* v = e.track->getVolumePlugin()) { volFader.setValue (v->getVolumeDb(), dontSendNotification); panKnob.setValue (v->getPan(), dontSendNotification); }
 
             updateVisibility();
@@ -364,13 +370,12 @@ private:
 
         int preferredHeight() const
         {
-            auto rows = [] (int k) { return (k + perRow - 1) / perRow; };
             int h = 6 + 22 /*name*/ + 26 /*btns*/;
-            h += SH + (instrOpen  ? ((entry.synth ? 26 : 0) + rows (nInstr) * KH) : 0);
-            h += SH + (preampOpen ? rows (2) * KH : 0);
-            h += SH + (eqOpen     ? rows (3) * KH : 0);
-            h += SH + (compOpen   ? rows (4) * KH : 0);
-            h += SH + 126;                                             // channel (fader + pan)
+            h += SH + (instrOpen  ? ((entry.synth ? 24 : 0) + DPH) : 0);   // synth: 3 pairs row; drum: 1 pair
+            h += SH + (preampOpen ? (entry.synth ? DTH : DPH) : 0);        // synth: Drive/Output/Level triple
+            h += SH + (eqOpen     ? DTH : 0);                              // Low/Mid/High triple
+            h += SH + (compOpen   ? DPH : 0);                              // two pairs in one row
+            h += SH + CHAN;                                                // pan + fader
             return h + 8;
         }
 
@@ -387,22 +392,59 @@ private:
             if (instrOpen)
             {
                 if (entry.synth) templateBox.setBounds (r.removeFromTop (24).reduced (2, 1));
-                layoutKnobs (r, instrKnob, instrLbl_, nInstr);
+                auto row = r.removeFromTop (DPH);
+                const int cw = row.getWidth() / perRow;
+                if (entry.synth)
+                {
+                    diagPair (row.removeFromLeft (cw), instrKnob[0], instrLbl_[0], instrKnob[1], instrLbl_[1]);
+                    diagPair (row.removeFromLeft (cw), instrKnob[2], instrLbl_[2], instrKnob[3], instrLbl_[3]);
+                    diagPair (row.removeFromLeft (cw), instrKnob[4], instrLbl_[4], instrKnob[5], instrLbl_[5]);
+                }
+                else if (entry.drum)
+                    diagPair (row.removeFromLeft (cw), instrKnob[0], instrLbl_[0], instrKnob[1], instrLbl_[1]);
             }
+
             headerRow (r, preampDisc, nullptr, &preampOn);
-            if (preampOpen) layoutKnobs (r, preampKnob, preampLbl, 2);
+            if (preampOpen)
+            {
+                const int cw = (r.getWidth()) / perRow;
+                if (entry.synth)
+                {
+                    auto area = r.removeFromTop (DTH).removeFromLeft (cw * 2);
+                    Slider* k[3] = { &preampKnob[0], &preampKnob[1], &levelKnob };
+                    Label*  l[3] = { &preampLbl[0],  &preampLbl[1],  &levelLbl  };
+                    diagN (area, k, l, 3);
+                }
+                else
+                    diagPair (r.removeFromTop (DPH).removeFromLeft (cw), preampKnob[0], preampLbl[0], preampKnob[1], preampLbl[1]);
+            }
+
             headerRow (r, eqDisc, nullptr, &eqOn);
-            if (eqOpen) layoutKnobs (r, eqKnob, eqLbl, 3);
+            if (eqOpen)
+            {
+                const int cw = r.getWidth() / perRow;
+                auto area = r.removeFromTop (DTH).removeFromLeft (cw * 2);
+                Slider* k[3] = { &eqKnob[0], &eqKnob[1], &eqKnob[2] };
+                Label*  l[3] = { &eqLbl[0],  &eqLbl[1],  &eqLbl[2]  };
+                diagN (area, k, l, 3);
+            }
+
             headerRow (r, compDisc, nullptr, &compOn);
-            if (compOpen) layoutKnobs (r, compKnob, compLbl, 4);
+            if (compOpen)
+            {
+                auto row = r.removeFromTop (DPH);
+                const int cw = row.getWidth() / perRow;
+                diagPair (row.removeFromLeft (cw), compKnob[0], compLbl[0], compKnob[1], compLbl[1]);
+                diagPair (row.removeFromLeft (cw), compKnob[2], compLbl[2], compKnob[3], compLbl[3]);
+            }
 
             chanLbl.setBounds (r.removeFromTop (SH));
-            auto chan = r.removeFromTop (126);
-            auto left = chan.removeFromLeft (chan.getWidth() / 2);
-            volLbl.setBounds (left.removeFromTop (13));
-            volFader.setBounds (left.reduced (6, 0));
-            panLbl.setBounds (chan.removeFromTop (13));
-            panKnob.setBounds (chan.removeFromTop (KH));
+            auto chan = r.removeFromTop (CHAN);
+            auto panArea = chan.removeFromTop (66);
+            panLbl.setBounds (panArea.removeFromTop (12));
+            panKnob.setBounds (panArea.withSizeKeepingCentre (jmin (54, panArea.getWidth()), jmin (54, panArea.getHeight())));
+            volLbl.setBounds (chan.removeFromTop (12));
+            volFader.setBounds (chan.withSizeKeepingCentre (46, chan.getHeight()));
         }
 
         void paint (Graphics& g) override
@@ -437,10 +479,12 @@ private:
             if (entry.synth) templateBox.setVisible (instrOpen);
             for (int i = 0; i < nInstr; ++i) { instrKnob[i].setVisible (instrOpen); instrLbl_[i].setVisible (instrOpen); }
             for (int i = 0; i < 2; ++i) { preampKnob[i].setVisible (preampOpen); preampLbl[i].setVisible (preampOpen); }
+            if (entry.synth) { levelKnob.setVisible (preampOpen); levelLbl.setVisible (preampOpen); }
             for (int i = 0; i < 3; ++i) { eqKnob[i].setVisible (eqOpen); eqLbl[i].setVisible (eqOpen); }
             for (int i = 0; i < 4; ++i) { compKnob[i].setVisible (compOpen); compLbl[i].setVisible (compOpen); }
         }
 
+        // a normal knob (rotary + value box) — used for Pan
         void addKnob (Slider& s, Label& l, const String& nm, double lo, double hi, double step, std::function<void()> cb)
         {
             l.setText (nm, dontSendNotification); l.setJustificationType (Justification::centred); l.setFont (FontOptions (11.0f)); addAndMakeVisible (l);
@@ -453,13 +497,29 @@ private:
             addAndMakeVisible (s);
         }
 
+        // a compact knob for diagonal groups (no value box; just the faux knob + a small name)
+        void addGroupKnob (Slider& s, Label& l, const String& nm, double lo, double hi, double step, std::function<void()> cb)
+        {
+            l.setText (nm, dontSendNotification); l.setJustificationType (Justification::centred); l.setFont (FontOptions (10.0f)); l.setColour (Label::textColourId, Colour (0xffaab2c8)); addAndMakeVisible (l);
+            s.setSliderStyle (Slider::RotaryVerticalDrag);
+            s.setRange (lo, hi, step);
+            s.setTextBoxStyle (Slider::NoTextBox, false, 0, 0);
+            s.setLookAndFeel (&knobLAF());
+            s.onValueChange = std::move (cb);
+            addAndMakeVisible (s);
+        }
+
         void bindParamKnob (int i, const String& nm)
         {
-            addKnob (instrKnob[i], instrLbl_[i], nm, 0, 1, 0.001, [this, i] { if (instrParam[i] != nullptr) instrParam[i]->setParameter ((float) instrKnob[i].getValue(), sendNotification); });
+            addGroupKnob (instrKnob[i], instrLbl_[i], nm, 0, 1, 0.001, [this, i] { if (instrParam[i] != nullptr) instrParam[i]->setParameter ((float) instrKnob[i].getValue(), sendNotification); });
             if (instrParam[i] != nullptr) instrKnob[i].setValue (instrParam[i]->getCurrentValue(), dontSendNotification);
         }
 
-        void loadInstrumentKnobs() { for (int i = 0; i < nInstr; ++i) if (instrParam[i] != nullptr) instrKnob[i].setValue (instrParam[i]->getCurrentValue(), dontSendNotification); }
+        void loadInstrumentKnobs()
+        {
+            for (int i = 0; i < nInstr; ++i) if (instrParam[i] != nullptr) instrKnob[i].setValue (instrParam[i]->getCurrentValue(), dontSendNotification);
+            if (entry.synth) levelKnob.setValue (entry.synth->level->getCurrentValue(), dontSendNotification);
+        }
 
         void applyComp()
         {
@@ -470,38 +530,37 @@ private:
             entry.comp->releaseMs.setParameter ((float) compKnob[3].getValue(), sendNotification);
         }
 
-        void layoutKnobs (Rectangle<int>& area, Slider* knobs, Label* labels, int count)
+        // ----- the reusable "diagonal group": N knobs from top-left to bottom-right,
+        //       slightly overlapping, labelled above each. 2 knobs fit one cell, 3 fit two.
+        void diagN (Rectangle<int> r, Slider** k, Label** l, int count)
         {
-            Slider* ps[8]; Label* pl[8];
-            for (int i = 0; i < count; ++i) { ps[i] = &knobs[i]; pl[i] = &labels[i]; }
-            layoutKnobsP (area, ps, pl, count);
-        }
-        void layoutKnobsP (Rectangle<int>& area, Slider** knobs, Label** labels, int count)
-        {
-            int i = 0;
-            while (i < count)
+            const int lblH = 11;
+            const int ks = (count <= 2) ? jmin (r.getWidth() * 64 / 100, r.getHeight() * 58 / 100)
+                                        : jmin (r.getWidth() * 40 / 100, r.getHeight() * 58 / 100);
+            for (int i = 0; i < count; ++i)
             {
-                auto row = area.removeFromTop (KH);
-                const int inRow = jmin (perRow, count - i);
-                const int cw = row.getWidth() / perRow;
-                for (int k = 0; k < inRow; ++k)
-                {
-                    auto cell = row.removeFromLeft (cw);
-                    labels[i]->setBounds (cell.removeFromTop (13));
-                    knobs[i]->setBounds (cell);
-                    ++i;
-                }
+                const double t = (count <= 1) ? 0.0 : (double) i / (count - 1);
+                const int x = r.getX() + roundToInt (t * (r.getWidth() - ks));
+                const int y = r.getY() + lblH + roundToInt (t * (r.getHeight() - lblH - ks));
+                l[i]->setBounds (x, y - lblH, ks, lblH);
+                k[i]->setBounds (x, y, ks, ks);
             }
+        }
+        void diagPair (Rectangle<int> r, Slider& a, Label& al, Slider& b, Label& bl)
+        {
+            Slider* k[2] = { &a, &b }; Label* l[2] = { &al, &bl };
+            diagN (r, k, l, 2);
         }
 
         TrackEntry entry;
         Label name, instrLbl, chanLbl;
         TextButton mute, solo, regen;
         TextButton instrDisc, preampDisc, eqDisc, compDisc;
-        bool instrOpen = true, preampOpen = true, eqOpen = true, compOpen = true;
+        bool instrOpen = true, preampOpen = false, eqOpen = false, compOpen = false;
         ComboBox templateBox;
-        te::AutomatableParameter::Ptr instrParam[7];
-        Slider instrKnob[7]; Label instrLbl_[7]; int nInstr = 0;
+        te::AutomatableParameter::Ptr instrParam[6];
+        Slider instrKnob[6]; Label instrLbl_[6]; int nInstr = 0;
+        Slider levelKnob; Label levelLbl;
         ToggleButton preampOn; Slider preampKnob[2]; Label preampLbl[2];
         ToggleButton eqOn;     Slider eqKnob[3];     Label eqLbl[3];
         ToggleButton compOn;   Slider compKnob[4];   Label compLbl[4];
@@ -680,10 +739,9 @@ private:
 
         rebuildColumns();
         reloadMaster();
-        edit->getTransport().ensureContextAllocated();
-        edit->getTransport().playFromStart (true);
+        edit->getTransport().ensureContextAllocated();   // ready to play, but don't auto-start
         generateButton.setEnabled (true);
-        info.setText ("Generated " + String ((int) entries.size()) + " tracks: " + built.joinIntoString (", ") + " @ " + String (tempo, 0) + " bpm.", dontSendNotification);
+        info.setText ("Generated " + String ((int) entries.size()) + " tracks: " + built.joinIntoString (", ") + " @ " + String (tempo, 0) + " bpm. Press Play.", dontSendNotification);
     }
 
     //== regenerate one track ==================================================
