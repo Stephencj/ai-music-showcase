@@ -14,6 +14,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <tracktion_engine/tracktion_engine.h>
 #include "AISynthPlugin.h"
+#include "AIPreampPlugin.h"
 
 namespace te = tracktion;
 using namespace juce;
@@ -28,6 +29,7 @@ public:
         auto& pm = engine.getPluginManager();
         pm.initialise();
         pm.createBuiltInType<tewk::AISynthPlugin>();
+        pm.createBuiltInType<tewk::AIPreampPlugin>();
         engine.getDeviceManager().initialise (0, 2);
 
         edit = te::Edit::createSingleTrackEdit (engine);
@@ -82,6 +84,13 @@ public:
         for (int i = 0; i < NumMacros; ++i)
             makeSlider (macroSlider[i], macroLbl[i], mn[i], 0.0, 1.0, 0.001,
                         [this, i] { if (auto p = paramFor (i)) p->setParameter ((float) macroSlider[i].getValue(), sendNotification); });
+
+        // Preamp section (first in the chain) — toggle doubles as header / on-off
+        preampOn.setButtonText ("Preamp");
+        preampOn.onClick = [this] { if (auto* pp = curPreamp()) pp->setEnabled (preampOn.getToggleState()); };
+        stripContent.addAndMakeVisible (preampOn);
+        makeSlider (preampSlider[0], preampLbl[0], "Drive",  0.0, 1.0, 0.001, [this] { applyPreamp(); });
+        makeSlider (preampSlider[1], preampLbl[1], "Output", 0.0, 1.0, 0.001, [this] { applyPreamp(); });
 
         // EQ section (the toggle doubles as the section header / on-off)
         eqOn.setButtonText ("EQ");
@@ -166,6 +175,7 @@ private:
     {
         te::AudioTrack* track = nullptr;
         tewk::AISynthPlugin* synth = nullptr;
+        tewk::AIPreampPlugin* preamp = nullptr;
         te::EqualiserPlugin* eq = nullptr;
         te::CompressorPlugin* comp = nullptr;
         String role; int notes = 0;
@@ -260,6 +270,12 @@ private:
         if (hasSynth) templateBox.setSelectedId (synth->getTemplateIndex() + 1, dontSendNotification);
         syncMacrosToUI();
 
+        if (auto* pp = curPreamp())
+        {
+            preampOn.setToggleState (pp->isEnabled(), dontSendNotification);
+            preampSlider[0].setValue (pp->drive->getCurrentValue(), dontSendNotification);
+            preampSlider[1].setValue (pp->output->getCurrentValue(), dontSendNotification);
+        }
         if (auto* e = curEq())
         {
             eqOn.setToggleState (e->isEnabled(), dontSendNotification);
@@ -278,8 +294,19 @@ private:
         refreshStatus();
     }
 
-    te::EqualiserPlugin*  curEq()   { return (selected >= 0 && selected < (int) entries.size()) ? entries[(size_t) selected].eq : nullptr; }
-    te::CompressorPlugin* curComp() { return (selected >= 0 && selected < (int) entries.size()) ? entries[(size_t) selected].comp : nullptr; }
+    bool selValid() const { return selected >= 0 && selected < (int) entries.size(); }
+    tewk::AIPreampPlugin* curPreamp() { return selValid() ? entries[(size_t) selected].preamp : nullptr; }
+    te::EqualiserPlugin*  curEq()     { return selValid() ? entries[(size_t) selected].eq   : nullptr; }
+    te::CompressorPlugin* curComp()   { return selValid() ? entries[(size_t) selected].comp : nullptr; }
+
+    void applyPreamp()
+    {
+        if (auto* pp = curPreamp())
+        {
+            pp->drive->setParameter ((float) preampSlider[0].getValue(), sendNotification);
+            pp->output->setParameter ((float) preampSlider[1].getValue(), sendNotification);
+        }
+    }
 
     void applyEq (int band)
     {
@@ -349,13 +376,15 @@ private:
         return nullptr;
     }
 
-    // Every track gets EQ + Compressor (off by default) after its source.
+    // Every track gets Preamp -> EQ -> Compressor (off by default) after its source.
     void addChannelStrip (TrackEntry& e, int baseIndex)
     {
-        e.eq   = insertPluginOfType<te::EqualiserPlugin>  (e.track, te::EqualiserPlugin::xmlTypeName,  baseIndex);
-        e.comp = insertPluginOfType<te::CompressorPlugin> (e.track, te::CompressorPlugin::xmlTypeName, baseIndex + 1);
-        if (e.eq   != nullptr) e.eq->setEnabled (false);
-        if (e.comp != nullptr) e.comp->setEnabled (false);
+        e.preamp = insertPluginOfType<tewk::AIPreampPlugin> (e.track, tewk::AIPreampPlugin::xmlTypeName, baseIndex);
+        e.eq     = insertPluginOfType<te::EqualiserPlugin>  (e.track, te::EqualiserPlugin::xmlTypeName,  baseIndex + 1);
+        e.comp   = insertPluginOfType<te::CompressorPlugin> (e.track, te::CompressorPlugin::xmlTypeName, baseIndex + 2);
+        if (e.preamp != nullptr) e.preamp->setEnabled (false);
+        if (e.eq     != nullptr) e.eq->setEnabled (false);
+        if (e.comp   != nullptr) e.comp->setEnabled (false);
     }
 
     int addNotes (te::AudioTrack* track, const String& name, const var& notes, double minLenBeats)
@@ -393,7 +422,7 @@ private:
         for (int i = 0; i < 8; ++i) add (a[i], (double) i, 0.9);
         int n = addNotes (track, "Demo", var (arr), 8.0);
 
-        TrackEntry e { track, sp, nullptr, nullptr, "Demo", n };
+        TrackEntry e { track, sp, nullptr, nullptr, nullptr, "Demo", n };
         addChannelStrip (e, 1);
         entries.push_back (e);
         selected = 0; synth = sp;
@@ -476,7 +505,7 @@ private:
                 auto* sp = insertPluginOfType<tewk::AISynthPlugin> (track, tewk::AISynthPlugin::xmlTypeName, 0);
                 if (sp != nullptr) sp->selectTemplate (templateForRole (role));
                 int n = addNotes (track, role, tv.getProperty ("notes", var()), genBars * 4.0);
-                TrackEntry e { track, sp, nullptr, nullptr, role, n };
+                TrackEntry e { track, sp, nullptr, nullptr, nullptr, role, n };
                 addChannelStrip (e, 1);
                 entries.push_back (e);
                 built.add (role);
@@ -532,8 +561,8 @@ private:
             track->setName ("Drums");
             const auto range = edit->tempoSequence.toTime ({ te::BeatPosition::fromBeats (0.0), te::BeatPosition::fromBeats (genBars * 4.0) });
             track->insertWaveClip ("Drums", wav, te::ClipPosition { range }, false);
-            TrackEntry e { track, nullptr, nullptr, nullptr, "Drums", -1 };
-            addChannelStrip (e, 0);   // no instrument, EQ+Comp at the front
+            TrackEntry e { track, nullptr, nullptr, nullptr, nullptr, "Drums", -1 };
+            addChannelStrip (e, 0);   // no instrument, Preamp+EQ+Comp at the front
             entries.push_back (e);
             rebuildTrackList();
         }
@@ -605,6 +634,10 @@ private:
         for (int i = 0; i < NumMacros; ++i) row (macroLbl[i], macroSlider[i]);
 
         y += sec;
+        preampOn.setBounds (0, y, w, 22); y += 26;
+        for (int i = 0; i < 2; ++i) row (preampLbl[i], preampSlider[i]);
+
+        y += sec;
         eqOn.setBounds (0, y, w, 22); y += 26;
         for (int i = 0; i < 3; ++i) row (eqLbl[i], eqSlider[i]);
 
@@ -633,6 +666,7 @@ private:
     Viewport   stripViewport;      Component stripContent;
     ComboBox   templateBox;
     Label      macroLbl[NumMacros]; Slider macroSlider[NumMacros];
+    ToggleButton preampOn; Label preampLbl[2]; Slider preampSlider[2];
     ToggleButton eqOn;   Label eqLbl[3];   Slider eqSlider[3];
     ToggleButton compOn; Label compLbl[4]; Slider compSlider[4];
 
