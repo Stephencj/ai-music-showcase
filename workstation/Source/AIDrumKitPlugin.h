@@ -171,9 +171,9 @@ public:
 
     static inline const char* xmlTypeName = "ai_drumkit";
 
-    juce::String getName() const override             { return "AI Drum Kit"; }
+    juce::String getName() const override             { return "Drum Kit"; }
     juce::String getPluginType() override             { return xmlTypeName; }
-    juce::String getSelectableDescription() override  { return "AI Drum Kit (built-in instrument)"; }
+    juce::String getSelectableDescription() override  { return "Drum Kit (built-in instrument)"; }
     bool takesAudioInput() override                   { return false; }
     bool takesMidiInput() override                    { return true; }
     bool isSynth() override                           { return true; }

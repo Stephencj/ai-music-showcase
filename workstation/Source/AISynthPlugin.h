@@ -254,9 +254,9 @@ public:
 
     static inline const char* xmlTypeName = "ai_synth";
 
-    juce::String getName() const override             { return "AI Synth"; }
+    juce::String getName() const override             { return "Synth"; }
     juce::String getPluginType() override             { return xmlTypeName; }
-    juce::String getSelectableDescription() override  { return "AI Synth (built-in instrument)"; }
+    juce::String getSelectableDescription() override  { return "Synth (built-in instrument)"; }
 
     bool takesAudioInput() override                   { return false; }
     bool takesMidiInput() override                    { return true; }

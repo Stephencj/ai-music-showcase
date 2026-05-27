@@ -21,8 +21,8 @@ add_subdirectory(_engine/modules/juce ./_juce_build)
 add_subdirectory(_engine/modules     ./_tracktion_build)
 
 juce_add_gui_app(AIWorkstation
-    PRODUCT_NAME "AI Workstation"
-    BUNDLE_ID "com.musicproducer.aiworkstation"
+    PRODUCT_NAME "Music Producer"
+    BUNDLE_ID "com.musicproducer.workstation"
     PLUGINHOST_AU TRUE
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "Audio input for recording")
