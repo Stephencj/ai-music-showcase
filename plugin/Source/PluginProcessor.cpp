@@ -46,6 +46,13 @@ void AIPartBankProcessor::releaseResources()
 
 void AIPartBankProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    if (auto* ph = getPlayHead())
+        if (auto p = ph->getPosition())
+        {
+            if (p->getBpm().hasValue() && *p->getBpm() > 0.0) hostBpmA.store (*p->getBpm());
+            if (auto tsig = p->getTimeSignature())
+                { hostNumA.store (tsig->numerator); hostDenomA.store (tsig->denominator); }
+        }
 #if AIPG_MIDI_FX
     juce::ignoreUnused (buffer);
     auto* ph = getPlayHead();
@@ -168,6 +175,7 @@ AIPartBankProcessor::GenResult AIPartBankProcessor::generate()
     body->setProperty ("tempo", tempo);
     body->setProperty ("bars", bars);
     body->setProperty ("output", "both");
+    body->setProperty ("time_signature", juce::Array<juce::var> { tsNum, tsDenom });
     if (genre.isNotEmpty()) body->setProperty ("genre", genre);
     auto addIf = [body] (const char* k, const juce::String& v) { if (v.isNotEmpty()) body->setProperty (k, v); };
     addIf ("voicing", voicing);       addIf ("chord_rhythm", chordRhythm);
@@ -180,7 +188,9 @@ AIPartBankProcessor::GenResult AIPartBankProcessor::generate()
         if (tok.trim().isNotEmpty()) prog.add (tok.trim());
     if (! prog.isEmpty()) body->setProperty ("progression", prog);
 
-    juce::URL url = juce::URL (serverBase + "/api/generate-part").withPOSTData (juce::JSON::toString (juce::var (body)));
+    const juce::String endpoint = (target == "arrangement") ? "/api/generate-arrangement"
+                                                            : "/api/generate-part";
+    juce::URL url = juce::URL (serverBase + endpoint).withPOSTData (juce::JSON::toString (juce::var (body)));
     auto opts = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
                     .withExtraHeaders ("Content-Type: application/json").withConnectionTimeoutMs (120000);
     std::unique_ptr<juce::InputStream> stream (url.createInputStream (opts));

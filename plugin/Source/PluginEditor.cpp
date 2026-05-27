@@ -64,7 +64,7 @@ AIPartBankEditor::AIPartBankEditor (AIPartBankProcessor& p)
     title.setFont (juce::Font (17.0f, juce::Font::bold));
     addAndMakeVisible (title);
 
-    targetBox.addItemList ({ "chords", "bass", "melody", "lead", "drums" }, 1);
+    targetBox.addItemList ({ "arrangement", "chords", "bass", "melody", "lead", "drums" }, 1);
     targetBox.setText (proc.target.isNotEmpty() ? proc.target : "melody", juce::dontSendNotification);
     targetBox.onChange = [this] { updateModifiers(); };
     addAndMakeVisible (targetBox);
@@ -93,6 +93,11 @@ AIPartBankEditor::AIPartBankEditor (AIPartBankProcessor& p)
 
     keyEdit.setText (proc.key.isNotEmpty() ? proc.key : "C"); addAndMakeVisible (keyEdit);
     tempoEdit.setText (juce::String (proc.tempo > 0 ? proc.tempo : 120.0, 1)); addAndMakeVisible (tempoEdit);
+    syncBtn.setToggleState (true, juce::dontSendNotification);
+    syncBtn.setTooltip ("Follow the DAW's tempo + time signature");
+    syncBtn.onClick = [this] { tempoEdit.setEnabled (! syncBtn.getToggleState()); };
+    tempoEdit.setEnabled (false);          // synced to host by default
+    addAndMakeVisible (syncBtn);
     barsEdit.setText (juce::String (proc.bars > 0 ? proc.bars : 4)); addAndMakeVisible (barsEdit);
     progEdit.setText (proc.progression);
     progEdit.setTextToShowWhenEmpty ("e.g. I V vi IV  (blank = key default)", juce::Colours::grey);
@@ -137,7 +142,17 @@ void AIPartBankEditor::pushSettings()
     proc.target = targetBox.getText();
     proc.genre  = (genreBox.getSelectedItemIndex() <= 0) ? juce::String() : genreBox.getText();
     proc.key    = keyEdit.getText().trim();
-    proc.tempo  = tempoEdit.getText().getDoubleValue(); if (proc.tempo <= 0) proc.tempo = 120.0;
+    if (syncBtn.getToggleState() && proc.hostBpm() > 0.0)
+    {
+        proc.tempo = proc.hostBpm();
+        proc.tsNum = proc.hostNum();
+        proc.tsDenom = proc.hostDenom();
+    }
+    else
+    {
+        proc.tempo = tempoEdit.getText().getDoubleValue(); if (proc.tempo <= 0) proc.tempo = 120.0;
+        proc.tsNum = 4; proc.tsDenom = 4;
+    }
     proc.bars   = juce::jmax (1, barsEdit.getText().getIntValue());
     proc.progression = progEdit.getText();
     proc.serverBase  = serverEdit.getText().trim().trimCharactersAtEnd ("/");
@@ -220,6 +235,14 @@ void AIPartBankEditor::updateModifiers()
     auto hide = [] (juce::ComboBox& box, juce::Label& lbl) { box.setVisible (false); lbl.setVisible (false); };
 
     const auto target = targetBox.getText();
+    if (target == "arrangement")   // full-band: uses the genre's defaults, no per-part mods
+    {
+        juce::Component* hideList[] = { &mod1Box, &mod2Box, &octaveSlider, &densitySlider,
+                                        &mod1Lbl, &mod2Lbl, &octaveLbl, &densityLbl };
+        for (auto* c : hideList) c->setVisible (false);
+        resized();
+        return;
+    }
     octaveLbl.setVisible (target != "drums");   octaveSlider.setVisible (target != "drums");
     densityLbl.setVisible (target != "chords"); densitySlider.setVisible (target != "chords");
     auto* root = partOptions.getDynamicObject();
@@ -318,6 +341,15 @@ void AIPartBankEditor::refreshGlyphs()
 
 void AIPartBankEditor::timerCallback()
 {
+    if (syncBtn.getToggleState())          // reflect the DAW's tempo
+    {
+        const double bpm = proc.hostBpm();
+        if (bpm > 0.0)
+        {
+            const auto s = juce::String (bpm, 1);
+            if (tempoEdit.getText() != s) tempoEdit.setText (s, juce::dontSendNotification);
+        }
+    }
 #if ! AIPG_MIDI_FX
     if (activeIndex >= 0 && ! proc.isPlaying()) { activeIndex = -1; refreshGlyphs(); }
 #endif
@@ -348,7 +380,13 @@ void AIPartBankEditor::resized()
     if (octaveSlider.isVisible())  row (octaveLbl, octaveSlider);
     if (densitySlider.isVisible()) row (densityLbl, densitySlider);
     row (keyLbl,    keyEdit);
-    row (tempoLbl,  tempoEdit);
+    {
+        auto line = r.removeFromTop (24);
+        tempoLbl.setBounds (line.removeFromLeft (60));
+        syncBtn.setBounds (line.removeFromRight (66));
+        tempoEdit.setBounds (line);
+        r.removeFromTop (3);
+    }
     row (barsLbl,   barsEdit);
     row (progLbl,   progEdit);
     row (serverLbl, serverEdit);

@@ -574,6 +574,16 @@ def generate_part_route(req: GeneratePartRequest) -> dict:
         raise HTTPException(400, str(exc))
 
 
+@router.post("/generate-arrangement")
+def generate_arrangement_route(req: GeneratePartRequest) -> dict:
+    """Generate a full arrangement as ONE multi-track MIDI (a track per part) +
+    a rendered mix — import once to lay out every part on its own DAW track."""
+    try:
+        return service.generate_arrangement(req)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
 @router.get("/part-options")
 def part_options_route() -> dict:
     """Valid per-part modifier choices (voicing/rhythm/pattern/style/phrase) for

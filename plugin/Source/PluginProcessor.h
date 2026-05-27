@@ -67,9 +67,15 @@ public:
     juce::String progression {};
     double tempo { 120.0 };
     int    bars { 4 };
+    int    tsNum { 4 }, tsDenom { 4 };   // sent as time_signature
     juce::String voicing, chordRhythm, bassPattern, drumPattern, melodyStyle, phraseShape;
     int    octave { -1 };          // -1 = unset (engine default); chords/bass/melody/lead
     double noteDensity { -1.0 };   // -1 = unset; bass/melody/lead/drums (0–1)
+
+    // Host transport (captured in processBlock, read by the editor to default tempo/meter)
+    double hostBpm() const   { return hostBpmA.load(); }
+    int    hostNum() const   { return hostNumA.load(); }
+    int    hostDenom() const { return hostDenomA.load(); }
 
     // ---- the bank (message-thread owned) ----------------------------------
     juce::OwnedArray<BankItem> bank;     // accessed only on the message thread
@@ -100,6 +106,9 @@ private:
     std::vector<MidiEv> armedEvents;     // guarded by emitLock
     double loopBeats { 0.0 };
     bool   wasPlaying { false };
+
+    std::atomic<double> hostBpmA { 0.0 };
+    std::atomic<int>    hostNumA { 4 }, hostDenomA { 4 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AIPartBankProcessor)
 };

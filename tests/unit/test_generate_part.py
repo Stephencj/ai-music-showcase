@@ -74,6 +74,28 @@ class GeneratePartTests(unittest.TestCase):
         self.assertIsNone(service.part_file(r["part_id"], "../../etc/passwd"))
 
 
+class ArrangementTests(unittest.TestCase):
+    def _arr(self, **kw):
+        kw.setdefault("output", "midi")
+        return service.generate_arrangement(GeneratePartRequest(**kw))
+
+    def test_multi_track_arrangement(self):
+        r = self._arr(key="G", scale="major", tempo=110, bars=8,
+                      progression=["I", "V", "vi", "IV"], genre="pop_full_song", seed=5)
+        names = {t["track"] for t in r["tracks"]}
+        self.assertEqual(names, {"Chords", "Bass", "Drums", "Melody"})
+        self.assertGreater(r["n_notes"], 0)
+        self.assertEqual(r["n_notes"], sum(t["n_notes"] for t in r["tracks"]))
+        # the saved MIDI really has multiple instruments
+        import pretty_midi
+        pm = pretty_midi.PrettyMIDI(str(service.part_file(r["part_id"], "part.mid")))
+        self.assertGreaterEqual(len([i for i in pm.instruments if i.notes]), 4)
+
+    def test_parts_subset(self):
+        r = self._arr(key="C", bars=4, progression=["I", "V"], parts=["bass", "drums"])
+        self.assertEqual({t["track"] for t in r["tracks"]}, {"Bass", "Drums"})
+
+
 class PartOptionsTests(unittest.TestCase):
     def test_shape_has_all_targets_and_defaults(self):
         po = service.part_options()

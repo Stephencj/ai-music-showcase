@@ -45,7 +45,7 @@ juce_add_plugin(AIPartBankMidi
     PLUGIN_MANUFACTURER_CODE Aimu
     PLUGIN_CODE Aipm
     FORMATS VST3 AU
-    PRODUCT_NAME "AI Part Bank (MIDI FX)"
+    PRODUCT_NAME "AI Part Bank MIDI FX"
     COMPANY_NAME "Music Producer"
     IS_SYNTH FALSE
     IS_MIDI_EFFECT TRUE

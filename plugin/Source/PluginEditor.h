@@ -29,6 +29,7 @@ private:
     juce::Label    title;
     juce::ComboBox targetBox, genreBox, mod1Box, mod2Box;
     juce::TextEditor keyEdit, tempoEdit, barsEdit, progEdit, serverEdit;
+    juce::ToggleButton syncBtn { "Host" };   // tempo/meter follow the DAW
     juce::Label    targetLbl, genreLbl, keyLbl, tempoLbl, barsLbl, progLbl, serverLbl, mod1Lbl, mod2Lbl;
     juce::Slider   octaveSlider, densitySlider;
     juce::Label    octaveLbl, densityLbl;

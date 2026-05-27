@@ -51,6 +51,8 @@ class GeneratePartRequest(BaseModel):
     phrase_shape: Optional[str] = None   # melody / lead
     octave: Optional[int] = None         # chords / bass / melody / lead
     note_density: Optional[float] = None # bass / melody / lead / drums (0–1)
+    parts: list[str] = Field(default_factory=list)  # /generate-arrangement: which
+                                  # parts (default drums+bass+chords+melody)
     output: str = "both"            # midi | wav | both
     seed: Optional[int] = None
     # The other channels' parts (role + note-list), so generation can fit what's
