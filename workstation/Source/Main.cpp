@@ -42,6 +42,18 @@ struct KnobLookAndFeel : public LookAndFeel_V4
         g.setColour (Colour (0xff8fa0ff));
         g.fillEllipse (centre.x - 2.5f, centre.y - 2.5f, 5.0f, 5.0f);        // centre hub
     }
+
+    Label* createSliderTextBox (Slider& s) override
+    {
+        auto* l = LookAndFeel_V4::createSliderTextBox (s);
+        l->setFont (FontOptions (11.0f));
+        l->setJustificationType (Justification::centred);
+        l->setColour (Label::textColourId, Colour (0xffe3e7f4));
+        l->setColour (Label::backgroundColourId, Colours::transparentBlack);
+        l->setColour (Label::outlineColourId, Colours::transparentBlack);
+        l->setMinimumHorizontalScale (1.0f);
+        return l;
+    }
 };
 
 inline KnobLookAndFeel& knobLAF() { static KnobLookAndFeel l; return l; }
@@ -515,6 +527,7 @@ private:
             l.setText (nm, dontSendNotification); l.setJustificationType (Justification::centred); l.setFont (FontOptions (11.0f)); addAndMakeVisible (l);
             s.setSliderStyle (Slider::RotaryVerticalDrag);
             s.setRange (lo, hi, step);
+            s.setNumDecimalPlacesToDisplay (decimalsFor (hi - lo));
             s.setTextBoxStyle (Slider::TextBoxBelow, false, 64, 14);
             s.setColour (Slider::textBoxOutlineColourId, Colours::transparentBlack);
             s.setLookAndFeel (&knobLAF());
@@ -528,12 +541,16 @@ private:
             l.setText (nm, dontSendNotification); l.setJustificationType (Justification::centred); l.setFont (FontOptions (10.0f)); l.setColour (Label::textColourId, Colour (0xffaab2c8)); addAndMakeVisible (l);
             s.setSliderStyle (Slider::RotaryVerticalDrag);
             s.setRange (lo, hi, step);
-            s.setTextBoxStyle (Slider::TextBoxBelow, false, 46, 13);
+            s.setNumDecimalPlacesToDisplay (decimalsFor (hi - lo));
+            s.setTextBoxStyle (Slider::TextBoxBelow, false, 52, 13);
             s.setColour (Slider::textBoxOutlineColourId, Colours::transparentBlack);
             s.setLookAndFeel (&knobLAF());
             s.onValueChange = std::move (cb);
             addAndMakeVisible (s);
         }
+
+        // keep value strings short so they fit the small boxes
+        static int decimalsFor (double span) { return span <= 2.0 ? 2 : (span <= 30.0 ? 1 : 0); }
 
         void bindParamKnob (int i, const String& nm)
         {
@@ -566,13 +583,15 @@ private:
                                   : jmin (r.getWidth() * 36 / 100, r.getHeight() - stackExtra - 16);
             ks = jmax (20, ks);
             const int stack = ks + stackExtra;
+            const int boxW = ks + 18;                          // wider than the circle so values fit
             for (int i = 0; i < count; ++i)
             {
                 const double t = (count <= 1) ? 0.0 : (double) i / (count - 1);
-                const int x = r.getX() + roundToInt (t * (r.getWidth() - ks));
+                const int cx = r.getX() + roundToInt (t * (r.getWidth() - ks)) + ks / 2;
                 const int yTop = r.getY() + roundToInt (t * (r.getHeight() - stack));
-                l[i]->setBounds (x, yTop, ks, lblH);
-                k[i]->setBounds (x, yTop + lblH, ks, ks + valH);   // circle + value box below
+                const int bx = cx - boxW / 2;
+                l[i]->setBounds (bx, yTop, boxW, lblH);
+                k[i]->setBounds (bx, yTop + lblH, boxW, ks + valH);   // circle centred in boxW; value box spans full width
             }
         }
         void diagPair (Rectangle<int> r, ValueSlider& a, Label& al, ValueSlider& b, Label& bl)
