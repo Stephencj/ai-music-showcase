@@ -73,6 +73,33 @@ struct FaderLookAndFeel : public LookAndFeel_V4
 
 inline FaderLookAndFeel& faderLAF() { static FaderLookAndFeel l; return l; }
 
+// A slider whose value box is type-over editable and that supports right-click
+// copy / paste of its value onto any other knob (shared clipboard).
+struct ValueSlider : public Slider
+{
+    static double& clipVal() { static double v = 0.0; return v; }
+    static bool&   hasClip() { static bool b = false; return b; }
+
+    void mouseDown (const MouseEvent& e) override
+    {
+        if (e.mods.isPopupMenu())
+        {
+            PopupMenu m;
+            m.addItem (1, "Copy value");
+            m.addItem (2, "Paste value", hasClip());
+            m.showMenuAsync (PopupMenu::Options().withTargetComponent (this),
+                [safe = Component::SafePointer<ValueSlider> (this)] (int r)
+                {
+                    if (safe == nullptr) return;
+                    if (r == 1) { clipVal() = safe->getValue(); hasClip() = true; }
+                    else if (r == 2 && hasClip()) safe->setValue (clipVal(), sendNotification);
+                });
+            return;
+        }
+        Slider::mouseDown (e);
+    }
+};
+
 //==============================================================================
 class MainComponent : public Component,
                       private Thread
@@ -264,8 +291,8 @@ private:
     //== a per-track channel column (all controls as knobs) ====================
     struct ChannelColumn : public Component
     {
-        // Diagonal group sizes: a PAIR fits one cell, a TRIPLE spans two cells.
-        static constexpr int SH = 20, perRow = 3, colW = 232, DPH = 92, DTH = 104, CHAN = 210;
+        // Groups are ~one original knob tall; sections fill the full (thinner) column width.
+        static constexpr int SH = 20, perRow = 3, colW = 188, DPH = 82, DTH = 82, CHAN = 200;
 
         ChannelColumn (TrackEntry e, std::function<void()> onRegen) : entry (e)
         {
@@ -393,39 +420,37 @@ private:
             {
                 if (entry.synth) templateBox.setBounds (r.removeFromTop (24).reduced (2, 1));
                 auto row = r.removeFromTop (DPH);
-                const int cw = row.getWidth() / perRow;
                 if (entry.synth)
                 {
+                    const int cw = row.getWidth() / 3;
                     diagPair (row.removeFromLeft (cw), instrKnob[0], instrLbl_[0], instrKnob[1], instrLbl_[1]);
                     diagPair (row.removeFromLeft (cw), instrKnob[2], instrLbl_[2], instrKnob[3], instrLbl_[3]);
-                    diagPair (row.removeFromLeft (cw), instrKnob[4], instrLbl_[4], instrKnob[5], instrLbl_[5]);
+                    diagPair (row,                     instrKnob[4], instrLbl_[4], instrKnob[5], instrLbl_[5]);
                 }
                 else if (entry.drum)
-                    diagPair (row.removeFromLeft (cw), instrKnob[0], instrLbl_[0], instrKnob[1], instrLbl_[1]);
+                    diagPair (row, instrKnob[0], instrLbl_[0], instrKnob[1], instrLbl_[1]);
             }
 
             headerRow (r, preampDisc, nullptr, &preampOn);
             if (preampOpen)
             {
-                const int cw = (r.getWidth()) / perRow;
+                auto area = r.removeFromTop (DTH);                  // full width
                 if (entry.synth)
                 {
-                    auto area = r.removeFromTop (DTH).removeFromLeft (cw * 2);
-                    Slider* k[3] = { &preampKnob[0], &preampKnob[1], &levelKnob };
-                    Label*  l[3] = { &preampLbl[0],  &preampLbl[1],  &levelLbl  };
+                    ValueSlider* k[3] = { &preampKnob[0], &preampKnob[1], &levelKnob };
+                    Label*       l[3] = { &preampLbl[0],  &preampLbl[1],  &levelLbl  };
                     diagN (area, k, l, 3);
                 }
                 else
-                    diagPair (r.removeFromTop (DPH).removeFromLeft (cw), preampKnob[0], preampLbl[0], preampKnob[1], preampLbl[1]);
+                    diagPair (area, preampKnob[0], preampLbl[0], preampKnob[1], preampLbl[1]);
             }
 
             headerRow (r, eqDisc, nullptr, &eqOn);
             if (eqOpen)
             {
-                const int cw = r.getWidth() / perRow;
-                auto area = r.removeFromTop (DTH).removeFromLeft (cw * 2);
-                Slider* k[3] = { &eqKnob[0], &eqKnob[1], &eqKnob[2] };
-                Label*  l[3] = { &eqLbl[0],  &eqLbl[1],  &eqLbl[2]  };
+                auto area = r.removeFromTop (DTH);                  // full width
+                ValueSlider* k[3] = { &eqKnob[0], &eqKnob[1], &eqKnob[2] };
+                Label*       l[3] = { &eqLbl[0],  &eqLbl[1],  &eqLbl[2]  };
                 diagN (area, k, l, 3);
             }
 
@@ -433,9 +458,9 @@ private:
             if (compOpen)
             {
                 auto row = r.removeFromTop (DPH);
-                const int cw = row.getWidth() / perRow;
-                diagPair (row.removeFromLeft (cw), compKnob[0], compLbl[0], compKnob[1], compLbl[1]);
-                diagPair (row.removeFromLeft (cw), compKnob[2], compLbl[2], compKnob[3], compLbl[3]);
+                const int half = row.getWidth() / 2;
+                diagPair (row.removeFromLeft (half), compKnob[0], compLbl[0], compKnob[1], compLbl[1]);
+                diagPair (row,                       compKnob[2], compLbl[2], compKnob[3], compLbl[3]);
             }
 
             chanLbl.setBounds (r.removeFromTop (SH));
@@ -484,8 +509,8 @@ private:
             for (int i = 0; i < 4; ++i) { compKnob[i].setVisible (compOpen); compLbl[i].setVisible (compOpen); }
         }
 
-        // a normal knob (rotary + value box) — used for Pan
-        void addKnob (Slider& s, Label& l, const String& nm, double lo, double hi, double step, std::function<void()> cb)
+        // a normal knob (rotary + editable value box) — used for Pan
+        void addKnob (ValueSlider& s, Label& l, const String& nm, double lo, double hi, double step, std::function<void()> cb)
         {
             l.setText (nm, dontSendNotification); l.setJustificationType (Justification::centred); l.setFont (FontOptions (11.0f)); addAndMakeVisible (l);
             s.setSliderStyle (Slider::RotaryVerticalDrag);
@@ -497,13 +522,14 @@ private:
             addAndMakeVisible (s);
         }
 
-        // a compact knob for diagonal groups (no value box; just the faux knob + a small name)
-        void addGroupKnob (Slider& s, Label& l, const String& nm, double lo, double hi, double step, std::function<void()> cb)
+        // a compact knob for diagonal groups: faux knob + small name + editable value box
+        void addGroupKnob (ValueSlider& s, Label& l, const String& nm, double lo, double hi, double step, std::function<void()> cb)
         {
             l.setText (nm, dontSendNotification); l.setJustificationType (Justification::centred); l.setFont (FontOptions (10.0f)); l.setColour (Label::textColourId, Colour (0xffaab2c8)); addAndMakeVisible (l);
             s.setSliderStyle (Slider::RotaryVerticalDrag);
             s.setRange (lo, hi, step);
-            s.setTextBoxStyle (Slider::NoTextBox, false, 0, 0);
+            s.setTextBoxStyle (Slider::TextBoxBelow, false, 46, 13);
+            s.setColour (Slider::textBoxOutlineColourId, Colours::transparentBlack);
             s.setLookAndFeel (&knobLAF());
             s.onValueChange = std::move (cb);
             addAndMakeVisible (s);
@@ -532,23 +558,26 @@ private:
 
         // ----- the reusable "diagonal group": N knobs from top-left to bottom-right,
         //       slightly overlapping, labelled above each. 2 knobs fit one cell, 3 fit two.
-        void diagN (Rectangle<int> r, Slider** k, Label** l, int count)
+        void diagN (Rectangle<int> r, ValueSlider** k, Label** l, int count)
         {
-            const int lblH = 11;
-            const int ks = (count <= 2) ? jmin (r.getWidth() * 64 / 100, r.getHeight() * 58 / 100)
-                                        : jmin (r.getWidth() * 40 / 100, r.getHeight() * 58 / 100);
+            const int lblH = 11, valH = 13;                 // each knob = name + circle + value box
+            const int stackExtra = lblH + valH;
+            int ks = (count <= 2) ? jmin (r.getWidth() * 50 / 100, r.getHeight() - stackExtra - 16)
+                                  : jmin (r.getWidth() * 36 / 100, r.getHeight() - stackExtra - 16);
+            ks = jmax (20, ks);
+            const int stack = ks + stackExtra;
             for (int i = 0; i < count; ++i)
             {
                 const double t = (count <= 1) ? 0.0 : (double) i / (count - 1);
                 const int x = r.getX() + roundToInt (t * (r.getWidth() - ks));
-                const int y = r.getY() + lblH + roundToInt (t * (r.getHeight() - lblH - ks));
-                l[i]->setBounds (x, y - lblH, ks, lblH);
-                k[i]->setBounds (x, y, ks, ks);
+                const int yTop = r.getY() + roundToInt (t * (r.getHeight() - stack));
+                l[i]->setBounds (x, yTop, ks, lblH);
+                k[i]->setBounds (x, yTop + lblH, ks, ks + valH);   // circle + value box below
             }
         }
-        void diagPair (Rectangle<int> r, Slider& a, Label& al, Slider& b, Label& bl)
+        void diagPair (Rectangle<int> r, ValueSlider& a, Label& al, ValueSlider& b, Label& bl)
         {
-            Slider* k[2] = { &a, &b }; Label* l[2] = { &al, &bl };
+            ValueSlider* k[2] = { &a, &b }; Label* l[2] = { &al, &bl };
             diagN (r, k, l, 2);
         }
 
@@ -559,12 +588,12 @@ private:
         bool instrOpen = true, preampOpen = false, eqOpen = false, compOpen = false;
         ComboBox templateBox;
         te::AutomatableParameter::Ptr instrParam[6];
-        Slider instrKnob[6]; Label instrLbl_[6]; int nInstr = 0;
-        Slider levelKnob; Label levelLbl;
-        ToggleButton preampOn; Slider preampKnob[2]; Label preampLbl[2];
-        ToggleButton eqOn;     Slider eqKnob[3];     Label eqLbl[3];
-        ToggleButton compOn;   Slider compKnob[4];   Label compLbl[4];
-        Slider volFader, panKnob; Label volLbl, panLbl;
+        ValueSlider instrKnob[6]; Label instrLbl_[6]; int nInstr = 0;
+        ValueSlider levelKnob; Label levelLbl;
+        ToggleButton preampOn; ValueSlider preampKnob[2]; Label preampLbl[2];
+        ToggleButton eqOn;     ValueSlider eqKnob[3];     Label eqLbl[3];
+        ToggleButton compOn;   ValueSlider compKnob[4];   Label compLbl[4];
+        ValueSlider volFader, panKnob; Label volLbl, panLbl;
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChannelColumn)
     };
 
@@ -866,7 +895,7 @@ private:
     Timeline   timeline;
     Viewport   mixerViewport;  Component mixerContainer;
     OwnedArray<ChannelColumn> columns;
-    Slider     masterKnob;
+    ValueSlider masterKnob;
     TextButton playButton, stopButton, renderButton, saveButton, loadButton, scanButton;
     TextEditor info;
 
