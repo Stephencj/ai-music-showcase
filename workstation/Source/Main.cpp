@@ -18,6 +18,35 @@ namespace te = tracktion;
 using namespace juce;
 
 //==============================================================================
+// A clean "faux knob": a wide circle with a single pointer from the centre to
+// the current value. Nothing else.
+struct KnobLookAndFeel : public LookAndFeel_V4
+{
+    void drawRotarySlider (Graphics& g, int x, int y, int w, int h,
+                           float pos, float startAngle, float endAngle, Slider&) override
+    {
+        auto area = Rectangle<int> (x, y, w, h).toFloat().reduced (3.0f);
+        const float d = jmin (area.getWidth(), area.getHeight());
+        const float r = d * 0.5f;
+        const auto centre = area.getCentre();
+        const float angle = startAngle + pos * (endAngle - startAngle);
+
+        g.setColour (Colour (0xff32363f));                                   // body
+        g.fillEllipse (centre.x - r, centre.y - r, d, d);
+        g.setColour (Colour (0xff5b6477));                                   // rim
+        g.drawEllipse (centre.x - r, centre.y - r, d, d, 1.6f);
+
+        const auto tip = centre.getPointOnCircumference (r - 4.0f, angle);   // value pointer
+        g.setColour (Colour (0xffcdd6ff));
+        g.drawLine ({ centre, tip }, 2.4f);
+        g.setColour (Colour (0xff8fa0ff));
+        g.fillEllipse (centre.x - 2.5f, centre.y - 2.5f, 5.0f, 5.0f);        // centre hub
+    }
+};
+
+inline KnobLookAndFeel& knobLAF() { static KnobLookAndFeel l; return l; }
+
+//==============================================================================
 class MainComponent : public Component,
                       private Thread
 {
@@ -75,6 +104,7 @@ public:
         masterKnob.setSliderStyle (Slider::RotaryVerticalDrag);
         masterKnob.setRange (-48.0, 6.0, 0.1);
         masterKnob.setTextBoxStyle (Slider::TextBoxRight, false, 50, 22);
+        masterKnob.setLookAndFeel (&knobLAF());
         masterKnob.onValueChange = [this] { if (auto m = edit->getMasterVolumePlugin()) m->setVolumeDb ((float) masterKnob.getValue()); };
         addAndMakeVisible (masterKnob);
 
@@ -85,7 +115,7 @@ public:
         addAndMakeVisible (info);
 
         buildInstrumentAndPhrase();
-        setSize (1120, 880);
+        setSize (1120, 940);
     }
 
     ~MainComponent() override
@@ -207,7 +237,7 @@ private:
     //== a per-track channel column (all controls as knobs) ====================
     struct ChannelColumn : public Component
     {
-        static constexpr int KH = 56, SH = 20, perRow = 3, colW = 232;
+        static constexpr int KH = 78, SH = 20, perRow = 3, colW = 232;
 
         ChannelColumn (TrackEntry e, std::function<void()> onRegen) : entry (e)
         {
@@ -339,7 +369,9 @@ private:
             l.setText (nm, dontSendNotification); l.setJustificationType (Justification::centred); l.setFont (FontOptions (11.0f)); addAndMakeVisible (l);
             s.setSliderStyle (Slider::RotaryVerticalDrag);
             s.setRange (lo, hi, step);
-            s.setTextBoxStyle (Slider::TextBoxBelow, false, 60, 15);
+            s.setTextBoxStyle (Slider::TextBoxBelow, false, 64, 14);
+            s.setColour (Slider::textBoxOutlineColourId, Colours::transparentBlack);
+            s.setLookAndFeel (&knobLAF());
             s.onValueChange = std::move (cb);
             addAndMakeVisible (s);
         }
