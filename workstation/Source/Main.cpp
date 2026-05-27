@@ -85,6 +85,25 @@ public:
             makeSlider (macroSlider[i], macroLbl[i], mn[i], 0.0, 1.0, 0.001,
                         [this, i] { if (auto p = paramFor (i)) p->setParameter ((float) macroSlider[i].getValue(), sendNotification); });
 
+        // Channel section (volume + pan) at the very top of the strip
+        chanTitle.setText ("Channel", dontSendNotification);
+        chanTitle.setFont (FontOptions (15.0f, Font::bold));
+        stripContent.addAndMakeVisible (chanTitle);
+        makeSlider (volSlider, volLbl, "Volume dB", -48.0, 6.0, 0.1,
+                    [this] { if (auto* t = curTrack()) if (auto* v = t->getVolumePlugin()) v->setVolumeDb ((float) volSlider.getValue()); });
+        makeSlider (panSlider, panLbl, "Pan", -1.0, 1.0, 0.01,
+                    [this] { if (auto* t = curTrack()) if (auto* v = t->getVolumePlugin()) v->setPan ((float) panSlider.getValue()); });
+
+        // Master volume (lives by the transport, not in the per-track strip)
+        masterLbl.setText ("Master", dontSendNotification);
+        masterLbl.setJustificationType (Justification::centredRight);
+        addAndMakeVisible (masterLbl);
+        masterSlider.setSliderStyle (Slider::LinearHorizontal);
+        masterSlider.setRange (-48.0, 6.0, 0.1);
+        masterSlider.setTextBoxStyle (Slider::TextBoxRight, false, 50, 22);
+        masterSlider.onValueChange = [this] { if (auto m = edit->getMasterVolumePlugin()) m->setVolumeDb ((float) masterSlider.getValue()); };
+        addAndMakeVisible (masterSlider);
+
         // Preamp section (first in the chain) — toggle doubles as header / on-off
         preampOn.setButtonText ("Preamp");
         preampOn.onClick = [this] { if (auto* pp = curPreamp()) pp->setEnabled (preampOn.getToggleState()); };
@@ -114,7 +133,9 @@ public:
         { b.setButtonText (t); b.onClick = std::move (fn); addAndMakeVisible (b); };
         button (playButton, "Play", [this] { playFromStart(); });
         button (stopButton, "Stop", [this] { stopPlayback(); });
-        button (renderButton, "Render WAV", [this] { renderWav(); });
+        button (renderButton, "Render", [this] { renderWav(); });
+        button (saveButton, "Save", [this] { saveProject(); });
+        button (loadButton, "Load", [this] { loadProject(); });
         button (scanButton, "Scan AU", [this] { startScan(); });
 
         info.setMultiLine (true); info.setReadOnly (true);
@@ -123,8 +144,11 @@ public:
                       dontSendNotification);
         addAndMakeVisible (info);
 
+        timeline.getEdit = [this] { return edit.get(); };
+        addAndMakeVisible (timeline);
+
         buildInstrumentAndPhrase();
-        setSize (980, 760);
+        setSize (980, 820);
     }
 
     ~MainComponent() override
@@ -146,12 +170,17 @@ public:
         fb (keyLbl, keyEdit, 30, 44); fb (tempoLbl, tempoEdit, 44, 50);
         fb (barsLbl, barsEdit, 34, 44); fb (genreLbl, genreEdit, 44, 150);
         generateButton.setBounds (genRow.removeFromLeft (130));
-        r.removeFromTop (12);
+        r.removeFromTop (10);
+
+        timeline.setBounds (r.removeFromTop (120));
+        r.removeFromTop (10);
 
         auto bottom = r.removeFromBottom (150);
         auto transport = bottom.removeFromTop (30);
-        for (auto* b : { &playButton, &stopButton, &renderButton, &scanButton })
-        { b->setBounds (transport.removeFromLeft (96)); transport.removeFromLeft (6); }
+        for (auto* b : { &playButton, &stopButton, &renderButton, &saveButton, &loadButton, &scanButton })
+        { b->setBounds (transport.removeFromLeft (80)); transport.removeFromLeft (5); }
+        masterSlider.setBounds (transport.removeFromRight (150));
+        masterLbl.setBounds (transport.removeFromRight (56));
         bottom.removeFromTop (8);
         info.setBounds (bottom);
 
@@ -197,15 +226,17 @@ private:
     {
         TrackRow (int i, std::function<void(int)> onSel) : index (i), select (std::move (onSel))
         {
-            mute.setButtonText ("M"); mute.setClickingTogglesState (true); addAndMakeVisible (mute);
-            solo.setButtonText ("S"); solo.setClickingTogglesState (true); addAndMakeVisible (solo);
+            mute.setButtonText ("M");  mute.setClickingTogglesState (true);  addAndMakeVisible (mute);
+            solo.setButtonText ("S");  solo.setClickingTogglesState (true);  addAndMakeVisible (solo);
+            regen.setButtonText ("Regen"); addAndMakeVisible (regen);
         }
         void mouseDown (const MouseEvent&) override { if (select) select (index); }
         void resized() override
         {
             auto a = getLocalBounds().reduced (4);
             solo.setBounds (a.removeFromRight (26)); a.removeFromRight (4);
-            mute.setBounds (a.removeFromRight (26));
+            mute.setBounds (a.removeFromRight (26)); a.removeFromRight (6);
+            regen.setBounds (a.removeFromRight (54));
             textArea = a;
         }
         void paint (Graphics& g) override
@@ -216,7 +247,62 @@ private:
         }
         int index; std::function<void(int)> select;
         bool selected = false; String text; Rectangle<int> textArea;
-        TextButton mute, solo;
+        TextButton mute, solo, regen;
+    };
+
+    //== timeline: lanes + clips + moving playhead =============================
+    struct Timeline : public Component, private Timer
+    {
+        std::function<te::Edit*()> getEdit;
+        Timeline() { startTimerHz (30); }
+        ~Timeline() override { stopTimer(); }
+        void timerCallback() override { repaint(); }
+
+        void paint (Graphics& g) override
+        {
+            g.fillAll (Colour (0xff1b1b1b));
+            auto* edit = getEdit ? getEdit() : nullptr;
+            if (edit == nullptr) return;
+            auto tracks = tracktion::getAudioTracks (*edit);
+            const int n = tracks.size();
+            if (n == 0) return;
+
+            const double bpm = edit->tempoSequence.getTempo (0) != nullptr ? edit->tempoSequence.getTempo (0)->getBpm() : 120.0;
+            auto secToBeat = [bpm] (double s) { return s * bpm / 60.0; };
+
+            double totalBeats = 8.0;
+            for (auto* t : tracks)
+                for (auto* c : t->getClips())
+                    totalBeats = juce::jmax (totalBeats, secToBeat (c->getPosition().getEnd().inSeconds()));
+
+            const int labelW = 72;
+            const float laneH = (float) getHeight() / (float) n;
+            const float trackW = (float) (getWidth() - labelW);
+            auto beatToX = [&] (double b) { return labelW + (float) (b / juce::jmax (1.0, totalBeats)) * trackW; };
+
+            for (int i = 0; i < n; ++i)
+            {
+                const float y = i * laneH;
+                g.setColour ((i % 2) ? Colour (0xff242424) : Colour (0xff1f1f1f));
+                g.fillRect (0.0f, y, (float) getWidth(), laneH);
+                g.setColour (Colours::lightgrey); g.setFont (FontOptions (12.0f));
+                g.drawText (tracks[i]->getName(), 5, (int) y, labelW - 8, (int) laneH, Justification::centredLeft);
+                g.setColour (Colour (0xff3b5bdb));
+                for (auto* clip : tracks[i]->getClips())
+                {
+                    const auto pos = clip->getPosition();
+                    const float x1 = beatToX (secToBeat (pos.getStart().inSeconds()));
+                    const float x2 = beatToX (secToBeat (pos.getEnd().inSeconds()));
+                    g.fillRoundedRectangle (x1 + 1.0f, y + 3.0f, juce::jmax (2.0f, x2 - x1 - 2.0f), laneH - 6.0f, 3.0f);
+                }
+            }
+
+            const float px = beatToX (secToBeat (edit->getTransport().getPosition().inSeconds()));
+            g.setColour (Colours::yellow);
+            g.drawLine (px, 0.0f, px, (float) getHeight(), 1.5f);
+        }
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Timeline)
     };
 
     void rebuildTrackList()
@@ -231,6 +317,7 @@ private:
             row->mute.onClick = [tr, row] { tr->setMute (row->mute.getToggleState()); };
             row->solo.setToggleState (tr->isSolo (false), dontSendNotification);
             row->solo.onClick = [tr, row] { tr->setSolo (row->solo.getToggleState()); };
+            row->regen.onClick = [this, i] { regenerateTrack (i); };
             row->selected = (i == selected);
             tracksContainer.addAndMakeVisible (row);
             trackRows.add (row);
@@ -270,6 +357,12 @@ private:
         if (hasSynth) templateBox.setSelectedId (synth->getTemplateIndex() + 1, dontSendNotification);
         syncMacrosToUI();
 
+        if (auto* t = curTrack())
+            if (auto* v = t->getVolumePlugin())
+            {
+                volSlider.setValue (v->getVolumeDb(), dontSendNotification);
+                panSlider.setValue (v->getPan(), dontSendNotification);
+            }
         if (auto* pp = curPreamp())
         {
             preampOn.setToggleState (pp->isEnabled(), dontSendNotification);
@@ -295,6 +388,7 @@ private:
     }
 
     bool selValid() const { return selected >= 0 && selected < (int) entries.size(); }
+    te::AudioTrack*       curTrack()  { return selValid() ? entries[(size_t) selected].track  : nullptr; }
     tewk::AIPreampPlugin* curPreamp() { return selValid() ? entries[(size_t) selected].preamp : nullptr; }
     te::EqualiserPlugin*  curEq()     { return selValid() ? entries[(size_t) selected].eq   : nullptr; }
     te::CompressorPlugin* curComp()   { return selValid() ? entries[(size_t) selected].comp : nullptr; }
@@ -355,6 +449,11 @@ private:
           << "    |    Selected: " << (selected >= 0 && selected < (int) entries.size() ? entries[(size_t) selected].role : String ("-")) << "\n";
         s << "Audio out: " << (dev != nullptr ? dev->getName() : String ("(none)"));
         status.setText (s, dontSendNotification);
+    }
+
+    void reloadMaster()
+    {
+        if (auto m = edit->getMasterVolumePlugin()) masterSlider.setValue (m->getVolumeDb(), dontSendNotification);
     }
 
     //== edit building =========================================================
@@ -428,6 +527,7 @@ private:
         selected = 0; synth = sp;
         rebuildTrackList();
         selectTrack (0);
+        reloadMaster();
     }
 
     //== generation ============================================================
@@ -516,6 +616,7 @@ private:
         synth = entries.empty() ? nullptr : entries[0].synth;
         rebuildTrackList();
         if (! entries.empty()) selectTrack (0);
+        reloadMaster();
         refreshStatus();
         info.setText ("Built " + built.joinIntoString (", ") + " @ " + String (tempo, 0) + " bpm. Rendering drums...", dontSendNotification);
 
@@ -575,6 +676,91 @@ private:
                       + " tracks (drums = rendered audio). Click a track for its instrument + EQ + Compressor.", dontSendNotification);
     }
 
+    //== regenerate a single track =============================================
+    void clearTrackClips (te::AudioTrack* track)
+    {
+        juce::Array<te::Clip*> clips (track->getClips());   // copy — we mutate while iterating
+        for (auto* c : clips) c->removeFromParent();
+    }
+
+    void regenerateTrack (int i)
+    {
+        if (i < 0 || i >= (int) entries.size()) return;
+        auto* track = entries[(size_t) i].track;
+        const String role = entries[(size_t) i].role;
+        const int seed = Random::getSystemRandom().nextInt (1000000);
+        info.setText ("Regenerating " + role + "...", dontSendNotification);
+
+        if (role.equalsIgnoreCase ("Drums"))
+        {
+            const auto url = serverBase + "/api/generate-arrangement";
+            const auto payload = makeBody ({ "drums" }, "wav", seed);
+            const auto base = serverBase;
+            Component::SafePointer<MainComponent> safe (this);
+            Thread::launch ([safe, url, payload, base, track]
+            {
+                File wavFile;
+                juce::URL u = juce::URL (url).withPOSTData (payload);
+                auto opts = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
+                                .withExtraHeaders ("Content-Type: application/json").withConnectionTimeoutMs (120000);
+                if (auto s = u.createInputStream (opts))
+                {
+                    auto resp = JSON::parse (s->readEntireStreamAsString());
+                    const String pid = resp.getProperty ("part_id", "").toString();
+                    if (pid.isNotEmpty())
+                    {
+                        juce::URL wu (base + "/api/parts/" + pid + "/part.wav");
+                        auto f = File::getSpecialLocation (File::tempDirectory).getChildFile ("ai_ws_drums_" + pid + ".wav");
+                        if (auto ws = wu.createInputStream (juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress).withConnectionTimeoutMs (120000)))
+                        { MemoryBlock mb; ws->readIntoMemoryBlock (mb); if (mb.getSize() > 0 && f.replaceWithData (mb.getData(), mb.getSize())) wavFile = f; }
+                    }
+                }
+                MessageManager::callAsync ([safe, wavFile, track] { if (safe != nullptr) safe->applyDrumRegen (track, wavFile); });
+            });
+        }
+        else
+        {
+            const auto url = serverBase + "/api/generate-arrangement";
+            const auto payload = makeBody ({ role.toLowerCase() }, "midi", seed);
+            Component::SafePointer<MainComponent> safe (this);
+            Thread::launch ([safe, url, payload, track, role]
+            {
+                var resp;
+                juce::URL u = juce::URL (url).withPOSTData (payload);
+                auto opts = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
+                                .withExtraHeaders ("Content-Type: application/json").withConnectionTimeoutMs (120000);
+                if (auto s = u.createInputStream (opts)) resp = JSON::parse (s->readEntireStreamAsString());
+                MessageManager::callAsync ([safe, resp, track, role] { if (safe != nullptr) safe->applyMelodicRegen (track, role, resp); });
+            });
+        }
+    }
+
+    void applyMelodicRegen (te::AudioTrack* track, const String& role, const var& resp)
+    {
+        if (! resp.isObject()) { info.setText ("Regen failed.", dontSendNotification); return; }
+        var notes;
+        if (auto* tracks = resp.getProperty ("tracks", var()).getArray())
+            if (! tracks->isEmpty()) notes = (*tracks)[0].getProperty ("notes", var());
+
+        clearTrackClips (track);
+        const int n = addNotes (track, role, notes, genBars * 4.0);
+        for (size_t k = 0; k < entries.size(); ++k)
+            if (entries[k].track == track) { entries[k].notes = n; updateRowText ((int) k); }
+        info.setText ("Regenerated " + role + " (" + String (n) + " notes).", dontSendNotification);
+    }
+
+    void applyDrumRegen (te::AudioTrack* track, const File& wav)
+    {
+        if (wav.existsAsFile() && wav.getSize() > 0)
+        {
+            clearTrackClips (track);
+            const auto range = edit->tempoSequence.toTime ({ te::BeatPosition::fromBeats (0.0), te::BeatPosition::fromBeats (genBars * 4.0) });
+            track->insertWaveClip ("Drums", wav, te::ClipPosition { range }, false);
+            info.setText ("Regenerated Drums.", dontSendNotification);
+        }
+        else info.setText ("Drum regen failed.", dontSendNotification);
+    }
+
     //== transport / render ====================================================
     void playFromStart() { auto& t = edit->getTransport(); t.ensureContextAllocated(); t.playFromStart (true); }
     void stopPlayback()  { if (edit) edit->getTransport().stop (false, false); }
@@ -585,6 +771,69 @@ private:
         auto out = File::getSpecialLocation (File::userDesktopDirectory).getChildFile ("AI Workstation.wav");
         const bool ok = te::Renderer::renderToFile (*edit, out, false);
         info.setText (ok ? ("Rendered: " + out.getFullPathName()) : "Render failed.", dontSendNotification);
+    }
+
+    //== save / load ===========================================================
+    void saveProject()
+    {
+        auto fc = std::make_shared<FileChooser> ("Save project",
+                      File::getSpecialLocation (File::userDocumentsDirectory).getChildFile ("song.tracktionedit"),
+                      "*.tracktionedit");
+        fc->launchAsync (FileBrowserComponent::saveMode | FileBrowserComponent::warnAboutOverwriting,
+            [this, fc] (const FileChooser& c)
+            {
+                auto f = c.getResult();
+                if (f == File()) return;
+                const bool ok = te::EditFileOperations (*edit).writeToFile (f, false);
+                info.setText (ok ? ("Saved: " + f.getFullPathName()) : "Save failed.", dontSendNotification);
+            });
+    }
+
+    void loadProject()
+    {
+        auto fc = std::make_shared<FileChooser> ("Load project",
+                      File::getSpecialLocation (File::userDocumentsDirectory), "*.tracktionedit");
+        fc->launchAsync (FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles,
+            [this, fc] (const FileChooser& c)
+            {
+                auto f = c.getResult();
+                if (f == File() || ! f.existsAsFile()) return;
+                stopPlayback();
+                if (auto loaded = te::loadEditFromFile (engine, f))
+                {
+                    edit = std::move (loaded);
+                    rebuildEntriesFromEdit();
+                    info.setText ("Loaded: " + f.getFullPathName(), dontSendNotification);
+                }
+                else info.setText ("Load failed.", dontSendNotification);
+            });
+    }
+
+    // After loading, re-discover each track's instrument + channel-strip plugins.
+    void rebuildEntriesFromEdit()
+    {
+        entries.clear();
+        for (auto* track : te::getAudioTracks (*edit))
+        {
+            TrackEntry e;
+            e.track  = track;
+            e.synth  = track->pluginList.findFirstPluginOfType<tewk::AISynthPlugin>();
+            e.preamp = track->pluginList.findFirstPluginOfType<tewk::AIPreampPlugin>();
+            e.eq     = track->pluginList.findFirstPluginOfType<te::EqualiserPlugin>();
+            e.comp   = track->pluginList.findFirstPluginOfType<te::CompressorPlugin>();
+            e.role   = track->getName();
+            int n = 0; bool midi = false;
+            for (auto* clip : track->getClips())
+                if (auto* mc = dynamic_cast<te::MidiClip*> (clip)) { midi = true; n += mc->getSequence().getNumNotes(); }
+            e.notes = midi ? n : -1;
+            entries.push_back (e);
+        }
+        selected = 0;
+        synth = entries.empty() ? nullptr : entries[0].synth;
+        rebuildTrackList();
+        if (! entries.empty()) selectTrack (0);
+        reloadMaster();
+        refreshStatus();
     }
 
     //== AU scan ===============================================================
@@ -629,6 +878,11 @@ private:
         int y = 0;
         auto row = [&] (Component& l, Component& c) { l.setBounds (0, y, lblW, rh); c.setBounds (lblW + 6, y, w - lblW - 6, rh); y += rh + gap; };
 
+        chanTitle.setBounds (0, y, w, 22); y += 24;
+        row (volLbl, volSlider);
+        row (panLbl, panSlider);
+
+        y += sec;
         instrTitle.setBounds (0, y, w, 22); y += 24;
         templateLbl.setBounds (0, y, lblW, rh); templateBox.setBounds (lblW + 6, y, jmin (160, w - lblW - 6), rh); y += rh + gap;
         for (int i = 0; i < NumMacros; ++i) row (macroLbl[i], macroSlider[i]);
@@ -660,17 +914,20 @@ private:
     TextEditor keyEdit, tempoEdit, barsEdit, genreEdit;
     TextButton generateButton;
 
+    Timeline   timeline;
     Viewport   tracksViewport;     Component tracksContainer;
     OwnedArray<TrackRow> trackRows;
 
     Viewport   stripViewport;      Component stripContent;
+    Label      chanTitle, volLbl, panLbl;  Slider volSlider, panSlider;
+    Label      masterLbl;          Slider masterSlider;
     ComboBox   templateBox;
     Label      macroLbl[NumMacros]; Slider macroSlider[NumMacros];
     ToggleButton preampOn; Label preampLbl[2]; Slider preampSlider[2];
     ToggleButton eqOn;   Label eqLbl[3];   Slider eqSlider[3];
     ToggleButton compOn; Label compLbl[4]; Slider compSlider[4];
 
-    TextButton playButton, stopButton, renderButton, scanButton;
+    TextButton playButton, stopButton, renderButton, saveButton, loadButton, scanButton;
     TextEditor info;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
