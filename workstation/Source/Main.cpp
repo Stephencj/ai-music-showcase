@@ -230,6 +230,7 @@ private:
         tewk::AIPreampPlugin* preamp = nullptr;
         te::EqualiserPlugin* eq = nullptr;
         te::CompressorPlugin* comp = nullptr;
+        te::LevelMeterPlugin* meter = nullptr;         // output level meter
         te::VolumeAndPanPlugin* volPlugin = nullptr;   // track or master/bus fader/pan
         String role; int notes = 0;
         bool isMaster = false;                         // the Master bus channel
@@ -299,6 +300,52 @@ private:
     };
 
     //== a per-track channel column (all controls as knobs) ====================
+    // vertical level meter (L/R peak) with the compressor threshold drawn across it
+    struct LevelMeter : public Component, private Timer
+    {
+        te::LevelMeterPlugin* meter = nullptr;
+        te::CompressorPlugin* comp = nullptr;
+        te::LevelMeasurer::Client client;
+        float lvlL = -100.0f, lvlR = -100.0f;
+
+        LevelMeter() { startTimerHz (30); }
+        ~LevelMeter() override { stopTimer(); detach(); }
+        void detach() { if (meter != nullptr) meter->measurer.removeClient (client); meter = nullptr; }
+        void attach (te::LevelMeterPlugin* m, te::CompressorPlugin* c)
+        {
+            detach(); meter = m; comp = c;
+            if (meter != nullptr) meter->measurer.addClient (client);
+        }
+        void timerCallback() override
+        {
+            lvlL = jmax (lvlL - 1.8f, client.getAndClearAudioLevel (0).dB);
+            lvlR = jmax (lvlR - 1.8f, client.getAndClearAudioLevel (1).dB);
+            repaint();
+        }
+        void paint (Graphics& g) override
+        {
+            auto r = getLocalBounds().toFloat();
+            g.setColour (Colour (0xff1a1c20)); g.fillRoundedRectangle (r, 2.0f);
+            auto dbToY = [&] (float db) { return r.getBottom() - (jlimit (-60.0f, 6.0f, db) + 60.0f) / 66.0f * r.getHeight(); };
+            const float w2 = r.getWidth() * 0.5f;
+            auto bar = [&] (float db, float x, float w)
+            {
+                const float y = dbToY (db);
+                g.setColour (db > -1.0f ? Colours::red : (db > -8.0f ? Colour (0xffe2c044) : Colour (0xff3bdb6c)));
+                g.fillRect (x, y, w, r.getBottom() - y);
+            };
+            bar (lvlL, r.getX() + 1.0f, w2 - 1.5f);
+            bar (lvlR, r.getX() + w2 + 0.5f, w2 - 1.5f);
+            if (comp != nullptr && comp->isEnabled())          // compressor threshold marker
+            {
+                const float y = dbToY (Decibels::gainToDecibels (comp->thresholdGain.getCurrentValue()));
+                g.setColour (Colours::orange);
+                g.drawLine (r.getX(), y, r.getRight(), y, 1.4f);
+            }
+        }
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LevelMeter)
+    };
+
     struct ChannelColumn : public Component
     {
         static constexpr int SH = 22, colW = 172, DPH = 82, DTH = 82;
@@ -429,6 +476,9 @@ private:
             addAndMakeVisible (volFader);
             if (e.volPlugin) { volFader.setValue (e.volPlugin->getVolumeDb(), dontSendNotification); panKnob.setValue (e.volPlugin->getPan(), dontSendNotification); }
 
+            meterComp.attach (e.meter, e.comp);
+            addAndMakeVisible (meterComp);
+
             if (e.isMaster)
             {
                 renderBtn.setButtonText ("Render WAV");
@@ -499,7 +549,9 @@ private:
             panLbl.setBounds (panCol.removeFromTop (12));
             panKnob.setBounds (panCol.withSizeKeepingCentre (jmin (54, panCol.getWidth()), jmin (54, panCol.getHeight())));
             volLbl.setBounds (footer.removeFromTop (12));
-            volFader.setBounds (footer.withSizeKeepingCentre (46, footer.getHeight()));
+            auto meterCol = footer.removeFromRight (16);   // level meter beside the fader
+            meterComp.setBounds (meterCol.reduced (2, 2));
+            volFader.setBounds (footer.withSizeKeepingCentre (40, footer.getHeight()));
         }
 
         // lay the effect sections into fxContent (scrolling area)
@@ -684,6 +736,7 @@ private:
         ToggleButton eqOn;     ValueSlider eqKnob[3];     Label eqLbl[3];
         ToggleButton compOn;   ValueSlider compKnob[4];   Label compLbl[4];
         ValueSlider volFader, panKnob; Label volLbl, panLbl;
+        LevelMeter meterComp;
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChannelColumn)
     };
 
@@ -767,6 +820,8 @@ private:
         m.preamp = ensureMasterPlugin<tewk::AIPreampPlugin> (mpl, tewk::AIPreampPlugin::xmlTypeName);
         m.eq     = ensureMasterPlugin<te::EqualiserPlugin>  (mpl, te::EqualiserPlugin::xmlTypeName);
         m.comp   = ensureMasterPlugin<te::CompressorPlugin> (mpl, te::CompressorPlugin::xmlTypeName);
+        m.meter  = ensureMasterPlugin<te::LevelMeterPlugin> (mpl, te::LevelMeterPlugin::xmlTypeName);
+        if (m.meter) m.meter->setEnabled (true);
         auto* mc = new ChannelColumn (m, [] {});
         mc->onRender = [this] { renderWav(); };
         mixerContainer.addAndMakeVisible (mc);
@@ -822,9 +877,10 @@ private:
         e.preamp = insertPluginOfType<tewk::AIPreampPlugin> (e.track, tewk::AIPreampPlugin::xmlTypeName, baseIndex);
         e.eq     = insertPluginOfType<te::EqualiserPlugin>  (e.track, te::EqualiserPlugin::xmlTypeName,  baseIndex + 1);
         e.comp   = insertPluginOfType<te::CompressorPlugin> (e.track, te::CompressorPlugin::xmlTypeName, baseIndex + 2);
+        e.meter  = insertPluginOfType<te::LevelMeterPlugin> (e.track, te::LevelMeterPlugin::xmlTypeName, baseIndex + 3);
         if (e.preamp) e.preamp->setEnabled (false);
         if (e.eq)     e.eq->setEnabled (false);
-        if (e.comp)   e.comp->setEnabled (false);
+        if (e.comp)   e.comp->setEnabled (false);   // meter stays enabled so it measures
     }
 
     int addNotes (te::AudioTrack* track, const String& name, const var& notes, double minLenBeats)
