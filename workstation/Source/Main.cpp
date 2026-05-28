@@ -161,6 +161,7 @@ public:
         button (saveButton, "Save", [this] { saveProject(); });
         button (loadButton, "Load", [this] { loadProject(); });
         button (settingsButton, "Settings", [this] { showSettings(); });
+        button (addBtn, "+ Add", [this] { showAddMenu(); });   // add channel / bus (mixer toolbar)
 
         // VCR-style transport, placed above the timeline
         auto vcr = [this] (TextButton& b, const char* sym, std::function<void()> fn)
@@ -207,6 +208,10 @@ public:
 
         timeline.setBounds (r.removeFromTop (110));
         r.removeFromTop (8);
+
+        auto mixTop = r.removeFromTop (24);                    // mixer toolbar
+        addBtn.setBounds (mixTop.removeFromLeft (90));
+        r.removeFromTop (4);
 
         mixerViewport.setBounds (r);
         layoutColumns();
@@ -707,6 +712,20 @@ private:
         else if (idx - 1 < (int) buses.size()) track->getOutput().setOutputToTrack (buses[(size_t) (idx - 1)].track);
     }
 
+    void addChannel()
+    {
+        auto* track = getOrInsertAudioTrackAt (te::getAudioTracks (*edit).size());
+        TrackEntry e; e.track = track;
+        e.role = "Channel " + String ((int) entries.size() + 1);
+        track->setName (e.role);
+        e.synth = insertPluginOfType<tewk::AISynthPlugin> (track, tewk::AISynthPlugin::xmlTypeName, 0);
+        if (e.synth) e.synth->selectTemplate (tewk::InstrTemplate::lead);
+        addChannelStrip (e, 1);
+        e.volPlugin = track->getVolumePlugin();
+        entries.push_back (e);
+        rebuildColumns();                       // empty channel — use its Regen button to fill it
+    }
+
     void addBus()
     {
         auto* track = getOrInsertAudioTrackAt (te::getAudioTracks (*edit).size());
@@ -936,8 +955,10 @@ private:
         const String role = entries[(size_t) i].role;
         const int seed = Random::getSystemRandom().nextInt (1000000);
         status.setText ("Regenerating " + role + "...", dontSendNotification);
+        String part = role.toLowerCase();                      // custom channels -> a melody part
+        if (part != "chords" && part != "bass" && part != "melody" && part != "drums") part = "melody";
         const auto url = serverBase + "/api/generate-arrangement";
-        const auto payload = makeBody ({ role.toLowerCase() }, "midi", seed);
+        const auto payload = makeBody ({ part }, "midi", seed);
         Component::SafePointer<MainComponent> safe (this);
         Thread::launch ([safe, url, payload, track, role]
         {
@@ -969,10 +990,18 @@ private:
     void showSettings()
     {
         PopupMenu m;
-        m.addItem (1, "Add Bus");
-        m.addItem (2, "Scan AU instruments");
+        m.addItem (1, "Scan AU instruments");
         m.showMenuAsync (PopupMenu::Options().withTargetComponent (&settingsButton),
-            [this] (int r) { if (r == 1) addBus(); else if (r == 2) startScan(); });
+            [this] (int r) { if (r == 1) startScan(); });
+    }
+
+    void showAddMenu()
+    {
+        PopupMenu m;
+        m.addItem (1, "Add Channel");
+        m.addItem (2, "Add Bus");
+        m.showMenuAsync (PopupMenu::Options().withTargetComponent (&addBtn),
+            [this] (int r) { if (r == 1) addChannel(); else if (r == 2) addBus(); });
     }
 
     void renderWav()
@@ -1063,7 +1092,7 @@ private:
     OwnedArray<ChannelColumn> columns;
     struct Divider : public Component { void paint (Graphics& g) override { g.fillAll (Colour (0xff3c4250)); } };
     Divider    busDivider;
-    TextButton playButton, pauseButton, stopButton, saveButton, loadButton, settingsButton, scanButton;
+    TextButton playButton, pauseButton, stopButton, saveButton, loadButton, settingsButton, scanButton, addBtn;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
