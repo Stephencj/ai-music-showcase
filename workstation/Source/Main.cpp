@@ -785,6 +785,7 @@ private:
         TrackEntry b; b.isBus = true; b.track = track;
         b.role = "Bus " + String ((int) buses.size() + 1);
         track->setName (b.role);
+        track->state.setProperty (juce::Identifier ("mpBus"), true, nullptr);   // persists; identifies buses on load
         addChannelStrip (b, 0);
         b.volPlugin = track->getVolumePlugin();
         track->getOutput().setOutputToDefaultDevice (false);   // bus -> master
@@ -1046,9 +1047,10 @@ private:
     void showSettings()
     {
         PopupMenu m;
-        m.addItem (1, "Scan AU instruments");
+        m.addItem (1, "Export Stems...");
+        m.addItem (2, "Scan AU instruments");
         m.showMenuAsync (PopupMenu::Options().withTargetComponent (&settingsButton),
-            [this] (int r) { if (r == 1) startScan(); });
+            [this] (int r) { if (r == 1) exportStems(); else if (r == 2) startScan(); });
     }
 
     void showAddMenu()
@@ -1066,6 +1068,37 @@ private:
         auto out = File::getSpecialLocation (File::userDesktopDirectory).getChildFile ("Music Producer.wav");
         const bool ok = te::Renderer::renderToFile (*edit, out, false);
         status.setText (ok ? ("Rendered: " + out.getFullPathName()) : "Render failed.", dontSendNotification);
+    }
+
+    void exportStems()
+    {
+        auto fc = std::make_shared<FileChooser> ("Export stems to folder...", File::getSpecialLocation (File::userDesktopDirectory));
+        fc->launchAsync (FileBrowserComponent::openMode | FileBrowserComponent::canSelectDirectories,
+            [this, fc] (const FileChooser& c)
+            {
+                auto dir = c.getResult();
+                if (dir == File()) return;
+                stopPlayback();
+                juce::WavAudioFormat wav;
+                const auto range = te::TimeRange (te::TimePosition(), te::TimePosition::fromSeconds (jmax (1.0, edit->getLength().inSeconds())));
+                int done = 0;
+                auto renderOne = [&] (te::AudioTrack* tr, const String& nm)
+                {
+                    if (tr == nullptr) return;
+                    te::Renderer::Parameters p (*edit);
+                    p.destFile = dir.getChildFile (File::createLegalFileName (nm) + ".wav");
+                    p.audioFormat = &wav;
+                    p.time = range;
+                    p.tracksToDo = te::toBitSet (juce::Array<te::Track*> { tr });
+                    p.bitDepth = 24; p.sampleRateForAudio = 44100.0;
+                    p.usePlugins = true; p.useMasterPlugins = false;
+                    if (te::Renderer::renderToFile ("Stem", p).existsAsFile()) ++done;
+                };
+                for (auto& e : entries) renderOne (e.track, e.role);
+                for (auto& b : buses)   renderOne (b.track, b.role);
+                te::Renderer::renderToFile (*edit, dir.getChildFile ("Master Mix.wav"), false);
+                status.setText ("Exported " + String (done) + " stems + mix → " + dir.getFullPathName(), dontSendNotification);
+            });
     }
 
     void saveProject()
@@ -1100,12 +1133,16 @@ private:
             e.preamp = track->pluginList.findFirstPluginOfType<tewk::AIPreampPlugin>();
             e.eq     = track->pluginList.findFirstPluginOfType<te::EqualiserPlugin>();
             e.comp   = track->pluginList.findFirstPluginOfType<te::CompressorPlugin>();
+            e.meter  = track->pluginList.findFirstPluginOfType<te::LevelMeterPlugin>();
             e.volPlugin = track->getVolumePlugin();
             e.role   = track->getName();
             int n = 0; bool midi = false;
             for (auto* clip : track->getClips()) if (auto* mc = dynamic_cast<te::MidiClip*> (clip)) { midi = true; n += mc->getSequence().getNumNotes(); }
             e.notes = midi ? n : -1;
-            entries.push_back (e);
+            if ((bool) track->state.getProperty (juce::Identifier ("mpBus"), false))
+            { e.isBus = true; buses.push_back (e); }
+            else
+                entries.push_back (e);
         }
         rebuildColumns();
     }
