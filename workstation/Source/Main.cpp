@@ -155,6 +155,7 @@ public:
         mixerViewport.setViewedComponent (&mixerContainer, false);
         mixerViewport.setScrollBarsShown (false, true);   // columns fill height; scroll horizontally
         mixerContainer.addChildComponent (busDivider);    // separator before the bus channels
+        mixerContainer.onPopupRequested = [this] { showAddMenu(); };   // right-click empty mixer → Add menu
 
         addChildComponent (pianoRoll);                    // note editor overlay (hidden until Edit)
         pianoRoll.onClose = [this] { pianoRoll.setVisible (false); };
@@ -297,13 +298,25 @@ private:
             const float laneH = (float) getHeight() / (float) n;
             const float trackW = (float) (getWidth() - labelW);
             auto beatToX = [&] (double b) { return labelW + (float) (b / juce::jmax (1.0, totalBeats)) * trackW; };
-            for (int i = 0; i < n; ++i)
+            for (int i = 0; i < n; ++i)                              // lane backgrounds + names
             {
                 const float y = i * laneH;
                 g.setColour ((i % 2) ? Colour (0xff242424) : Colour (0xff1f1f1f));
                 g.fillRect (0.0f, y, (float) getWidth(), laneH);
                 g.setColour (Colours::lightgrey); g.setFont (FontOptions (12.0f));
                 g.drawText (tracks[i]->getName(), 5, (int) y, labelW - 8, (int) laneH, Justification::centredLeft);
+            }
+            // bar / beat subdivision lines across the lanes
+            for (int b = 0; b <= (int) std::ceil (totalBeats); ++b)
+            {
+                const float x = beatToX ((double) b);
+                const bool barLine = (b % 4) == 0;
+                g.setColour (Colours::white.withAlpha (barLine ? 0.18f : 0.06f));
+                g.drawVerticalLine ((int) x, 0.0f, (float) getHeight());
+            }
+            for (int i = 0; i < n; ++i)                              // clip blocks (on top of lines)
+            {
+                const float y = i * laneH;
                 g.setColour (Colour (0xff3b5bdb));
                 for (auto* clip : tracks[i]->getClips())
                 {
@@ -350,21 +363,32 @@ private:
         {
             auto r = getLocalBounds().toFloat();
             g.setColour (Colour (0xff1a1c20)); g.fillRoundedRectangle (r, 2.0f);
-            auto dbToY = [&] (float db) { return r.getBottom() - (jlimit (-60.0f, 6.0f, db) + 60.0f) / 66.0f * r.getHeight(); };
-            const float w2 = r.getWidth() * 0.5f;
+            const float labelW = 16.0f;
+            auto bars  = r.withTrimmedRight (labelW);
+            auto scale = Rectangle<float> (bars.getRight(), r.getY(), labelW, r.getHeight());
+            auto dbToY = [&] (float db) { return bars.getBottom() - (jlimit (-60.0f, 6.0f, db) + 60.0f) / 66.0f * bars.getHeight(); };
+            const float w2 = bars.getWidth() * 0.5f;
             auto bar = [&] (float db, float x, float w)
             {
                 const float y = dbToY (db);
                 g.setColour (db > -1.0f ? Colours::red : (db > -8.0f ? Colour (0xffe2c044) : Colour (0xff3bdb6c)));
-                g.fillRect (x, y, w, r.getBottom() - y);
+                g.fillRect (x, y, w, bars.getBottom() - y);
             };
-            bar (lvlL, r.getX() + 1.0f, w2 - 1.5f);
-            bar (lvlR, r.getX() + w2 + 0.5f, w2 - 1.5f);
+            bar (lvlL, bars.getX() + 1.0f,        w2 - 1.5f);
+            bar (lvlR, bars.getX() + w2 + 0.5f,   w2 - 1.5f);
             if (comp != nullptr && comp->isEnabled())          // compressor threshold marker
             {
                 const float y = dbToY (Decibels::gainToDecibels (comp->thresholdGain.getCurrentValue()));
                 g.setColour (Colours::orange);
-                g.drawLine (r.getX(), y, r.getRight(), y, 1.4f);
+                g.drawLine (bars.getX(), y, bars.getRight(), y, 1.4f);
+            }
+            g.setColour (Colour (0xff8893a8));                 // dB tick scale
+            g.setFont (FontOptions (8.5f));
+            for (int db : { 0, -6, -12, -24, -48 })
+            {
+                const float y = dbToY ((float) db);
+                g.drawLine (bars.getRight() - 3.0f, y, bars.getRight(), y, 1.0f);
+                g.drawText (String (db), (int) scale.getX(), (int) y - 6, (int) labelW, 12, Justification::centredLeft);
             }
         }
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LevelMeter)
@@ -714,9 +738,9 @@ private:
             panLbl.setBounds (panCol.removeFromTop (12));
             panKnob.setBounds (panCol.withSizeKeepingCentre (jmin (54, panCol.getWidth()), jmin (54, panCol.getHeight())));
             volLbl.setBounds (footer.removeFromTop (12));
-            auto meterCol = footer.removeFromRight (16);   // level meter beside the fader
+            auto meterCol = footer.removeFromRight (30);   // level meter + dB scale beside the fader
             meterComp.setBounds (meterCol.reduced (2, 2));
-            volFader.setBounds (footer.withSizeKeepingCentre (40, footer.getHeight()));
+            volFader.setBounds (footer.withSizeKeepingCentre (36, footer.getHeight()));
         }
 
         // lay the effect sections into fxContent (scrolling area)
@@ -1045,7 +1069,7 @@ private:
         e.preamp = insertPluginOfType<tewk::AIPreampPlugin> (e.track, tewk::AIPreampPlugin::xmlTypeName, baseIndex);
         e.eq     = insertPluginOfType<te::EqualiserPlugin>  (e.track, te::EqualiserPlugin::xmlTypeName,  baseIndex + 1);
         e.comp   = insertPluginOfType<te::CompressorPlugin> (e.track, te::CompressorPlugin::xmlTypeName, baseIndex + 2);
-        e.meter  = insertPluginOfType<te::LevelMeterPlugin> (e.track, te::LevelMeterPlugin::xmlTypeName, baseIndex + 3);
+        e.meter  = insertPluginOfType<te::LevelMeterPlugin> (e.track, te::LevelMeterPlugin::xmlTypeName, 999); // append: post-fader
         if (e.preamp) e.preamp->setEnabled (false);
         if (e.eq)     e.eq->setEnabled (false);
         if (e.comp)   e.comp->setEnabled (false);   // meter stays enabled so it measures
@@ -1387,7 +1411,12 @@ private:
     TextEditor keyEdit, tempoEdit, barsEdit, genreEdit;
     TextButton generateButton;
     Timeline   timeline;
-    Viewport   mixerViewport;  Component mixerContainer;
+    struct MixerArea : public Component
+    {
+        std::function<void()> onPopupRequested;
+        void mouseDown (const MouseEvent& e) override { if (e.mods.isPopupMenu() && onPopupRequested) onPopupRequested(); }
+    };
+    Viewport   mixerViewport;  MixerArea mixerContainer;
     OwnedArray<ChannelColumn> columns;
     struct Divider : public Component { void paint (Graphics& g) override { g.fillAll (Colour (0xff3c4250)); } };
     Divider    busDivider;
