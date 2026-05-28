@@ -124,7 +124,7 @@ public:
         pm.createBuiltInType<tewk::AISynthPlugin>();
         pm.createBuiltInType<tewk::AIPreampPlugin>();
         pm.createBuiltInType<tewk::AIDrumKitPlugin>();
-        engine.getDeviceManager().initialise (2, 2);   // open inputs too, for recording
+        engine.getDeviceManager().initialise (0, 2);   // output-only; mic input is opt-in via Settings
 
         edit = te::Edit::createSingleTrackEdit (engine);
 
@@ -1276,9 +1276,14 @@ private:
     {
         PopupMenu m;
         m.addItem (1, "Export Stems...");
-        m.addItem (2, "Scan AU instruments");
+        m.addItem (2, "Enable Audio Input (for recording)");
+        m.addItem (3, "Scan AU instruments");
         m.showMenuAsync (PopupMenu::Options().withTargetComponent (&settingsButton),
-            [this] (int r) { if (r == 1) exportStems(); else if (r == 2) startScan(); });
+            [this] (int r) {
+                if (r == 1) exportStems();
+                else if (r == 2) { engine.getDeviceManager().initialise (2, 2); rebuildColumns(); status.setText ("Audio input enabled (grant mic permission if asked).", dontSendNotification); }
+                else if (r == 3) startScan();
+            });
     }
 
     void showAddMenu()
