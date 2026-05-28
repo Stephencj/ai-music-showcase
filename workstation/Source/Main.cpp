@@ -157,18 +157,16 @@ public:
 
         auto button = [this] (TextButton& b, const String& t, std::function<void()> fn)
         { b.setButtonText (t); b.onClick = std::move (fn); addAndMakeVisible (b); };
-        button (playButton, "Play", [this] { playFromStart(); });
-        button (stopButton, "Stop", [this] { stopPlayback(); });
-        button (renderButton, "Render", [this] { renderWav(); });
         button (saveButton, "Save", [this] { saveProject(); });
         button (loadButton, "Load", [this] { loadProject(); });
-        button (scanButton, "Scan AU", [this] { startScan(); });
+        button (settingsButton, "Settings", [this] { showSettings(); });
 
-        info.setMultiLine (true); info.setReadOnly (true);
-        info.setFont (FontOptions (Font::getDefaultMonospacedFontName(), 12.0f, Font::plain));
-        info.setText ("Press \"Generate Song\" to build a multi-track arrangement. Each track gets a channel column.",
-                      dontSendNotification);
-        addAndMakeVisible (info);
+        // VCR-style transport, placed above the timeline
+        auto vcr = [this] (TextButton& b, const char* sym, std::function<void()> fn)
+        { b.setButtonText (String (CharPointer_UTF8 (sym))); b.onClick = std::move (fn); addAndMakeVisible (b); };
+        vcr (playButton,  "\xe2\x96\xb6", [this] { transportPlay(); });    // play
+        vcr (pauseButton, "\xe2\x8f\xb8", [this] { transportPause(); });   // pause
+        vcr (stopButton,  "\xe2\x8f\xb9", [this] { transportStop(); });    // stop
 
         buildInstrumentAndPhrase();
         setSize (1120, 940);
@@ -183,8 +181,13 @@ public:
     void resized() override
     {
         auto r = getLocalBounds().reduced (14);
-        header.setBounds (r.removeFromTop (26));
-        status.setBounds (r.removeFromTop (22));
+
+        auto top = r.removeFromTop (30);
+        header.setBounds (top.removeFromLeft (168));
+        saveButton.setBounds (top.removeFromLeft (58)); top.removeFromLeft (4);
+        loadButton.setBounds (top.removeFromLeft (58)); top.removeFromLeft (8);
+        settingsButton.setBounds (top.removeFromLeft (80));
+        status.setBounds (top.reduced (12, 4));
         r.removeFromTop (6);
 
         auto genRow = r.removeFromTop (28);
@@ -193,18 +196,16 @@ public:
         fb (keyLbl, keyEdit, 30, 44); fb (tempoLbl, tempoEdit, 44, 50);
         fb (barsLbl, barsEdit, 34, 44); fb (genreLbl, genreEdit, 44, 150);
         generateButton.setBounds (genRow.removeFromLeft (130));
-        r.removeFromTop (10);
+        r.removeFromTop (8);
+
+        auto tr = r.removeFromTop (28);                        // VCR transport above the timeline
+        playButton.setBounds  (tr.removeFromLeft (42)); tr.removeFromLeft (4);
+        pauseButton.setBounds (tr.removeFromLeft (42)); tr.removeFromLeft (4);
+        stopButton.setBounds  (tr.removeFromLeft (42));
+        r.removeFromTop (6);
 
         timeline.setBounds (r.removeFromTop (110));
-        r.removeFromTop (10);
-
-        auto transport = r.removeFromBottom (34);
-        for (auto* b : { &playButton, &stopButton, &renderButton, &saveButton, &loadButton, &scanButton })
-        { b->setBounds (transport.removeFromLeft (80)); transport.removeFromLeft (5); }
-
-        auto infoArea = r.removeFromBottom (78);
-        info.setBounds (infoArea);
-        r.removeFromBottom (6);
+        r.removeFromTop (8);
 
         mixerViewport.setBounds (r);
         layoutColumns();
@@ -409,8 +410,17 @@ private:
             addAndMakeVisible (volFader);
             if (e.volPlugin) { volFader.setValue (e.volPlugin->getVolumeDb(), dontSendNotification); panKnob.setValue (e.volPlugin->getPan(), dontSendNotification); }
 
+            if (e.isMaster)
+            {
+                renderBtn.setButtonText ("Render WAV");
+                renderBtn.onClick = [this] { if (onRender) onRender(); };
+                addAndMakeVisible (renderBtn);
+            }
+
             if (! e.isMaster) updateVisibility();
         }
+
+        std::function<void()> onRender;   // master only: render the mix
 
         void resized() override
         {
@@ -444,6 +454,11 @@ private:
         {
             footer.reduce (2, 2);
             chanLbl.setBounds (footer.removeFromTop (16));
+            if (entry.isMaster)
+            {
+                renderBtn.setBounds (footer.removeFromTop (26).reduced (2, 1));
+                footer.removeFromTop (6);
+            }
             if (! entry.isMaster)
             {
                 auto ms = footer.removeFromTop (24);
@@ -605,7 +620,7 @@ private:
         int footerTop = 0;
         Label name, chanLbl;
         Viewport fxView; Component fxContent;
-        TextButton mute, solo, regen;
+        TextButton mute, solo, regen, renderBtn;
         Label inLbl, outLbl; ComboBox inBox, outBox;
         TextButton instrDisc, preampDisc, eqDisc, compDisc;
         bool instrOpen = true, preampOpen = false, eqOpen = false, compOpen = false;
@@ -634,6 +649,7 @@ private:
         TrackEntry m; m.isMaster = true; m.role = "Master";
         if (auto mv = edit->getMasterVolumePlugin()) m.volPlugin = mv.get();
         auto* mc = new ChannelColumn (m, [] {});
+        mc->onRender = [this] { renderWav(); };
         mixerContainer.addAndMakeVisible (mc);
         columns.add (mc);
 
@@ -757,7 +773,7 @@ private:
     {
         genSeed = Random::getSystemRandom().nextInt (1000000);
         generateButton.setEnabled (false);
-        info.setText ("Generating arrangement...", dontSendNotification);
+        status.setText ("Generating arrangement...", dontSendNotification);
         const auto url = serverBase + "/api/generate-arrangement";
         const auto payload = makeBody ({ "chords", "bass", "melody", "drums" }, "midi", genSeed);
         Component::SafePointer<MainComponent> safe (this);
@@ -775,7 +791,7 @@ private:
     void onArrangement (const var& resp)
     {
         if (! resp.isObject() || ! resp.hasProperty ("tracks"))
-        { info.setText ("Generation failed (backend on " + serverBase + " not reachable).", dontSendNotification); generateButton.setEnabled (true); return; }
+        { status.setText ("Generation failed (backend on " + serverBase + " not reachable).", dontSendNotification); generateButton.setEnabled (true); return; }
 
         stopPlayback();
         columns.clear();                         // drop old columns before the edit goes away
@@ -793,7 +809,7 @@ private:
         rebuildColumns();
         edit->getTransport().ensureContextAllocated();   // ready to play, but don't auto-start
         generateButton.setEnabled (true);
-        info.setText ("Generated " + String ((int) entries.size()) + " tracks: " + built.joinIntoString (", ") + " @ " + String (tempo, 0) + " bpm. Press Play.", dontSendNotification);
+        status.setText ("Generated " + String ((int) entries.size()) + " tracks: " + built.joinIntoString (", ") + " @ " + String (tempo, 0) + " bpm. Press Play.", dontSendNotification);
     }
 
     //== regenerate one track ==================================================
@@ -805,7 +821,7 @@ private:
         auto* track = entries[(size_t) i].track;
         const String role = entries[(size_t) i].role;
         const int seed = Random::getSystemRandom().nextInt (1000000);
-        info.setText ("Regenerating " + role + "...", dontSendNotification);
+        status.setText ("Regenerating " + role + "...", dontSendNotification);
         const auto url = serverBase + "/api/generate-arrangement";
         const auto payload = makeBody ({ role.toLowerCase() }, "midi", seed);
         Component::SafePointer<MainComponent> safe (this);
@@ -822,24 +838,34 @@ private:
 
     void applyRegen (te::AudioTrack* track, const String& role, const var& resp)
     {
-        if (! resp.isObject()) { info.setText ("Regen failed.", dontSendNotification); return; }
+        if (! resp.isObject()) { status.setText ("Regen failed.", dontSendNotification); return; }
         var notes;
         if (auto* tracks = resp.getProperty ("tracks", var()).getArray()) if (! tracks->isEmpty()) notes = (*tracks)[0].getProperty ("notes", var());
         clearTrackClips (track);
         const int n = addNotes (track, role, notes, genBars * 4.0);
-        info.setText ("Regenerated " + role + " (" + String (n) + " notes).", dontSendNotification);
+        status.setText ("Regenerated " + role + " (" + String (n) + " notes).", dontSendNotification);
     }
 
     //== transport / render / save / load ======================================
-    void playFromStart() { auto& t = edit->getTransport(); t.ensureContextAllocated(); t.playFromStart (true); }
-    void stopPlayback()  { if (edit) edit->getTransport().stop (false, false); }
+    void transportPlay()  { auto& t = edit->getTransport(); t.ensureContextAllocated(); t.play (false); }      // from current position
+    void transportPause() { if (edit) edit->getTransport().stop (false, false); }                              // hold position
+    void transportStop()  { if (edit) { auto& t = edit->getTransport(); t.stop (false, false); t.setPosition (te::TimePosition()); } }
+    void stopPlayback()   { if (edit) edit->getTransport().stop (false, false); }
+
+    void showSettings()
+    {
+        PopupMenu m;
+        m.addItem (1, "Scan AU instruments");
+        m.showMenuAsync (PopupMenu::Options().withTargetComponent (&settingsButton),
+            [this] (int r) { if (r == 1) startScan(); });
+    }
 
     void renderWav()
     {
         stopPlayback();
         auto out = File::getSpecialLocation (File::userDesktopDirectory).getChildFile ("Music Producer.wav");
         const bool ok = te::Renderer::renderToFile (*edit, out, false);
-        info.setText (ok ? ("Rendered: " + out.getFullPathName()) : "Render failed.", dontSendNotification);
+        status.setText (ok ? ("Rendered: " + out.getFullPathName()) : "Render failed.", dontSendNotification);
     }
 
     void saveProject()
@@ -849,7 +875,7 @@ private:
         fc->launchAsync (FileBrowserComponent::saveMode | FileBrowserComponent::warnAboutOverwriting,
             [this, fc] (const FileChooser& c) { auto f = c.getResult(); if (f == File()) return;
                 const bool ok = te::EditFileOperations (*edit).writeToFile (f, false);
-                info.setText (ok ? ("Saved: " + f.getFullPathName()) : "Save failed.", dontSendNotification); });
+                status.setText (ok ? ("Saved: " + f.getFullPathName()) : "Save failed.", dontSendNotification); });
     }
 
     void loadProject()
@@ -858,8 +884,8 @@ private:
         fc->launchAsync (FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles,
             [this, fc] (const FileChooser& c) { auto f = c.getResult(); if (f == File() || ! f.existsAsFile()) return;
                 stopPlayback(); columns.clear();
-                if (auto loaded = te::loadEditFromFile (engine, f)) { edit = std::move (loaded); rebuildEntriesFromEdit(); info.setText ("Loaded: " + f.getFullPathName(), dontSendNotification); }
-                else info.setText ("Load failed.", dontSendNotification); });
+                if (auto loaded = te::loadEditFromFile (engine, f)) { edit = std::move (loaded); rebuildEntriesFromEdit(); status.setText ("Loaded: " + f.getFullPathName(), dontSendNotification); }
+                else status.setText ("Load failed.", dontSendNotification); });
     }
 
     void rebuildEntriesFromEdit()
@@ -884,7 +910,7 @@ private:
     }
 
     //== AU scan ===============================================================
-    void startScan() { if (isThreadRunning()) return; scanButton.setEnabled (false); info.setText ("Scanning Audio Units...\n", dontSendNotification); startThread(); }
+    void startScan() { if (isThreadRunning()) return; scanButton.setEnabled (false); status.setText ("Scanning Audio Units...\n", dontSendNotification); startThread(); }
 
     void run() override
     {
@@ -902,7 +928,8 @@ private:
         ins.sort (true);
         Component::SafePointer<MainComponent> safe (this);
         MessageManager::callAsync ([safe, ins] { if (safe == nullptr) return;
-            safe->info.setText (ins.isEmpty() ? String ("No AU instruments found.") : String (ins.size()) + " AU instrument(s):\n\n" + ins.joinIntoString ("\n"), dontSendNotification);
+            AlertWindow::showMessageBoxAsync (MessageBoxIconType::NoIcon, "Audio Units",
+                ins.isEmpty() ? String ("No AU instruments found.") : String (ins.size()) + " found:\n\n" + ins.joinIntoString ("\n"));
             safe->scanButton.setEnabled (true); });
     }
 
@@ -917,8 +944,7 @@ private:
     Timeline   timeline;
     Viewport   mixerViewport;  Component mixerContainer;
     OwnedArray<ChannelColumn> columns;
-    TextButton playButton, stopButton, renderButton, saveButton, loadButton, scanButton;
-    TextEditor info;
+    TextButton playButton, pauseButton, stopButton, saveButton, loadButton, settingsButton, scanButton;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
