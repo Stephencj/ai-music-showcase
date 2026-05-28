@@ -154,6 +154,7 @@ public:
         addAndMakeVisible (mixerViewport);
         mixerViewport.setViewedComponent (&mixerContainer, false);
         mixerViewport.setScrollBarsShown (false, true);   // columns fill height; scroll horizontally
+        mixerContainer.addChildComponent (busDivider);    // separator before the bus channels
 
         auto button = [this] (TextButton& b, const String& t, std::function<void()> fn)
         { b.setButtonText (t); b.onClick = std::move (fn); addAndMakeVisible (b); };
@@ -661,9 +662,21 @@ private:
     {
         const int w = ChannelColumn::colW;
         const int h = jmax (260, mixerViewport.getHeight() - 2);   // columns fill the mixer height
-        for (int i = 0; i < columns.size(); ++i)
-            columns[i]->setBounds (i * w, 0, w, h);
-        mixerContainer.setSize (jmax (mixerViewport.getWidth(), columns.size() * w), h);
+        const int nTracks = jmin ((int) entries.size(), columns.size());
+        const int nBuses  = jmax (0, columns.size() - nTracks);
+        const int gap = 30;
+
+        int x = 0;
+        for (int i = 0; i < nTracks; ++i) { columns[i]->setBounds (x, 0, w, h); x += w; }
+
+        const int busesW = nBuses * w;
+        const int busStart = jmax (x + gap, mixerViewport.getWidth() - busesW - 2);   // right-align buses
+        for (int j = 0; j < nBuses; ++j) columns[nTracks + j]->setBounds (busStart + j * w, 0, w, h);
+
+        busDivider.setVisible (nBuses > 0 && nTracks > 0);
+        busDivider.setBounds (busStart - gap / 2 - 1, 4, 2, h - 8);
+
+        mixerContainer.setSize (jmax (mixerViewport.getWidth(), busStart + busesW), h);
     }
 
     void refreshStatus()
@@ -944,6 +957,8 @@ private:
     Timeline   timeline;
     Viewport   mixerViewport;  Component mixerContainer;
     OwnedArray<ChannelColumn> columns;
+    struct Divider : public Component { void paint (Graphics& g) override { g.fillAll (Colour (0xff3c4250)); } };
+    Divider    busDivider;
     TextButton playButton, pauseButton, stopButton, saveButton, loadButton, settingsButton, scanButton;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
