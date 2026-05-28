@@ -156,6 +156,9 @@ public:
         mixerViewport.setScrollBarsShown (false, true);   // columns fill height; scroll horizontally
         mixerContainer.addChildComponent (busDivider);    // separator before the bus channels
 
+        addChildComponent (pianoRoll);                    // note editor overlay (hidden until Edit)
+        pianoRoll.onClose = [this] { pianoRoll.setVisible (false); };
+
         auto button = [this] (TextButton& b, const String& t, std::function<void()> fn)
         { b.setButtonText (t); b.onClick = std::move (fn); addAndMakeVisible (b); };
         button (saveButton, "Save", [this] { saveProject(); });
@@ -215,6 +218,24 @@ public:
 
         mixerViewport.setBounds (r);
         layoutColumns();
+
+        if (pianoRoll.isVisible()) pianoRoll.setBounds (getLocalBounds());
+    }
+
+    void openPianoRoll (te::AudioTrack* track)
+    {
+        if (track == nullptr) return;
+        te::MidiClip* mc = nullptr;
+        for (auto* c : track->getClips()) if (auto* m = dynamic_cast<te::MidiClip*> (c)) { mc = m; break; }
+        if (mc == nullptr)   // empty channel: give it a clip to edit
+        {
+            const auto range = edit->tempoSequence.toTime ({ te::BeatPosition::fromBeats (0.0), te::BeatPosition::fromBeats (genBars * 4.0) });
+            mc = dynamic_cast<te::MidiClip*> (track->insertNewClip (te::TrackItem::Type::midi, track->getName(), range, nullptr));
+        }
+        pianoRoll.setClip (mc, &edit->getUndoManager(), genKey, genScale, genProg, genBars, track->getName());
+        pianoRoll.setBounds (getLocalBounds());
+        pianoRoll.setVisible (true);
+        pianoRoll.toFront (true);
     }
 
     void paint (Graphics& g) override { g.fillAll (getLookAndFeel().findColour (ResizableWindow::backgroundColourId)); }
@@ -346,6 +367,130 @@ private:
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LevelMeter)
     };
 
+    // Roman-numeral (e.g. "vi") in a key/scale -> chord name (e.g. "Am").
+    static String chordName (const String& key, const String& scale, const String& roman)
+    {
+        if (roman.trim().isEmpty()) return {};
+        static const char* names[] = { "C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B" };
+        auto noteIdx = [] (const String& k) -> int
+        {
+            static const std::pair<const char*, int> m[] = { {"C",0},{"C#",1},{"DB",1},{"D",2},{"D#",3},{"EB",3},{"E",4},
+                {"F",5},{"F#",6},{"GB",6},{"G",7},{"G#",8},{"AB",8},{"A",9},{"A#",10},{"BB",10},{"B",11} };
+            const auto u = k.toUpperCase();
+            for (auto& e : m) if (u == e.first) return e.second;
+            return 0;
+        };
+        const String core = roman.toUpperCase().retainCharacters ("IV");
+        int degree = 0;
+        if      (core.startsWith ("VII")) degree = 7;
+        else if (core.startsWith ("VI"))  degree = 6;
+        else if (core.startsWith ("IV"))  degree = 4;
+        else if (core.startsWith ("V"))   degree = 5;
+        else if (core.startsWith ("III")) degree = 3;
+        else if (core.startsWith ("II"))  degree = 2;
+        else if (core.startsWith ("I"))   degree = 1;
+        if (degree == 0) return {};
+        const int major[] = { 0,2,4,5,7,9,11 }, minor[] = { 0,2,3,5,7,8,10 };
+        const int* deg = scale.equalsIgnoreCase ("minor") ? minor : major;
+        const int rootSemi = (noteIdx (key) + deg[degree - 1]) % 12;
+        String suffix;
+        if (roman.containsIgnoreCase ("dim") || roman.contains (String::fromUTF8 ("\xc2\xb0"))) suffix = "dim";
+        else if (roman.toLowerCase() == roman) suffix = "m";
+        if (roman.contains ("7")) suffix += "7";
+        return names[rootSemi] + suffix;
+    }
+
+    // Piano-roll editor for one MIDI clip, with the generator's chord changes as headers.
+    struct PianoRoll : public Component
+    {
+        std::function<void()> onClose;
+        te::MidiClip* clip = nullptr;
+        juce::UndoManager* um = nullptr;
+        String key = "C", scale = "major", trackName; StringArray prog; int bars = 8;
+        int loPitch = 48, hiPitch = 72;
+        TextButton closeBtn { "Close" };
+        Label title;
+        static constexpr int topBar = 30, chordH = 22, keyW = 32;
+
+        PianoRoll()
+        {
+            title.setFont (FontOptions (15.0f, Font::bold)); title.setColour (Label::textColourId, Colours::white);
+            addAndMakeVisible (title);
+            closeBtn.onClick = [this] { if (onClose) onClose(); };
+            addAndMakeVisible (closeBtn);
+        }
+        void setClip (te::MidiClip* c, juce::UndoManager* u, const String& k, const String& sc, const StringArray& p, int b, const String& nm)
+        {
+            clip = c; um = u; key = k; scale = sc; prog = p; bars = jmax (1, b);
+            title.setText ("Edit  -  " + nm, dontSendNotification);
+            loPitch = 48; hiPitch = 72;
+            if (clip != nullptr)
+                for (auto* n : clip->getSequence().getNotes()) { loPitch = jmin (loPitch, n->getNoteNumber() - 3); hiPitch = jmax (hiPitch, n->getNoteNumber() + 3); }
+            loPitch = jlimit (0, 116, loPitch); hiPitch = jlimit (loPitch + 12, 127, hiPitch);
+            repaint();
+        }
+        int totalBeats() const { return jmax (1, bars * 4); }
+        float beatW() const   { return (float) (getWidth() - keyW) / (float) totalBeats(); }
+        float rowH() const    { return (float) (getHeight() - topBar - chordH) / (float) jmax (1, hiPitch - loPitch); }
+        float gridTop() const { return (float) (topBar + chordH); }
+        float beatToX (double b) const { return keyW + (float) b * beatW(); }
+        float pitchToY (int p) const   { return gridTop() + (float) (hiPitch - p) * rowH(); }
+
+        void resized() override { title.setBounds (10, 4, getWidth() - 110, 22); closeBtn.setBounds (getWidth() - 84, 4, 74, 22); }
+
+        void paint (Graphics& g) override
+        {
+            g.fillAll (Colour (0xff1b1d22));
+            g.setColour (Colour (0xff232733)); g.fillRect (0, 0, getWidth(), topBar);
+            const float bw = beatW(), rh = rowH();
+
+            for (int p = loPitch; p < hiPitch; ++p)            // key rows
+            {
+                const float y = pitchToY (p + 1);
+                const bool black = juce::Array<int> { 1,3,6,8,10 }.contains (p % 12);
+                g.setColour (black ? Colour (0xff202329) : Colour (0xff262a31)); g.fillRect ((float) keyW, y, (float) (getWidth() - keyW), rh);
+                if (p % 12 == 0) { g.setColour (Colour (0xff8893a8)); g.setFont (FontOptions (9.0f)); g.drawText ("C" + String (p / 12 - 1), 1, (int) y, keyW - 3, (int) rh, Justification::centredRight); }
+            }
+            for (int b = 0; b <= totalBeats(); ++b)            // bar/beat lines
+            { const float x = beatToX (b); g.setColour (Colours::white.withAlpha (b % 4 == 0 ? 0.22f : 0.06f)); g.drawVerticalLine ((int) x, gridTop(), (float) getHeight()); }
+
+            for (int bar = 0; bar < bars; ++bar)               // chord headers
+            {
+                const float x = keyW + bar * 4 * bw;
+                g.setColour ((bar % 2) ? Colour (0xff2b3140) : Colour (0xff262b37)); g.fillRect (x, (float) topBar, 4 * bw, (float) chordH);
+                g.setColour (Colours::white.withAlpha (0.15f)); g.drawVerticalLine ((int) x, (float) topBar, gridTop());
+                g.setColour (Colour (0xffe2c044)); g.setFont (FontOptions (13.0f, Font::bold));
+                g.drawText (prog.isEmpty() ? String() : chordName (key, scale, prog[bar % prog.size()]), (int) x + 5, topBar, (int) (4 * bw) - 7, chordH, Justification::centredLeft);
+            }
+
+            if (clip != nullptr)                               // notes
+                for (auto* n : clip->getSequence().getNotes())
+                {
+                    const float x = beatToX (n->getStartBeat().inBeats());
+                    const float w = jmax (3.0f, (float) n->getLengthBeats().inBeats() * bw);
+                    const float y = pitchToY (n->getNoteNumber());
+                    g.setColour (Colour (0xff5a7bff)); g.fillRoundedRectangle (x + 1.0f, y + 1.0f, w - 2.0f, rh - 2.0f, 2.0f);
+                    g.setColour (Colour (0xff1b2a6b)); g.drawRoundedRectangle (x + 1.0f, y + 1.0f, w - 2.0f, rh - 2.0f, 2.0f, 1.0f);
+                }
+        }
+
+        void mouseDown (const MouseEvent& e) override          // click empty = add note, click note = delete
+        {
+            if (clip == nullptr || um == nullptr || (float) e.y < gridTop() || e.x < keyW) return;
+            const float bw = beatW(), rh = rowH();
+            double beat = jmax (0.0, std::floor (((double) e.x - keyW) / bw * 2.0) / 2.0);   // snap 1/2 beat
+            const int pitch = jlimit (0, 127, hiPitch - (int) (((float) e.y - gridTop()) / rh));
+            auto& seq = clip->getSequence();
+            for (auto* n : seq.getNotes())
+                if (n->getNoteNumber() == pitch && beat >= n->getStartBeat().inBeats() - 1.0e-4 && beat < n->getEndBeat().inBeats())
+                { seq.removeNote (*n, um); repaint(); return; }
+            seq.addNote (pitch, te::BeatPosition::fromBeats (beat), te::BeatDuration::fromBeats (1.0), 90, 0, um);
+            repaint();
+        }
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PianoRoll)
+    };
+
     struct ChannelColumn : public Component
     {
         static constexpr int SH = 22, colW = 172, DPH = 82, DTH = 82;
@@ -371,7 +516,10 @@ private:
             const bool isTrack = (! e.isMaster && ! e.isBus);
 
             if (isTrack)
-            { regen.setButtonText ("Regen"); regen.onClick = onRegen; addAndMakeVisible (regen); }
+            {
+                regen.setButtonText ("Regen"); regen.onClick = onRegen; addAndMakeVisible (regen);
+                editBtn.setButtonText ("Edit"); editBtn.onClick = [this] { if (onEdit) onEdit(); }; addAndMakeVisible (editBtn);
+            }
 
             // Instrument (tracks only)
             if (e.synth != nullptr || e.drum != nullptr)
@@ -499,13 +647,18 @@ private:
         }
 
         std::function<void()> onRender;   // master only: render the mix
+        std::function<void()> onEdit;     // open the piano roll for this track
 
         void resized() override
         {
             auto r = getLocalBounds().reduced (6, 4);
             name.setBounds (r.removeFromTop (24));
-            if (! entry.isMaster)
-                regen.setBounds (r.removeFromTop (22).reduced (1, 1));
+            if (! entry.isMaster && ! entry.isBus)
+            {
+                auto br = r.removeFromTop (22);
+                regen.setBounds (br.removeFromLeft (br.getWidth() / 2 - 2)); br.removeFromLeft (4);
+                editBtn.setBounds (br);
+            }
 
             // pinned footer at the bottom; effects scroll in between
             const int footerH = entry.isMaster ? 170 : 244;
@@ -724,7 +877,7 @@ private:
         bool hasInstr = false;
         Label name, chanLbl;
         Viewport fxView; Component fxContent;
-        TextButton mute, solo, regen, renderBtn;
+        TextButton mute, solo, regen, renderBtn, editBtn;
         Label inLbl, outLbl; ComboBox inBox, outBox;
         TextButton instrDisc, preampDisc, eqDisc, compDisc;
         bool instrOpen = true, preampOpen = false, eqOpen = false, compOpen = false;
@@ -804,6 +957,7 @@ private:
         {
             auto* col = new ChannelColumn (entries[(size_t) i], [this, i] { regenerateTrack (i); });
             auto* track = entries[(size_t) i].track;
+            col->onEdit = [this, track] { openPianoRoll (track); };
             col->setOutputs (outNames, outputIndexOf (track), [this, track] (int idx) { routeTrackOutput (track, idx); });
             mixerContainer.addAndMakeVisible (col);
             columns.add (col);
@@ -986,6 +1140,11 @@ private:
         columns.clear();                         // drop old columns before the edit goes away
         const double tempo = (double) resp.getProperty ("tempo", 120.0);
         genBars = (int) resp.getProperty ("bars", 8);
+        genKey  = resp.getProperty ("key", "C").toString();
+        genScale = resp.getProperty ("scale", "major").toString();
+        genProg.clear();
+        if (auto* pa = resp.getProperty ("progression", var()).getArray())
+            for (auto& pv : *pa) genProg.add (pv.toString());
         edit = te::Edit::createSingleTrackEdit (engine);
         if (auto* t0 = edit->tempoSequence.getTempo (0)) t0->setBpm (tempo);
 
@@ -1176,6 +1335,8 @@ private:
     std::vector<TrackEntry> entries;
     std::vector<TrackEntry> buses;
     int genSeed = 1, genBars = 8;
+    String genKey = "C", genScale = "major";
+    StringArray genProg { "I", "V", "vi", "IV" };
         Label      header, status;
     Label      keyLbl, tempoLbl, barsLbl, genreLbl;
     TextEditor keyEdit, tempoEdit, barsEdit, genreEdit;
@@ -1185,6 +1346,7 @@ private:
     OwnedArray<ChannelColumn> columns;
     struct Divider : public Component { void paint (Graphics& g) override { g.fillAll (Colour (0xff3c4250)); } };
     Divider    busDivider;
+    PianoRoll  pianoRoll;
     TextButton playButton, pauseButton, stopButton, saveButton, loadButton, settingsButton, scanButton, addBtn;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
