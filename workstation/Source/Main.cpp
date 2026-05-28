@@ -124,7 +124,7 @@ public:
         pm.createBuiltInType<tewk::AISynthPlugin>();
         pm.createBuiltInType<tewk::AIPreampPlugin>();
         pm.createBuiltInType<tewk::AIDrumKitPlugin>();
-        engine.getDeviceManager().initialise (0, 2);
+        engine.getDeviceManager().initialise (2, 2);   // open inputs too, for recording
 
         edit = te::Edit::createSingleTrackEdit (engine);
 
@@ -169,9 +169,11 @@ public:
         // VCR-style transport, placed above the timeline
         auto vcr = [this] (TextButton& b, const char* sym, std::function<void()> fn)
         { b.setButtonText (String (CharPointer_UTF8 (sym))); b.onClick = std::move (fn); addAndMakeVisible (b); };
-        vcr (playButton,  "\xe2\x96\xb6", [this] { transportPlay(); });    // play
-        vcr (pauseButton, "\xe2\x8f\xb8", [this] { transportPause(); });   // pause
-        vcr (stopButton,  "\xe2\x8f\xb9", [this] { transportStop(); });    // stop
+        vcr (playButton,   "\xe2\x96\xb6", [this] { transportPlay(); });   // play
+        vcr (pauseButton,  "\xe2\x8f\xb8", [this] { transportPause(); });  // pause
+        vcr (stopButton,   "\xe2\x8f\xb9", [this] { transportStop(); });   // stop
+        vcr (recordButton, "\xe2\x8f\xba", [this] { transportRecord(); }); // record
+        recordButton.setColour (TextButton::textColourOffId, Colours::red);
 
         buildInstrumentAndPhrase();
         setSize (1120, 940);
@@ -204,9 +206,10 @@ public:
         r.removeFromTop (8);
 
         auto tr = r.removeFromTop (28);                        // VCR transport above the timeline
-        playButton.setBounds  (tr.removeFromLeft (42)); tr.removeFromLeft (4);
-        pauseButton.setBounds (tr.removeFromLeft (42)); tr.removeFromLeft (4);
-        stopButton.setBounds  (tr.removeFromLeft (42));
+        playButton.setBounds   (tr.removeFromLeft (42)); tr.removeFromLeft (4);
+        pauseButton.setBounds  (tr.removeFromLeft (42)); tr.removeFromLeft (4);
+        stopButton.setBounds   (tr.removeFromLeft (42)); tr.removeFromLeft (4);
+        recordButton.setBounds (tr.removeFromLeft (42));
         r.removeFromTop (6);
 
         timeline.setBounds (r.removeFromTop (110));
@@ -646,6 +649,15 @@ private:
             outBox.onChange = [this, cb] { if (cb) cb (outBox.getSelectedId() - 1); };
         }
 
+        // Populate the Input menu (tracks only): None + available input devices.
+        void setInputs (const StringArray& names, int currentIndex, std::function<void(int)> cb)
+        {
+            inBox.clear (dontSendNotification);
+            for (int i = 0; i < names.size(); ++i) inBox.addItem (names[i], i + 1);
+            inBox.setSelectedId (currentIndex + 1, dontSendNotification);
+            inBox.onChange = [this, cb] { if (cb) cb (inBox.getSelectedId() - 1); };
+        }
+
         std::function<void()> onRender;   // master only: render the mix
         std::function<void()> onEdit;     // open the piano roll for this track
 
@@ -959,6 +971,7 @@ private:
             auto* track = entries[(size_t) i].track;
             col->onEdit = [this, track] { openPianoRoll (track); };
             col->setOutputs (outNames, outputIndexOf (track), [this, track] (int idx) { routeTrackOutput (track, idx); });
+            col->setInputs (inputNames(), currentInputIdx (track), [this, track] (int idx) { assignTrackInput (track, idx); });
             mixerContainer.addAndMakeVisible (col);
             columns.add (col);
         }
@@ -1198,10 +1211,42 @@ private:
     }
 
     //== transport / render / save / load ======================================
-    void transportPlay()  { auto& t = edit->getTransport(); t.ensureContextAllocated(); t.play (false); }      // from current position
-    void transportPause() { if (edit) edit->getTransport().stop (false, false); }                              // hold position
-    void transportStop()  { if (edit) { auto& t = edit->getTransport(); t.stop (false, false); t.setPosition (te::TimePosition()); } }
-    void stopPlayback()   { if (edit) edit->getTransport().stop (false, false); }
+    void transportPlay()   { auto& t = edit->getTransport(); t.ensureContextAllocated(); t.play (false); }     // from current position
+    void transportPause()  { if (edit) edit->getTransport().stop (false, false); }                             // hold position
+    void transportStop()   { if (edit) { auto& t = edit->getTransport(); t.stop (false, false); t.setPosition (te::TimePosition()); } }
+    void transportRecord() { auto& t = edit->getTransport(); t.ensureContextAllocated(); t.record (false, false); }
+    void stopPlayback()    { if (edit) edit->getTransport().stop (false, false); }
+
+    //== input routing (the channel "In" menu) =================================
+    StringArray inputNames()
+    {
+        StringArray n; n.add ("None");
+        for (auto* inst : edit->getAllInputDevices()) n.add (inst->getInputDevice().getName());
+        return n;
+    }
+    int currentInputIdx (te::AudioTrack* track)
+    {
+        int i = 1;
+        for (auto* inst : edit->getAllInputDevices()) { if (inst->getTargets().contains (track->itemID)) return i; ++i; }
+        return 0;   // None
+    }
+    void assignTrackInput (te::AudioTrack* track, int idx)
+    {
+        if (track == nullptr) return;
+        auto* um = &edit->getUndoManager();
+        edit->getEditInputDevices().clearAllInputs (*track, um);
+        if (idx >= 1)
+        {
+            auto insts = edit->getAllInputDevices();
+            if (idx - 1 < insts.size())
+            {
+                auto* inst = insts[idx - 1];
+                inst->getInputDevice().setEnabled (true);
+                [[ maybe_unused ]] auto r = inst->setTarget (track->itemID, true, um, 0);
+                inst->setRecordingEnabled (track->itemID, true);
+            }
+        }
+    }
 
     void showSettings()
     {
@@ -1347,7 +1392,7 @@ private:
     struct Divider : public Component { void paint (Graphics& g) override { g.fillAll (Colour (0xff3c4250)); } };
     Divider    busDivider;
     PianoRoll  pianoRoll;
-    TextButton playButton, pauseButton, stopButton, saveButton, loadButton, settingsButton, scanButton, addBtn;
+    TextButton playButton, pauseButton, stopButton, recordButton, saveButton, loadButton, settingsButton, scanButton, addBtn;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
