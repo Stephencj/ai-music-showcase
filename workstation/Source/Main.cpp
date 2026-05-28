@@ -629,13 +629,16 @@ private:
                 addAndMakeVisible (mute); addAndMakeVisible (solo);
             }
 
-            // footer: Input / Output (tracks only; outBox filled later via setOutputs)
+            // footer: Audio / MIDI routing (tracks only; populated later via setOutputs / setInputs / setMidiInputs / setMidiOutputs)
             if (isTrack)
             {
-                inLbl.setText ("In", dontSendNotification);   inLbl.setFont (FontOptions (11.0f));  addAndMakeVisible (inLbl);
-                outLbl.setText ("Out", dontSendNotification); outLbl.setFont (FontOptions (11.0f)); addAndMakeVisible (outLbl);
-                inBox.addItem ("None", 1); inBox.setSelectedId (1, dontSendNotification); addAndMakeVisible (inBox);
-                addAndMakeVisible (outBox);
+                auto label = [] (Label& l, const char* t) { l.setText (t, dontSendNotification); l.setFont (FontOptions (11.0f)); };
+                label (inLbl,  "Audio In");   addAndMakeVisible (inLbl);
+                label (outLbl, "Audio Out");  addAndMakeVisible (outLbl);
+                label (midiInLbl,  "MIDI In");  addAndMakeVisible (midiInLbl);
+                label (midiOutLbl, "MIDI Out"); addAndMakeVisible (midiOutLbl);
+                for (auto* c : { &inBox, &outBox, &midiInBox, &midiOutBox })
+                { c->addItem ("None", 1); c->setSelectedId (1, dontSendNotification); addAndMakeVisible (*c); }
             }
 
             // footer: Channel label + Pan + Volume fader (all channel types)
@@ -673,13 +676,29 @@ private:
             outBox.onChange = [this, cb] { if (cb) cb (outBox.getSelectedId() - 1); };
         }
 
-        // Populate the Input menu (tracks only): None + available input devices.
+        // Populate the Input menu (tracks only): None + other channels + hardware input devices.
         void setInputs (const StringArray& names, int currentIndex, std::function<void(int)> cb)
         {
             inBox.clear (dontSendNotification);
             for (int i = 0; i < names.size(); ++i) inBox.addItem (names[i], i + 1);
             inBox.setSelectedId (currentIndex + 1, dontSendNotification);
             inBox.onChange = [this, cb] { if (cb) cb (inBox.getSelectedId() - 1); };
+        }
+
+        // MIDI routing (tracks only): mirror MIDI between channels — symmetric "In ← X" / "Out → X" views of the same link.
+        void setMidiInputs (const StringArray& names, int currentIndex, std::function<void(int)> cb)
+        {
+            midiInBox.clear (dontSendNotification);
+            for (int i = 0; i < names.size(); ++i) midiInBox.addItem (names[i], i + 1);
+            midiInBox.setSelectedId (currentIndex + 1, dontSendNotification);
+            midiInBox.onChange = [this, cb] { if (cb) cb (midiInBox.getSelectedId() - 1); };
+        }
+        void setMidiOutputs (const StringArray& names, int currentIndex, std::function<void(int)> cb)
+        {
+            midiOutBox.clear (dontSendNotification);
+            for (int i = 0; i < names.size(); ++i) midiOutBox.addItem (names[i], i + 1);
+            midiOutBox.setSelectedId (currentIndex + 1, dontSendNotification);
+            midiOutBox.onChange = [this, cb] { if (cb) cb (midiOutBox.getSelectedId() - 1); };
         }
 
         std::function<void()> onRender;   // master only: render the mix
@@ -697,7 +716,9 @@ private:
             }
 
             // pinned footer at the bottom; effects scroll in between
-            const int footerH = entry.isMaster ? 170 : 244;
+            // tracks: mute/solo + 4 routing rows (audio in/out + MIDI in/out) + pan/meter/fader
+            const bool isTrackKind = (! entry.isMaster && ! entry.isBus);
+            const int footerH = entry.isMaster ? 170 : (isTrackKind ? 290 : 200);
             auto footer = r.removeFromBottom (footerH);
             footerTop = footer.getY();
             layoutFooter (footer);
@@ -730,8 +751,20 @@ private:
             {
                 auto ms = footer.removeFromTop (24);
                 mute.setBounds (ms.removeFromLeft (ms.getWidth() / 2 - 2)); ms.removeFromLeft (4); solo.setBounds (ms);
-                auto inR = footer.removeFromTop (22); inLbl.setBounds (inR.removeFromLeft (28)); inBox.setBounds (inR.reduced (1, 1));
-                auto outR = footer.removeFromTop (22); outLbl.setBounds (outR.removeFromLeft (28)); outBox.setBounds (outR.reduced (1, 1));
+            }
+            const bool isTrackKind = (! entry.isMaster && ! entry.isBus);
+            if (isTrackKind)
+            {
+                const int labW = 58;
+                auto row = [&] (Label& l, ComboBox& c) {
+                    auto r2 = footer.removeFromTop (22);
+                    l.setBounds (r2.removeFromLeft (labW));
+                    c.setBounds (r2.reduced (1, 1));
+                };
+                row (inLbl, inBox);
+                row (outLbl, outBox);
+                row (midiInLbl, midiInBox);
+                row (midiOutLbl, midiOutBox);
                 footer.removeFromTop (4);
             }
             auto panCol = footer.removeFromLeft (64);
@@ -914,7 +947,8 @@ private:
         Label name, chanLbl;
         Viewport fxView; Component fxContent;
         TextButton mute, solo, regen, renderBtn, editBtn;
-        Label inLbl, outLbl; ComboBox inBox, outBox;
+        Label inLbl, outLbl, midiInLbl, midiOutLbl;
+        ComboBox inBox, outBox, midiInBox, midiOutBox;
         TextButton instrDisc, preampDisc, eqDisc, compDisc;
         bool instrOpen = true, preampOpen = false, eqOpen = false, compOpen = false;
         ComboBox templateBox;
@@ -939,19 +973,39 @@ private:
         return nullptr;
     }
 
-    int outputIndexOf (te::AudioTrack* track)
+    // Find one of our audio tracks by its EditItemID, encoded as a string in track state.
+    te::AudioTrack* findTrackByItemID (const String& s)
     {
-        if (track != nullptr)
-            if (auto* dest = track->getOutput().getDestinationTrack())
-                for (int i = 0; i < (int) buses.size(); ++i) if (buses[(size_t) i].track == dest) return i + 1;
-        return 0;   // Master / default
+        if (s.isEmpty()) return nullptr;
+        for (auto* tr : te::getAudioTracks (*edit)) if (tr->itemID.toString() == s) return tr;
+        return nullptr;
     }
 
-    void routeTrackOutput (te::AudioTrack* track, int idx)
+    // --- Audio Out picker: Master, then buses, then other channels ----------
+    StringArray audioOutNamesFor (te::AudioTrack* self)
     {
-        if (track == nullptr) return;
-        if (idx <= 0) track->getOutput().setOutputToDefaultDevice (false);
-        else if (idx - 1 < (int) buses.size()) track->getOutput().setOutputToTrack (buses[(size_t) (idx - 1)].track);
+        StringArray n; n.add ("Master");
+        for (auto& b : buses)   n.add (juce::String::fromUTF8 ("→ ") + b.role);
+        for (auto& e : entries) if (e.track != self) n.add (juce::String::fromUTF8 ("→ ") + e.role);
+        return n;
+    }
+    int audioOutIdxFor (te::AudioTrack* self)
+    {
+        if (self == nullptr) return 0;
+        auto* dest = self->getOutput().getDestinationTrack();
+        if (dest == nullptr) return 0;
+        int idx = 1;
+        for (auto& b : buses)   { if (b.track == dest) return idx; ++idx; }
+        for (auto& e : entries) if (e.track != self) { if (e.track == dest) return idx; ++idx; }
+        return 0;
+    }
+    void routeAudioOut (te::AudioTrack* self, int idx)
+    {
+        if (self == nullptr) return;
+        if (idx <= 0) { self->getOutput().setOutputToDefaultDevice (false); return; }
+        int j = 1;
+        for (auto& b : buses)   { if (j == idx) { self->getOutput().setOutputToTrack (b.track); rebuildColumns(); return; } ++j; }
+        for (auto& e : entries) if (e.track != self) { if (j == idx) { self->getOutput().setOutputToTrack (e.track); rebuildColumns(); return; } ++j; }
     }
 
     void addChannel()
@@ -986,16 +1040,15 @@ private:
     {
         columns.clear();
 
-        StringArray outNames; outNames.add ("Master");
-        for (auto& b : buses) outNames.add (b.role);
-
         for (int i = 0; i < (int) entries.size(); ++i)         // track channels (left)
         {
             auto* col = new ChannelColumn (entries[(size_t) i], [this, i] { regenerateTrack (i); });
             auto* track = entries[(size_t) i].track;
             col->onEdit = [this, track] { openPianoRoll (track); };
-            col->setOutputs (outNames, outputIndexOf (track), [this, track] (int idx) { routeTrackOutput (track, idx); });
-            col->setInputs (inputNames(), currentInputIdx (track), [this, track] (int idx) { assignTrackInput (track, idx); });
+            col->setOutputs    (audioOutNamesFor (track),         audioOutIdxFor (track),    [this, track] (int idx) { routeAudioOut (track, idx); });
+            col->setInputs     (audioInNamesFor (track),          audioInIdxFor (track),     [this, track] (int idx) { assignAudioIn (track, idx); });
+            col->setMidiOutputs(midiPickerNamesFor (track, false), midiOutIdxFor (track),     [this, track] (int idx) { setMidiOutLink (track, idx); });
+            col->setMidiInputs (midiPickerNamesFor (track, true),  midiInIdxFor (track),      [this, track] (int idx) { setMidiInLink  (track, idx); });
             mixerContainer.addAndMakeVisible (col);
             columns.add (col);
         }
@@ -1231,6 +1284,7 @@ private:
         if (auto* tracks = resp.getProperty ("tracks", var()).getArray()) if (! tracks->isEmpty()) notes = (*tracks)[0].getProperty ("notes", var());
         clearTrackClips (track);
         const int n = addNotes (track, role, notes, genBars * 4.0);
+        syncAllMidiLinks();        // refresh any tracks mirroring MIDI from this one
         status.setText ("Regenerated " + role + " (" + String (n) + " notes).", dontSendNotification);
     }
 
@@ -1238,38 +1292,221 @@ private:
     void transportPlay()   { auto& t = edit->getTransport(); t.ensureContextAllocated(); t.play (false); }     // from current position
     void transportPause()  { if (edit) edit->getTransport().stop (false, false); }                             // hold position
     void transportStop()   { if (edit) { auto& t = edit->getTransport(); t.stop (false, false); t.setPosition (te::TimePosition()); } }
-    void transportRecord() { auto& t = edit->getTransport(); t.ensureContextAllocated(); t.record (false, false); }
+    void transportRecord()
+    {
+        // If any channel has an internal record source ("Audio In ← Channel X"), bounce that
+        // source into a wave clip on the destination instead of using hardware input.
+        bool didBounce = false;
+        stopPlayback();
+        for (auto& e : entries)
+        {
+            const String srcId = e.track->state.getProperty (mpRecSrcId, {}).toString();
+            if (srcId.isNotEmpty())
+                if (auto* src = findTrackByItemID (srcId))
+                { bounceSourceToTrack (src, e.track); didBounce = true; }
+        }
+        if (didBounce) { status.setText ("Bounced internal sources.", dontSendNotification); rebuildColumns(); return; }
+        // Otherwise: normal hardware-input record.
+        auto& t = edit->getTransport(); t.ensureContextAllocated(); t.record (false, false);
+    }
     void stopPlayback()    { if (edit) edit->getTransport().stop (false, false); }
 
-    //== input routing (the channel "In" menu) =================================
-    StringArray inputNames()
+    //== Audio In picker: None, other channels/buses (internal), then hardware inputs =======
+    // An internal source pipes that channel's output here AND arms a "bounce on Record" capture.
+    static inline const juce::Identifier mpRecSrcId { "mpRecSrcId" };
+
+    StringArray audioInNamesFor (te::AudioTrack* self)
     {
         StringArray n; n.add ("None");
+        for (auto& e : entries) if (e.track != self) n.add (juce::String::fromUTF8 ("← ") + e.role);
+        for (auto& b : buses)   if (b.track != self) n.add (juce::String::fromUTF8 ("← ") + b.role);
         for (auto* inst : edit->getAllInputDevices()) n.add (inst->getInputDevice().getName());
         return n;
     }
-    int currentInputIdx (te::AudioTrack* track)
+    int audioInIdxFor (te::AudioTrack* self)
     {
-        int i = 1;
-        for (auto* inst : edit->getAllInputDevices()) { if (inst->getTargets().contains (track->itemID)) return i; ++i; }
-        return 0;   // None
-    }
-    void assignTrackInput (te::AudioTrack* track, int idx)
-    {
-        if (track == nullptr) return;
-        auto* um = &edit->getUndoManager();
-        edit->getEditInputDevices().clearAllInputs (*track, um);
-        if (idx >= 1)
+        if (self == nullptr) return 0;
+        const String srcId = self->state.getProperty (mpRecSrcId, {}).toString();
+        if (srcId.isNotEmpty())
         {
-            auto insts = edit->getAllInputDevices();
-            if (idx - 1 < insts.size())
+            int idx = 1;
+            for (auto& e : entries) if (e.track != self) { if (e.track->itemID.toString() == srcId) return idx; ++idx; }
+            for (auto& b : buses)   if (b.track != self) { if (b.track->itemID.toString() == srcId) return idx; ++idx; }
+        }
+        int hwBase = 1;
+        for (auto& e : entries) if (e.track != self) ++hwBase;
+        for (auto& b : buses)   if (b.track != self) ++hwBase;
+        int j = hwBase;
+        for (auto* inst : edit->getAllInputDevices()) { if (inst->getTargets().contains (self->itemID)) return j; ++j; }
+        return 0;
+    }
+    void assignAudioIn (te::AudioTrack* self, int idx)
+    {
+        if (self == nullptr) return;
+        auto* um = &edit->getUndoManager();
+        edit->getEditInputDevices().clearAllInputs (*self, um);
+        self->state.removeProperty (mpRecSrcId, nullptr);
+        if (idx <= 0) { rebuildColumns(); return; }
+
+        int j = 1;
+        auto bindInternal = [&] (te::AudioTrack* src) {
+            src->getOutput().setOutputToTrack (self);
+            self->state.setProperty (mpRecSrcId, src->itemID.toString(), nullptr);
+            rebuildColumns();
+        };
+        for (auto& e : entries) if (e.track != self) { if (j == idx) { bindInternal (e.track); return; } ++j; }
+        for (auto& b : buses)   if (b.track != self) { if (j == idx) { bindInternal (b.track); return; } ++j; }
+
+        const int hwIdx = idx - j;
+        auto insts = edit->getAllInputDevices();
+        if (hwIdx >= 0 && hwIdx < insts.size())
+        {
+            auto* inst = insts[hwIdx];
+            inst->getInputDevice().setEnabled (true);
+            [[ maybe_unused ]] auto r = inst->setTarget (self->itemID, true, um, 0);
+            inst->setRecordingEnabled (self->itemID, true);
+        }
+        rebuildColumns();
+    }
+
+    //== MIDI link picker: mirror MIDI clips from a source channel into a destination ========
+    // Stored as "mpMidiSrcId" on the destination track (the one whose MIDI mirrors a source).
+    static inline const juce::Identifier mpMidiSrcId { "mpMidiSrcId" };
+
+    StringArray midiPickerNamesFor (te::AudioTrack* self, bool isIn)
+    {
+        StringArray n; n.add ("None");
+        const auto prefix = isIn ? juce::String::fromUTF8 ("← ") : juce::String::fromUTF8 ("→ ");
+        for (auto& e : entries) if (e.track != self) n.add (prefix + e.role);
+        return n;
+    }
+    // "Where do MY MIDI clips get mirrored TO?" — look for another track whose source = me.
+    int midiOutIdxFor (te::AudioTrack* self)
+    {
+        int idx = 1;
+        for (auto& e : entries) if (e.track != self)
+        {
+            if (e.track->state.getProperty (mpMidiSrcId, {}).toString() == self->itemID.toString()) return idx;
+            ++idx;
+        }
+        return 0;
+    }
+    // "Where do MY MIDI clips come FROM?" — read our own mpMidiSrcId.
+    int midiInIdxFor (te::AudioTrack* self)
+    {
+        const String src = self->state.getProperty (mpMidiSrcId, {}).toString();
+        if (src.isEmpty()) return 0;
+        int idx = 1;
+        for (auto& e : entries) if (e.track != self)
+        {
+            if (e.track->itemID.toString() == src) return idx;
+            ++idx;
+        }
+        return 0;
+    }
+    void clearMidiClipsOn (te::AudioTrack* tr)
+    {
+        if (tr == nullptr) return;
+        juce::Array<te::Clip*> mids;
+        for (auto* c : tr->getClips()) if (dynamic_cast<te::MidiClip*> (c)) mids.add (c);
+        for (auto* c : mids) c->removeFromParent();
+    }
+    void syncMidiClips (te::AudioTrack* src, te::AudioTrack* dst)
+    {
+        if (src == nullptr || dst == nullptr || src == dst) return;
+        clearMidiClipsOn (dst);
+        auto* um = &edit->getUndoManager();
+        for (auto* c : src->getClips()) if (auto* smc = dynamic_cast<te::MidiClip*> (c))
+        {
+            const auto pos = smc->getPosition();
+            const te::TimeRange range (pos.getStart(), pos.getEnd());
+            if (auto dmc = dst->insertMIDIClip ("MIDI Link", range, nullptr))
             {
-                auto* inst = insts[idx - 1];
-                inst->getInputDevice().setEnabled (true);
-                [[ maybe_unused ]] auto r = inst->setTarget (track->itemID, true, um, 0);
-                inst->setRecordingEnabled (track->itemID, true);
+                auto& dseq = dmc->getSequence();
+                for (auto* note : smc->getSequence().getNotes())
+                    dseq.addNote (note->getNoteNumber(), note->getStartBeat(), note->getLengthBeats(),
+                                  note->getVelocity(), 0, um);
             }
         }
+    }
+    void syncAllMidiLinks()
+    {
+        for (auto& e : entries)
+        {
+            const String s = e.track->state.getProperty (mpMidiSrcId, {}).toString();
+            if (s.isNotEmpty()) if (auto* src = findTrackByItemID (s)) syncMidiClips (src, e.track);
+        }
+    }
+    // Set "self's MIDI goes to channel idx" — symmetric to setting that channel's MIDI In ← self.
+    void setMidiOutLink (te::AudioTrack* self, int idx)
+    {
+        // Clear any existing MIDI link FROM self (other tracks whose src is self).
+        for (auto& e : entries) if (e.track != self)
+        {
+            if (e.track->state.getProperty (mpMidiSrcId, {}).toString() == self->itemID.toString())
+            {
+                e.track->state.removeProperty (mpMidiSrcId, nullptr);
+                clearMidiClipsOn (e.track);
+            }
+        }
+        if (idx <= 0) { rebuildColumns(); return; }
+        int j = 1;
+        for (auto& e : entries) if (e.track != self)
+        {
+            if (j == idx)
+            {
+                e.track->state.setProperty (mpMidiSrcId, self->itemID.toString(), nullptr);
+                syncMidiClips (self, e.track);
+                rebuildColumns();
+                return;
+            }
+            ++j;
+        }
+    }
+    // Set "self's MIDI comes from channel idx" — stores src on self.
+    void setMidiInLink (te::AudioTrack* self, int idx)
+    {
+        self->state.removeProperty (mpMidiSrcId, nullptr);
+        clearMidiClipsOn (self);
+        if (idx <= 0) { rebuildColumns(); return; }
+        int j = 1;
+        for (auto& e : entries) if (e.track != self)
+        {
+            if (j == idx)
+            {
+                self->state.setProperty (mpMidiSrcId, e.track->itemID.toString(), nullptr);
+                syncMidiClips (e.track, self);
+                rebuildColumns();
+                return;
+            }
+            ++j;
+        }
+    }
+
+    //== Bounce-on-Record: offline-render source channel to a wave clip on destination =======
+    void bounceSourceToTrack (te::AudioTrack* src, te::AudioTrack* dst)
+    {
+        if (src == nullptr || dst == nullptr) return;
+        auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("MusicProducer/Bounces");
+        dir.createDirectory();
+        auto outFile = dir.getChildFile ("bounce_" + String ((juce::int64) Time::currentTimeMillis()) + ".wav");
+
+        const double len = jmax (1.0, edit->getLength().inSeconds());
+        juce::WavAudioFormat wav;
+        te::Renderer::Parameters p (*edit);
+        p.destFile = outFile;
+        p.audioFormat = &wav;
+        p.time = te::TimeRange (te::TimePosition(), te::TimePosition::fromSeconds (len));
+        p.tracksToDo = te::toBitSet (juce::Array<te::Track*> { src });
+        p.bitDepth = 24; p.sampleRateForAudio = 44100.0;
+        p.usePlugins = true; p.useMasterPlugins = false;
+
+        auto rendered = te::Renderer::renderToFile ("Bounce", p);
+        if (! rendered.existsAsFile()) { status.setText ("Bounce render failed.", dontSendNotification); return; }
+
+        auto clip = dst->insertWaveClip ("Bounce of " + src->getName(), rendered,
+                                         { { te::TimePosition(), te::TimePosition::fromSeconds (len) } }, false);
+        if (clip == nullptr) status.setText ("Bounce: could not insert clip.", dontSendNotification);
     }
 
     void showSettings()
