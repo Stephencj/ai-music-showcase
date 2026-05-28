@@ -225,9 +225,10 @@ private:
         tewk::AIPreampPlugin* preamp = nullptr;
         te::EqualiserPlugin* eq = nullptr;
         te::CompressorPlugin* comp = nullptr;
-        te::VolumeAndPanPlugin* volPlugin = nullptr;   // track or master fader/pan
+        te::VolumeAndPanPlugin* volPlugin = nullptr;   // track or master/bus fader/pan
         String role; int notes = 0;
         bool isMaster = false;                         // the Master bus channel
+        bool isBus = false;                            // a user submix bus
     };
 
     //== timeline ==============================================================
@@ -313,18 +314,18 @@ private:
             addChildComponent (fxView);                  // scrolling effects rack (above the pinned footer)
             fxView.setViewedComponent (&fxContent, false);
             fxView.setScrollBarsShown (true, false);
-            fxView.setVisible (! e.isMaster);
+            fxView.setVisible (true);
 
-            if (! e.isMaster)
+            const bool isTrack = (! e.isMaster && ! e.isBus);
+
+            if (isTrack)
+            { regen.setButtonText ("Regen"); regen.onClick = onRegen; addAndMakeVisible (regen); }
+
+            // Instrument (tracks only)
+            if (e.synth != nullptr || e.drum != nullptr)
             {
-                regen.setButtonText ("Regen"); regen.onClick = onRegen; addAndMakeVisible (regen);
-
-                setupDisclosure (instrDisc,  instrOpen);
-                setupDisclosure (preampDisc, preampOpen);
-                setupDisclosure (eqDisc,     eqOpen);
-                setupDisclosure (compDisc,   compOpen);
-
-                // Instrument — synth: Tone/Shape, Attack/Release, Space/Move (Level -> Preamp). Drum: Tone/Decay.
+                hasInstr = true;
+                setupDisclosure (instrDisc, instrOpen);
                 if (e.synth != nullptr)
                 {
                     for (int i = 0; i < 4; ++i) templateBox.addItem (tewk::AISynthPlugin::templateName (i), i + 1);
@@ -336,53 +337,62 @@ private:
                     nInstr = 6;
                     for (int i = 0; i < nInstr; ++i) { instrParam[i] = mp[i]; bindParamKnob (i, mn[i]); }
                 }
-                else if (e.drum != nullptr)
+                else
                 {
                     const char* mn[2] = { "Tone", "Decay" };
                     te::AutomatableParameter::Ptr mp[2] = { e.drum->tone, e.drum->decay };
                     nInstr = 2;
                     for (int i = 0; i < nInstr; ++i) { instrParam[i] = mp[i]; bindParamKnob (i, mn[i]); }
                 }
+            }
 
-                // Preamp (+ instrument Level for synth)
+            // Preamp / EQ / Compressor — present on tracks, buses AND the master.
+            if (e.preamp != nullptr)
+            {
+                setupDisclosure (preampDisc, preampOpen);
                 preampOn.onClick = [this] { if (entry.preamp) entry.preamp->setEnabled (preampOn.getToggleState()); };
-                if (e.preamp) preampOn.setToggleState (e.preamp->isEnabled(), dontSendNotification);
+                preampOn.setToggleState (e.preamp->isEnabled(), dontSendNotification);
                 fxContent.addAndMakeVisible (preampOn);
                 addGroupKnob (preampKnob[0], preampLbl[0], "Drive",  0, 1, 0.001, [this] { if (entry.preamp) entry.preamp->drive->setParameter  ((float) preampKnob[0].getValue(), sendNotification); });
                 addGroupKnob (preampKnob[1], preampLbl[1], "Output", 0, 1, 0.001, [this] { if (entry.preamp) entry.preamp->output->setParameter ((float) preampKnob[1].getValue(), sendNotification); });
-                if (e.preamp) { preampKnob[0].setValue (e.preamp->drive->getCurrentValue(), dontSendNotification); preampKnob[1].setValue (e.preamp->output->getCurrentValue(), dontSendNotification); }
-                if (e.synth)
+                preampKnob[0].setValue (e.preamp->drive->getCurrentValue(), dontSendNotification);
+                preampKnob[1].setValue (e.preamp->output->getCurrentValue(), dontSendNotification);
+                if (e.synth != nullptr)
                 {
                     addGroupKnob (levelKnob, levelLbl, "Level", 0, 1, 0.001, [this] { entry.synth->level->setParameter ((float) levelKnob.getValue(), sendNotification); });
                     levelKnob.setValue (e.synth->level->getCurrentValue(), dontSendNotification);
                 }
-
-                // EQ
+            }
+            if (e.eq != nullptr)
+            {
+                setupDisclosure (eqDisc, eqOpen);
                 eqOn.onClick = [this] { if (entry.eq) entry.eq->setEnabled (eqOn.getToggleState()); };
-                if (e.eq) eqOn.setToggleState (e.eq->isEnabled(), dontSendNotification);
+                eqOn.setToggleState (e.eq->isEnabled(), dontSendNotification);
                 fxContent.addAndMakeVisible (eqOn);
                 addGroupKnob (eqKnob[0], eqLbl[0], "Low",  -20, 20, 0.1, [this] { if (entry.eq) entry.eq->setLowGain  ((float) eqKnob[0].getValue()); });
                 addGroupKnob (eqKnob[1], eqLbl[1], "Mid",  -20, 20, 0.1, [this] { if (entry.eq) entry.eq->setMidGain1 ((float) eqKnob[1].getValue()); });
                 addGroupKnob (eqKnob[2], eqLbl[2], "High", -20, 20, 0.1, [this] { if (entry.eq) entry.eq->setHighGain ((float) eqKnob[2].getValue()); });
-                if (e.eq) { eqKnob[0].setValue (e.eq->loGain->getCurrentValue(), dontSendNotification); eqKnob[1].setValue (e.eq->midGain1->getCurrentValue(), dontSendNotification); eqKnob[2].setValue (e.eq->hiGain->getCurrentValue(), dontSendNotification); }
-
-                // Compressor
+                eqKnob[0].setValue (e.eq->loGain->getCurrentValue(), dontSendNotification); eqKnob[1].setValue (e.eq->midGain1->getCurrentValue(), dontSendNotification); eqKnob[2].setValue (e.eq->hiGain->getCurrentValue(), dontSendNotification);
+            }
+            if (e.comp != nullptr)
+            {
+                setupDisclosure (compDisc, compOpen);
                 compOn.onClick = [this] { if (entry.comp) entry.comp->setEnabled (compOn.getToggleState()); };
-                if (e.comp) compOn.setToggleState (e.comp->isEnabled(), dontSendNotification);
+                compOn.setToggleState (e.comp->isEnabled(), dontSendNotification);
                 fxContent.addAndMakeVisible (compOn);
                 addGroupKnob (compKnob[0], compLbl[0], "Thresh", -40, 0, 0.5, [this] { applyComp(); });
                 addGroupKnob (compKnob[1], compLbl[1], "Ratio",   1, 20, 0.1, [this] { applyComp(); });
                 addGroupKnob (compKnob[2], compLbl[2], "Attack", 0.3, 200, 0.5, [this] { applyComp(); });
                 addGroupKnob (compKnob[3], compLbl[3], "Release", 10, 300, 1, [this] { applyComp(); });
-                if (e.comp)
-                {
-                    compKnob[0].setValue (Decibels::gainToDecibels (e.comp->thresholdGain.getCurrentValue()), dontSendNotification);
-                    compKnob[1].setValue (1.0 / jmax (0.05f, e.comp->ratio.getCurrentValue()), dontSendNotification);
-                    compKnob[2].setValue (e.comp->attackMs.getCurrentValue(), dontSendNotification);
-                    compKnob[3].setValue (e.comp->releaseMs.getCurrentValue(), dontSendNotification);
-                }
+                compKnob[0].setValue (Decibels::gainToDecibels (e.comp->thresholdGain.getCurrentValue()), dontSendNotification);
+                compKnob[1].setValue (1.0 / jmax (0.05f, e.comp->ratio.getCurrentValue()), dontSendNotification);
+                compKnob[2].setValue (e.comp->attackMs.getCurrentValue(), dontSendNotification);
+                compKnob[3].setValue (e.comp->releaseMs.getCurrentValue(), dontSendNotification);
+            }
 
-                // footer: Mute / Solo
+            // footer: Mute / Solo (tracks + buses)
+            if (! e.isMaster)
+            {
                 mute.setButtonText ("M"); mute.setClickingTogglesState (true);
                 mute.setToggleState (e.track && e.track->isMuted (false), dontSendNotification);
                 mute.onClick = [this] { if (entry.track) entry.track->setMute (mute.getToggleState()); };
@@ -390,16 +400,19 @@ private:
                 solo.setToggleState (e.track && e.track->isSolo (false), dontSendNotification);
                 solo.onClick = [this] { if (entry.track) entry.track->setSolo (solo.getToggleState()); };
                 addAndMakeVisible (mute); addAndMakeVisible (solo);
-
-                // footer: Input / Output routing (Output -> Master for now)
-                inLbl.setText ("In", dontSendNotification);   inLbl.setFont (FontOptions (11.0f));  addAndMakeVisible (inLbl);
-                outLbl.setText ("Out", dontSendNotification); outLbl.setFont (FontOptions (11.0f)); addAndMakeVisible (outLbl);
-                inBox.addItem ("None", 1);   inBox.setSelectedId (1, dontSendNotification);   addAndMakeVisible (inBox);
-                outBox.addItem ("Master", 1); outBox.setSelectedId (1, dontSendNotification); addAndMakeVisible (outBox);
             }
 
-            // footer: Channel label + Pan + Volume fader (bound to track or master)
-            chanLbl.setText (e.isMaster ? "Bus" : "Channel", dontSendNotification); section (chanLbl);
+            // footer: Input / Output (tracks only; outBox filled later via setOutputs)
+            if (isTrack)
+            {
+                inLbl.setText ("In", dontSendNotification);   inLbl.setFont (FontOptions (11.0f));  addAndMakeVisible (inLbl);
+                outLbl.setText ("Out", dontSendNotification); outLbl.setFont (FontOptions (11.0f)); addAndMakeVisible (outLbl);
+                inBox.addItem ("None", 1); inBox.setSelectedId (1, dontSendNotification); addAndMakeVisible (inBox);
+                addAndMakeVisible (outBox);
+            }
+
+            // footer: Channel label + Pan + Volume fader (all channel types)
+            chanLbl.setText (e.isMaster ? "Master" : (e.isBus ? "Bus" : "Channel"), dontSendNotification); section (chanLbl);
             addKnob (panKnob, panLbl, "Pan", -1, 1, 0.01, [this] { if (entry.volPlugin) entry.volPlugin->setPan ((float) panKnob.getValue()); });
             volLbl.setText ("Vol", dontSendNotification); volLbl.setJustificationType (Justification::centred); volLbl.setFont (FontOptions (11.0f)); addAndMakeVisible (volLbl);
             volFader.setSliderStyle (Slider::LinearVertical);
@@ -418,7 +431,16 @@ private:
                 addAndMakeVisible (renderBtn);
             }
 
-            if (! e.isMaster) updateVisibility();
+            updateVisibility();
+        }
+
+        // Populate the Output routing menu (tracks only): Master + buses.
+        void setOutputs (const StringArray& names, int currentIndex, std::function<void(int)> cb)
+        {
+            outBox.clear (dontSendNotification);
+            for (int i = 0; i < names.size(); ++i) outBox.addItem (names[i], i + 1);
+            outBox.setSelectedId (currentIndex + 1, dontSendNotification);
+            outBox.onChange = [this, cb] { if (cb) cb (outBox.getSelectedId() - 1); };
         }
 
         std::function<void()> onRender;   // master only: render the mix
@@ -478,40 +500,51 @@ private:
         // lay the effect sections into fxContent (scrolling area)
         void layoutFx()
         {
-            if (entry.isMaster) { fxContent.setSize (jmax (10, fxView.getWidth()), 0); return; }
             const int w = jmax (40, fxView.getWidth() - (fxView.isVerticalScrollBarShown() ? 12 : 2));
             Rectangle<int> r (0, 0, w, 4000);
 
-            headerRow (r, instrDisc, nullptr);
-            if (instrOpen)
+            if (hasInstr)
             {
-                if (entry.synth) templateBox.setBounds (r.removeFromTop (24).reduced (2, 1));
-                if (entry.synth)
+                headerRow (r, instrDisc, nullptr);
+                if (instrOpen)
                 {
-                    auto row1 = r.removeFromTop (DPH); const int half = row1.getWidth() / 2;
-                    diagPair (row1.removeFromLeft (half), instrKnob[0], instrLbl_[0], instrKnob[1], instrLbl_[1]);
-                    diagPair (row1,                       instrKnob[2], instrLbl_[2], instrKnob[3], instrLbl_[3]);
-                    auto row2 = r.removeFromTop (DPH);
-                    diagPair (row2.removeFromLeft (half), instrKnob[4], instrLbl_[4], instrKnob[5], instrLbl_[5]);
+                    if (entry.synth) templateBox.setBounds (r.removeFromTop (24).reduced (2, 1));
+                    if (entry.synth)
+                    {
+                        auto row1 = r.removeFromTop (DPH); const int half = row1.getWidth() / 2;
+                        diagPair (row1.removeFromLeft (half), instrKnob[0], instrLbl_[0], instrKnob[1], instrLbl_[1]);
+                        diagPair (row1,                       instrKnob[2], instrLbl_[2], instrKnob[3], instrLbl_[3]);
+                        auto row2 = r.removeFromTop (DPH);
+                        diagPair (row2.removeFromLeft (half), instrKnob[4], instrLbl_[4], instrKnob[5], instrLbl_[5]);
+                    }
+                    else
+                        diagPair (r.removeFromTop (DPH).removeFromLeft (w / 2), instrKnob[0], instrLbl_[0], instrKnob[1], instrLbl_[1]);
                 }
-                else if (entry.drum)
-                    diagPair (r.removeFromTop (DPH).removeFromLeft (w / 2), instrKnob[0], instrLbl_[0], instrKnob[1], instrLbl_[1]);
             }
-            headerRow (r, preampDisc, &preampOn);
-            if (preampOpen)
+            if (entry.preamp != nullptr)
             {
-                auto area = r.removeFromTop (DTH);
-                if (entry.synth) { ValueSlider* k[3] = { &preampKnob[0], &preampKnob[1], &levelKnob }; Label* l[3] = { &preampLbl[0], &preampLbl[1], &levelLbl }; diagN (area, k, l, 3); }
-                else diagPair (area, preampKnob[0], preampLbl[0], preampKnob[1], preampLbl[1]);
+                headerRow (r, preampDisc, &preampOn);
+                if (preampOpen)
+                {
+                    auto area = r.removeFromTop (DTH);
+                    if (entry.synth) { ValueSlider* k[3] = { &preampKnob[0], &preampKnob[1], &levelKnob }; Label* l[3] = { &preampLbl[0], &preampLbl[1], &levelLbl }; diagN (area, k, l, 3); }
+                    else diagPair (area, preampKnob[0], preampLbl[0], preampKnob[1], preampLbl[1]);
+                }
             }
-            headerRow (r, eqDisc, &eqOn);
-            if (eqOpen) { auto area = r.removeFromTop (DTH); ValueSlider* k[3] = { &eqKnob[0], &eqKnob[1], &eqKnob[2] }; Label* l[3] = { &eqLbl[0], &eqLbl[1], &eqLbl[2] }; diagN (area, k, l, 3); }
-            headerRow (r, compDisc, &compOn);
-            if (compOpen)
+            if (entry.eq != nullptr)
             {
-                auto row = r.removeFromTop (DPH); const int half = row.getWidth() / 2;
-                diagPair (row.removeFromLeft (half), compKnob[0], compLbl[0], compKnob[1], compLbl[1]);
-                diagPair (row,                       compKnob[2], compLbl[2], compKnob[3], compLbl[3]);
+                headerRow (r, eqDisc, &eqOn);
+                if (eqOpen) { auto area = r.removeFromTop (DTH); ValueSlider* k[3] = { &eqKnob[0], &eqKnob[1], &eqKnob[2] }; Label* l[3] = { &eqLbl[0], &eqLbl[1], &eqLbl[2] }; diagN (area, k, l, 3); }
+            }
+            if (entry.comp != nullptr)
+            {
+                headerRow (r, compDisc, &compOn);
+                if (compOpen)
+                {
+                    auto row = r.removeFromTop (DPH); const int half = row.getWidth() / 2;
+                    diagPair (row.removeFromLeft (half), compKnob[0], compLbl[0], compKnob[1], compLbl[1]);
+                    diagPair (row,                       compKnob[2], compLbl[2], compKnob[3], compLbl[3]);
+                }
             }
             fxContent.setSize (w, r.getY() + 4);
         }
@@ -536,16 +569,28 @@ private:
         void updateVisibility()
         {
             auto arrow = [] (bool open) { return open ? String (CharPointer_UTF8 ("\xe2\x96\xbe  ")) : String (CharPointer_UTF8 ("\xe2\x96\xb8  ")); };
-            instrDisc.setButtonText  (arrow (instrOpen)  + (entry.drum ? "Drum Kit" : "Instrument"));
-            preampDisc.setButtonText (arrow (preampOpen) + "Preamp");
-            eqDisc.setButtonText     (arrow (eqOpen)     + "EQ");
-            compDisc.setButtonText   (arrow (compOpen)   + "Comp");
-            if (entry.synth) templateBox.setVisible (instrOpen);
-            for (int i = 0; i < nInstr; ++i) { instrKnob[i].setVisible (instrOpen); instrLbl_[i].setVisible (instrOpen); }
-            for (int i = 0; i < 2; ++i) { preampKnob[i].setVisible (preampOpen); preampLbl[i].setVisible (preampOpen); }
-            if (entry.synth) { levelKnob.setVisible (preampOpen); levelLbl.setVisible (preampOpen); }
-            for (int i = 0; i < 3; ++i) { eqKnob[i].setVisible (eqOpen); eqLbl[i].setVisible (eqOpen); }
-            for (int i = 0; i < 4; ++i) { compKnob[i].setVisible (compOpen); compLbl[i].setVisible (compOpen); }
+            if (hasInstr)
+            {
+                instrDisc.setButtonText (arrow (instrOpen) + (entry.drum ? "Drum Kit" : "Instrument"));
+                if (entry.synth) templateBox.setVisible (instrOpen);
+                for (int i = 0; i < nInstr; ++i) { instrKnob[i].setVisible (instrOpen); instrLbl_[i].setVisible (instrOpen); }
+            }
+            if (entry.preamp != nullptr)
+            {
+                preampDisc.setButtonText (arrow (preampOpen) + "Preamp");
+                for (int i = 0; i < 2; ++i) { preampKnob[i].setVisible (preampOpen); preampLbl[i].setVisible (preampOpen); }
+                if (entry.synth) { levelKnob.setVisible (preampOpen); levelLbl.setVisible (preampOpen); }
+            }
+            if (entry.eq != nullptr)
+            {
+                eqDisc.setButtonText (arrow (eqOpen) + "EQ");
+                for (int i = 0; i < 3; ++i) { eqKnob[i].setVisible (eqOpen); eqLbl[i].setVisible (eqOpen); }
+            }
+            if (entry.comp != nullptr)
+            {
+                compDisc.setButtonText (arrow (compOpen) + "Comp");
+                for (int i = 0; i < 4; ++i) { compKnob[i].setVisible (compOpen); compLbl[i].setVisible (compOpen); }
+            }
         }
 
         void addKnob (ValueSlider& s, Label& l, const String& nm, double lo, double hi, double step, std::function<void()> cb)
@@ -619,6 +664,7 @@ private:
 
         TrackEntry entry;
         int footerTop = 0;
+        bool hasInstr = false;
         Label name, chanLbl;
         Viewport fxView; Component fxContent;
         TextButton mute, solo, regen, renderBtn;
@@ -637,18 +683,71 @@ private:
     };
 
     //== columns ===============================================================
+    template <typename T>
+    T* ensureMasterPlugin (te::PluginList& mpl, const char* type)
+    {
+        if (auto* existing = mpl.findFirstPluginOfType<T>()) return existing;
+        if (auto p = edit->getPluginCache().createNewPlugin (type, {}))
+        { auto* tp = dynamic_cast<T*> (p.get()); mpl.insertPlugin (p, -1, nullptr); if (tp) tp->setEnabled (false); return tp; }
+        return nullptr;
+    }
+
+    int outputIndexOf (te::AudioTrack* track)
+    {
+        if (track != nullptr)
+            if (auto* dest = track->getOutput().getDestinationTrack())
+                for (int i = 0; i < (int) buses.size(); ++i) if (buses[(size_t) i].track == dest) return i + 1;
+        return 0;   // Master / default
+    }
+
+    void routeTrackOutput (te::AudioTrack* track, int idx)
+    {
+        if (track == nullptr) return;
+        if (idx <= 0) track->getOutput().setOutputToDefaultDevice (false);
+        else if (idx - 1 < (int) buses.size()) track->getOutput().setOutputToTrack (buses[(size_t) (idx - 1)].track);
+    }
+
+    void addBus()
+    {
+        auto* track = getOrInsertAudioTrackAt (te::getAudioTracks (*edit).size());
+        TrackEntry b; b.isBus = true; b.track = track;
+        b.role = "Bus " + String ((int) buses.size() + 1);
+        track->setName (b.role);
+        addChannelStrip (b, 0);
+        b.volPlugin = track->getVolumePlugin();
+        track->getOutput().setOutputToDefaultDevice (false);   // bus -> master
+        buses.push_back (b);
+        rebuildColumns();
+    }
+
     void rebuildColumns()
     {
         columns.clear();
-        for (int i = 0; i < (int) entries.size(); ++i)
+
+        StringArray outNames; outNames.add ("Master");
+        for (auto& b : buses) outNames.add (b.role);
+
+        for (int i = 0; i < (int) entries.size(); ++i)         // track channels (left)
         {
             auto* col = new ChannelColumn (entries[(size_t) i], [this, i] { regenerateTrack (i); });
+            auto* track = entries[(size_t) i].track;
+            col->setOutputs (outNames, outputIndexOf (track), [this, track] (int idx) { routeTrackOutput (track, idx); });
             mixerContainer.addAndMakeVisible (col);
             columns.add (col);
         }
-        // Master bus channel at the right end
+        for (auto& b : buses)                                  // submix buses (right group)
+        {
+            auto* col = new ChannelColumn (b, [] {});
+            mixerContainer.addAndMakeVisible (col);
+            columns.add (col);
+        }
+        // Master bus with its own FX rack (on the edit master plugin list)
         TrackEntry m; m.isMaster = true; m.role = "Master";
         if (auto mv = edit->getMasterVolumePlugin()) m.volPlugin = mv.get();
+        auto& mpl = edit->getMasterPluginList();
+        m.preamp = ensureMasterPlugin<tewk::AIPreampPlugin> (mpl, tewk::AIPreampPlugin::xmlTypeName);
+        m.eq     = ensureMasterPlugin<te::EqualiserPlugin>  (mpl, te::EqualiserPlugin::xmlTypeName);
+        m.comp   = ensureMasterPlugin<te::CompressorPlugin> (mpl, te::CompressorPlugin::xmlTypeName);
         auto* mc = new ChannelColumn (m, [] {});
         mc->onRender = [this] { renderWav(); };
         mixerContainer.addAndMakeVisible (mc);
@@ -756,6 +855,7 @@ private:
     void buildInstrumentAndPhrase()
     {
         entries.clear();
+        buses.clear();
         genBars = 2;
         Array<var> arr;
         auto add = [&] (int p, double s, double l) { arr.add (var (Array<var> { p, s, l })); };
@@ -814,6 +914,7 @@ private:
         if (auto* t0 = edit->tempoSequence.getTempo (0)) t0->setBpm (tempo);
 
         entries.clear();
+        buses.clear();
         StringArray built;
         if (auto* tracks = resp.getProperty ("tracks", var()).getArray())
             for (auto& tv : *tracks)
@@ -868,9 +969,10 @@ private:
     void showSettings()
     {
         PopupMenu m;
-        m.addItem (1, "Scan AU instruments");
+        m.addItem (1, "Add Bus");
+        m.addItem (2, "Scan AU instruments");
         m.showMenuAsync (PopupMenu::Options().withTargetComponent (&settingsButton),
-            [this] (int r) { if (r == 1) startScan(); });
+            [this] (int r) { if (r == 1) addBus(); else if (r == 2) startScan(); });
     }
 
     void renderWav()
@@ -904,6 +1006,7 @@ private:
     void rebuildEntriesFromEdit()
     {
         entries.clear();
+        buses.clear();
         for (auto* track : te::getAudioTracks (*edit))
         {
             TrackEntry e; e.track = track;
@@ -949,6 +1052,7 @@ private:
     te::Engine engine { "Music Producer" };
     std::unique_ptr<te::Edit> edit;
     std::vector<TrackEntry> entries;
+    std::vector<TrackEntry> buses;
     int genSeed = 1, genBars = 8;
         Label      header, status;
     Label      keyLbl, tempoLbl, barsLbl, genreLbl;
