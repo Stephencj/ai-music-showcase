@@ -369,6 +369,42 @@ def block_melody(name: str) -> dict:
         raise HTTPException(404, f"No melody: {exc}")
 
 
+@router.post("/scan/sheet")
+async def scan_sheet_music(file: UploadFile = File(...)) -> dict:
+    """Scan a sheet-music image (PNG/JPG photo or scan) → MIDI, saved as a
+    block. OMR is slow, so this returns a ``job_id`` to poll like /generate;
+    the finished job's ``saved_block`` opens in practice mode / Compose."""
+    data = await file.read()
+    fname = file.filename or "score.png"
+    job = registry.create()
+    registry.run(job, lambda progress: service.run_sheet_scan(data, fname, progress, job.id))
+    return {"job_id": job.id}
+
+
+@router.post("/analyze/audio")
+async def analyze_audio_upload(file: UploadFile = File(...)) -> dict:
+    """Listen to an uploaded song and break down its progression: returns the
+    same score-data shape as a block (key, scale, tempo, chord chart) so the
+    practice chart + diagrams render it directly, plus a Roman-numeral
+    ``progression`` for the 'generate similar' button."""
+    data = await file.read()
+    try:
+        return service.analyze_audio_file(data, filename=file.filename or "song")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, f"Could not analyze audio: {exc}")
+
+
+@router.get("/blocks/{name}/score-data")
+def block_score_data(name: str) -> dict:
+    """Per-bar chords (symbol / Roman / Nashville) + bar timings for the
+    practice-mode chord chart and the piano/guitar chord diagrams. Chords are
+    detected from the rendered harmony tracks."""
+    try:
+        return service.score_data(name)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, f"No score data: {exc}")
+
+
 @router.post("/blocks/{name}/lyrics/draft")
 def draft_block_lyrics(name: str, req: LyricsDraftRequest) -> dict:
     """Enqueue a lyric-draft request for a Claude Code watch-loop to answer

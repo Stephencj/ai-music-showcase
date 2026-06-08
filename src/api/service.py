@@ -96,6 +96,7 @@ def run_generation(req, progress, job_id: str) -> dict:
         enabled_instruments=_instrumental_only(req.instruments, preset.default_instruments),
         key=req.key, scale=req.scale, tempo=req.tempo,
         bars=req.bars, swing=req.swing,
+        progression=(list(req.progression) or None),
         output_dir=job_dir,
         skip_audio=True,            # we render HQ below; skip the low-fi pass
     )
@@ -389,6 +390,128 @@ def melody_info(name: str) -> dict:
         "phrase_syllables": phrase_syllable_counts(notes),
         "has_lead": bool(notes),
     }
+
+
+def _normalize_scan_image(data: bytes, filename: str) -> str:
+    """Save uploaded sheet-music bytes as a PNG for oemer, preserving the image
+    as much as possible. We *only* normalise the container format and correct
+    EXIF rotation (phone photos) — resizing, bordering or thresholding a clean
+    scan was observed to break oemer's staff detection, so we don't touch the
+    pixels otherwise. Returns the temp path."""
+    import tempfile
+    import io
+    from PIL import Image, ImageOps
+
+    try:
+        im = Image.open(io.BytesIO(data))
+        im.load()
+    except Exception as exc:
+        raise ValueError(
+            f"Couldn't read {filename!r} as an image. Upload a PNG or JPG photo "
+            f"or scan of the score (PDF/HEIC aren't supported yet). ({exc})"
+        )
+    im = ImageOps.exif_transpose(im)
+    if im.mode not in ("RGB", "L"):
+        im = im.convert("RGB")
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+    im.save(tmp.name)
+    tmp.close()
+    return tmp.name
+
+
+def run_sheet_scan(data: bytes, filename: str, progress, job_id: str) -> dict:
+    """Background job: scan a sheet-music image → MIDI → saved block.
+
+    Saves the recognised score as a normal block (so it opens in practice mode
+    and Compose like anything else). Returns the block name + detected key/tempo.
+    OMR is slow (~1–2 min) and input-sensitive; failures surface as job errors.
+    """
+    import os
+    import tempfile
+    from pathlib import Path
+    import pretty_midi
+    from src.daw_integration.generic import blocks as block_store
+    from src.daw_integration.generic.omr import scan_to_midi
+
+    progress("Preparing image…", 0.05)
+    img_path = _normalize_scan_image(data, filename)
+    out_dir = Path(tempfile.mkdtemp())
+    try:
+        progress("Reading the score — this can take a minute…", 0.15)
+        meta = scan_to_midi(img_path, out_dir)
+
+        progress("Building MIDI block…", 0.75)
+        pm = pretty_midi.PrettyMIDI(meta["midi_path"])
+        ts = meta["time_signature"]
+        spec = {
+            "source": "omr",
+            "key": meta["key"], "scale": meta["scale"],
+            "tempo": meta["tempo"], "time_signature": ts,
+            "sections": [],
+        }
+        base = os.path.splitext(os.path.basename(filename))[0] or "Scanned score"
+        name = _save_unique_block(
+            block_store, f"Scan {base}", pm,
+            tempo=meta["tempo"], time_signature=ts, bars=meta["bars"], spec=spec,
+        )
+
+        progress("Rendering preview…", 0.9)
+        try:
+            block_store.ensure_preview_audio(name)
+        except Exception as exc:  # noqa: BLE001 — block still usable without preview
+            logger.warning("scan preview render failed for %s: %s", name, exc)
+
+        progress("Done.", 1.0)
+        return {
+            "saved_block": name,
+            "key": meta["key"], "scale": meta["scale"],
+            "tempo": meta["tempo"], "bars": meta["bars"],
+            "n_notes": sum(len(i.notes) for i in pm.instruments),
+        }
+    finally:
+        for p in (img_path,):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+
+def analyze_audio_file(data: bytes, filename: str = "song") -> dict:
+    """Analyze raw uploaded audio bytes into score-data (key/tempo/chords) plus
+    a Roman-numeral ``progression`` for 'generate similar'. Writes to a temp
+    file because librosa/audioread decode from a path."""
+    import os
+    import tempfile
+    from src.daw_integration.generic.audio_analysis import (
+        analyze_audio, progression_romans,
+    )
+
+    suffix = os.path.splitext(filename)[1] or ".wav"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        tmp.write(data)
+        tmp.flush()
+        tmp.close()
+        score = analyze_audio(tmp.name)
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+    score["progression"] = progression_romans(score)
+    return score
+
+
+def score_data(name: str) -> dict:
+    """Per-bar chord chart + bar timings for a block. Chords are detected from
+    the rendered harmony tracks (see chord_analysis.extract_score_data) so the
+    chart reflects what's actually in the audio. Consumed by practice mode and
+    the piano/guitar chord diagrams."""
+    from src.daw_integration.generic import blocks as block_store
+    from src.daw_integration.generic.chord_analysis import extract_score_data
+
+    pm, meta = block_store.load_block(name)
+    return extract_score_data(pm, meta)
 
 
 # Fast/dense vocal lines (rap) read far better on the rough/TTS engine than the

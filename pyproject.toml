@@ -40,6 +40,7 @@ dependencies = [
     "gradio>=6.0",
     "zeroconf>=0.130",
     "music21>=9.1",
+    "oemer>=0.1.5",
     "mcp>=1.0",
 ]
 

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import GenerateScreen from "./components/GenerateScreen";
 import ComposeScreen from "./components/ComposeScreen";
+import PracticeScreen from "./components/PracticeScreen";
 import type { BlockSpec } from "./types";
 
-type Tab = "generate" | "compose";
+type Tab = "generate" | "compose" | "practice";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("generate");
@@ -21,10 +22,12 @@ export default function App() {
 
       {tab === "generate" ? (
         <GenerateScreen initialSpec={editSpec} onSpecConsumed={() => setEditSpec(null)} />
-      ) : (
+      ) : tab === "compose" ? (
         <ComposeScreen
           onEditInGenerate={(spec) => { setEditSpec(spec); setTab("generate"); }}
         />
+      ) : (
+        <PracticeScreen />
       )}
 
       <nav className="tabbar">
@@ -33,6 +36,9 @@ export default function App() {
         </button>
         <button className={tab === "compose" ? "on" : ""} onClick={() => setTab("compose")}>
           <span className="ico">🎬</span>Compose
+        </button>
+        <button className={tab === "practice" ? "on" : ""} onClick={() => setTab("practice")}>
+          <span className="ico">🎹</span>Practice
         </button>
       </nav>
     </div>

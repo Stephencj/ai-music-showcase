@@ -16,6 +16,9 @@ class GenerateRequest(BaseModel):
     key: Optional[str] = None
     scale: Optional[str] = None
     tempo: Optional[float] = None
+    # Roman-numeral chords/bar overriding the preset's progression — used by
+    # "generate similar" to reproduce a progression detected from a sample.
+    progression: list[str] = Field(default_factory=list)
     seed: Optional[int] = None            # 0/None → random (returned in result)
     swing: Optional[float] = None
     bars: Optional[int] = None

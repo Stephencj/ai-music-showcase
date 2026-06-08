@@ -194,6 +194,7 @@ def compose_song(
     tempo: Optional[float] = None,
     bars: Optional[int] = None,
     swing: Optional[float] = None,
+    progression: Optional[list] = None,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     output_midi: str = DEFAULT_MIDI_NAME,
     output_wav: str = DEFAULT_WAV_NAME,
@@ -219,7 +220,9 @@ def compose_song(
     eff_tempo = float(tempo if tempo is not None else preset.tempo)
     eff_swing = float(swing if swing is not None else preset.swing)
     eff_bars = int(bars if bars is not None else preset.default_bars)
-    progression = list(preset.progression)
+    # A caller-supplied progression (e.g. one detected from an audio sample)
+    # overrides the preset's; it still flows through pacing/slicing per section.
+    progression = list(progression) if progression else list(preset.progression)
     technique_overrides = technique_overrides or {}
 
     # Sections — caller-provided or derived from the preset variant.

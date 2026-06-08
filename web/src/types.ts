@@ -135,6 +135,7 @@ export interface GenerateBody {
   key?: string | null;
   scale?: string | null;
   tempo?: number | null;
+  progression?: string[];
   seed?: number | null;
   swing?: number | null;
   instruments: string[];
@@ -142,4 +143,6 @@ export interface GenerateBody {
   with_pdf: boolean;
   with_stems: boolean;
   master_preset: string;
+  save_as_block?: boolean;
+  block_name?: string | null;
 }

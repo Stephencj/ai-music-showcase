@@ -8,8 +8,9 @@ pretty_midi>=0.2.11
 pydub>=0.25.1
 soundfile>=0.13.1
 pyworld>=0.3.5          # WORLD vocoder — F0 resynthesis for the rough vocal engine
-onnxruntime>=1.26.0     # DiffSinger studio vocal engine (acoustic + vocoder ONNX)
+onnxruntime>=1.26.0     # DiffSinger studio vocal engine + oemer OMR (acoustic/vocoder/score ONNX)
 g2p-en>=2.1.0           # grapheme→phoneme (ARPABET) for the studio vocal engine
+oemer>=0.1.5            # optical music recognition: sheet-music image → MusicXML (Practice "Scan sheet")
 
 # Numerical Computing
 numpy>=2.4.4

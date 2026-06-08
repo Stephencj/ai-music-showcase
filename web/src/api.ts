@@ -117,6 +117,65 @@ export const getVoices = () =>
 export const getMelodyInfo = (name: string) =>
   jget<{ total_notes: number; phrase_syllables: number[]; has_lead: boolean }>(
     `/api/blocks/${encodeURIComponent(name)}/melody`);
+
+// --- Practice mode: chord chart + bar timings (detected from the MIDI) ---
+export interface ChordEntry {
+  bar: number;
+  start_time: number;
+  end_time: number;
+  root: string | null;
+  quality: string | null;
+  symbol: string;   // absolute, e.g. "Gmaj7" / "Em" / "N.C."
+  roman: string;    // key-relative, e.g. "IV" / "vi"
+  nashville: string; // e.g. "4" / "6m"
+}
+export interface ChordSpan {
+  start_bar: number; end_bar: number;
+  start_time: number; end_time: number;
+  root: string | null;
+  quality: string | null;
+  symbol: string;
+  roman: string;
+  nashville: string;
+}
+export interface ScoreSection {
+  label: string; role: string;
+  start_bar: number; end_bar: number;
+  start_time: number; end_time: number;
+}
+export interface ScoreData {
+  key: string; scale: string; tempo: number;
+  time_signature: number[]; bars: number; bar_seconds: number;
+  beats_per_bar: number;
+  sections: ScoreSection[];
+  chords: ChordEntry[];       // one per bar
+  chord_spans: ChordSpan[];   // consecutive identical chords merged
+}
+export const getScoreData = (name: string) =>
+  jget<ScoreData>(`/api/blocks/${encodeURIComponent(name)}/score-data`);
+
+// Analyze an uploaded song → same score-data shape + a Roman-numeral
+// progression for "generate similar".
+export interface AudioAnalysis extends ScoreData {
+  duration: number;
+  progression: string[];
+}
+export async function analyzeAudio(file: File): Promise<AudioAnalysis> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const r = await fetch(url("/api/analyze/audio"), { method: "POST", body: fd });
+  if (!r.ok) throw new Error((await r.text()) || r.statusText);
+  return r.json() as Promise<AudioAnalysis>;
+}
+
+// Scan a sheet-music image → MIDI block (slow OMR job; returns a job_id to poll).
+export async function scanSheet(file: File): Promise<{ job_id: string }> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const r = await fetch(url("/api/scan/sheet"), { method: "POST", body: fd });
+  if (!r.ok) throw new Error((await r.text()) || r.statusText);
+  return r.json() as Promise<{ job_id: string }>;
+}
 // Lyric drafting is answered by a Claude Code watch-loop (no API key):
 // enqueue a request, then poll until it's answered with fitted lyrics.
 export const requestLyrics = (name: string, theme: string) =>
