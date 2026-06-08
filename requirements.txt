@@ -11,6 +11,7 @@ pyworld>=0.3.5          # WORLD vocoder — F0 resynthesis for the rough vocal e
 onnxruntime>=1.26.0     # DiffSinger studio vocal engine + oemer OMR (acoustic/vocoder/score ONNX)
 g2p-en>=2.1.0           # grapheme→phoneme (ARPABET) for the studio vocal engine
 oemer>=0.1.5            # optical music recognition: sheet-music image → MusicXML (Practice "Scan sheet")
+pytesseract>=0.3.10     # text OCR for scanned scores (tempo/title/lyrics); needs the `tesseract` binary (brew install tesseract)
 
 # Numerical Computing
 numpy>=2.4.4

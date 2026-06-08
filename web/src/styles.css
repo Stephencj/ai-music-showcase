@@ -458,3 +458,13 @@ audio { width: 100%; margin: 8px 0 12px; }
 }
 .gen-similar .btn { flex: 0 0 auto; padding: 9px 14px; }
 .gen-msg { font-size: 12px; color: var(--muted); flex-basis: 100%; }
+
+/* Practice: speed control */
+.speed-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.speed-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.speed-row button {
+  border: 1px solid rgba(255,255,255,0.12); background: var(--bg-2); color: var(--text);
+  border-radius: 8px; padding: 5px 10px; font-size: 13px; cursor: pointer;
+}
+.speed-row button.on { background: linear-gradient(135deg, var(--violet), var(--blue)); border-color: transparent; }
+.speed-bpm { margin-left: auto; font-size: 13px; color: var(--accent-2); font-variant-numeric: tabular-nums; }

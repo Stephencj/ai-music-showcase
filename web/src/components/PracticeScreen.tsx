@@ -35,6 +35,9 @@ export default function PracticeScreen() {
   const [notation, setNotation] = useState<Notation>("chord");
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // "Generate similar" (upload mode)
   const [simGenre, setSimGenre] = useState<string>("");
@@ -183,6 +186,17 @@ export default function PracticeScreen() {
     activeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [activeSpanIdx]);
 
+  // Apply the practice speed to the audio element (preservesPitch keeps the
+  // key the same when slowing down). Re-applied when the source changes.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    a.playbackRate = speed;
+    a.preservesPitch = true;
+    // Vendor-prefixed aliases for older WebKit (iOS).
+    (a as unknown as { webkitPreservesPitch?: boolean }).webkitPreservesPitch = true;
+  }, [speed, audioSrc, score]);
+
   const activeSection = useMemo(() => {
     if (!score) return null;
     return score.sections.find((s) => t >= s.start_time && t < s.end_time) || null;
@@ -250,14 +264,33 @@ export default function PracticeScreen() {
         <>
           {audioSrc && (
             <audio
+              ref={audioRef}
               src={audioSrc}
               controls
               onTimeUpdate={(e) => setT(e.currentTarget.currentTime)}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
+              onLoadedMetadata={(e) => { e.currentTarget.playbackRate = speed; }}
               style={{ width: "100%" }}
             />
           )}
+
+          {/* Practice speed — change playback rate without dropping pitch. The
+              chord chart tracks the media timeline, so it stays in sync at any
+              speed. Effective tempo shown for reference. */}
+          <div className="speed-row">
+            <span className="speed-label">Speed</span>
+            {[0.5, 0.75, 1, 1.25].map((s) => (
+              <button
+                key={s}
+                className={Math.abs(speed - s) < 0.001 ? "on" : ""}
+                onClick={() => setSpeed(s)}
+              >
+                {s === 1 ? "1×" : `${s}×`}
+              </button>
+            ))}
+            <span className="speed-bpm">{Math.round(score.tempo * speed)} BPM</span>
+          </div>
 
           {mode === "upload" && (
             <div className="gen-similar">

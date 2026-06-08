@@ -449,9 +449,12 @@ def run_sheet_scan(data: bytes, filename: str, progress, job_id: str) -> dict:
             "tempo": meta["tempo"], "time_signature": ts,
             "sections": [],
         }
-        base = os.path.splitext(os.path.basename(filename))[0] or "Scanned score"
+        # Prefer the OCR'd title for the block name; fall back to the filename.
+        title = (meta.get("title") or "").strip()
+        base = title or os.path.splitext(os.path.basename(filename))[0] or "Scanned score"
+        block_name = base if title else f"Scan {base}"
         name = _save_unique_block(
-            block_store, f"Scan {base}", pm,
+            block_store, block_name, pm,
             tempo=meta["tempo"], time_signature=ts, bars=meta["bars"], spec=spec,
         )
 

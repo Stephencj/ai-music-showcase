@@ -128,9 +128,24 @@ def scan_to_midi(image_path: str, out_dir: Path, timeout: int = 600) -> dict:
     """
     import music21 as m21
     import pretty_midi
+    from .sheet_ocr import extract_metadata
 
     xml = scan_to_musicxml(image_path, out_dir, timeout=timeout)
     score = m21.converter.parse(str(xml))
+
+    # Text pass (Tesseract) for the things oemer can't read: tempo, title.
+    ocr = extract_metadata(image_path)
+
+    # If OCR found the marked tempo, stamp it onto the score so the written MIDI
+    # plays at the marked speed (oemer alone always loses tempo). The block
+    # tempo is then read back from the MIDI, keeping audio + chart in sync.
+    if ocr.get("tempo"):
+        try:
+            for mm in list(score.recurse().getElementsByClass("MetronomeMark")):
+                mm.activeSite.remove(mm)
+            score.insert(0, m21.tempo.MetronomeMark(number=int(ocr["tempo"])))
+        except Exception:
+            pass
 
     midi_path = out_dir / f"{Path(image_path).stem}.mid"
     score.write("midi", fp=str(midi_path))
@@ -148,8 +163,8 @@ def scan_to_midi(image_path: str, out_dir: Path, timeout: int = 600) -> dict:
     # rendered straight from this MIDI (note times already baked at that tempo),
     # while the practice chart derives bar timings from the block's tempo field.
     # If they disagree the play-along cursor drifts. Read it back from the MIDI
-    # so the two are always consistent (music21 uses the score's metronome mark
-    # if present, else 120).
+    # so the two are always consistent (music21 uses the metronome mark we just
+    # stamped from OCR, the score's own mark, else its 120 default).
     tempo: Optional[float] = None
     try:
         _pm = pretty_midi.PrettyMIDI(str(midi_path))
@@ -175,7 +190,10 @@ def scan_to_midi(image_path: str, out_dir: Path, timeout: int = 600) -> dict:
         "musicxml_path": str(xml),
         "key": key_name,
         "scale": scale_name,
-        "tempo": tempo or 100.0,
+        "tempo": round(tempo, 1) if tempo else 100.0,
         "bars": bars,
         "time_signature": ts,
+        "title": ocr.get("title"),
+        "composer": ocr.get("composer"),
+        "ocr_text": ocr.get("raw_text", ""),
     }
