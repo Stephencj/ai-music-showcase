@@ -3,6 +3,7 @@ import * as api from "../api";
 import type { ScoreData, ChordSpan } from "../api";
 import type { Block, Preset } from "../types";
 import ChordDiagram from "./ChordDiagram";
+import { MODES, ALL_ROOTS, scaleToModeId, rootPc, romanFor, nashvilleFor } from "../chordLabels";
 
 type Notation = "chord" | "nashville" | "roman";
 type Mode = "block" | "upload" | "scan";
@@ -12,13 +13,6 @@ const NOTATION_LABEL: Record<Notation, string> = {
   nashville: "Nashville",
   roman: "Roman",
 };
-
-function label(c: { symbol: string; nashville: string; roman: string }, n: Notation): string {
-  if (c.symbol === "N.C.") return "—";
-  if (n === "nashville") return c.nashville || c.symbol;
-  if (n === "roman") return c.roman || c.symbol;
-  return c.symbol;
-}
 
 export default function PracticeScreen() {
   const [mode, setMode] = useState<Mode>("block");
@@ -36,6 +30,10 @@ export default function PracticeScreen() {
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
+  // Tonic + mode the Roman/Nashville numbers are computed against. Seeded from
+  // the detected key, but fully selectable across the modal range for learning.
+  const [tonic, setTonic] = useState("C");
+  const [keyMode, setKeyMode] = useState("major");
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -197,6 +195,25 @@ export default function PracticeScreen() {
     (a as unknown as { webkitPreservesPitch?: boolean }).webkitPreservesPitch = true;
   }, [speed, audioSrc, score]);
 
+  // Seed the tonic/mode selectors from the detected key whenever a new score
+  // loads (the user can then override them across the full modal range).
+  useEffect(() => {
+    if (!score) return;
+    setTonic(ALL_ROOTS[rootPc(score.key)]);
+    setKeyMode(scaleToModeId(score.scale));
+  }, [score]);
+
+  const modeIntervals = (MODES.find((m) => m.id === keyMode) || MODES[0]).intervals;
+
+  // Display label for a chord under the current notation + selected tonic/mode.
+  function labelFor(c: { symbol: string; root: string | null; quality: string | null }): string {
+    if (c.symbol === "N.C.") return "—";
+    if (notation === "chord" || !c.root || !c.quality) return c.symbol;
+    return notation === "nashville"
+      ? nashvilleFor(c.root, c.quality, tonic, modeIntervals)
+      : romanFor(c.root, c.quality, tonic, modeIntervals);
+  }
+
   const activeSection = useMemo(() => {
     if (!score) return null;
     return score.sections.find((s) => t >= s.start_time && t < s.end_time) || null;
@@ -252,6 +269,23 @@ export default function PracticeScreen() {
           ))}
         </div>
       </div>
+
+      {score && notation !== "chord" && (
+        <div className="keymode-row">
+          <span className="keymode-label">Numbers vs</span>
+          <select value={tonic} onChange={(e) => setTonic(e.target.value)}>
+            {ALL_ROOTS.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <select value={keyMode} onChange={(e) => setKeyMode(e.target.value)}>
+            {MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </select>
+          <button
+            className="keymode-reset"
+            onClick={() => { setTonic(ALL_ROOTS[rootPc(score.key)]); setKeyMode(scaleToModeId(score.scale)); }}
+            title="Reset to the detected key"
+          >↺</button>
+        </div>
+      )}
 
       {err && <div className="practice-err">{err}</div>}
       {mode === "scan" && scanMsg && <div className="practice-hint">{scanMsg}</div>}
@@ -312,7 +346,7 @@ export default function PracticeScreen() {
             </div>
             <div className="np-chords">
               <div className="np-current">
-                <div className="np-big">{active ? label(active, notation) : "—"}</div>
+                <div className="np-big">{active ? labelFor(active) : "—"}</div>
                 {notation !== "chord" && active && active.symbol !== "N.C." && (
                   <div className="np-alt">{active.symbol}</div>
                 )}
@@ -323,7 +357,7 @@ export default function PracticeScreen() {
               </div>
               <div className="np-next">
                 <div className="np-next-label">next</div>
-                <div className="np-next-chord">{next ? label(next, notation) : "—"}</div>
+                <div className="np-next-chord">{next ? labelFor(next) : "—"}</div>
               </div>
             </div>
           </div>
@@ -341,7 +375,7 @@ export default function PracticeScreen() {
                       {score.chord_spans
                         .filter((s) => s.start_bar >= sec.start_bar && s.start_bar <= sec.end_bar)
                         .map((s) => (
-                          <Cell key={s.start_bar} span={s} notation={notation}
+                          <Cell key={s.start_bar} span={s} text={labelFor(s)}
                             active={s === active} cellRef={s === active ? activeRef : undefined} />
                         ))}
                     </div>
@@ -350,7 +384,7 @@ export default function PracticeScreen() {
               : (
                 <div className="chart-grid">
                   {score.chord_spans.map((s) => (
-                    <Cell key={s.start_bar} span={s} notation={notation}
+                    <Cell key={s.start_bar} span={s} text={labelFor(s)}
                       active={s === active} cellRef={s === active ? activeRef : undefined} />
                   ))}
                 </div>
@@ -363,17 +397,17 @@ export default function PracticeScreen() {
 }
 
 function Cell({
-  span, notation, active, cellRef,
+  span, text, active, cellRef,
 }: {
   span: ChordSpan;
-  notation: Notation;
+  text: string;
   active: boolean;
   cellRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   const bars = span.end_bar - span.start_bar + 1;
   return (
     <div ref={cellRef} className={`chart-cell${active ? " active" : ""}`} data-bars={bars}>
-      <div className="cell-chord">{label(span, notation)}</div>
+      <div className="cell-chord">{text}</div>
       {bars > 1 && <div className="cell-bars">{bars} bars</div>}
     </div>
   );

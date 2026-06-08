@@ -468,3 +468,15 @@ audio { width: 100%; margin: 8px 0 12px; }
 }
 .speed-row button.on { background: linear-gradient(135deg, var(--violet), var(--blue)); border-color: transparent; }
 .speed-bpm { margin-left: auto; font-size: 13px; color: var(--accent-2); font-variant-numeric: tabular-nums; }
+
+/* Practice: tonic + mode selector for Roman/Nashville re-numbering */
+.keymode-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.keymode-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.keymode-row select {
+  padding: 7px 9px; border-radius: 8px; background: var(--bg-2); color: var(--text);
+  border: 1px solid rgba(255,255,255,0.12); font-size: 13px;
+}
+.keymode-reset {
+  border: 1px solid rgba(255,255,255,0.12); background: var(--bg-2); color: var(--accent-2);
+  border-radius: 8px; width: 30px; height: 30px; cursor: pointer; font-size: 15px;
+}
