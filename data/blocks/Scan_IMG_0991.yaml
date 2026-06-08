@@ -1,0 +1,27 @@
+name: Scan_IMG_0991
+tempo: 120.0
+time_signature:
+- 4
+- 4
+bars: 24
+duration_seconds: 55.875
+created: '2026-06-08T16:29:25'
+instruments:
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 127
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 192
+n_notes: 319
+spec:
+  source: omr
+  key: A
+  scale: minor
+  tempo: 120.0
+  time_signature:
+  - 4
+  - 4
+  sections: []

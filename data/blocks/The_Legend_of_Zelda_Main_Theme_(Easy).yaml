@@ -1,0 +1,27 @@
+name: The_Legend_of_Zelda_Main_Theme_(Easy)
+tempo: 130.00013000012999
+time_signature:
+- 4
+- 4
+bars: 24
+duration_seconds: 51.5768715
+created: '2026-06-08T18:51:50'
+instruments:
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 127
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 192
+n_notes: 319
+spec:
+  source: omr
+  key: A
+  scale: minor
+  tempo: 130.00013000012999
+  time_signature:
+  - 4
+  - 4
+  sections: []
