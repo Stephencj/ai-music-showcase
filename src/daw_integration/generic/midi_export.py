@@ -67,6 +67,15 @@ GM_DRUMS = {
     "kick": 36, "snare": 38, "hihat_closed": 42, "hihat_open": 46,
     "tom_low": 45, "tom_mid": 47, "tom_high": 50,
     "crash": 49, "ride": 51, "ride_bell": 53, "clap": 39, "rim": 37,
+    # Latin / hand percussion (standard GM percussion notes)
+    "tambourine": 54, "cowbell": 56,
+    "bongo_high": 60, "bongo_low": 61,
+    "conga_mute": 62, "conga_open": 63, "conga_low": 64,
+    "timbale_high": 65, "timbale_low": 66,
+    "agogo_high": 67, "agogo_low": 68,
+    "cabasa": 69, "maracas": 70,
+    "guiro_short": 73, "guiro_long": 74, "clave": 75,
+    "woodblock_high": 76, "woodblock_low": 77,
 }
 
 # Base roman numeral → scale-degree index (0-6). Matched longest-first.
@@ -890,6 +899,61 @@ DRUM_PATTERNS_4_4: dict[str, tuple[list, str]] = {
         ("snare",        [(1, _DRUM_V), (1.5, _DRUM_GHOST), (3, _DRUM_V)]),
         ("hihat_closed", _hh([i * 0.25 for i in range(16)])),
         ("hihat_open",   [(0.5, 0.85), (2.5, 0.85)]),
+    ], "16th"),
+    # ----- Hip-hop layered "DJ blend" grooves -----
+    # A drum entry may carry an optional third value, a *layer shift* in
+    # beats: the whole layer is nudged off the grid so two complementary
+    # loops sit slightly apart in time, producing the flam / comb-filter
+    # width a DJ gets when blending two records that aren't phase-locked.
+    # Positive = laid back (late), negative = pushed (early).
+    "hiphop_dj_layered": ([
+        # Deck A — tight boom-bap kit, dead on the grid.
+        ("kick",         _h([0, 0.75, 2.5]), 0.0),
+        ("snare",        [(1, _DRUM_V), (3, _DRUM_V)], 0.0),
+        ("hihat_closed", _hh([i * 0.5 for i in range(8)]), 0.0),
+        # Deck B — same pocket, nudged ~late for the blended-loop flam.
+        ("hihat_open",   [(1.5, 0.7), (3.5, 0.7)], 0.045),
+        ("cabasa",       _hh([i * 0.25 for i in range(16)], mult=0.4), 0.06),
+        # Hand-clap doubling the snare, pushed slightly early — stereo-ish width.
+        ("clap",         [(1, 0.6), (3, 0.6)], -0.035),
+    ], "16th"),
+    "trap_dj_layered": ([
+        # 808 + clap core on the grid.
+        ("kick",         _h([0, 1.5, 2.75]), 0.0),
+        ("snare",        [(2, _DRUM_V)], 0.0),
+        ("clap",         [(2, 0.8)], 0.02),
+        ("hihat_closed", _hh([i * 0.25 for i in range(16)]), 0.0),
+        # Second hat layer — roll subdivisions, nudged late behind the main hats.
+        ("hihat_closed", _hh([0.5, 1.0, 1.25, 3.0, 3.5, 3.75], mult=0.55), 0.05),
+        ("hihat_open",   [(1.5, 0.7)], 0.03),
+    ], "16th"),
+    # ----- Latin hand-percussion sets -----
+    "latin_mambo": ([
+        ("clave",        [(0, 0.9), (1.5, 0.9), (3, 0.9)]),   # 3-side son clave
+        ("conga_open",   _hh([1.5, 3.5], mult=0.85)),
+        ("conga_mute",   _hh([0.75, 1.0, 2.75, 3.0], mult=0.55)),
+        ("conga_low",    _h([2])),
+        ("timbale_high", _hh([0.5, 2.5], mult=0.7)),
+        ("cowbell",      _hh([0, 1, 2, 3], mult=0.7)),
+        ("kick",         _h([0, 1.5, 2, 3.5])),               # tumbao anchor
+    ], "16th"),
+    "latin_cumbia": ([
+        ("guiro_long",   _hh([0, 1, 2, 3], mult=0.7)),
+        ("guiro_short",  _hh([0.5, 1.5, 2.5, 3.5], mult=0.5)),
+        ("conga_open",   _h([1, 3])),
+        ("conga_mute",   _hh([0.5, 1.5, 2.5, 3.5], mult=0.5)),
+        ("cowbell",      _hh([0, 2], mult=0.7)),
+        ("kick",         _h([0, 2])),
+    ], "16th"),
+    "latin_percussion": ([
+        # Pure hand-percussion bed — congas/bongos/clave/shakers, no kit.
+        ("clave",        [(0, 0.85), (1.5, 0.85), (3, 0.85)]),
+        ("conga_open",   _hh([1.5, 3.5], mult=0.85)),
+        ("conga_mute",   _hh([0.75, 2.75], mult=0.6)),
+        ("bongo_high",   _hh([0.5, 1.0, 2.5, 3.0], mult=0.6)),
+        ("bongo_low",    _h([0, 2])),
+        ("maracas",      _hh([i * 0.25 for i in range(16)], mult=0.4)),
+        ("cowbell",      _hh([0, 1, 2, 3], mult=0.55)),
     ], "16th"),
 }
 
@@ -3017,13 +3081,22 @@ class MidiExporter:
 
         for bar in range(bars):
             bar_start = (bar_offset + bar) * self.bar_duration
-            for drum_name, offset_vels in hits:
+            for entry in hits:
+                # A layer is (drum_name, [(offset, vel_mult), ...]) with an
+                # optional trailing layer-shift in beats for DJ-blend grooves.
+                if len(entry) == 3:
+                    drum_name, offset_vels, layer_shift = entry
+                else:
+                    drum_name, offset_vels = entry
+                    layer_shift = 0.0
                 midi_note = GM_DRUMS.get(drum_name, 36)
                 for beat_offset, vel_mult in offset_vels:
                     if drum_name not in primary and rng.random() > density:
                         continue
                     swung = apply_swing(beat_offset, swing, grid=grid)
-                    t = bar_start + swung * beat
+                    t = bar_start + (swung + layer_shift) * beat
+                    if t < 0.0:
+                        t = 0.0  # never push a hit before the song start
                     vel = int(velocity * vel_mult)
                     track.notes.append(NoteEvent(midi_note, t, t + gate, vel))
 

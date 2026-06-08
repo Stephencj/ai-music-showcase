@@ -461,6 +461,26 @@ STYLES: dict[str, StylePreset] = {
         bass_program=33,   # Electric Bass (finger)
         melody_program=17, # Drawbar Organ — sampled organ flavor
     ),
+    "hip_hop_dj": StylePreset(
+        name="Hip Hop (DJ Layers)", tempo=88, key="F", scale="minor",
+        progression=["i7", "iv7", "VI7", "v7"],
+        voicing="ninth", bass_pattern="root", drum_pattern="hiphop_dj_layered",
+        chord_rhythm="charleston", melody_style="blues",
+        chord_octave=3, bass_octave=2, swing=0.12,
+        chord_program=4,   # Electric Piano 1 — Rhodes
+        bass_program=33,   # Electric Bass (finger)
+        melody_program=17, # Drawbar Organ
+    ),
+    "trap_dj": StylePreset(
+        name="Trap (DJ Layers)", tempo=140, key="C", scale="minor",
+        progression=["i", "VI", "iv", "v"],
+        voicing="open5", bass_pattern="root", drum_pattern="trap_dj_layered",
+        chord_rhythm="pad", melody_style="chord_tone",
+        chord_octave=4, bass_octave=2,
+        chord_program=50,  # Synth Strings 1
+        bass_program=38,   # Synth Bass 1 — 808 thump
+        melody_program=81, # Lead 2 (sawtooth)
+    ),
     "rap_2000s": StylePreset(
         name="2000s Rap", tempo=92, key="C", scale="minor",
         progression=["i", "VI", "iv", "v"],      # dark Kanye / 808s era
@@ -522,6 +542,36 @@ STYLES: dict[str, StylePreset] = {
             ("Tropical vi-IV", ["vi", "IV", "I", "V"]),
             ("Bachata cycle", ["I", "vi", "ii", "V"]),
         ],
+    ),
+    "latin_mambo": StylePreset(
+        name="Latin Mambo", tempo=100, key="A", scale="minor",
+        progression=["i", "iv", "V7", "i"],
+        voicing="seventh", bass_pattern="tumbao", drum_pattern="latin_mambo",
+        chord_rhythm="montuno_2_3", melody_style="chord_tone",
+        chord_octave=4, bass_octave=2,
+        chord_program=0,   # Acoustic Grand — montuno
+        bass_program=33,
+        melody_program=56, # Trumpet
+    ),
+    "latin_cumbia": StylePreset(
+        name="Cumbia", tempo=92, key="D", scale="minor",
+        progression=["i", "V", "i", "V"],
+        voicing="triad", bass_pattern="root_fifth", drum_pattern="latin_cumbia",
+        chord_rhythm="montuno_2_3", melody_style="chord_tone",
+        chord_octave=4, bass_octave=2,
+        chord_program=24,  # Acoustic Guitar (nylon)
+        bass_program=33,
+        melody_program=21, # Accordion
+    ),
+    "latin_percussion": StylePreset(
+        name="Latin Percussion", tempo=100, key="C", scale="minor",
+        progression=["i", "i", "i", "i"],
+        voicing="triad", bass_pattern="tumbao", drum_pattern="latin_percussion",
+        chord_rhythm="montuno_2_3", melody_style="chord_tone",
+        chord_octave=4, bass_octave=2,
+        chord_program=0,
+        bass_program=33,
+        melody_program=0,
     ),
     "salsa": StylePreset(
         name="Salsa", tempo=95, key="A", scale="minor",
