@@ -50,6 +50,12 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Music Producer finds your Mac on the same Wi-Fi network.</string>
+			<key>NSCameraUsageDescription</key>
+		<string>Take a photo of sheet music to scan it into a song.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Choose a photo of sheet music or an audio file to import.</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>Record audio to analyze its chord progression.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

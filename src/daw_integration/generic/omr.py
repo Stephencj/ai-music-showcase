@@ -72,6 +72,7 @@ def scan_to_midi(image_path: str, out_dir: Path, timeout: int = 600) -> dict:
     Returns ``{midi_path, key, scale, tempo, bars, time_signature}``.
     """
     import music21 as m21
+    import pretty_midi
 
     xml = scan_to_musicxml(image_path, out_dir, timeout=timeout)
     score = m21.converter.parse(str(xml))
@@ -88,11 +89,20 @@ def scan_to_midi(image_path: str, out_dir: Path, timeout: int = 600) -> dict:
     except Exception:
         pass
 
+    # Tempo MUST match the written MIDI's embedded tempo: the block preview is
+    # rendered straight from this MIDI (note times already baked at that tempo),
+    # while the practice chart derives bar timings from the block's tempo field.
+    # If they disagree the play-along cursor drifts. Read it back from the MIDI
+    # so the two are always consistent (music21 uses the score's metronome mark
+    # if present, else 120).
     tempo: Optional[float] = None
-    for mm in score.recurse().getElementsByClass("MetronomeMark"):
-        if mm.number:
-            tempo = float(mm.number)
-            break
+    try:
+        _pm = pretty_midi.PrettyMIDI(str(midi_path))
+        _tempos = _pm.get_tempo_changes()[1]
+        if len(_tempos):
+            tempo = float(_tempos[0])
+    except Exception:
+        pass
 
     ts = [4, 4]
     tss = score.recurse().getElementsByClass("TimeSignature")
