@@ -123,9 +123,25 @@ def launch(blocks: gr.Blocks, *,
     # /app so an iPhone/desktop client can load it straight from the Mac
     # (and Capacitor/Tauri later bundle the same dist/). html=True makes it
     # an SPA fallback. Built via `cd web && npm run build`.
+    #
+    # Cache policy matters for the iOS WKWebView: plain StaticFiles sends no
+    # Cache-Control, so the web view heuristically caches index.html and keeps
+    # loading an OLD bundle after a rebuild (e.g. never showing a new tab). We
+    # serve the HTML entry as ``no-cache`` (always revalidate → picks up new
+    # builds) while the content-hashed ``/app/assets/*`` stay immutable.
+    class _SpaStatic(StaticFiles):
+        async def get_response(self, path, scope):
+            resp = await super().get_response(path, scope)
+            ctype = resp.headers.get("content-type", "")
+            if ctype.startswith("text/html"):
+                resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+            elif "assets/" in path:
+                resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            return resp
+
     _web_dist = _Path(__file__).resolve().parents[2] / "web" / "dist"
     if _web_dist.exists():
-        api.mount("/app", StaticFiles(directory=str(_web_dist), html=True),
+        api.mount("/app", _SpaStatic(directory=str(_web_dist), html=True),
                   name="webapp")
 
     # MCP server (SSE transport) — same auth middleware as the rest of
