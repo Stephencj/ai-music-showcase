@@ -12,10 +12,13 @@ subsequent runs are offline.
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger("ai_music_studio.omr")
 
 # oemer 0.1.5 still uses NumPy aliases (np.int, np.float, …) that were removed
 # in NumPy 2.x, which the rest of the project requires. Rather than edit the
@@ -34,35 +37,87 @@ _OEMER_RUNNER = (
 )
 
 
-def _oemer_cmd(image: Path, out_dir: Path) -> list[str]:
-    # oemer defaults to onnxruntime (no --use-tf); --without-deskew is faster
-    # and avoids a deskew failure mode on clean digital renders.
-    return [
-        sys.executable, "-c", _OEMER_RUNNER,
-        str(image), "-o", str(out_dir), "--without-deskew",
-    ]
+def _oemer_cmd(image: Path, out_dir: Path, deskew: bool) -> list[str]:
+    # oemer defaults to onnxruntime (no --use-tf). Deskew is oemer's own
+    # rotation-correction step — helpful for phone photos, but it can misfire
+    # on perfectly-axis-aligned digital renders, hence the --without-deskew
+    # fallback strategy below.
+    cmd = [sys.executable, "-c", _OEMER_RUNNER, str(image), "-o", str(out_dir)]
+    if not deskew:
+        cmd.append("--without-deskew")
+    return cmd
+
+
+def _run_oemer(image: Path, out_dir: Path, deskew: bool, timeout: int):
+    """One oemer attempt into its own dir. Returns the MusicXML path or None.
+
+    Each attempt gets a fresh output dir so a stale .musicxml from a prior
+    attempt can't be mistaken for this one's success.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        proc = subprocess.run(
+            _oemer_cmd(image, out_dir, deskew),
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return None, "timed out"
+    xmls = list(out_dir.glob("*.musicxml"))
+    if xmls:
+        return xmls[0], ""
+    return None, (proc.stderr or proc.stdout or "")[-300:]
+
+
+def _gentle_clean(image_path: str, dest: Path) -> Optional[str]:
+    """Last-resort rescue: even out glare + knock down moiré WITHOUT hard
+    binarising (which breaks oemer's staff detection). Only used when oemer
+    fails on the raw image — e.g. a very dark / low-contrast photo. Returns the
+    cleaned PNG path, or None if OpenCV/PIL isn't usable."""
+    try:
+        import cv2
+        import numpy as np
+        from PIL import Image, ImageOps
+        im = ImageOps.exif_transpose(Image.open(image_path)).convert("L")
+        g = np.array(im)
+        g = cv2.bilateralFilter(g, 9, 75, 75)
+        g = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(g)
+        cv2.imwrite(str(dest), g)
+        return str(dest)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("OMR gentle-clean failed: %s", exc)
+        return None
 
 
 def scan_to_musicxml(image_path: str, out_dir: Path, timeout: int = 600) -> Path:
-    """Run oemer on an image and return the produced MusicXML path."""
+    """Recognise a score image → MusicXML, trying oemer-native strategies in
+    order and stopping at the first that yields output.
+
+    Empirically oemer recognises the *raw* image best — pre-cleaning (binarise
+    / threshold) tends to break its internal staff detection — so cleanup is a
+    last resort only. Order: deskew-on (phone photos), then deskew-off (clean
+    digital renders), then a gently-cleaned rescue for low-contrast captures.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
-    proc = subprocess.run(
-        _oemer_cmd(Path(image_path), out_dir),
-        capture_output=True, text=True, timeout=timeout,
-    )
-    # oemer writes <stem>.musicxml into out_dir (or alongside the image).
-    stem = Path(image_path).stem
-    candidates = [
-        out_dir / f"{stem}.musicxml",
-        Path(image_path).with_suffix(".musicxml"),
-        *out_dir.glob("*.musicxml"),
+    raw = image_path
+    cleaned = _gentle_clean(image_path, out_dir / "cleaned.png")
+    attempts = [
+        ("raw + deskew", raw, True),
+        ("raw, no deskew", raw, False),
     ]
-    for c in candidates:
-        if c.exists():
-            return c
+    if cleaned:
+        attempts.append(("cleaned rescue", cleaned, False))
+
+    errors = []
+    for i, (label, img, deskew) in enumerate(attempts):
+        xml, err = _run_oemer(Path(img), out_dir / f"try{i}", deskew, timeout)
+        if xml is not None:
+            logger.info("OMR succeeded via strategy %r", label)
+            return xml
+        logger.info("OMR strategy %r produced nothing", label)
+        errors.append(f"[{label}] {err}")
+
     raise RuntimeError(
-        "oemer produced no MusicXML.\n"
-        f"stdout: {proc.stdout[-500:]}\nstderr: {proc.stderr[-500:]}"
+        "oemer produced no MusicXML after all strategies.\n" + "\n".join(errors)
     )
 
 
