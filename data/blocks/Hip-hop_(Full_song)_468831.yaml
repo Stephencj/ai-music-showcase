@@ -1,0 +1,62 @@
+name: Hip-hop_(Full_song)_468831
+tempo: 90.0
+time_signature:
+- 4
+- 4
+bars: 64
+duration_seconds: 170.7664959
+created: '2026-06-07T20:14:45'
+instruments:
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 698
+- name: Synth Bass
+  program: 38
+  is_drum: false
+  n_notes: 208
+- name: Electric Piano
+  program: 4
+  is_drum: false
+  n_notes: 704
+n_notes: 1610
+spec:
+  genre: hip_hop_full
+  key: A
+  scale: minor
+  tempo: 90.0
+  time_signature:
+  - 4
+  - 4
+  seed: 468831
+  swing: null
+  instruments:
+  - drum_kit
+  - synth_bass
+  - electric_piano
+  sections:
+  - start_bar: 0
+    end_bar: 7
+    label: Intro
+    role: intro
+  - start_bar: 8
+    end_bar: 23
+    label: Verse 1
+    role: verse
+  - start_bar: 24
+    end_bar: 31
+    label: Hook 1
+    role: chorus
+  - start_bar: 32
+    end_bar: 47
+    label: Verse 2
+    role: verse
+  - start_bar: 48
+    end_bar: 55
+    label: Bridge
+    role: bridge
+  - start_bar: 56
+    end_bar: 63
+    label: Hook out
+    role: chorus
+  section: null

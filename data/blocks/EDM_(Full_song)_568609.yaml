@@ -1,0 +1,75 @@
+name: EDM_(Full_song)_568609
+tempo: 126.0
+time_signature:
+- 4
+- 4
+bars: 128
+duration_seconds: 243.80928000000003
+created: '2026-06-07T20:02:35'
+instruments:
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 1402
+- name: Synth Bass
+  program: 38
+  is_drum: false
+  n_notes: 432
+- name: Synth Pad
+  program: 89
+  is_drum: false
+  n_notes: 1040
+- name: Synth Lead
+  program: 81
+  is_drum: false
+  n_notes: 592
+- name: Lead
+  program: 26
+  is_drum: false
+  n_notes: 48
+n_notes: 3514
+spec:
+  genre: edm_full_song
+  key: C#
+  scale: minor
+  tempo: 126.0
+  time_signature:
+  - 4
+  - 4
+  seed: 568609
+  swing: null
+  instruments:
+  - drum_kit
+  - synth_bass
+  - synth_pad
+  - synth_lead
+  sections:
+  - start_bar: 0
+    end_bar: 15
+    label: Intro
+    role: intro
+  - start_bar: 16
+    end_bar: 31
+    label: Buildup 1
+    role: intro
+  - start_bar: 32
+    end_bar: 47
+    label: Drop 1
+    role: chorus
+  - start_bar: 48
+    end_bar: 63
+    label: Breakdown
+    role: bridge
+  - start_bar: 64
+    end_bar: 79
+    label: Buildup 2
+    role: intro
+  - start_bar: 80
+    end_bar: 111
+    label: Drop 2
+    role: chorus
+  - start_bar: 112
+    end_bar: 127
+    label: Outro
+    role: outro
+  section: null

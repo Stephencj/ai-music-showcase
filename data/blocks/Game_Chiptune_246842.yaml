@@ -1,0 +1,58 @@
+name: Game_Chiptune_246842
+tempo: 150.0
+time_signature:
+- 4
+- 4
+bars: 32
+duration_seconds: 51.16
+created: '2026-06-07T20:49:18'
+instruments:
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 380
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 148
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 612
+- name: Lead
+  program: 26
+  is_drum: false
+  n_notes: 12
+n_notes: 1152
+spec:
+  genre: game_chiptune
+  key: C
+  scale: major
+  tempo: 150.0
+  time_signature:
+  - 4
+  - 4
+  seed: 246842
+  swing: null
+  instruments:
+  - drum_kit
+  - electric_bass
+  - piano
+  sections:
+  - start_bar: 0
+    end_bar: 3
+    label: Intro
+    role: intro
+  - start_bar: 4
+    end_bar: 19
+    label: Verse
+    role: verse
+  - start_bar: 20
+    end_bar: 27
+    label: Chorus
+    role: chorus
+  - start_bar: 28
+    end_bar: 31
+    label: Outro
+    role: outro
+  section: null

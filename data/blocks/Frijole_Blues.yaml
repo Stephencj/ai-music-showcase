@@ -1,0 +1,144 @@
+name: Frijole_Blues
+tempo: 104.0
+time_signature:
+- 4
+- 4
+bars: 80
+duration_seconds: 184.61538461538458
+created: '2026-05-25T01:00:56'
+instruments:
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 1099
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 328
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 1544
+- name: Electric Guitar (clean)
+  program: 27
+  is_drum: false
+  n_notes: 1104
+- name: Lead Vocal
+  program: 53
+  is_drum: false
+  n_notes: 341
+- name: Backing Vocals
+  program: 52
+  is_drum: false
+  n_notes: 141
+n_notes: 4557
+spec:
+  genre: pop_full_song
+  key: F#
+  scale: major
+  tempo: 104.0
+  time_signature:
+  - 4
+  - 4
+  seed: 287252
+  swing: null
+  instruments:
+  - drum_kit
+  - electric_bass
+  - piano
+  - electric_guitar_clean
+  - vocal_lead
+  - vocal_harmony
+  sections:
+  - start_bar: 0
+    end_bar: 3
+    label: Intro
+    role: intro
+  - start_bar: 4
+    end_bar: 19
+    label: Verse 1
+    role: verse
+  - start_bar: 20
+    end_bar: 23
+    label: Pre-chorus
+    role: verse
+  - start_bar: 24
+    end_bar: 39
+    label: Chorus 1
+    role: chorus
+  - start_bar: 40
+    end_bar: 51
+    label: Verse 2
+    role: verse
+  - start_bar: 52
+    end_bar: 59
+    label: Bridge
+    role: bridge
+  - start_bar: 60
+    end_bar: 75
+    label: Chorus 2
+    role: chorus
+  - start_bar: 76
+    end_bar: 79
+    label: Outro
+    role: outro
+  section: null
+lyrics: 'Oh no
+
+  Here it comes
+
+  Woke at three a.m. with a deep and stabbing pain
+
+  My heart was beating sideways and I thought I''d hit the drain
+
+  I texted all my exes saying sorry for it all
+
+  I crawled across the carpet and I waited for the fall
+
+  I saw a white light glowing
+
+  Heard a choir start to cry
+
+  I thought that I was dying, said my final sweet goodbye
+
+  Wrote it on my phone with a tear inside my eye
+
+  Turns out it wasn''t heartbreak, wasn''t even my poor heart
+
+  Oh I just needed to fart, I just needed to fart
+
+  I called my weeping mother, said remember me with love
+
+  She asked me what was hurting, I said everything above
+
+  The doctor''s on the highway and I see the flashing light
+
+  Then something deep inside me started rumbling in the night
+
+  The nurses came in sprinting and they hooked me to a beep
+
+  I told them tell my goldfish that I loved him oh so deep
+
+  I thought that I was dying, said my final sweet goodbye
+
+  Wrote it on my phone with a tear inside my eye
+
+  Turns out it wasn''t heartbreak, wasn''t even my poor heart
+
+  Oh I just needed to fart, I just needed to fart
+
+  All the drama, all the tears, the eulogy I penned
+
+  I had planned my whole dang funeral, the flowers and the hymn
+
+  A symphony of agony came roaring from my end
+
+  Oh I''m alive
+
+  I''m alive
+
+  And the bathroom''s not so fine
+
+  Light a candle, start anew
+
+  I just needed to fart, what a beautiful design'

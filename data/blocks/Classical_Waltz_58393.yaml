@@ -1,0 +1,58 @@
+name: Classical_Waltz_58393
+tempo: 132.0
+time_signature:
+- 3
+- 4
+bars: 32
+duration_seconds: 43.63632
+created: '2026-05-25T15:33:40'
+instruments:
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 120
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 96
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 784
+- name: Lead
+  program: 26
+  is_drum: false
+  n_notes: 8
+n_notes: 1008
+spec:
+  genre: classical_waltz
+  key: G
+  scale: major
+  tempo: 132.0
+  time_signature:
+  - 3
+  - 4
+  seed: 58393
+  swing: null
+  instruments:
+  - drum_kit
+  - electric_bass
+  - piano
+  sections:
+  - start_bar: 0
+    end_bar: 3
+    label: Intro
+    role: intro
+  - start_bar: 4
+    end_bar: 19
+    label: Verse
+    role: verse
+  - start_bar: 20
+    end_bar: 27
+    label: Chorus
+    role: chorus
+  - start_bar: 28
+    end_bar: 31
+    label: Outro
+    role: outro
+  section: null

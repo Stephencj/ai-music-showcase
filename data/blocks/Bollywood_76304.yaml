@@ -1,0 +1,54 @@
+name: Bollywood_76304
+tempo: 105.0
+time_signature:
+- 4
+- 4
+bars: 32
+duration_seconds: 73.142784
+created: '2026-06-07T21:01:42'
+instruments:
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 377
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 108
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 560
+n_notes: 1045
+spec:
+  genre: bollywood
+  key: D
+  scale: raga_yaman
+  tempo: 105.0
+  time_signature:
+  - 4
+  - 4
+  seed: 76304
+  swing: null
+  instruments:
+  - drum_kit
+  - electric_bass
+  - piano
+  sections:
+  - start_bar: 0
+    end_bar: 3
+    label: Intro
+    role: intro
+  - start_bar: 4
+    end_bar: 19
+    label: Verse
+    role: verse
+  - start_bar: 20
+    end_bar: 27
+    label: Chorus
+    role: chorus
+  - start_bar: 28
+    end_bar: 31
+    label: Outro
+    role: outro
+  section: null

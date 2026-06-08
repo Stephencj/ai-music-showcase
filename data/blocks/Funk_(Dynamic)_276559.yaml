@@ -1,0 +1,85 @@
+name: Funk_(Dynamic)_276559
+tempo: 100.0
+time_signature:
+- 4
+- 4
+bars: 8
+duration_seconds: 19.243636363636366
+created: '2026-06-08T00:58:47'
+instruments:
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 125
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 44
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 88
+- name: Synth Bass
+  program: 38
+  is_drum: false
+  n_notes: 56
+- name: Percussion
+  program: 0
+  is_drum: true
+  n_notes: 137
+- name: Electric Piano
+  program: 4
+  is_drum: false
+  n_notes: 140
+- name: Organ (Hammond)
+  program: 16
+  is_drum: false
+  n_notes: 144
+- name: Electric Guitar (clean)
+  program: 27
+  is_drum: false
+  n_notes: 144
+- name: Acoustic Guitar
+  program: 25
+  is_drum: false
+  n_notes: 144
+- name: Synth Pad
+  program: 89
+  is_drum: false
+  n_notes: 200
+n_notes: 1222
+spec:
+  genre: funk_dynamic
+  key: G#
+  scale: dorian
+  tempo: 100.0
+  time_signature:
+  - 4
+  - 4
+  seed: 276559
+  swing: null
+  instruments:
+  - drum_kit
+  - electric_bass
+  - piano
+  - synth_bass
+  - percussion
+  - electric_piano
+  - organ_hammond
+  - electric_guitar_clean
+  - acoustic_guitar
+  - synth_pad
+  sections:
+  - start_bar: 0
+    end_bar: 3
+    label: Groove
+    role: verse
+  - start_bar: 4
+    end_bar: 5
+    label: Bridge
+    role: bridge
+  - start_bar: 6
+    end_bar: 7
+    label: Drop
+    role: chorus
+  section: null

@@ -1,0 +1,126 @@
+name: Soul___Motown_(Full_song)_219890
+tempo: 98.0
+time_signature:
+- 4
+- 4
+bars: 80
+duration_seconds: 195.91808
+created: '2026-05-25T15:38:37'
+instruments:
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 982
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 280
+- name: Electric Piano
+  program: 4
+  is_drum: false
+  n_notes: 924
+- name: Brass Section
+  program: 61
+  is_drum: false
+  n_notes: 1616
+- name: Lead Vocal
+  program: 53
+  is_drum: false
+  n_notes: 252
+- name: Backing Vocals
+  program: 52
+  is_drum: false
+  n_notes: 102
+n_notes: 4156
+spec:
+  genre: soul_motown_full
+  key: C#
+  scale: major
+  tempo: 98.0
+  time_signature:
+  - 4
+  - 4
+  seed: 219890
+  swing: null
+  instruments:
+  - drum_kit
+  - electric_bass
+  - electric_piano
+  - brass_section
+  - vocal_lead
+  - vocal_harmony
+  sections:
+  - start_bar: 0
+    end_bar: 3
+    label: Intro
+    role: intro
+  - start_bar: 4
+    end_bar: 19
+    label: Verse 1
+    role: verse
+  - start_bar: 20
+    end_bar: 35
+    label: Chorus 1
+    role: chorus
+  - start_bar: 36
+    end_bar: 51
+    label: Verse 2
+    role: verse
+  - start_bar: 52
+    end_bar: 59
+    label: Bridge
+    role: bridge
+  - start_bar: 60
+    end_bar: 75
+    label: Chorus 2
+    role: chorus
+  - start_bar: 76
+    end_bar: 79
+    label: Outro
+    role: outro
+  section: null
+lyrics: 'Ooh, summertime
+
+
+  Sun came up on Saturday, the city''s feeling fine
+
+  You walked by in golden light and stole this heart of mine
+
+  The radio was playing low, the ceiling fans were slow
+
+  And baby when you looked at me, I felt the whole town glow
+
+
+  It''s that summer sizzle, baby, burning up the street
+
+  Got me melting like the sidewalk underneath my feet
+
+  Turn the heat up higher, let the good times roll
+
+  Summer sizzle, baby, you''re the fire in my soul
+
+
+  We danced until the streetlights came and painted us in gold
+
+  Your hand was warm inside of mine, we never felt the cold
+
+  A little sweat, a little groove, the band was playing sweet
+
+  Two hearts caught in the rhythm of that hot and heavy beat
+
+
+  Oh, when the temperature is rising, I lose all my control
+
+  Come a little closer now and let me lose my soul
+
+
+  It''s that summer sizzle, baby, burning up the street
+
+  Got me melting like the sidewalk underneath my feet
+
+  Turn the heat up higher, let the good times roll
+
+  Summer sizzle, baby, you''re the fire in my soul
+
+
+  Ooh, that summer sizzle'
