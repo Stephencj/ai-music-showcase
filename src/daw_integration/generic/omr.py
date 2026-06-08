@@ -121,6 +121,30 @@ def scan_to_musicxml(image_path: str, out_dir: Path, timeout: int = 600) -> Path
     )
 
 
+def _close_silent_gaps(pm, min_gap: float = 0.12) -> int:
+    """Bridge spots where EVERY part falls silent — almost always dropped notes
+    in the OMR, not a real rest (piano writing rarely rests both hands mid-
+    phrase). We sustain the just-released notes across the gap, which removes
+    the jarring "stopped to reposition hands" pause while keeping the bar grid
+    intact (legitimate single-hand rests are left alone — the other hand covers
+    them, so they aren't total silence). Returns the number of notes extended.
+    """
+    spans = sorted((n.start, n.end) for inst in pm.instruments for n in inst.notes)
+    gaps, cur = [], 0.0
+    for s, e in spans:
+        if s - cur > min_gap:
+            gaps.append((cur, s))
+        cur = max(cur, e)
+    extended = 0
+    for g0, g1 in gaps:
+        for inst in pm.instruments:
+            for n in inst.notes:
+                if abs(n.end - g0) < 0.06 and n.end < g1:
+                    n.end = g1
+                    extended += 1
+    return extended
+
+
 def scan_to_midi(image_path: str, out_dir: Path, timeout: int = 600) -> dict:
     """Scan a sheet-music image → MIDI + basic musical metadata.
 
@@ -168,6 +192,8 @@ def scan_to_midi(image_path: str, out_dir: Path, timeout: int = 600) -> dict:
     tempo: Optional[float] = None
     try:
         _pm = pretty_midi.PrettyMIDI(str(midi_path))
+        _close_silent_gaps(_pm)
+        _pm.write(str(midi_path))
         _tempos = _pm.get_tempo_changes()[1]
         if len(_tempos):
             tempo = float(_tempos[0])
