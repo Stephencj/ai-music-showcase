@@ -1059,10 +1059,10 @@ def _add_lead_tech(name, *, roles, mode, label, description,
 # A repeating riff hook in verses/choruses and a real call-and-response
 # solo in the bridge/solo section (the "Solo" label maps to the bridge
 # role). Only fire for the ``lead_guitar`` instrument.
-_add_lead_tech("rock_lead_riff_verse", roles=("verse",), mode="riff",
+_add_lead_tech("rock_lead_riff_verse", roles=("intro", "verse", "outro"), mode="riff",
                lick_genre="rock", tags=("rock",), velocity=88,
                label="Rock lead riff (verse)",
-               description="Repeating pentatonic guitar riff with bends — a verse hook.")
+               description="Repeating pentatonic guitar riff with bends — a verse/intro hook.")
 _add_lead_tech("rock_lead_riff_chorus", roles=("chorus",), mode="riff",
                lick_genre="rock", tags=("rock",), velocity=98,
                label="Rock lead riff (chorus)",
@@ -1099,7 +1099,7 @@ _add_lead_tech("blues_guitar_solo", roles=("bridge",), mode="solo",
 # ----- LEAD GUITAR (Country) ------------------------------------------------
 # Major-pentatonic chicken-pickin' with snapped attacks, sixth double-stops
 # and oblique pedal-steel bends. Twangy clean-electric tone (27).
-_add_lead_tech("country_lead_riff_verse", roles=("verse",), mode="riff",
+_add_lead_tech("country_lead_riff_verse", roles=("intro", "verse", "outro"), mode="riff",
                lick_genre="country", tags=("country",), program=27, velocity=90,
                label="Country lead riff (verse)",
                description="Chicken-pickin' double-stop riff with snapped attacks.")
