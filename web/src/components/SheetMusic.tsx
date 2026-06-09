@@ -76,8 +76,15 @@ export default function SheetMusic({
       });
       apiRef.current = api;
 
-      const audioEl = audioRef.current;
-      if (audioEl && api.player && api.player.output) {
+      // Bridge the practice <audio> to AlphaTab's external-media output. This
+      // is what drives the cursor — but api.player.output isn't always ready
+      // the instant after construction, so attach on playerReady (with a
+      // retry fallback), not just synchronously.
+      let attached = false;
+      const attachBridge = () => {
+        const audioEl = audioRef.current;
+        if (attached || !audioEl || !api.player || !api.player.output) return;
+        attached = true;
         const push = () => {
           try { api.player.output.updatePosition(audioEl.currentTime * 1000); } catch { /* */ }
         };
@@ -107,7 +114,14 @@ export default function SheetMusic({
           pause() { audioEl.pause(); },
           seekTo(ms: number) { audioEl.currentTime = (ms || 0) / 1000; },
         };
-      }
+        // If audio is already rolling, get the cursor going immediately.
+        push();
+        if (!audioEl.paused) { try { api.play(); } catch { /* */ } }
+      };
+      attachBridge();                                  // try now
+      try { api.playerReady.on(attachBridge); } catch { /* */ }
+      // Fallback: poll briefly in case playerReady never fires (external media).
+      for (let i = 1; i <= 10 && !attached; i++) setTimeout(attachBridge, i * 150);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       api.scoreLoaded.on((s: any) => {
