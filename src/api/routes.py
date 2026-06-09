@@ -768,6 +768,15 @@ def song_audio_route(title: str) -> FileResponse:
         raise HTTPException(404, f"No song audio: {exc}")
 
 
+@router.get("/songs/{title}/audio.wav")
+def song_audio_wav_route(title: str) -> FileResponse:
+    """Cached WAV for a saved song — used for clean section looping."""
+    try:
+        return _serve(Path(service.ensure_song_wav(title)), "audio/wav")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, f"No song wav: {exc}")
+
+
 @router.post("/songs")
 def save_song(req: SongSaveRequest) -> dict:
     try:

@@ -688,10 +688,11 @@ def song_score_data(title: str) -> dict:
     }
 
 
-def ensure_song_preview(title: str) -> str:
-    """Render (and cache) a saved song's audio so it can be practised. Concats
-    the timeline's blocks → MIDI → HQ render → cached MP3 under data/songs.
-    Re-renders only when missing or older than the song definition."""
+def _ensure_song_audio(title: str):
+    """Render a saved song once, caching BOTH a WAV and an MP3 under data/songs
+    (the WAV is used for gapless-ish section looping — seeking a WAV has no MP3
+    decoder-priming gap). Returns (wav_path, mp3_path)."""
+    import shutil
     import tempfile
     from src.daw_integration.generic import block_concat
     from src.daw_integration.generic import blocks as block_store
@@ -699,10 +700,16 @@ def ensure_song_preview(title: str) -> str:
     from src.audio_processing.render.pipeline import render_to_audio
 
     song_yaml = song_store._path(title)
-    mp3 = song_store.SONGS_DIR / f"{song_store._safe_name(title)}.mp3"
-    if mp3.exists() and (not song_yaml.exists()
-                         or mp3.stat().st_mtime >= song_yaml.stat().st_mtime):
-        return str(mp3)
+    safe = song_store._safe_name(title)
+    wav = song_store.SONGS_DIR / f"{safe}.wav"
+    mp3 = song_store.SONGS_DIR / f"{safe}.mp3"
+
+    def fresh(p: Path) -> bool:
+        return p.exists() and (not song_yaml.exists()
+                               or p.stat().st_mtime >= song_yaml.stat().st_mtime)
+
+    if fresh(wav) and fresh(mp3):
+        return wav, mp3
 
     timeline = song_store.load_song_timeline(title).get("timeline") or []
     if not timeline:
@@ -714,9 +721,23 @@ def ensure_song_preview(title: str) -> str:
     render = render_to_audio(midi=midi_path, output_dir=tmp / "render",
                              with_stems=False, master_preset="default")
     song_store.SONGS_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copy(str(render.mix_path), str(wav))
+    except Exception:  # noqa: BLE001 — wav is an optimisation, not required
+        pass
     if not block_store.write_preview_mp3(Path(render.mix_path), mp3):
         raise RuntimeError("could not render song preview")
-    return str(mp3)
+    return wav, mp3
+
+
+def ensure_song_preview(title: str) -> str:
+    """Cached MP3 for a saved song (for streaming playback)."""
+    return str(_ensure_song_audio(title)[1])
+
+
+def ensure_song_wav(title: str) -> str:
+    """Cached WAV for a saved song (for clean section looping)."""
+    return str(_ensure_song_audio(title)[0])
 
 
 # Fast/dense vocal lines (rap) read far better on the rough/TTS engine than the

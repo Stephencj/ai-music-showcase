@@ -179,6 +179,8 @@ export const getSongScoreData = (title: string) =>
   jget<ScoreData>(`/api/songs/${encodeURIComponent(title)}/score-data`);
 export const songAudioUrl = (title: string) =>
   url(`/api/songs/${encodeURIComponent(title)}/audio`);
+export const songWavUrl = (title: string) =>
+  url(`/api/songs/${encodeURIComponent(title)}/audio.wav`);
 
 // Analyze an uploaded song → same score-data shape + a Roman-numeral
 // progression for "generate similar".

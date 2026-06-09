@@ -292,7 +292,15 @@ export default function PracticeScreen() {
     return () => cancelAnimationFrame(raf);
   }, [diagramNotes]);
 
-  const playSrc = (solo && selectedTrack && blockName) ? api.partAudioUrl(blockName, partIdx) : audioSrc;
+  // For section looping, play the WAV (sample-accurate seeks — no MP3 decoder
+  // priming gap), which keeps loops tight without losing pitch-preserved speed.
+  const sectionLooping = loop.startsWith("s");
+  const playSrc = (solo && selectedTrack && blockName)
+    ? api.partAudioUrl(blockName, partIdx)
+    : sectionLooping
+      ? (blockName ? api.blockFileUrl(blockName, "wav")
+         : sourceIsSong ? api.songWavUrl(selected.slice(5)) : audioSrc)
+      : audioSrc;
 
   // Section looping driven by rAF (60fps) instead of timeupdate (~4Hz), and
   // seeking back a hair BEFORE the section end so the element never fires
@@ -436,7 +444,13 @@ export default function PracticeScreen() {
               onTimeUpdate={(e) => setT(e.currentTarget.currentTime)}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
-              onLoadedMetadata={(e) => applyRate(e.currentTarget)}
+              onLoadedMetadata={(e) => {
+                applyRate(e.currentTarget);
+                if (loop.startsWith("s")) {
+                  const sec = score.sections[Number(loop.slice(1))];
+                  if (sec) e.currentTarget.currentTime = sec.start_time;
+                }
+              }}
               style={{ width: "100%" }}
             />
           )}
