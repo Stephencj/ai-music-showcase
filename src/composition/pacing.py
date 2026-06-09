@@ -298,19 +298,88 @@ _register(PacingStrategy(
     tags=("chord_additions", "jazz", "broadway"),
 ))
 
+# ---- with_tritone_sub -----------------------------------------------------
+def _with_tritone_sub(prog, key, scale):
+    """Replace the dominant (V) with its tritone substitute bII7 — the
+    classic jazz reharm where bII7 resolves down a half-step into I. Other
+    chords hold one bar."""
+    out = []
+    for s, _ in _normalize_progression(prog):
+        if _strip_suffix(s) in ("V", "v"):
+            out.append(("bII7", 1.0))
+        else:
+            out.append((s, 1.0))
+    return out
+
+
+_register(PacingStrategy(
+    name="with_tritone_sub",
+    label="Tritone substitution",
+    description="Substitute the dominant V with bII7 (tritone sub into I).",
+    apply=_with_tritone_sub,
+    tags=("reharm", "jazz"),
+))
+
+# ---- with_borrowed_chords -------------------------------------------------
+def _with_borrowed_chords(prog, key, scale):
+    """Modal interchange: in a major key colour the subdominant with the
+    borrowed minor iv (and submediant with bVI); in a minor key borrow the
+    brighter major IV. Tasteful, idiomatic — a no-op when those degrees
+    aren't present."""
+    minor = bool(scale) and scale.lower().startswith("min")
+    out = []
+    for s, _ in _normalize_progression(prog):
+        stem = _strip_suffix(s)
+        if not minor and stem == "IV":
+            out.append(("iv", 1.0))       # borrowed minor iv
+        elif not minor and stem == "vi":
+            out.append(("bVI", 1.0))      # borrowed flat-VI
+        elif minor and stem == "iv":
+            out.append(("IV", 1.0))       # borrowed major IV (Dorian colour)
+        else:
+            out.append((s, 1.0))
+    return out
+
+
+_register(PacingStrategy(
+    name="with_borrowed_chords",
+    label="Borrowed chords (modal interchange)",
+    description="Colour with borrowed chords — minor iv / bVI in major, major IV in minor.",
+    apply=_with_borrowed_chords,
+    tags=("reharm", "modal_interchange"),
+))
+
 
 # ---------------------------------------------------------------------------
 # Public helpers
 # ---------------------------------------------------------------------------
 
-def pick_pacing(rng, preset, section_role: str) -> PacingStrategy:
+def pick_pacing(rng, preset, section_role: str, reharm: tuple = (),
+                reharm_prob: float = 0.0) -> PacingStrategy:
     """Pick a pacing strategy for one section using ``rng``.
 
     Bridge sections sample from ``preset.bridge_pacing_options`` when
     set (more adventurous pool); everything else samples from
     ``preset.pacing_options``. Empty pools fall back to ``uniform_1``
     so presets that opted out keep today's 1-bar-per-chord behavior.
+
+    ``reharm`` is the genre's ``(strategy_name, weight)`` reharmonization
+    pool (from ``harmony_profile``). In verse/chorus/bridge sections there's
+    a role-scaled chance to pick a reharm strategy instead — so tonal
+    variation isn't bridge-only — while intro/outro stay clean.
     """
+    if reharm and reharm_prob > 0 and section_role in ("verse", "chorus", "bridge"):
+        p = min(0.6, reharm_prob * (1.8 if section_role == "bridge" else 1.0))
+        if rng.random() < p:
+            names = [n for n, _ in reharm]
+            weights = [max(1, int(w)) for _, w in reharm]
+            roll = float(rng.random()) * float(sum(weights))
+            acc = 0.0
+            for n, w in zip(names, weights):
+                acc += w
+                if roll <= acc:
+                    return PACING_REGISTRY.get(n, PACING_REGISTRY["uniform_1"])
+
     bridge_pool = tuple(getattr(preset, "bridge_pacing_options", ()) or ())
     main_pool = tuple(getattr(preset, "pacing_options", ()) or ())
     pool = bridge_pool if (section_role == "bridge" and bridge_pool) else main_pool

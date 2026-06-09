@@ -24,34 +24,45 @@ class HarmonyProfile:
     # (strategy_name, weight) reharm strategies eligible in NON-bridge
     # sections (bridges already sample the preset's bridge_pacing_options).
     reharm: tuple
+    # Base per-section probability of applying a reharm strategy in a
+    # verse/chorus (scaled up for bridges). Higher = more adventurous.
+    reharm_prob: float
 
 
 # Tasteful diatonic colour — pop / country / generic. Sparse secondary doms.
 _TASTEFUL = HarmonyProfile(
     voicing_variety=0.35, voicing_family="diatonic_color",
-    reharm=(("with_secondary_doms", 1),),
+    reharm=(("with_secondary_doms", 1),), reharm_prob=0.12,
 )
-# Rock / metal — power-driven, very little reharm.
+# Rock / metal — power-driven, basically no reharm.
 _ROCK = HarmonyProfile(
     voicing_variety=0.30, voicing_family="rock",
-    reharm=(),
+    reharm=(), reharm_prob=0.0,
 )
 # Jazz / funk / soul / blues — extended colour + adventurous reharm.
 _JAZZ = HarmonyProfile(
     voicing_variety=0.60, voicing_family="jazz",
     reharm=(("with_secondary_doms", 2), ("with_tritone_sub", 1),
-            ("with_borrowed_chords", 1)),
+            ("with_borrowed_chords", 1)), reharm_prob=0.38,
 )
 # Classical / cinematic — triadic + suspensions, occasional secondary dom.
 _CLASSICAL = HarmonyProfile(
     voicing_variety=0.25, voicing_family="classical",
-    reharm=(("with_secondary_doms", 1),),
+    reharm=(("with_secondary_doms", 1),), reharm_prob=0.10,
+)
+# Blues — rich jazzy voicings, but the 12-bar FORM is rigid: never repace
+# or reharmonize it (that breaks the canonical I7-IV7-V7 structure).
+_BLUES = HarmonyProfile(
+    voicing_variety=0.50, voicing_family="jazz",
+    reharm=(), reharm_prob=0.0,
 )
 
 
 def harmony_profile(genre: str | None) -> HarmonyProfile:
     g = (genre or "").lower()
-    if any(k in g for k in ("jazz", "funk", "soul", "blues", "rnb",
+    if "blues" in g:                       # rigid form — checked before jazz
+        return _BLUES
+    if any(k in g for k in ("jazz", "funk", "soul", "rnb",
                             "gospel", "afrobeat", "saloon", "disco")):
         return _JAZZ
     if any(k in g for k in ("rock", "metal", "punk", "grunge")):

@@ -23,6 +23,7 @@ import numpy as np
 import soundfile as sf
 
 from src.composition import BANK, role_for_label
+from src.composition.harmony import harmony_profile
 from src.composition.pacing import apply_pacing, pick_pacing
 from src.composition.techniques import TechniqueContext, apply_technique
 from src.composition.voicing_layer import (
@@ -310,7 +311,9 @@ def compose_song(
         pacing_rng = np.random.default_rng(
             _sub_seed(seed, label, "pacing"),
         )
-        pacing = pick_pacing(pacing_rng, preset, role)
+        _hprof = harmony_profile(genre)
+        pacing = pick_pacing(pacing_rng, preset, role,
+                             reharm=_hprof.reharm, reharm_prob=_hprof.reharm_prob)
         pacing_picks[label] = pacing
         paced_progression = apply_pacing(
             progression, pacing, eff_key, eff_scale,
