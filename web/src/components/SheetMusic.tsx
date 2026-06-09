@@ -5,6 +5,9 @@ import { mediaUrl } from "../api";
 // the practice <audio> element with its cursor (External Media mode = 4, the
 // same setup the classic playback tab uses). The high-quality audio is the
 // backend FluidSynth render; AlphaTab only draws notation + the moving cursor.
+//
+// When `trackIndex` is >= 0 the score is reduced to just that instrument's
+// staff (so selecting a part isolates the sheet to that part).
 
 let atLoad: Promise<void> | null = null;
 function loadAlphaTab(): Promise<void> {
@@ -22,14 +25,29 @@ function loadAlphaTab(): Promise<void> {
 }
 
 export default function SheetMusic({
-  blockName, audioRef,
+  blockName, audioRef, trackIndex = -1,
 }: {
   blockName: string;
   audioRef: React.RefObject<HTMLAudioElement | null>;
+  trackIndex?: number;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const statusRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const apiRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const scoreRef = useRef<any>(null);
 
+  // Pick the track(s) to render for a given selection.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderForIndex = (api: any, score: any, idx: number) => {
+    if (!api || !score?.tracks?.length) return;
+    const tracks = (idx != null && idx >= 0 && score.tracks[idx])
+      ? [score.tracks[idx]] : score.tracks;
+    try { api.renderTracks(tracks); } catch { /* */ }
+  };
+
+  // Init AlphaTab + load the score once per block.
   useEffect(() => {
     let cancelled = false;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -56,11 +74,8 @@ export default function SheetMusic({
         },
         display: { layoutMode: 0 }, // page mode — wraps like sheet music
       });
+      apiRef.current = api;
 
-      // Drive the cursor from the practice audio element. AlphaTab only shows
-      // and scrolls the cursor while its OWN player state is Playing, so we
-      // mirror the audio's play/pause into api.play()/api.pause() — otherwise
-      // the cursor stays parked even as updatePosition arrives.
       const audioEl = audioRef.current;
       if (audioEl && api.player && api.player.output) {
         const push = () => {
@@ -96,7 +111,8 @@ export default function SheetMusic({
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       api.scoreLoaded.on((s: any) => {
-        try { if (s?.tracks?.length) api.renderTracks(s.tracks); } catch { /* */ }
+        scoreRef.current = s;
+        renderForIndex(api, s, trackIndex);
       });
       api.renderFinished.on(() => {
         setStatus("");
@@ -119,8 +135,16 @@ export default function SheetMusic({
       cancelled = true;
       removeListeners();
       try { api?.destroy?.(); } catch { /* */ }
+      apiRef.current = null;
+      scoreRef.current = null;
     };
   }, [blockName, audioRef]);
+
+  // Re-render only the selected instrument when the part changes (no re-fetch).
+  useEffect(() => {
+    renderForIndex(apiRef.current, scoreRef.current, trackIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackIndex]);
 
   return (
     <div className="sheet-wrap">

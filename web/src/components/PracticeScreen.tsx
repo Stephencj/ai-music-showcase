@@ -583,7 +583,7 @@ export default function PracticeScreen() {
 
           {panels.chart && (view === "sheet" ? (
             blockName
-              ? <SheetMusic blockName={blockName} audioRef={audioRef} />
+              ? <SheetMusic blockName={blockName} audioRef={audioRef} trackIndex={partIdx} />
               : <div className="practice-hint">Sheet view is available for blocks (songs show the chart).</div>
           ) : view === "tape" ? (
             <TapeView score={score} labelParts={labelParts} audioRef={audioRef} onSeek={seekTo} />
