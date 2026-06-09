@@ -619,6 +619,54 @@ MELODIC_LICKS: dict[str, dict] = {
                    (0.6, 5, 0.3), (0.9, 8, 1.2)],
         "genre": "pop", "emotion": "ascending",
     },
+    # ----- Added vocabulary (hooks, answers, resolutions) -----
+    "pop_hook_leap_5_8_5_3": {
+        # Big up-leap then settle — a singable chorus hook.
+        "events": [(0.0, 5, 0.4), (0.5, 8, 0.6), (1.25, 5, 0.4), (1.75, 3, 1.0)],
+        "genre": "pop", "emotion": "hooky",
+    },
+    "anthem_rise_1_5_8": {
+        "events": [(0.0, 1, 0.5), (0.75, 5, 0.5), (1.5, 8, 1.5)],
+        "genre": "rock", "emotion": "anthemic",
+    },
+    "ballad_sigh_5_4_3": {
+        # Descending "sigh" — wistful resolution.
+        "events": [(0.0, 5, 0.6), (0.75, 4, 0.5), (1.5, 3, 1.5)],
+        "genre": "ballad", "emotion": "wistful",
+    },
+    "soul_turn_5_b3_2_1": {
+        "events": [(0.0, 5, 0.3), (0.4, 3, 0.3), (0.8, 2, 0.3), (1.2, 1, 1.0)],
+        "genre": "soul_rnb", "emotion": "bluesy_resolve",
+    },
+    "gospel_climb_1_3_5_6_8": {
+        "events": [(0.0, 1, 0.25), (0.3, 3, 0.25), (0.6, 5, 0.25),
+                   (0.9, 6, 0.25), (1.2, 8, 1.2)],
+        "genre": "gospel", "emotion": "lifting",
+    },
+    "jazz_enclosure_2_4_3_1": {
+        # Approach the 3rd from above/below, resolve to tonic.
+        "events": [(0.0, 2, 0.25), (0.25, 4, 0.25), (0.5, 3, 0.5), (1.0, 1, 1.0)],
+        "genre": "jazz", "emotion": "resolved_chromatic",
+    },
+    "latin_montuno_3_5_1": {
+        "events": [(0.0, 3, 0.3), (0.4, 5, 0.3), (0.8, 1, 0.3),
+                   (1.2, 3, 0.3), (1.6, 5, 0.6)],
+        "genre": "latin", "emotion": "syncopated",
+    },
+    "edm_octave_pop_1_8_5_8": {
+        "events": [(0.0, 1, 0.4), (0.5, 8, 0.4), (1.0, 5, 0.4), (1.5, 8, 0.6)],
+        "genre": "edm", "emotion": "driving",
+    },
+    "country_6_5_3_1_resolve": {
+        "events": [(0.0, 6, 0.4), (0.5, 5, 0.4), (1.0, 3, 0.4), (1.5, 1, 1.0)],
+        "genre": "country", "emotion": "homey_resolve",
+    },
+    "answer_phrase_3_2_1": {
+        # A short "answer" that resolves down to the tonic — pairs as the
+        # response half of a call/response phrase.
+        "events": [(0.0, 3, 0.5), (0.6, 2, 0.4), (1.2, 1, 1.4)],
+        "genre": "any", "emotion": "answer_resolve",
+    },
 }
 
 

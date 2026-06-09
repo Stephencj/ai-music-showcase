@@ -101,11 +101,21 @@ class RoughEngine(VocalEngine):
         # Target F0 contour: piecewise-constant per note (with light vibrato),
         # zeroed where the source was unvoiced so consonants stay crisp.
         frame_t = np.arange(n_tgt) * _FRAME_MS / 1000.0
-        ends = np.cumsum([d for _, d in notes])
+        durs = np.array([d for _, d in notes], dtype=float)
+        ends = np.cumsum(durs)
+        starts = ends - durs
         pitches = np.array([m for m, _ in notes])
         which = np.clip(np.searchsorted(ends, frame_t, side="right"), 0, len(notes) - 1)
         f0_t = midi_to_hz(pitches[which])
-        f0_t *= 1.0 + 0.006 * np.sin(2 * np.pi * 5.0 * frame_t)  # subtle vibrato
+        # Per-note vibrato: only on sustained notes, phase reset at each
+        # onset and eased in after ~0.2s — so short notes hit cleanly and
+        # held notes bloom (instead of a constant global wobble on every
+        # syllable). Mirrors the studio engine's tasteful vibrato.
+        t_in_note = frame_t - starts[which]
+        sustained = (durs[which] >= 0.45).astype(float)
+        ramp = np.clip((t_in_note - 0.2) / 0.25, 0.0, 1.0)
+        vib = 0.005 * np.sin(2 * np.pi * 5.5 * t_in_note) * ramp * sustained
+        f0_t = f0_t * (1.0 + vib)
         f0_t = np.where(voiced_t, f0_t, 0.0)
 
         y = pw.synthesize(np.ascontiguousarray(f0_t),
