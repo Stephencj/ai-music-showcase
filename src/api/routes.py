@@ -730,6 +730,24 @@ def load_song(title: str) -> dict:
         raise HTTPException(404, f"Song not found: {exc}")
 
 
+@router.get("/songs/{title}/score-data")
+def song_score_data_route(title: str) -> dict:
+    """Practice chord chart for a saved song (its blocks concatenated)."""
+    try:
+        return service.song_score_data(title)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, f"No song score data: {exc}")
+
+
+@router.get("/songs/{title}/audio")
+def song_audio_route(title: str) -> FileResponse:
+    """Rendered (cached) audio for a saved song, for practice playback."""
+    try:
+        return _serve(Path(service.ensure_song_preview(title)), "audio/mpeg")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, f"No song audio: {exc}")
+
+
 @router.post("/songs")
 def save_song(req: SongSaveRequest) -> dict:
     try:

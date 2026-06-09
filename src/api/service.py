@@ -550,6 +550,80 @@ def score_data(name: str) -> dict:
     return extract_score_data(pm, meta)
 
 
+def song_score_data(title: str) -> dict:
+    """Practice-chart score-data for a saved SONG (a timeline of blocks). The
+    blocks are concatenated into one MIDI, each timeline entry becomes a
+    section labelled by its block, and chords are detected over the whole
+    thing — so a full song can be practised just like a block."""
+    from src.daw_integration.generic import block_concat
+    from src.daw_integration.generic import blocks as block_store
+    from src.daw_integration.generic import songs as song_store
+    from src.daw_integration.generic.chord_analysis import extract_score_data
+
+    timeline = song_store.load_song_timeline(title).get("timeline") or []
+    if not timeline:
+        raise ValueError("song has no blocks")
+    pm, _info = block_concat.concat_blocks(timeline)
+
+    # Seed key/scale/tempo/meter from the first block.
+    _fpm, first_meta = block_store.load_block(timeline[0]["block_name"])
+    fspec = first_meta.get("spec") or {}
+    tempo = float(fspec.get("tempo") or first_meta.get("tempo") or 120.0)
+    ts = first_meta.get("time_signature") or fspec.get("time_signature") or [4, 4]
+    key = fspec.get("key") or first_meta.get("key") or "C"
+    scale = fspec.get("scale") or first_meta.get("scale") or "major"
+
+    # One section per timeline entry, sized by the block's bars × repeat.
+    sections, cur = [], 0
+    for entry in timeline:
+        try:
+            _p, m = block_store.load_block(entry["block_name"])
+        except Exception:
+            continue
+        span = max(1, round(int(m.get("bars") or 0) * float(entry.get("repeat") or 1)))
+        sections.append({"label": entry["block_name"], "role": "section",
+                         "start_bar": cur, "end_bar": cur + span - 1})
+        cur += span
+
+    meta = {
+        "tempo": tempo, "time_signature": ts, "bars": cur,
+        "spec": {"key": key, "scale": scale, "tempo": tempo,
+                 "time_signature": ts, "sections": sections},
+    }
+    return extract_score_data(pm, meta)
+
+
+def ensure_song_preview(title: str) -> str:
+    """Render (and cache) a saved song's audio so it can be practised. Concats
+    the timeline's blocks → MIDI → HQ render → cached MP3 under data/songs.
+    Re-renders only when missing or older than the song definition."""
+    import tempfile
+    from src.daw_integration.generic import block_concat
+    from src.daw_integration.generic import blocks as block_store
+    from src.daw_integration.generic import songs as song_store
+    from src.audio_processing.render.pipeline import render_to_audio
+
+    song_yaml = song_store._path(title)
+    mp3 = song_store.SONGS_DIR / f"{song_store._safe_name(title)}.mp3"
+    if mp3.exists() and (not song_yaml.exists()
+                         or mp3.stat().st_mtime >= song_yaml.stat().st_mtime):
+        return str(mp3)
+
+    timeline = song_store.load_song_timeline(title).get("timeline") or []
+    if not timeline:
+        raise ValueError("song has no blocks")
+    pm, _info = block_concat.concat_blocks(timeline)
+    tmp = Path(tempfile.mkdtemp())
+    midi_path = tmp / "song.mid"
+    pm.write(str(midi_path))
+    render = render_to_audio(midi=midi_path, output_dir=tmp / "render",
+                             with_stems=False, master_preset="default")
+    song_store.SONGS_DIR.mkdir(parents=True, exist_ok=True)
+    if not block_store.write_preview_mp3(Path(render.mix_path), mp3):
+        raise RuntimeError("could not render song preview")
+    return str(mp3)
+
+
 # Fast/dense vocal lines (rap) read far better on the rough/TTS engine than the
 # studio SVS, so we suggest "rough" for sections whose median sung note is short.
 _DENSE_NOTE_SEC = 0.18

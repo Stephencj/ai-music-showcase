@@ -19,7 +19,9 @@ const NOTATION_LABEL: Record<Notation, string> = {
 export default function PracticeScreen() {
   const [mode, setMode] = useState<Mode>("block");
   const [blocks, setBlocks] = useState<Block[]>([]);
-  const [name, setName] = useState<string>("");
+  const [songs, setSongs] = useState<string[]>([]);
+  // Picker value, prefixed: "block:<name>" or "song:<title>".
+  const [selected, setSelected] = useState<string>("");
   const [presets, setPresets] = useState<Preset[]>([]);
 
   const [score, setScore] = useState<ScoreData | null>(null);
@@ -59,9 +61,10 @@ export default function PracticeScreen() {
       .then((bs) => {
         const playable = bs.filter((b) => b.has_preview);
         setBlocks(playable);
-        if (playable.length && !name) setName(playable[0].name);
+        setSelected((cur) => cur || (playable.length ? `block:${playable[0].name}` : ""));
       })
       .catch((e) => setErr(String(e)));
+    api.listSongs().then((r) => setSongs(r.songs || [])).catch(() => {});
     api.getPresets().then((ps) => {
       setPresets(ps);
       if (ps.length) setSimGenre(ps[0].id);
@@ -69,17 +72,27 @@ export default function PracticeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Block mode: load score + audio for the selected block.
+  // Block mode: load score + audio for the selected block OR song.
   useEffect(() => {
-    if (mode !== "block" || !name) return;
-    setLoading(true); setScore(null); setErr(""); setT(0);
-    const block = blocks.find((b) => b.name === name);
-    if (block) setAudioSrc(api.mediaUrl(block.audio_url));
-    api.getScoreData(name)
-      .then((s) => { setScore(s); setProgression([]); })
-      .catch((e) => setErr(String(e)))
-      .finally(() => setLoading(false));
-  }, [mode, name, blocks]);
+    if (mode !== "block" || !selected) return;
+    setLoading(true); setScore(null); setErr(""); setT(0); setLoop("off");
+    if (selected.startsWith("song:")) {
+      const title = selected.slice(5);
+      setAudioSrc(api.songAudioUrl(title));
+      api.getSongScoreData(title)
+        .then((s) => { setScore(s); setProgression([]); })
+        .catch((e) => setErr(String(e)))
+        .finally(() => setLoading(false));
+    } else {
+      const nm = selected.replace(/^block:/, "");
+      const block = blocks.find((b) => b.name === nm);
+      if (block) setAudioSrc(api.mediaUrl(block.audio_url));
+      api.getScoreData(nm)
+        .then((s) => { setScore(s); setProgression([]); })
+        .catch((e) => setErr(String(e)))
+        .finally(() => setLoading(false));
+    }
+  }, [mode, selected, blocks]);
 
   async function onUpload(file: File) {
     setLoading(true); setScore(null); setErr(""); setT(0); setSimMsg("");
@@ -149,7 +162,7 @@ export default function PracticeScreen() {
             const norm = (s: string) => s.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
             const hit = bs.find((x) => x.name === b) || bs.find((x) => norm(x.name) === norm(b));
             setMode("block");
-            setName(hit ? hit.name : b);
+            setSelected(`block:${hit ? hit.name : b}`);
             setScanMsg("");
           } else {
             setScanMsg("Scan finished but produced no notes.");
@@ -216,6 +229,7 @@ export default function PracticeScreen() {
   }, [score]);
 
   const modeIntervals = (MODES.find((m) => m.id === keyMode) || MODES[0]).intervals;
+  const sourceIsSong = selected.startsWith("song:");
 
   // Seek playback to a chord's start (tap a cell to jump there).
   function seekTo(time: number) {
@@ -260,11 +274,18 @@ export default function PracticeScreen() {
 
       <div className="practice-controls">
         {mode === "block" ? (
-          <select value={name} onChange={(e) => setName(e.target.value)}>
-            {blocks.length === 0 && <option value="">No playable blocks</option>}
-            {blocks.map((b) => (
-              <option key={b.name} value={b.name}>{b.name}</option>
-            ))}
+          <select value={selected} onChange={(e) => setSelected(e.target.value)}>
+            {blocks.length === 0 && songs.length === 0 && <option value="">Nothing to play yet</option>}
+            {songs.length > 0 && (
+              <optgroup label="Songs">
+                {songs.map((s) => <option key={`song:${s}`} value={`song:${s}`}>{s}</option>)}
+              </optgroup>
+            )}
+            <optgroup label="Blocks">
+              {blocks.map((b) => (
+                <option key={`block:${b.name}`} value={`block:${b.name}`}>{b.name}</option>
+              ))}
+            </optgroup>
           </select>
         ) : mode === "upload" ? (
           <label className="upload-btn">
@@ -369,7 +390,7 @@ export default function PracticeScreen() {
               }}
             >
               <option value="off">Off</option>
-              <option value="all">Whole</option>
+              <option value="all">Whole {sourceIsSong ? "song" : "block"}</option>
               {score.sections.map((s, i) => (
                 <option key={`${s.label}-${s.start_bar}`} value={`s${i}`}>{s.label}</option>
               ))}

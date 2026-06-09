@@ -154,6 +154,12 @@ export interface ScoreData {
 export const getScoreData = (name: string) =>
   jget<ScoreData>(`/api/blocks/${encodeURIComponent(name)}/score-data`);
 
+// Songs (timelines of blocks) practised like a block: derived chart + cached audio.
+export const getSongScoreData = (title: string) =>
+  jget<ScoreData>(`/api/songs/${encodeURIComponent(title)}/score-data`);
+export const songAudioUrl = (title: string) =>
+  url(`/api/songs/${encodeURIComponent(title)}/audio`);
+
 // Analyze an uploaded song → same score-data shape + a Roman-numeral
 // progression for "generate similar".
 export interface AudioAnalysis extends ScoreData {
