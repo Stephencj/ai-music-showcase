@@ -17,6 +17,7 @@ from typing import Optional
 
 import numpy as np
 
+from src.composition.harmony import harmony_profile
 from src.composition.solo import build_riff, build_solo
 from src.composition.techniques import BANK, Technique, TechniqueContext
 
@@ -906,11 +907,17 @@ def _add_chord_tech(name, *, rhythm, roles, label, description,
     """
     def _apply(midi, ctx):
         eff_program, eff_track = _route_kwargs(ctx, program, track_name)
+        # Genre-tuned per-chord voicing variety (on by default) — the
+        # technique's ``voicing`` stays the home voicing, coloured per chord.
+        prof = harmony_profile(ctx.genre)
         kwargs = dict(
             key=ctx.key, scale_name=ctx.scale,
             progression=ctx.progression, bars=ctx.bar_count,
             bar_offset=ctx.start_bar, rhythm=rhythm,
             voicing=voicing, swing=ctx.swing,
+            voicing_variety=prof.voicing_variety,
+            voicing_family=prof.voicing_family,
+            seed=_seed(ctx),
         )
         if velocity is not None:
             kwargs["velocity"] = velocity

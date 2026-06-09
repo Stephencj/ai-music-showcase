@@ -239,6 +239,70 @@ def roman_to_semitone_offset(symbol: str, scale_type: str = "major") -> tuple[in
     return (offset + accidental, quality)
 
 
+# Per-chord voicing variety — keyed to harmonic FUNCTION, so the same
+# progression isn't stamped with one uniform voicing ("mostly 7 chords").
+# Each family is genre-appropriate; the preset's base voicing stays the
+# high-probability "home" (see ``_voicing_for_chord``). Genre→family/level
+# mapping lives in src/composition/harmony.py.
+VOICING_PALETTES: dict[str, dict[str, list[str]]] = {
+    "diatonic_color": {   # pop / country / generic — diatonic colour
+        "tonic":       ["triad", "sixth", "add9", "seventh"],
+        "predominant": ["triad", "seventh", "add9", "sus2"],
+        "dominant":    ["triad", "seventh", "sus4"],
+        "submediant":  ["triad", "seventh", "add9"],
+        "other":       ["triad", "seventh"],
+    },
+    "rock": {             # rock / metal — stays power-driven
+        "tonic":       ["power", "open5", "triad", "sus4"],
+        "predominant": ["power", "open5", "triad"],
+        "dominant":    ["power", "open5", "sus4"],
+        "submediant":  ["power", "triad"],
+        "other":       ["power", "triad"],
+    },
+    "jazz": {             # jazz / funk / soul / blues — extended colour
+        "tonic":       ["ninth", "seventh", "sixth", "drop2", "add9"],
+        "predominant": ["ninth", "seventh", "rootless", "drop2"],
+        "dominant":    ["ninth", "seventh", "drop2", "sus4"],
+        "submediant":  ["ninth", "seventh", "rootless"],
+        "other":       ["seventh", "ninth"],
+    },
+    "classical": {        # classical / cinematic — triadic + suspensions
+        "tonic":       ["triad", "seventh", "sus4"],
+        "predominant": ["triad", "seventh", "sus2"],
+        "dominant":    ["seventh", "triad", "sus4"],
+        "submediant":  ["triad", "seventh"],
+        "other":       ["triad", "seventh"],
+    },
+}
+
+
+def _chord_function(root_degree: Optional[int]) -> str:
+    """Harmonic function from a chord's scale-degree index (0 = tonic).
+
+    Non-diatonic chords (degree None) → ``"other"`` so they keep the base
+    voicing rather than being recoloured into the wrong function.
+    """
+    return {
+        0: "tonic",
+        4: "dominant", 6: "dominant",        # V and vii (dominant function)
+        1: "predominant", 3: "predominant",  # ii and IV (predominant)
+        2: "submediant", 5: "submediant",    # iii and vi (tonic substitutes)
+    }.get(root_degree if root_degree is not None else -1, "other")
+
+
+def _voicing_for_chord(root_degree, quality, base_voicing, family, variety, rng):
+    """Pick a per-chord voicing: the base voicing most of the time, an
+    in-family alternative for that chord's function ``variety`` of the
+    time. Keeps the genre's home sound while adding colour."""
+    if root_degree is None or variety <= 0.0:
+        return base_voicing
+    if rng.random() >= variety:
+        return base_voicing                  # home voicing
+    palette = VOICING_PALETTES.get(family, VOICING_PALETTES["diatonic_color"])
+    choices = palette.get(_chord_function(root_degree)) or [base_voicing]
+    return choices[int(rng.integers(len(choices)))]
+
+
 def voice_chord(root_midi: int, quality: str = "maj", voicing: str = "triad",
                 scale_degree_seventh: Optional[int] = None,
                 scale_degree_ninth: Optional[int] = None) -> list[int]:
@@ -1993,8 +2057,18 @@ class MidiExporter:
         voice_leading: str = "fresh",
         avoid_melody_track: Optional[str] = None,
         rhythm_overrides: Optional[list[dict]] = None,
+        voicing_variety: float = 0.0,
+        voicing_family: str = "diatonic_color",
+        seed: Optional[int] = None,
     ) -> "MidiExporter":
         """Add a chord progression using Roman numerals.
+
+        ``voicing`` is the base/home voicing. When ``voicing_variety > 0``
+        each chord may instead take a function-appropriate alternative from
+        ``VOICING_PALETTES[voicing_family]`` — so the progression isn't one
+        uniform voicing ("mostly 7 chords"). ``variety`` is the per-chord
+        probability of deviating from the home voicing; ``seed`` makes it
+        deterministic. ``0.0`` (default) = today's uniform behaviour.
 
         ``progression`` accepts two shapes:
 
@@ -2040,6 +2114,7 @@ class MidiExporter:
         # which sounded explicitly chromatic for V/iii/vi chords in
         # a major-keyed song).
         scale_intervals = SCALES.get(scale_name, SCALES["major"])
+        voicing_rng = np.random.default_rng(seed) if voicing_variety > 0 else None
         for event in events:
             offset, quality = roman_to_semitone_offset(event.symbol, scale_name)
             root = root_midi + offset
@@ -2059,8 +2134,14 @@ class MidiExporter:
                 ninth_pc = scale_intervals[(root_degree + 1) % n]
                 scale_seventh = (seventh_pc - (offset % 12)) % 12
                 scale_ninth = ((ninth_pc - (offset % 12)) % 12) + 12
+            eff_voicing = voicing
+            if voicing_rng is not None:
+                eff_voicing = _voicing_for_chord(
+                    root_degree, quality, voicing, voicing_family,
+                    voicing_variety, voicing_rng,
+                )
             pitches = voice_chord(
-                root, quality, voicing,
+                root, quality, eff_voicing,
                 scale_degree_seventh=scale_seventh,
                 scale_degree_ninth=scale_ninth,
             )
