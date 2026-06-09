@@ -978,7 +978,7 @@ def _add_melody_tech(name, *, roles, label, description,
                      phrase_shape=None, velocity_curve=None,
                      velocity_range=None, octave=None,
                      motif_development=None, rhythm_motif=None,
-                     lick_pool=None):
+                     lick_pool=None, expression="auto"):
     """Register a melody-instrument technique.
 
     The base factory (melody_style + note_density) is sufficient for
@@ -989,15 +989,38 @@ def _add_melody_tech(name, *, roles, label, description,
     + ``octave`` for register, and ``motif_development`` /
     ``rhythm_motif`` / ``lick_pool`` for melisma-style ornamentation.
     Any kwarg left as None falls through to ``add_melody``'s default.
+
+    ``expression`` adds expressive pitch-bend articulation (scoop /
+    vibrato / fall). Default ``"auto"`` turns it ON ("light") for
+    instrument-rendered melodies and OFF for sung vocals (which ignore
+    MIDI bends) — resolved from the routed instrument's family. Pass an
+    explicit preset ("light"/"full"/"vocal") or ``None`` to override.
     """
     def _apply(midi, ctx):
         eff_program, eff_track = _route_kwargs(ctx, program, track_name)
+        # Resolve expression from the routed instrument: never bend a sung
+        # vocal; default instrumental melodies to a light articulation.
+        inst = getattr(ctx, "instrument_obj", None)
+        fam = getattr(inst, "family", None) if inst is not None else None
+        if fam == "vocal":
+            eff_expr = None
+        elif expression == "auto":
+            eff_expr = "light" if fam is not None else None
+        else:
+            eff_expr = expression
         kwargs = dict(
             key=ctx.key, scale_name=ctx.scale,
             bars=ctx.bar_count, bar_offset=ctx.start_bar,
             seed=_seed(ctx), swing=ctx.swing,
             note_density=note_density, melody_style=melody_style,
+            # Pass the section's chords so melodies use the chord-aware
+            # motif engine (strong beats land on chord tones, phrase
+            # shapes / motif development / lick injection all apply) — not
+            # the legacy scale-random-walk that ignores those knobs.
+            progression=ctx.progression,
         )
+        if eff_expr is not None:
+            kwargs["expression"] = eff_expr
         if eff_program is not None:
             kwargs["program"] = eff_program
         if eff_track is not None:

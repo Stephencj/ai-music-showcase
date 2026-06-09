@@ -622,6 +622,33 @@ MELODIC_LICKS: dict[str, dict] = {
 }
 
 
+# Melody articulation presets — depths for the expressive layer that
+# ``add_melody(expression=...)`` applies via pitch bends. Each note gets at
+# most one of {scoop into a strong note, vibrato on a sustain, fall off a
+# phrase end} so the bend events never collide on a single-line melody.
+MELODY_EXPRESSION: dict[str, dict] = {
+    "light": {"scoop_prob": 0.22, "scoop_depth": 0.8, "vib_min_beats": 1.5,
+              "vib_depth": 0.22, "vib_rate": 5.5, "fall_prob": 0.35, "fall_depth": 1.5},
+    "full":  {"scoop_prob": 0.45, "scoop_depth": 1.0, "vib_min_beats": 1.0,
+              "vib_depth": 0.4,  "vib_rate": 6.0, "fall_prob": 0.55, "fall_depth": 2.0},
+    "vocal": {"scoop_prob": 0.5,  "scoop_depth": 1.2, "vib_min_beats": 1.0,
+              "vib_depth": 0.45, "vib_rate": 5.5, "fall_prob": 0.5,  "fall_depth": 2.0},
+}
+
+
+def _resolve_expression(expression) -> Optional[dict]:
+    """Normalise the ``expression`` arg to a depths dict (or None = off)."""
+    if not expression:
+        return None
+    if isinstance(expression, str):
+        return MELODY_EXPRESSION.get(expression, MELODY_EXPRESSION["light"])
+    if isinstance(expression, dict):
+        merged = dict(MELODY_EXPRESSION["light"])
+        merged.update(expression)
+        return merged
+    return None
+
+
 # Tension-building operators — transformations applied to an EXISTING melody bar.
 # Stored as transformation recipes; the Melody Studio's SectionOverride
 # carries a ``tension_op`` field that picks one by name.
@@ -2166,8 +2193,17 @@ class MidiExporter:
         rhythm_motif: Optional[str] = None,
         velocity_curve: str = "flat",
         lick_pool: Optional[list[str]] = None,
+        expression: Optional[Union[str, dict]] = None,
     ) -> "MidiExporter":
         """Generate a melody.
+
+        ``expression`` adds human articulation to the melody via pitch
+        bends (scoop into strong notes, vibrato on sustains, fall off
+        phrase ends). ``None`` (default) = plain notes, byte-identical to
+        the legacy output. Pass a preset name (``"light"`` / ``"full"`` /
+        ``"vocal"``) or a dict of depths (see ``MELODY_EXPRESSION``). Only
+        audible on instrument-rendered melodies (FluidSynth honours pitch
+        bends); sung vocals ignore them, so leave it off for vocal tracks.
 
         ``melody_style``:
           - ``random``: scale-constrained random walk (legacy behavior).
@@ -2209,6 +2245,10 @@ class MidiExporter:
             without configuration.
         """
         rng = np.random.default_rng(seed)
+        expr = _resolve_expression(expression)
+        # Articulation uses its OWN rng so turning expression on/off never
+        # changes the generated notes — it only adds bends on top.
+        expr_rng = np.random.default_rng((seed or 0) + 999983) if expr else None
         scale_ints = SCALES.get(scale_name, SCALES["major"])
         root_midi = note_name_to_midi(key, octave)
         # Vocal-range palette: one octave from key root — caps top at the
@@ -2523,6 +2563,11 @@ class MidiExporter:
                 t = base_t + world_bar * self.bar_duration + beat_in_bar * beat
                 dur = ev["duration"] * beat * 0.95
                 track.notes.append(NoteEvent(pitch, t, t + dur, vel))
+                if expr is not None:
+                    self._articulate_melody_note(
+                        track, t, dur, bool(ev["accent"]), note_pos,
+                        float(ev["duration"]), expr, expr_rng,
+                    )
 
         # Walk the section in motif-length blocks.
         # Each block's variation is the SUM of the phrase-shape bias and
@@ -4113,6 +4158,42 @@ class MidiExporter:
             phase = (t - start - delay) * rate_hz * 2.0 * math.pi
             track.bends.append(BendEvent(time=t, semitones=depth_st * math.sin(phase)))
             t += step
+
+    def _articulate_melody_note(
+        self, track: Track, t: float, dur: float, accent: bool,
+        note_pos: float, dur_beats: float, p: dict, rng,
+    ) -> None:
+        """Add at most one expressive gesture to a just-appended melody note.
+
+        Mutually exclusive per note so the pitch-bend events never collide:
+        a scoop INTO a strong note (head), then either a vibrato on a held
+        note or a fall OFF a phrase-end note (tail). The wheel resets to 0
+        in the inter-note gap so the next note rings true.
+        """
+        sw = min(0.12, dur * 0.35)        # scoop window (seconds)
+        scooped = False
+        if accent and rng.random() < p["scoop_prob"]:
+            self._emit_bend(track, t, sw, -p["scoop_depth"], 0.0,
+                            curve="ease_out", steps=5)
+            scooped = True
+
+        is_end = note_pos >= 0.9
+        if is_end and dur_beats >= 1.0 and rng.random() < p["fall_prob"]:
+            # Fall/doit off the tail, reset in the gap after the note.
+            self._emit_bend(track, t + dur * 0.55, dur * 0.45, 0.0,
+                            -p["fall_depth"], curve="ease_in", steps=6)
+            track.bends.append(BendEvent(time=t + dur + 0.01, semitones=0.0))
+        elif dur_beats >= p["vib_min_beats"]:
+            start = t + (sw if scooped else 0.0) + 0.05
+            length = (t + dur) - start
+            if length > 0.1:
+                self._emit_vibrato(track, start, length,
+                                   depth_st=p["vib_depth"], rate_hz=p["vib_rate"],
+                                   delay=0.0)
+                track.bends.append(BendEvent(time=t + dur + 0.01, semitones=0.0))
+        elif scooped:
+            # Plain scoop already ends at 0; nothing more to reset.
+            pass
 
     def add_articulated_note(
         self,
