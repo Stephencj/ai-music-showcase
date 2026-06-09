@@ -1040,7 +1040,7 @@ STYLES: dict[str, StylePreset] = {
         name="Country (Full song)", tempo=112, key="G", scale="major",
         # I-V-vi-IV with V on the chorus turnaround × 20 = 80 bars.
         progression=[("I", 1.0), ("V", 1.0), ("vi", 1.0), ("IV", 1.0)] * 20,
-        voicing="triad", bass_pattern="root_fifth", drum_pattern="basic_rock",
+        voicing="triad", bass_pattern="root_fifth", drum_pattern="train_beat",
         chord_rhythm="pulse_quarter", melody_style="pentatonic",
         chord_octave=4, bass_octave=3, default_bars=80,
         rhythm_variants={
@@ -1057,8 +1057,8 @@ STYLES: dict[str, StylePreset] = {
                 {"start_bar": 36, "end_bar": 51, "label": "Verse 2",
                  "chord_rhythm_h1": "pulse_quarter", "chord_rhythm_h2": "",
                  "bass_pattern": "root_fifth"},
-                {"start_bar": 52, "end_bar": 59, "label": "Bridge",
-                 "chord_rhythm_h1": "pad", "chord_rhythm_h2": "",
+                {"start_bar": 52, "end_bar": 59, "label": "Solo",
+                 "chord_rhythm_h1": "dotted_8ths", "chord_rhythm_h2": "",
                  "bass_pattern": "walking"},
                 {"start_bar": 60, "end_bar": 75, "label": "Chorus 2",
                  "chord_rhythm_h1": "dotted_8ths", "chord_rhythm_h2": "",
@@ -1068,7 +1068,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "root"},
             ],
         },
-        default_instruments=['drum_kit', 'electric_bass', 'acoustic_guitar', 'electric_guitar_clean', 'vocal_lead'],
+        default_instruments=['drum_kit', 'electric_bass', 'acoustic_guitar', 'electric_guitar_clean', 'lead_guitar', 'vocal_lead'],
         pacing_options=('uniform_1', 'uniform_1', 'stretch_tonic_2'),
         bridge_pacing_options=('with_secondary_doms', 'stretch_tonic_2', 'with_chromatic_passing'),
     ),

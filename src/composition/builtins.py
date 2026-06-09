@@ -1096,6 +1096,23 @@ _add_lead_tech("blues_guitar_solo", roles=("bridge",), mode="solo",
                description="Call-and-response blue-note solo — bends, vibrato and "
                            "space, building to a 12-bar turnaround.")
 
+# ----- LEAD GUITAR (Country) ------------------------------------------------
+# Major-pentatonic chicken-pickin' with snapped attacks, sixth double-stops
+# and oblique pedal-steel bends. Twangy clean-electric tone (27).
+_add_lead_tech("country_lead_riff_verse", roles=("verse",), mode="riff",
+               lick_genre="country", tags=("country",), program=27, velocity=90,
+               label="Country lead riff (verse)",
+               description="Chicken-pickin' double-stop riff with snapped attacks.")
+_add_lead_tech("country_lead_riff_chorus", roles=("chorus",), mode="riff",
+               lick_genre="country", tags=("country",), program=27, velocity=96,
+               label="Country lead (chorus)",
+               description="Twangy double-stop chorus hook with oblique bends.")
+_add_lead_tech("country_guitar_solo", roles=("bridge",), mode="solo",
+               lick_genre="country", tags=("country",), program=27, weight=3,
+               label="Country guitar solo",
+               description="Chicken-pickin' solo — sixth double-stops, oblique "
+                           "pedal-steel bends and snapped attacks, into a turnaround.")
+
 
 # ----- POP ------------------------------------------------------------------
 _add_chord_tech("pop_chord_pad_intro", rhythm="pad",

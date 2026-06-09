@@ -63,6 +63,7 @@ class LickNote:
     strong: bool = False             # snap to a chord tone at compile time
     articulation: Optional[str] = None
     velocity: Optional[int] = None   # overrides the call-level velocity
+    double_stop: Optional[str] = None  # "sixth" -> add a diatonic 6th above
 
 
 @dataclass
@@ -156,6 +157,7 @@ def render_lick(
     scale = SCALES.get(scale_name, SCALES["pentatonic_minor"])
     tonic = note_name_to_midi(key, octave)
     chord_pcs = chord_pitch_classes(chord_symbol, key, scale_type)
+    major_pcs = {(note_name_to_midi(key, 0) + iv) % 12 for iv in SCALES["major"]}
     reg = {"low": -1, "mid": 0, "high": 1}.get(lick.register, 0) + register_octave_bump
     beat_dur = midi.beat_duration
     emitted: list[int] = []
@@ -176,6 +178,9 @@ def render_lick(
         art = ln.articulation
         bend = _BEND_MAP.get(art) if art else None
         vibrato = art in _VIBRATO_ARTICS if art else False
+        if art == "snap":          # chicken-pickin' percussive "cluck"
+            vel = min(127, vel + 15)
+            dur *= 0.6
 
         midi.add_articulated_note(
             track_name, pitch, start, dur,
@@ -185,6 +190,17 @@ def render_lick(
         if art == "bend_release_whole":
             track = midi._track_for(track_name, program=program)
             midi._emit_bend(track, start + dur * 0.5, dur * 0.5, 2.0, 0.0)
+
+        # Double-stop: a diatonic sixth above on a SIBLING track (own
+        # channel/stem). When the main note bends, the sixth stays put —
+        # that's the oblique pedal-steel double-stop bend. When it
+        # doesn't, it's a parallel-sixth country double-stop.
+        if ln.double_stop == "sixth":
+            harm = max(0, min(127, snap_to_chord_tone(pitch + 9, major_pcs)))
+            midi.add_articulated_note(
+                f"{track_name} (dbl)", harm, start, dur,
+                velocity=max(1, vel - 8), program=program, bend=None,
+            )
         emitted.append(pitch)
 
     return emitted
@@ -266,9 +282,47 @@ _BLUES_LICKS = [
     ]),
 ]
 
+# Country: major-pentatonic chicken-pickin' (snapped attacks), sixth
+# double-stops and oblique pedal-steel bends. Scale "pentatonic_major":
+# [root, 2, 3, 5, 6] -> idx 0..4.
+_COUNTRY_LICKS = [
+    Lick("country_double_stop_call", "country", "call", [
+        _ln(2, 0.0, 0.5, double_stop="sixth", articulation="bend_half"),  # oblique
+        _ln(2, 0.5, 0.5, double_stop="sixth"),                            # static 6th
+        _ln(4, 1.0, 1.0, strong=True, double_stop="sixth", articulation="vibrato"),
+        _ln(3, 2.0, 0.5, articulation="snap"),
+        _ln(0, 2.5, 1.5, strong=True),
+    ], scale="pentatonic_major"),
+    Lick("country_chicken_riff", "country", "riff", [
+        _ln(0, 0.0, 0.25, strong=True, articulation="snap"),
+        _ln(4, 0.5, 0.25, articulation="snap"),
+        _ln(3, 1.0, 0.25, articulation="snap"),
+        _ln(2, 1.25, 0.25),
+        _ln(0, 2.0, 0.25, strong=True, articulation="snap"),
+        _ln(4, 2.5, 0.25, articulation="snap"),
+        _ln(3, 3.0, 0.5, articulation="bend_half"),
+        _ln(0, 3.5, 0.5, strong=True),
+    ], scale="pentatonic_major"),
+    Lick("country_resp", "country", "response", [
+        _ln(4, 0.0, 0.5, articulation="snap"),
+        _ln(3, 0.5, 0.5),
+        _ln(2, 1.0, 0.5, double_stop="sixth"),
+        _ln(1, 1.5, 0.5),
+        _ln(0, 2.0, 2.0, strong=True, double_stop="sixth", articulation="vibrato"),
+    ], scale="pentatonic_major"),
+    Lick("country_turnaround", "country", "turnaround", [
+        _ln(0, 0.0, 0.5, strong=True, articulation="snap"),
+        _ln(2, 0.5, 0.5, double_stop="sixth"),
+        _ln(3, 1.0, 0.5, articulation="bend_half"),
+        _ln(4, 1.5, 0.5, double_stop="sixth"),
+        _ln(0, 2.0, 2.0, strong=True, articulation="vibrato"),
+    ], scale="pentatonic_major"),
+]
+
 LICKS: dict[str, list[Lick]] = {
     "rock": _ROCK_LICKS,
     "blues": _BLUES_LICKS,
+    "country": _COUNTRY_LICKS,
 }
 
 

@@ -786,6 +786,14 @@ DRUM_PATTERNS_4_4: dict[str, tuple[list, str]] = {
         ("snare",        _h([1, 3])),
         ("hihat_closed", _hh([i * 0.5 for i in range(8)])),
     ], "8th"),
+    # Train beat — steady 16th-note snare "pistons" (brush-style) with
+    # accents on the backbeats; a country/blues staple. Kick on 1 & 3.
+    "train_beat": ([
+        ("kick",         _h([0, 2])),
+        ("snare",        [(i * 0.25, 1.0 if i in (4, 12) else 0.4)
+                          for i in range(16)]),
+        ("hihat_closed", _hh([i * 0.5 for i in range(8)], mult=0.7)),
+    ], "16th"),
     "four_on_floor": ([
         ("kick",         _h([0, 1, 2, 3])),
         ("snare",        _h([1, 3])),
