@@ -547,3 +547,28 @@ audio { width: 100%; margin: 8px 0 12px; }
   border-radius: 8px; padding: 4px 8px; font-size: 13px; cursor: pointer;
   font-variant-numeric: tabular-nums; min-width: 52px;
 }
+
+/* Notation roll (piano-roll ribbon) */
+.roll-card { background: var(--card); border-radius: 12px; padding: 10px; border: 1px solid rgba(255,255,255,0.06); }
+.roll { position: relative; overflow: hidden; border-radius: 10px; background: var(--bg-2); border: 1px solid rgba(255,255,255,0.08); margin-top: 6px; }
+.roll-grid { position: absolute; inset: 0; pointer-events: none; }
+.roll-line { position: absolute; left: 0; right: 0; height: 1px; background: rgba(255,255,255,0.07); }
+.roll-line span { position: absolute; left: 4px; top: -7px; font-size: 9px; color: var(--muted); }
+.roll-now { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent-2); box-shadow: 0 0 10px var(--accent-2); z-index: 3; }
+.roll-lane { position: absolute; top: 0; bottom: 0; left: 0; will-change: transform; }
+.roll-note {
+  position: absolute; background: var(--accent); border-radius: 3px; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+  border: 1px solid rgba(0,0,0,0.25);
+}
+.roll-note span { font-size: 9px; color: #fff; font-weight: 600; white-space: nowrap; }
+.roll-note.on { background: var(--accent-2); box-shadow: 0 0 10px var(--accent-2); transform: scale(1.04); }
+
+/* Part selector + practice settings gear */
+.part-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.part-row select { padding: 7px 9px; border-radius: 8px; background: var(--bg-2); color: var(--text); border: 1px solid rgba(255,255,255,0.12); font-size: 13px; flex: 1; min-width: 120px; }
+.part-solo { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text); }
+.head-controls { display: flex; align-items: center; justify-content: space-between; }
+.gear-btn { background: var(--bg-2); border: 1px solid rgba(255,255,255,0.12); color: var(--text); border-radius: 8px; width: 34px; height: 32px; font-size: 16px; cursor: pointer; }
+.settings-panel { display: flex; flex-wrap: wrap; gap: 12px; background: var(--card); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 10px 12px; }
+.settings-panel label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }

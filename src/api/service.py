@@ -550,6 +550,37 @@ def score_data(name: str) -> dict:
     return extract_score_data(pm, meta)
 
 
+def block_part_audio(name: str, track_index: int) -> str:
+    """Render (and cache) a single track of a block in isolation, so a part can
+    be played through on its own in practice mode. Returns the MP3 path."""
+    import tempfile
+    import pretty_midi
+    from src.daw_integration.generic import blocks as block_store
+    from src.audio_processing.render.pipeline import render_to_audio
+
+    midi_src = block_store._midi_path(name)
+    pm, _meta = block_store.load_block(name)
+    if track_index < 0 or track_index >= len(pm.instruments):
+        raise ValueError(f"track {track_index} out of range")
+
+    cache = block_store.BLOCKS_DIR / f"{block_store._safe_name(name)}.part{track_index}.mp3"
+    if cache.exists() and (not midi_src.exists()
+                           or cache.stat().st_mtime >= midi_src.stat().st_mtime):
+        return str(cache)
+
+    # Single-instrument MIDI (absolute note times carry the timing).
+    solo = pretty_midi.PrettyMIDI()
+    solo.instruments.append(pm.instruments[track_index])
+    tmp = Path(tempfile.mkdtemp())
+    midi_path = tmp / "part.mid"
+    solo.write(str(midi_path))
+    render = render_to_audio(midi=midi_path, output_dir=tmp / "render",
+                             with_stems=False, master_preset="default")
+    if not block_store.write_preview_mp3(Path(render.mix_path), cache):
+        raise RuntimeError("could not render part preview")
+    return str(cache)
+
+
 def song_score_data(title: str) -> dict:
     """Practice-chart score-data for a saved SONG (a timeline of blocks).
 

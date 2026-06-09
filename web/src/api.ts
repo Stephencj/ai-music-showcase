@@ -154,6 +154,26 @@ export interface ScoreData {
 export const getScoreData = (name: string) =>
   jget<ScoreData>(`/api/blocks/${encodeURIComponent(name)}/score-data`);
 
+// Per-track notes [pitch, startBeat, durBeat] (beats = quarter notes) for the
+// notation roll + real-time piano/guitar. Same data the workstation loads.
+export interface NoteTrack {
+  track: string;
+  is_drum: boolean;
+  notes: [number, number, number][];
+}
+export interface BlockNotes {
+  tempo: number;
+  bars: number;
+  time_signature: number[];
+  key: string;
+  scale: string;
+  tracks: NoteTrack[];
+}
+export const getBlockNotes = (name: string) =>
+  jget<BlockNotes>(`/api/blocks/${encodeURIComponent(name)}/notes`);
+export const partAudioUrl = (name: string, idx: number) =>
+  url(`/api/blocks/${encodeURIComponent(name)}/part-audio/${idx}`);
+
 // Songs (timelines of blocks) practised like a block: derived chart + cached audio.
 export const getSongScoreData = (title: string) =>
   jget<ScoreData>(`/api/songs/${encodeURIComponent(title)}/score-data`);

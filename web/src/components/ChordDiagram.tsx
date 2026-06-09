@@ -121,8 +121,20 @@ function guitarShape(root: string, quality: string): { frets: number[]; approx: 
   return { frets, approx };
 }
 
-function Guitar({ root, quality }: { root: string; quality: string }) {
-  const { frets, approx } = guitarShape(root, quality);
+function Guitar({ root, quality, freePitches }: { root: string; quality: string; freePitches?: Set<number> }) {
+  let frets: number[];
+  let approx = false;
+  if (freePitches && freePitches.size) {
+    // Live notes: lowest fret per string whose pitch class is sounding.
+    frets = STRING_PCS.map((pc) => {
+      for (let f = 0; f <= 14; f++) if (freePitches.has((pc + f) % 12)) return f;
+      return -1;
+    });
+  } else {
+    const shape = guitarShape(root, quality);
+    frets = shape.frets;
+    approx = shape.approx;
+  }
   const played = frets.filter((f) => f > 0);
   const minF = played.length ? Math.min(...played) : 1;
   const maxF = played.length ? Math.max(...played) : 1;
@@ -165,21 +177,33 @@ function Guitar({ root, quality }: { root: string; quality: string }) {
   );
 }
 
-export default function ChordDiagram({ root, quality }: { root: string; quality: string }) {
+export default function ChordDiagram({
+  root, quality, activePitches,
+}: {
+  root: string;
+  quality: string;
+  activePitches?: number[];   // when set, show the actual notes sounding now
+}) {
+  const live = !!(activePitches && activePitches.length);
   const tones = useMemo(() => {
+    if (live) return new Set(activePitches!.map((p) => ((p % 12) + 12) % 12));
     const offs = TEMPLATES[quality] || TEMPLATES.maj;
     return new Set(offs.map((o) => (rootPc(root) + o) % 12));
-  }, [root, quality]);
+  }, [root, quality, live, activePitches]);
+  const pianoRoot = live
+    ? (activePitches!.length ? ((Math.min(...activePitches!) % 12) + 12) % 12 : -1)
+    : rootPc(root) % 12;
 
   return (
     <div className="diagrams">
       <div className="diagram-card">
-        <div className="diagram-title">Piano</div>
-        <Piano tones={tones} root={rootPc(root) % 12} />
+        <div className="diagram-title">Piano{live ? " · live" : ""}</div>
+        <Piano tones={tones} root={pianoRoot} />
       </div>
       <div className="diagram-card">
-        <div className="diagram-title">Guitar</div>
-        <Guitar root={FLAT_TO_SHARP[root] ?? root} quality={quality} />
+        <div className="diagram-title">Guitar{live ? " · live" : ""}</div>
+        <Guitar root={FLAT_TO_SHARP[root] ?? root} quality={quality}
+          freePitches={live ? tones : undefined} />
       </div>
     </div>
   );

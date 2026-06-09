@@ -404,6 +404,15 @@ def block_notes_route(name: str) -> dict:
         raise HTTPException(404, f"No notes: {exc}")
 
 
+@router.get("/blocks/{name}/part-audio/{track_index}")
+def block_part_audio_route(name: str, track_index: int) -> FileResponse:
+    """Isolated (solo) audio for one track of a block, for part playthrough."""
+    try:
+        return _serve(Path(service.block_part_audio(name, track_index)), "audio/mpeg")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, f"No part audio: {exc}")
+
+
 @router.get("/blocks/{name}/score-data")
 def block_score_data(name: str) -> dict:
     """Per-bar chords (symbol / Roman / Nashville) + bar timings for the

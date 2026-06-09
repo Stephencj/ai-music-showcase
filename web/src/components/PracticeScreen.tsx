@@ -4,6 +4,8 @@ import type { ScoreData, ChordSpan } from "../api";
 import type { Block, Preset } from "../types";
 import ChordDiagram from "./ChordDiagram";
 import TapeView from "./TapeView";
+import NotationRoll, { type RollNote } from "./NotationRoll";
+import type { BlockNotes } from "../api";
 import { MODES, ALL_ROOTS, scaleToModeId, rootPc, romanFor, nashvilleFor } from "../chordLabels";
 
 type Notation = "chord" | "nashville" | "roman";
@@ -25,6 +27,18 @@ export default function PracticeScreen() {
   const [presets, setPresets] = useState<Preset[]>([]);
 
   const [score, setScore] = useState<ScoreData | null>(null);
+  // Per-track notes for the notation roll + real-time diagrams (blocks only).
+  const [partNotes, setPartNotes] = useState<BlockNotes | null>(null);
+  const [partIdx, setPartIdx] = useState(-1);   // -1 = no part selected
+  const [solo, setSolo] = useState(false);      // play just the selected part
+  // Which panels show in the practice space (gear), persisted.
+  const [panels, setPanels] = useState<Record<string, boolean>>(() => {
+    try {
+      return { nowPlaying: true, diagrams: true, roll: true, chart: true,
+               ...JSON.parse(localStorage.getItem("practice.panels") || "{}") };
+    } catch { return { nowPlaying: true, diagrams: true, roll: true, chart: true }; }
+  });
+  const [showSettings, setShowSettings] = useState(false);
   const [audioSrc, setAudioSrc] = useState<string>("");
   const [progression, setProgression] = useState<string[]>([]);
 
@@ -72,10 +86,15 @@ export default function PracticeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    try { localStorage.setItem("practice.panels", JSON.stringify(panels)); } catch { /* ignore */ }
+  }, [panels]);
+
   // Block mode: load score + audio for the selected block OR song.
   useEffect(() => {
     if (mode !== "block" || !selected) return;
     setLoading(true); setScore(null); setErr(""); setT(0); setLoop("off");
+    setPartNotes(null); setPartIdx(-1); setSolo(false);
     if (selected.startsWith("song:")) {
       const title = selected.slice(5);
       setAudioSrc(api.songAudioUrl(title));
@@ -91,6 +110,7 @@ export default function PracticeScreen() {
         .then((s) => { setScore(s); setProgression([]); })
         .catch((e) => setErr(String(e)))
         .finally(() => setLoading(false));
+      api.getBlockNotes(nm).then(setPartNotes).catch(() => setPartNotes(null));
     }
   }, [mode, selected, blocks]);
 
@@ -231,6 +251,34 @@ export default function PracticeScreen() {
 
   const modeIntervals = (MODES.find((m) => m.id === keyMode) || MODES[0]).intervals;
   const sourceIsSong = selected.startsWith("song:");
+  const blockName = selected.startsWith("block:") ? selected.slice(6) : "";
+
+  // Selected part → notes in seconds for the roll + real-time diagrams.
+  const selectedTrack = partNotes && partIdx >= 0 ? partNotes.tracks[partIdx] : null;
+  const partRollNotes: RollNote[] = useMemo(() => {
+    if (!selectedTrack || !partNotes) return [];
+    const spb = 60 / (partNotes.tempo || 120);
+    return selectedTrack.notes.map(([pitch, sb, db]) => ({ pitch, start: sb * spb, dur: db * spb }));
+  }, [selectedTrack, partNotes]);
+
+  // Notes sounding right now (rAF, but only re-render when the set changes).
+  const [livePitches, setLivePitches] = useState<number[] | undefined>(undefined);
+  useEffect(() => {
+    if (!partRollNotes.length) { setLivePitches(undefined); return; }
+    let raf = 0, last = "";
+    const tick = () => {
+      const tt = audioRef.current?.currentTime ?? 0;
+      const ps = partRollNotes.filter((n) => tt >= n.start && tt < n.start + n.dur)
+        .map((n) => n.pitch).sort((a, b) => a - b);
+      const key = ps.join(",");
+      if (key !== last) { last = key; setLivePitches(ps); }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [partRollNotes]);
+
+  const playSrc = (solo && selectedTrack && blockName) ? api.partAudioUrl(blockName, partIdx) : audioSrc;
 
   // Seek playback to a chord's start (tap a cell to jump there).
   function seekTo(time: number) {
@@ -347,7 +395,7 @@ export default function PracticeScreen() {
           {audioSrc && (
             <audio
               ref={audioRef}
-              src={audioSrc}
+              src={playSrc}
               controls
               loop={loop === "all"}
               onTimeUpdate={(e) => {
@@ -396,6 +444,23 @@ export default function PracticeScreen() {
             </select>
           </div>
 
+          {!sourceIsSong && partNotes && partNotes.tracks.some((tr) => !tr.is_drum) && (
+            <div className="part-row">
+              <span className="speed-label">🎯 Part</span>
+              <select value={partIdx} onChange={(e) => { setPartIdx(Number(e.target.value)); setSolo(false); }}>
+                <option value={-1}>Off — chords only</option>
+                {partNotes.tracks.map((tr, i) => (tr.is_drum ? null : (
+                  <option key={i} value={i}>{tr.track}</option>
+                )))}
+              </select>
+              {partIdx >= 0 && (
+                <label className="part-solo">
+                  <input type="checkbox" checked={solo} onChange={(e) => setSolo(e.target.checked)} /> Solo
+                </label>
+              )}
+            </div>
+          )}
+
           {mode === "upload" && (
             <div className="gen-similar">
               <select value={simGenre} onChange={(e) => setSimGenre(e.target.value)} disabled={simBusy}>
@@ -408,41 +473,68 @@ export default function PracticeScreen() {
             </div>
           )}
 
-          <div className="now-playing">
-            <div className="np-meta">
-              <span className="np-key">{score.key} {score.scale}</span>
-              <span className="np-sec">{activeSection?.label || ""}</span>
-              <span className="np-tempo">{Math.round(score.tempo)} BPM</span>
+          {panels.nowPlaying && (
+            <div className="now-playing">
+              <div className="np-meta">
+                <span className="np-key">{score.key} {score.scale}</span>
+                <span className="np-sec">{activeSection?.label || ""}</span>
+                <span className="np-tempo">{Math.round(score.tempo)} BPM</span>
+              </div>
+              <div className="np-chords">
+                <div className="np-current">
+                  <div className="np-big">{active ? labelParts(active).primary : "—"}</div>
+                  {active && labelParts(active).secondary && (
+                    <div className="np-alt">{labelParts(active).secondary}</div>
+                  )}
+                </div>
+                <div className="np-count">
+                  {playing && beatsToNext != null ? `${beatsToNext}` : "·"}
+                  <span>beats</span>
+                </div>
+                <div className="np-next">
+                  <div className="np-next-label">next</div>
+                  <div className="np-next-chord">{next ? labelParts(next).primary : "—"}</div>
+                </div>
+              </div>
             </div>
-            <div className="np-chords">
-              <div className="np-current">
-                <div className="np-big">{active ? labelParts(active).primary : "—"}</div>
-                {active && labelParts(active).secondary && (
-                  <div className="np-alt">{labelParts(active).secondary}</div>
-                )}
-              </div>
-              <div className="np-count">
-                {playing && beatsToNext != null ? `${beatsToNext}` : "·"}
-                <span>beats</span>
-              </div>
-              <div className="np-next">
-                <div className="np-next-label">next</div>
-                <div className="np-next-chord">{next ? labelParts(next).primary : "—"}</div>
-              </div>
-            </div>
-          </div>
-
-          {active && active.root && (
-            <ChordDiagram root={active.root} quality={active.quality || "maj"} />
           )}
 
-          <div className="seg view-toggle">
-            <button className={view === "grid" ? "on" : ""} onClick={() => setView("grid")}>Grid</button>
-            <button className={view === "tape" ? "on" : ""} onClick={() => setView("tape")}>Tape ▶</button>
+          {panels.diagrams && (active?.root || (selectedTrack && livePitches && livePitches.length)) && (
+            <ChordDiagram
+              root={active?.root || "C"}
+              quality={active?.quality || "maj"}
+              activePitches={selectedTrack ? livePitches : undefined}
+            />
+          )}
+
+          {panels.roll && partRollNotes.length > 0 && (
+            <div className="roll-card">
+              <div className="diagram-title">{selectedTrack?.track} — notation roll</div>
+              <NotationRoll notes={partRollNotes} audioRef={audioRef} />
+            </div>
+          )}
+
+          <div className="head-controls">
+            <div className="seg view-toggle">
+              <button className={view === "grid" ? "on" : ""} onClick={() => setView("grid")}>Grid</button>
+              <button className={view === "tape" ? "on" : ""} onClick={() => setView("tape")}>Tape ▶</button>
+            </div>
+            <button className="gear-btn" onClick={() => setShowSettings((s) => !s)} title="Practice settings">⚙</button>
           </div>
+          {showSettings && (
+            <div className="settings-panel">
+              {([["nowPlaying", "Now playing"], ["diagrams", "Piano / guitar"],
+                 ["roll", "Notation roll"], ["chart", "Chord chart"]] as [string, string][]).map(([k, lbl]) => (
+                <label key={k}>
+                  <input type="checkbox" checked={!!panels[k]}
+                    onChange={(e) => setPanels((p) => ({ ...p, [k]: e.target.checked }))} /> {lbl}
+                </label>
+              ))}
+            </div>
+          )}
           </div>
 
-          {view === "tape" ? (
+          {panels.chart && (view === "tape" ? (
             <TapeView score={score} labelParts={labelParts} audioRef={audioRef} onSeek={seekTo} />
           ) : (
             <div className="chart" ref={chartRef}>
@@ -471,7 +563,7 @@ export default function PracticeScreen() {
                   </div>
                 )}
             </div>
-          )}
+          ))}
         </>
       )}
     </div>
