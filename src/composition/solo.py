@@ -162,8 +162,15 @@ def build_solo(
              for role in ("call", "response", "riff", "turnaround")}
     everything = licks_for(genre)
 
-    def pool_for(role: str) -> list[Lick]:
-        return pools.get(role) or everything
+    def pool_for(role: str, progress: float) -> list[Lick]:
+        pool = pools.get(role) or everything
+        # Save the screaming high-register licks for the climax so the
+        # solo's top note lands at the peak, not in the opening bars.
+        if intensity_arc and progress < 0.68:
+            grounded = [lk for lk in pool if lk.register != "high"]
+            if grounded:
+                return grounded
+        return pool
 
     placements: list[tuple[int, str]] = []
     prev: Optional[Lick] = None
@@ -191,7 +198,7 @@ def build_solo(
             lick = vary_lick(prev, op)
             repeats += 1
         else:
-            lick = _choose(pool_for(role), prev, rng)
+            lick = _choose(pool_for(role, progress), prev, rng)
             repeats = 0
 
         chord = chord_at_position(events, float(bar)) or "I"

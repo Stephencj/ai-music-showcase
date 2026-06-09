@@ -70,7 +70,7 @@ _ROCK = MixProfile(
         "drums":      {"gain_db": -1.0},      # drums loud
         "bass":       {"gain_db": -3.0},
         "chords":     {"gain_db": -7.0},      # guitars +2
-        "lead":       {"gain_db": -1.5},      # lead guitar out front
+        "lead":       {"gain_db": 0.5},       # lead guitar way out front
         "lead_vocal": {"gain_db": -2.5},
         "bvocal":     {"gain_db": -9.0},
         "strings":    {"gain_db": -14.0},     # strings way back
@@ -87,7 +87,7 @@ _JAZZ = MixProfile(
         "drums":      {"gain_db": -4.0},      # drums softer, more acoustic
         "bass":       {"gain_db": -3.0},
         "chords":     {"gain_db": -7.0},      # piano forward
-        "lead":       {"gain_db": -2.0},      # lead/solo guitar forward (blues)
+        "lead":       {"gain_db": -0.5},      # lead/solo guitar way forward (blues)
         "lead_vocal": {"gain_db": -2.5},
         "brass":      {"gain_db": -5.0},      # horns up
         "woodwind":   {"gain_db": -7.0},

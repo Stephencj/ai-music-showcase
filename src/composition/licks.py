@@ -247,6 +247,44 @@ _ROCK_LICKS = [
         _ln(3, 0.5, 0.5), _ln(2, 1.0, 0.5), _ln(1, 1.5, 0.5),
         _ln(0, 2.0, 2.0, strong=True, articulation="vibrato"),
     ]),
+    Lick("rock_box_call_b", "rock", "call", [
+        _ln(4, 0.0, 0.5, strong=True),                       # b7
+        _ln(5, 0.5, 0.5, articulation="bend_half"),          # root 8va, bent in
+        _ln(4, 1.0, 0.5),
+        _ln(3, 1.5, 1.0, strong=True, articulation="bend_whole"),  # 5
+        _ln(2, 2.5, 0.5),                                    # 4
+        _ln(0, 3.0, 1.0, strong=True, articulation="vibrato"),
+    ]),
+    Lick("rock_box_resp_b", "rock", "response", [
+        _ln(5, 0.0, 0.5), _ln(4, 0.5, 0.5),
+        _ln(3, 1.0, 0.5, articulation="bend_half"),
+        _ln(1, 1.5, 0.5),
+        _ln(0, 2.0, 2.0, strong=True, articulation="vibrato"),
+    ]),
+    Lick("rock_octave_riff", "rock", "riff", [
+        _ln(0, 0.0, 0.5, strong=True), _ln(5, 0.5, 0.5),     # root + octave
+        _ln(0, 1.0, 0.5), _ln(4, 1.5, 0.5),
+        _ln(0, 2.0, 0.5, strong=True), _ln(5, 2.5, 0.5),
+        _ln(3, 3.0, 0.5), _ln(4, 3.5, 0.5),
+    ]),
+    Lick("rock_seq_call", "rock", "call", [
+        _ln(0, 0.0, 0.33, strong=True), _ln(1, 0.33, 0.33), _ln(2, 0.66, 0.34),
+        _ln(1, 1.0, 0.33), _ln(2, 1.33, 0.33), _ln(3, 1.66, 0.34),
+        _ln(2, 2.0, 0.5), _ln(3, 2.5, 0.5, articulation="bend_half"),
+        _ln(4, 3.0, 1.0, strong=True, articulation="vibrato"),
+    ]),
+    Lick("rock_high_call", "rock", "call", [
+        _ln(0, 0.0, 0.5, octave=1, strong=True),
+        _ln(4, 0.5, 0.5),
+        _ln(3, 1.0, 1.0, strong=True, articulation="bend_whole"),
+        _ln(1, 2.0, 0.5, octave=1),
+        _ln(0, 2.5, 1.5, octave=1, strong=True, articulation="vibrato"),
+    ], register="high"),
+    Lick("rock_resp_slide", "rock", "response", [
+        _ln(3, 0.0, 0.5, articulation="slide_up"),
+        _ln(4, 0.5, 0.5), _ln(3, 1.0, 0.5), _ln(2, 1.5, 0.5),
+        _ln(0, 2.0, 2.0, strong=True, articulation="vibrato"),
+    ]),
 ]
 
 # Blues: blue-note (b5) call/response with space and shuffle phrasing.
@@ -279,6 +317,47 @@ _BLUES_LICKS = [
         _ln(0, 2.0, 1.0, strong=True),
         _ln(3, 3.0, 0.5, articulation="bend_half"),           # b5 lead-in
         _ln(4, 3.5, 0.5, strong=True, articulation="vibrato"),
+    ]),
+    Lick("blues_call_b", "blues", "call", [
+        _ln(1, 0.0, 0.5, articulation="bend_whole"),          # b3 bent
+        _ln(2, 0.5, 0.5),                                     # 4
+        _ln(3, 1.0, 0.5, articulation="bend_half"),           # b5 blue note
+        _ln(4, 1.5, 0.5, strong=True),                        # 5
+        _ln(1, 2.0, 1.0, articulation="vibrato"),
+        _ln(0, 3.0, 1.0, strong=True),
+    ]),
+    Lick("blues_resp_b", "blues", "response", [
+        _ln(4, 0.0, 0.5), _ln(3, 0.5, 0.5, articulation="bend_half"),
+        _ln(2, 1.0, 0.5), _ln(1, 1.5, 0.5),
+        _ln(0, 2.0, 2.0, strong=True, articulation="vibrato"),
+    ]),
+    Lick("blues_slow_bend", "blues", "call", [
+        _ln(1, 0.0, 1.5, strong=True, articulation="bend_whole"),  # long, vocal bend
+        _ln(None, 1.5, 0.5),                                  # space
+        _ln(4, 2.0, 1.0, articulation="vibrato"),
+        _ln(0, 3.0, 1.0, strong=True),
+    ]),
+    Lick("blues_high_call", "blues", "call", [
+        _ln(0, 0.0, 0.5, octave=1, strong=True),
+        _ln(5, 0.5, 0.5),
+        _ln(4, 1.0, 1.0, articulation="bend_half"),
+        _ln(1, 2.0, 0.5, octave=1, articulation="bend_whole"),
+        _ln(0, 2.5, 1.5, octave=1, strong=True, articulation="vibrato"),
+    ], register="high"),
+    Lick("blues_fast_riff", "blues", "riff", [
+        _ln(0, 0.0, 0.25, strong=True), _ln(1, 0.25, 0.25),
+        _ln(2, 0.5, 0.25), _ln(3, 0.75, 0.25),
+        _ln(4, 1.0, 0.5), _ln(2, 1.5, 0.5),
+        _ln(0, 2.0, 0.25, strong=True), _ln(1, 2.25, 0.25),
+        _ln(2, 2.5, 0.25), _ln(3, 2.75, 0.25),
+        _ln(4, 3.0, 1.0, articulation="vibrato"),
+    ]),
+    Lick("blues_turnaround_b", "blues", "turnaround", [
+        _ln(0, 0.0, 0.5, strong=True), _ln(5, 0.5, 0.5),
+        _ln(4, 1.0, 0.5), _ln(3, 1.5, 0.5, articulation="bend_half"),
+        _ln(2, 2.0, 0.5), _ln(1, 2.5, 0.5),
+        _ln(4, 3.0, 0.5, strong=True, articulation="bend_whole"),
+        _ln(0, 3.5, 0.5, strong=True),
     ]),
 ]
 
@@ -316,6 +395,41 @@ _COUNTRY_LICKS = [
         _ln(3, 1.0, 0.5, articulation="bend_half"),
         _ln(4, 1.5, 0.5, double_stop="sixth"),
         _ln(0, 2.0, 2.0, strong=True, articulation="vibrato"),
+    ], scale="pentatonic_major"),
+    Lick("country_double_stop_call_b", "country", "call", [
+        _ln(0, 0.0, 0.5, strong=True, double_stop="sixth"),
+        _ln(1, 0.5, 0.5, double_stop="sixth"),
+        _ln(2, 1.0, 1.0, strong=True, double_stop="sixth", articulation="bend_half"),  # oblique
+        _ln(3, 2.0, 0.5, articulation="snap"),
+        _ln(2, 2.5, 0.5, double_stop="sixth"),
+        _ln(0, 3.0, 1.0, strong=True, articulation="vibrato"),
+    ], scale="pentatonic_major"),
+    Lick("country_pedal_call", "country", "call", [
+        _ln(2, 0.0, 1.0, strong=True, double_stop="sixth", articulation="bend_whole"),  # big oblique
+        _ln(2, 1.0, 0.5, double_stop="sixth"),
+        _ln(3, 1.5, 0.5, articulation="snap"),
+        _ln(4, 2.0, 1.0, double_stop="sixth", articulation="vibrato"),
+        _ln(0, 3.0, 1.0, strong=True),
+    ], scale="pentatonic_major"),
+    Lick("country_chicken_riff_b", "country", "riff", [
+        _ln(3, 0.0, 0.25, strong=True, articulation="snap"),
+        _ln(2, 0.5, 0.25, articulation="snap"),
+        _ln(0, 1.0, 0.25, articulation="snap"), _ln(4, 1.25, 0.25),
+        _ln(3, 2.0, 0.25, strong=True, articulation="snap"),
+        _ln(2, 2.5, 0.25, articulation="snap"),
+        _ln(1, 3.0, 0.5, articulation="bend_half"), _ln(0, 3.5, 0.5, strong=True),
+    ], scale="pentatonic_major"),
+    Lick("country_resp_b", "country", "response", [
+        _ln(4, 0.0, 0.5, articulation="snap"),
+        _ln(3, 0.5, 0.5, double_stop="sixth"),
+        _ln(2, 1.0, 0.5), _ln(1, 1.5, 0.5, articulation="bend_half"),
+        _ln(0, 2.0, 2.0, strong=True, double_stop="sixth", articulation="vibrato"),
+    ], scale="pentatonic_major"),
+    Lick("country_open_run", "country", "riff", [
+        _ln(0, 0.0, 0.5, strong=True), _ln(1, 0.5, 0.5),
+        _ln(2, 1.0, 0.5), _ln(3, 1.5, 0.5),
+        _ln(4, 2.0, 0.5), _ln(3, 2.5, 0.5),
+        _ln(2, 3.0, 0.5, articulation="snap"), _ln(0, 3.5, 0.5, strong=True),
     ], scale="pentatonic_major"),
 ]
 

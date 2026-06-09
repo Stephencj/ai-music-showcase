@@ -1047,7 +1047,7 @@ def _lead_guitar_engine(midi, ctx):
     eff_program, eff_track = _route_kwargs(ctx, program, "Lead Guitar")
     # Forward velocities so the lead cuts through (it also lands in the
     # boosted "lead" mix family); the solo ramps higher across its arc.
-    velocity = 108 if solo else 104
+    velocity = 114 if solo else 110
     common = dict(
         bars=ctx.bar_count, progression=ctx.progression,
         key=ctx.key, scale_type=ctx.scale, genre=lick_genre,
