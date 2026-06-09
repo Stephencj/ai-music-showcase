@@ -280,6 +280,27 @@ export default function PracticeScreen() {
 
   const playSrc = (solo && selectedTrack && blockName) ? api.partAudioUrl(blockName, partIdx) : audioSrc;
 
+  // Section looping driven by rAF (60fps) instead of timeupdate (~4Hz), and
+  // seeking back a hair BEFORE the section end so the element never fires
+  // 'ended' (which would stop playback on the last section) and there's no
+  // quarter-second overshoot — tight, snappy loops.
+  useEffect(() => {
+    if (!loop.startsWith("s") || !score) return;
+    const sec = score.sections[Number(loop.slice(1))];
+    if (!sec) return;
+    let raf = 0;
+    const tick = () => {
+      const a = audioRef.current;
+      if (a && a.currentTime >= sec.end_time - 0.06) {
+        a.currentTime = sec.start_time;
+        if (a.paused && playing) a.play().catch(() => {});
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [loop, score, playing]);
+
   // Seek playback to a chord's start (tap a cell to jump there).
   function seekTo(time: number) {
     const a = audioRef.current;
@@ -398,12 +419,7 @@ export default function PracticeScreen() {
               src={playSrc}
               controls
               loop={loop === "all"}
-              onTimeUpdate={(e) => {
-                const ct = e.currentTarget.currentTime;
-                const sec = loop.startsWith("s") ? score.sections[Number(loop.slice(1))] : null;
-                if (sec && ct >= sec.end_time - 0.03) { e.currentTarget.currentTime = sec.start_time; return; }
-                setT(ct);
-              }}
+              onTimeUpdate={(e) => setT(e.currentTarget.currentTime)}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
               onLoadedMetadata={(e) => applyRate(e.currentTarget)}
