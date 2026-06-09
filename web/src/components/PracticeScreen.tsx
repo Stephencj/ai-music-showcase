@@ -3,9 +3,11 @@ import * as api from "../api";
 import type { ScoreData, ChordSpan } from "../api";
 import type { Block, Preset } from "../types";
 import ChordDiagram from "./ChordDiagram";
+import TapeView from "./TapeView";
 import { MODES, ALL_ROOTS, scaleToModeId, rootPc, romanFor, nashvilleFor } from "../chordLabels";
 
 type Notation = "chord" | "nashville" | "roman";
+type ChartView = "grid" | "tape";
 type Mode = "block" | "upload" | "scan";
 
 const NOTATION_LABEL: Record<Notation, string> = {
@@ -27,6 +29,7 @@ export default function PracticeScreen() {
   const [err, setErr] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [notation, setNotation] = useState<Notation>("chord");
+  const [view, setView] = useState<ChartView>("grid");
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -47,6 +50,7 @@ export default function PracticeScreen() {
   const [scanBusy, setScanBusy] = useState(false);
 
   const activeRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     api.getBlocks()
@@ -180,9 +184,15 @@ export default function PracticeScreen() {
     return Math.max(0, Math.ceil((active.end_time - t) / beatSec));
   }, [score, active, t]);
 
+  // Follow the song by scrolling ONLY the chart container (grid view) — the
+  // now-playing header + diagrams stay pinned above and don't move.
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [activeSpanIdx]);
+    if (view !== "grid") return;
+    const box = chartRef.current, cell = activeRef.current;
+    if (!box || !cell) return;
+    const b = box.getBoundingClientRect(), c = cell.getBoundingClientRect();
+    box.scrollTo({ top: box.scrollTop + (c.top - b.top) - b.height / 2 + c.height / 2, behavior: "smooth" });
+  }, [activeSpanIdx, view]);
 
   // Apply the practice speed to the audio element (preservesPitch keeps the
   // key the same when slowing down). Re-applied when the source changes.
@@ -296,6 +306,7 @@ export default function PracticeScreen() {
 
       {score && (
         <>
+          <div className="practice-head">
           {audioSrc && (
             <audio
               ref={audioRef}
@@ -366,30 +377,40 @@ export default function PracticeScreen() {
             <ChordDiagram root={active.root} quality={active.quality || "maj"} />
           )}
 
-          <div className="chart">
-            {score.sections.length > 0
-              ? score.sections.map((sec) => (
-                  <div key={`${sec.label}-${sec.start_bar}`} className="chart-section">
-                    <div className="chart-section-label">{sec.label}</div>
-                    <div className="chart-grid">
-                      {score.chord_spans
-                        .filter((s) => s.start_bar >= sec.start_bar && s.start_bar <= sec.end_bar)
-                        .map((s) => (
-                          <Cell key={s.start_bar} span={s} text={labelFor(s)}
-                            active={s === active} cellRef={s === active ? activeRef : undefined} />
-                        ))}
-                    </div>
-                  </div>
-                ))
-              : (
-                <div className="chart-grid">
-                  {score.chord_spans.map((s) => (
-                    <Cell key={s.start_bar} span={s} text={labelFor(s)}
-                      active={s === active} cellRef={s === active ? activeRef : undefined} />
-                  ))}
-                </div>
-              )}
+          <div className="seg view-toggle">
+            <button className={view === "grid" ? "on" : ""} onClick={() => setView("grid")}>Grid</button>
+            <button className={view === "tape" ? "on" : ""} onClick={() => setView("tape")}>Tape ▶</button>
           </div>
+          </div>
+
+          {view === "tape" ? (
+            <TapeView score={score} labelFor={labelFor} audioRef={audioRef} />
+          ) : (
+            <div className="chart" ref={chartRef}>
+              {score.sections.length > 0
+                ? score.sections.map((sec) => (
+                    <div key={`${sec.label}-${sec.start_bar}`} className="chart-section">
+                      <div className="chart-section-label">{sec.label}</div>
+                      <div className="chart-grid">
+                        {score.chord_spans
+                          .filter((s) => s.start_bar >= sec.start_bar && s.start_bar <= sec.end_bar)
+                          .map((s) => (
+                            <Cell key={s.start_bar} span={s} text={labelFor(s)}
+                              active={s === active} cellRef={s === active ? activeRef : undefined} />
+                          ))}
+                      </div>
+                    </div>
+                  ))
+                : (
+                  <div className="chart-grid">
+                    {score.chord_spans.map((s) => (
+                      <Cell key={s.start_bar} span={s} text={labelFor(s)}
+                        active={s === active} cellRef={s === active ? activeRef : undefined} />
+                    ))}
+                  </div>
+                )}
+            </div>
+          )}
         </>
       )}
     </div>

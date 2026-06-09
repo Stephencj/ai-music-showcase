@@ -480,3 +480,42 @@ audio { width: 100%; margin: 8px 0 12px; }
   border: 1px solid rgba(255,255,255,0.12); background: var(--bg-2); color: var(--accent-2);
   border-radius: 8px; width: 30px; height: 30px; cursor: pointer; font-size: 15px;
 }
+
+/* Practice: pinned head + independently-scrolling chart */
+.practice-head { display: flex; flex-direction: column; gap: 12px; }
+.view-toggle { align-self: flex-start; }
+.chart { max-height: 46vh; overflow-y: auto; position: relative; padding: 2px; }
+
+/* Tape view — horizontal right-to-left chord/section feed */
+.tape {
+  position: relative; height: 150px; overflow: hidden; border-radius: 12px;
+  background: var(--bg-2); border: 1px solid rgba(255,255,255,0.08);
+}
+.tape-playhead {
+  position: absolute; top: 0; bottom: 0; width: 2px; z-index: 3;
+  background: var(--accent-2); box-shadow: 0 0 10px var(--accent-2);
+}
+.tape-playhead::before {
+  content: ""; position: absolute; top: 0; left: -5px;
+  border-left: 6px solid transparent; border-right: 6px solid transparent;
+  border-top: 8px solid var(--accent-2);
+}
+.tape-lane { position: absolute; top: 0; bottom: 0; left: 0; will-change: transform; }
+.tape-chord {
+  position: absolute; top: 44px; height: 62px; display: flex; align-items: center;
+  justify-content: center; background: var(--card-2); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px; box-sizing: border-box; padding: 0 6px;
+}
+.tape-chord span { font-size: 22px; font-weight: 700; white-space: nowrap; }
+.tape-chord.on {
+  background: linear-gradient(135deg, var(--violet), var(--blue)); border-color: transparent;
+  transform: scale(1.06); box-shadow: 0 4px 16px rgba(124,58,237,0.45);
+}
+.tape-section {
+  position: absolute; top: 6px; bottom: 6px; width: 2px;
+  background: rgba(56,189,248,0.35);
+}
+.tape-section span {
+  position: absolute; top: 0; left: 5px; font-size: 11px; font-weight: 600;
+  color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
+}
