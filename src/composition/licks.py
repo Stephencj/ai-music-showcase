@@ -285,6 +285,27 @@ _ROCK_LICKS = [
         _ln(4, 0.5, 0.5), _ln(3, 1.0, 0.5), _ln(2, 1.5, 0.5),
         _ln(0, 2.0, 2.0, strong=True, articulation="vibrato"),
     ]),
+    Lick("rock_repeat_figure", "rock", "call", [
+        _ln(3, 0.0, 0.25, strong=True), _ln(3, 0.5, 0.25), _ln(3, 1.0, 0.25),  # hammered 5 — intensity
+        _ln(4, 1.5, 0.25), _ln(3, 2.0, 0.25), _ln(1, 2.5, 0.25),
+        _ln(0, 3.0, 1.0, strong=True, articulation="vibrato"),
+    ]),
+    Lick("rock_wide_leap_call", "rock", "call", [
+        _ln(0, 0.0, 0.5, strong=True), _ln(5, 0.5, 0.5, articulation="bend_half"),  # octave leap
+        _ln(4, 1.0, 0.5), _ln(0, 1.5, 0.5),
+        _ln(3, 2.0, 1.0, strong=True, articulation="bend_whole"),
+        _ln(0, 3.0, 1.0, articulation="vibrato"),
+    ]),
+    Lick("rock_legato_run", "rock", "response", [
+        # overlapping durations -> hammer-on / pull-off legato feel
+        _ln(0, 0.0, 0.4), _ln(1, 0.25, 0.4), _ln(2, 0.5, 0.4), _ln(3, 0.75, 0.4),
+        _ln(4, 1.0, 0.6), _ln(3, 1.4, 0.6), _ln(2, 1.8, 0.6),
+        _ln(0, 2.5, 1.5, strong=True, articulation="vibrato"),
+    ]),
+    Lick("rock_synco_riff", "rock", "riff", [
+        _ln(0, 0.0, 0.5, strong=True), _ln(0, 0.75, 0.25), _ln(3, 1.5, 0.5),
+        _ln(0, 2.0, 0.5, strong=True), _ln(4, 2.75, 0.25), _ln(3, 3.25, 0.5),
+    ]),
 ]
 
 # Blues: blue-note (b5) call/response with space and shuffle phrasing.
@@ -359,6 +380,26 @@ _BLUES_LICKS = [
         _ln(4, 3.0, 0.5, strong=True, articulation="bend_whole"),
         _ln(0, 3.5, 0.5, strong=True),
     ]),
+    Lick("blues_repeat_bend", "blues", "call", [
+        _ln(3, 0.0, 0.5, articulation="bend_half"), _ln(3, 0.75, 0.25, articulation="bend_half"),
+        _ln(4, 1.25, 0.25), _ln(3, 1.5, 0.5, articulation="bend_half"),  # worried b5
+        _ln(1, 2.0, 1.0, articulation="vibrato"), _ln(0, 3.0, 1.0, strong=True),
+    ]),
+    Lick("blues_descending", "blues", "response", [
+        _ln(5, 0.0, 0.5), _ln(4, 0.5, 0.5), _ln(3, 1.0, 0.5), _ln(2, 1.5, 0.5),
+        _ln(1, 2.0, 0.5), _ln(0, 2.5, 1.5, strong=True, articulation="vibrato"),
+    ]),
+    Lick("blues_scoop_call", "blues", "call", [
+        _ln(0, 0.0, 1.0, strong=True, articulation="bend_half"),  # scoop into the root
+        _ln(1, 1.0, 0.5), _ln(3, 1.5, 0.5, articulation="bend_half"),
+        _ln(4, 2.0, 1.0, strong=True, articulation="vibrato"), _ln(2, 3.0, 1.0),
+    ]),
+    Lick("blues_triplet_riff", "blues", "riff", [
+        _ln(0, 0.0, 0.33, strong=True), _ln(1, 0.33, 0.33), _ln(0, 0.66, 0.34),
+        _ln(4, 1.0, 0.5), _ln(3, 1.5, 0.5),
+        _ln(0, 2.0, 0.33, strong=True), _ln(1, 2.33, 0.33), _ln(0, 2.66, 0.34),
+        _ln(4, 3.0, 1.0, articulation="vibrato"),
+    ]),
 ]
 
 # Country: major-pentatonic chicken-pickin' (snapped attacks), sixth
@@ -430,6 +471,27 @@ _COUNTRY_LICKS = [
         _ln(2, 1.0, 0.5), _ln(3, 1.5, 0.5),
         _ln(4, 2.0, 0.5), _ln(3, 2.5, 0.5),
         _ln(2, 3.0, 0.5, articulation="snap"), _ln(0, 3.5, 0.5, strong=True),
+    ], scale="pentatonic_major"),
+    Lick("country_banjo_roll", "country", "riff", [
+        _ln(0, 0.0, 0.25, strong=True, articulation="snap"), _ln(2, 0.25, 0.25), _ln(3, 0.5, 0.25),
+        _ln(0, 0.75, 0.25), _ln(2, 1.0, 0.25, articulation="snap"), _ln(3, 1.25, 0.25),
+        _ln(4, 1.5, 0.25), _ln(3, 1.75, 0.25),
+        _ln(0, 2.0, 0.25, strong=True, articulation="snap"), _ln(2, 2.25, 0.25),
+        _ln(3, 2.5, 0.25), _ln(0, 2.75, 0.25),
+        _ln(2, 3.0, 1.0, double_stop="sixth", articulation="vibrato"),
+    ], scale="pentatonic_major"),
+    Lick("country_walkup_call", "country", "call", [
+        _ln(3, 0.0, 0.5, articulation="snap"), _ln(4, 0.5, 0.5),     # 5, 6 walk-up
+        _ln(0, 1.0, 0.5, octave=1, strong=True, double_stop="sixth"),
+        _ln(4, 1.5, 0.5, double_stop="sixth"),
+        _ln(2, 2.0, 1.0, strong=True, articulation="bend_half"),
+        _ln(0, 3.0, 1.0, articulation="vibrato"),
+    ], scale="pentatonic_major"),
+    Lick("country_pedal_b", "country", "call", [
+        _ln(1, 0.0, 1.0, strong=True, double_stop="sixth", articulation="bend_whole"),
+        _ln(2, 1.0, 1.0, double_stop="sixth", articulation="vibrato"),
+        _ln(3, 2.0, 0.5, articulation="snap"), _ln(4, 2.5, 0.5, double_stop="sixth"),
+        _ln(0, 3.0, 1.0, strong=True),
     ], scale="pentatonic_major"),
 ]
 
