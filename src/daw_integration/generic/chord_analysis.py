@@ -184,10 +184,16 @@ def extract_score_data(pm, meta: dict) -> dict:
     if not harmony_insts:
         harmony_insts = [inst for inst in pm.instruments if not inst.is_drum]
 
-    if bars <= 0 and bar_seconds > 0:
+    if bar_seconds > 0:
         end = max((n.end for inst in pm.instruments for n in inst.notes),
                   default=0.0)
-        bars = max(1, round(end / bar_seconds))
+        content_bars = round(end / bar_seconds)
+        # Cover the whole recording. Scanned/imported MIDI can have measures
+        # that don't sum to the meter, so the audio runs longer than the measure
+        # count implies — without this the chart/cursor stop early and drift
+        # behind the audio. Generated songs are uniform, so content_bars matches
+        # the measure count and this changes nothing for them.
+        bars = max(bars, content_bars, 1)
 
     tonic = _tonic_pc(key)
     per_bar: list[dict] = []

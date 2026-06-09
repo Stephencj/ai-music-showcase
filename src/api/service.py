@@ -505,6 +505,39 @@ def analyze_audio_file(data: bytes, filename: str = "song") -> dict:
     return score
 
 
+def block_notes(name: str) -> dict:
+    """A block's notes per track in the workstation's arrangement format
+    (notes as [pitch, start_beat, dur_beat], beats = quarter notes), so the
+    DAW can load a scanned/saved block into editable MIDI clips for the
+    piano-roll editor — same shape as /api/generate-arrangement."""
+    from src.daw_integration.generic import blocks as block_store
+
+    pm, meta = block_store.load_block(name)
+    spec = meta.get("spec") or {}
+    tempo = float(spec.get("tempo") or meta.get("tempo") or 120.0)
+    ts = meta.get("time_signature") or spec.get("time_signature") or [4, 4]
+    spb = 60.0 / tempo  # seconds per quarter-note beat
+    tracks = []
+    for inst in pm.instruments:
+        notes = [
+            [int(n.pitch), round(n.start / spb, 4), round((n.end - n.start) / spb, 4)]
+            for n in inst.notes
+        ]
+        tracks.append({
+            "track": inst.name or ("Drums" if inst.is_drum else "Track"),
+            "is_drum": bool(inst.is_drum),
+            "notes": notes,
+        })
+    return {
+        "tempo": tempo,
+        "bars": int(meta.get("bars") or spec.get("bars") or 0),
+        "time_signature": [int(ts[0]), int(ts[1])],
+        "key": spec.get("key") or meta.get("key") or "C",
+        "scale": spec.get("scale") or meta.get("scale") or "major",
+        "tracks": tracks,
+    }
+
+
 def score_data(name: str) -> dict:
     """Per-bar chord chart + bar timings for a block. Chords are detected from
     the rendered harmony tracks (see chord_analysis.extract_score_data) so the

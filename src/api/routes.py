@@ -394,6 +394,16 @@ async def analyze_audio_upload(file: UploadFile = File(...)) -> dict:
         raise HTTPException(400, f"Could not analyze audio: {exc}")
 
 
+@router.get("/blocks/{name}/notes")
+def block_notes_route(name: str) -> dict:
+    """A block's notes per track (arrangement format) for loading into the
+    workstation's piano-roll editor."""
+    try:
+        return service.block_notes(name)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, f"No notes: {exc}")
+
+
 @router.get("/blocks/{name}/score-data")
 def block_score_data(name: str) -> dict:
     """Per-bar chords (symbol / Roman / Nashville) + bar timings for the
