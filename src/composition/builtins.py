@@ -971,6 +971,24 @@ def _add_drum_tech(name, *, pattern, roles, label, description,
               weight=weight, apply=_apply)
 
 
+def _auto_expression(genre: Optional[str]) -> str:
+    """Genre-appropriate default melody articulation depth for instruments.
+
+    Expressive idioms (blues/jazz/soul/funk/gospel) get the full scoop +
+    vibrato + fall treatment; classical / orchestral / cinematic lines get
+    vibrato-only "legato" (scoops and doit-falls read as wrong-genre);
+    everything else gets a tasteful "light".
+    """
+    g = (genre or "").lower()
+    if any(k in g for k in ("blues", "jazz", "soul", "funk", "gospel",
+                            "rnb", "saloon", "afrobeat")):
+        return "full"
+    if any(k in g for k in ("classical", "cinematic", "baroque", "waltz",
+                            "romantic", "orchestr", "holiday", "gamelan")):
+        return "legato"
+    return "light"
+
+
 def _add_melody_tech(name, *, roles, label, description,
                      tags=(), weight=1, note_density=0.6,
                      melody_style="motif", program=None, track_name=None,
@@ -1005,7 +1023,7 @@ def _add_melody_tech(name, *, roles, label, description,
         if fam == "vocal":
             eff_expr = None
         elif expression == "auto":
-            eff_expr = "light" if fam is not None else None
+            eff_expr = _auto_expression(ctx.genre) if fam is not None else None
         else:
             eff_expr = expression
         kwargs = dict(
@@ -2106,6 +2124,7 @@ _add_melody_tech("vocal_lead_ballad_sustain",
                  melody_style="motif", note_density=0.3,
                  phrase_shape="plateau", velocity_curve="arc",
                  velocity_range=(60, 90),
+                 lick_pool=["ballad_sigh_5_4_3"],
                  roles=("intro", "verse", "outro"),
                  tags=("vocal", "ballad", "lyrical"),
                  instruments=("vocal_lead",), weight=3,
@@ -2123,6 +2142,7 @@ _add_melody_tech("vocal_lead_intimate_verse",
 _add_melody_tech("vocal_lead_jazz_crooner",
                  melody_style="chord_tone", note_density=0.5,
                  phrase_shape="call_response", velocity_curve="fall",
+                 lick_pool=["jazz_enclosure_2_4_3_1", "answer_phrase_3_2_1"],
                  roles=("verse",),
                  tags=("vocal", "jazz", "crooner"),
                  instruments=("vocal_lead",), weight=2,
@@ -2131,6 +2151,7 @@ _add_melody_tech("vocal_lead_jazz_crooner",
 _add_melody_tech("vocal_lead_country_twang",
                  melody_style="pentatonic", note_density=0.6,
                  phrase_shape="arc",
+                 lick_pool=["country_6_5_3_1_resolve"],
                  roles=("verse", "chorus"),
                  tags=("vocal", "country", "twang"),
                  instruments=("vocal_lead",), weight=2,
@@ -2139,6 +2160,7 @@ _add_melody_tech("vocal_lead_country_twang",
 _add_melody_tech("vocal_lead_hooky_motif",
                  melody_style="motif", note_density=0.6,
                  motif_development=["repeat", "sequence_up", "repeat", "cadence"],
+                 lick_pool=["pop_hook_leap_5_8_5_3", "answer_phrase_3_2_1"],
                  roles=("chorus",),
                  tags=("vocal", "pop", "hook"),
                  instruments=("vocal_lead",), weight=2,
@@ -2148,6 +2170,7 @@ _add_melody_tech("vocal_lead_pop_chorus_belt",
                  melody_style="motif", note_density=0.75,
                  phrase_shape="arc", velocity_curve="arc",
                  velocity_range=(80, 110),
+                 lick_pool=["pop_hook_leap_5_8_5_3"],
                  roles=("chorus",),
                  tags=("vocal", "pop", "belt"),
                  instruments=("vocal_lead",), weight=3,
@@ -2157,7 +2180,7 @@ _add_melody_tech("vocal_lead_rnb_melisma",
                  melody_style="pentatonic", note_density=0.85,
                  phrase_shape="arc",
                  rhythm_motif="gospel_melisma_5_to_1",
-                 lick_pool=["gospel_melisma_5_to_1"],
+                 lick_pool=["gospel_melisma_5_to_1", "soul_turn_5_b3_2_1"],
                  roles=("chorus", "bridge"),
                  tags=("vocal", "rnb", "soul", "melisma"),
                  instruments=("vocal_lead",), weight=2,
@@ -2166,6 +2189,7 @@ _add_melody_tech("vocal_lead_rnb_melisma",
 _add_melody_tech("vocal_lead_gospel_lift",
                  melody_style="pentatonic", note_density=0.7,
                  phrase_shape="rise", velocity_curve="rise",
+                 lick_pool=["gospel_climb_1_3_5_6_8"],
                  roles=("chorus", "outro"),
                  tags=("vocal", "gospel", "soul"),
                  instruments=("vocal_lead",), weight=2,
@@ -2175,6 +2199,7 @@ _add_melody_tech("vocal_lead_rock_belt",
                  melody_style="chord_tone", note_density=0.7,
                  phrase_shape="rise", velocity_curve="rise",
                  octave=6,
+                 lick_pool=["anthem_rise_1_5_8"],
                  roles=("chorus", "bridge"),
                  tags=("vocal", "rock", "belt"),
                  instruments=("vocal_lead",), weight=2,

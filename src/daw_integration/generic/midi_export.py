@@ -681,6 +681,10 @@ MELODY_EXPRESSION: dict[str, dict] = {
               "vib_depth": 0.4,  "vib_rate": 6.0, "fall_prob": 0.55, "fall_depth": 2.0},
     "vocal": {"scoop_prob": 0.5,  "scoop_depth": 1.2, "vib_min_beats": 1.0,
               "vib_depth": 0.45, "vib_rate": 5.5, "fall_prob": 0.5,  "fall_depth": 2.0},
+    # Vibrato only — no scoop/fall. For classical / orchestral / woodwind
+    # lines where pitch scoops and doit-falls read as wrong-genre.
+    "legato": {"scoop_prob": 0.0, "scoop_depth": 0.0, "vib_min_beats": 0.9,
+               "vib_depth": 0.25, "vib_rate": 5.2, "fall_prob": 0.0, "fall_depth": 0.0},
 }
 
 
