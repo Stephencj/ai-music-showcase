@@ -28,13 +28,13 @@ def _compose(seed=7):
 
 
 class TestRockLeadIntegration(unittest.TestCase):
-    def test_lead_techniques_registered(self):
-        for name in ("rock_lead_riff_verse", "rock_lead_riff_chorus",
-                     "rock_guitar_solo"):
-            self.assertIsNotNone(BANK.get(name), f"{name} not registered")
-        solo = BANK.get("rock_guitar_solo")
-        self.assertIn("lead_guitar", solo.instruments)
-        self.assertIn("bridge", solo.section_roles)  # "Solo" label -> bridge role
+    def test_lead_engine_registered(self):
+        eng = BANK.get("lead_guitar_engine")
+        self.assertIsNotNone(eng, "lead_guitar_engine not registered")
+        self.assertEqual(eng.instruments, ("lead_guitar",))
+        # Covers every role so there's no generic-melody fallback.
+        for role in ("intro", "verse", "chorus", "bridge", "outro"):
+            self.assertIn(role, eng.section_roles)
 
     def test_lead_guitar_plays_with_bends(self):
         by_name = _compose()

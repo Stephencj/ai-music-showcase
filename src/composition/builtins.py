@@ -1022,96 +1022,57 @@ def _add_melody_tech(name, *, roles, label, description,
               weight=weight, apply=_apply)
 
 
-def _add_lead_tech(name, *, roles, mode, label, description,
-                   tags=(), weight=1, lick_genre="rock",
-                   program=30, octave=4, velocity=94,
-                   instruments=("lead_guitar",)):
-    """Register a lead-guitar technique driven by the lick/solo engine.
-
-    ``mode="solo"`` builds a phrased, building solo (call-and-response +
-    intensity arc + turnaround); ``mode="riff"`` repeats a transposable
-    riff lick for a memorable verse/chorus hook. ``lick_genre`` selects
-    the lick vocabulary (rock / blues / country). Defaults to the
-    ``lead_guitar`` instrument id so it only fires when that instrument
-    is enabled — never leaking onto vocals or other melody instruments.
-    """
-    def _apply(midi, ctx):
-        eff_program, eff_track = _route_kwargs(ctx, program, "Lead Guitar")
-        rng = np.random.default_rng(_seed(ctx))
-        common = dict(
-            bars=ctx.bar_count, progression=ctx.progression,
-            key=ctx.key, scale_type=ctx.scale, genre=lick_genre, rng=rng,
-            track_name=eff_track or "Lead Guitar",
-            program=eff_program if eff_program is not None else program,
-            velocity=velocity, swing=ctx.swing, octave=octave,
-            bar_offset=ctx.start_bar,
-        )
-        if mode == "solo":
-            build_solo(midi, **common)
-        else:
-            build_riff(midi, **common)
-    _register(name=name, label=label, description=description,
-              instruments=instruments, roles=roles, tags=tags,
-              weight=weight, apply=_apply)
+# ----- LEAD GUITAR (riff/solo engine) ---------------------------------------
+# ONE technique, keyed to the lead_guitar instrument id, covers every
+# section role. Because it's the only lead_guitar candidate there is no
+# cross-genre lick leakage — the vocabulary is chosen DETERMINISTICALLY
+# from the song preset, and the mode (riff vs solo) from the role.
+_LEAD_LICK_GENRE = {
+    "rock_anthem_full": "rock", "rock": "rock", "rock_buildup": "rock",
+    "metal": "rock", "metal_full": "rock", "punk": "rock",
+    "funk_full_song": "rock", "funk": "rock",
+    "blues_12bar_full": "blues", "jazz_blues_full": "blues",
+    "country_full": "country", "country": "country",
+}
+_LEAD_PROGRAM = {"rock": 29, "blues": 27, "country": 27}
 
 
-# ----- LEAD GUITAR (Rock) ---------------------------------------------------
-# A repeating riff hook in verses/choruses and a real call-and-response
-# solo in the bridge/solo section (the "Solo" label maps to the bridge
-# role). Only fire for the ``lead_guitar`` instrument.
-_add_lead_tech("rock_lead_riff_verse", roles=("intro", "verse", "outro"), mode="riff",
-               lick_genre="rock", tags=("rock",), velocity=88,
-               label="Rock lead riff (verse)",
-               description="Repeating pentatonic guitar riff with bends — a verse/intro hook.")
-_add_lead_tech("rock_lead_riff_chorus", roles=("chorus",), mode="riff",
-               lick_genre="rock", tags=("rock",), velocity=98,
-               label="Rock lead riff (chorus)",
-               description="Driving, higher-energy chorus riff with bends.")
-_add_lead_tech("rock_guitar_solo", roles=("bridge",), mode="solo",
-               lick_genre="rock", tags=("rock",), weight=3,
-               label="Rock guitar solo",
-               description="Call-and-response pentatonic solo with bends, "
-                           "building through a register climb to a turnaround.")
+def _lead_guitar_engine(midi, ctx):
+    lick_genre = _LEAD_LICK_GENRE.get(ctx.genre, "rock")
+    role = ctx.section_role
+    # Solo in the bridge/solo section; in a 12-bar blues every chorus is a
+    # solo chorus too. Everything else is a repeating riff hook.
+    solo = role == "bridge" or (role == "chorus" and lick_genre == "blues")
+    program = _LEAD_PROGRAM.get(lick_genre, 29)
+    eff_program, eff_track = _route_kwargs(ctx, program, "Lead Guitar")
+    # Forward velocities so the lead cuts through (it also lands in the
+    # boosted "lead" mix family); the solo ramps higher across its arc.
+    velocity = 108 if solo else 104
+    common = dict(
+        bars=ctx.bar_count, progression=ctx.progression,
+        key=ctx.key, scale_type=ctx.scale, genre=lick_genre,
+        rng=np.random.default_rng(_seed(ctx)),
+        track_name=eff_track or "Lead Guitar",
+        program=eff_program if eff_program is not None else program,
+        velocity=velocity, swing=ctx.swing, octave=4,
+        bar_offset=ctx.start_bar,
+    )
+    if solo:
+        build_solo(midi, **common)
+    else:
+        build_riff(midi, **common)
 
-# ----- LEAD GUITAR (Blues) --------------------------------------------------
-# Blue-note (b5) call-and-response with shuffle phrasing and space. The
-# 12-bar form's choruses double as solo choruses, so cover verse/chorus
-# (riff/comping fills) and bridge (full solo). Clean electric tone (27).
-_add_lead_tech("blues_lead_riff_verse", roles=("verse",), mode="riff",
-               lick_genre="blues", tags=("blues",), program=27, velocity=84,
-               label="Blues lead fills (verse)",
-               description="Sparse blue-note shuffle fills between vocal phrases.")
-# In a 12-bar blues every chorus IS a solo chorus, so the chorus cell
-# solos (call-and-response, building) rather than looping a riff. A
-# bridge solo is also registered for blues songs that have one.
-_add_lead_tech("blues_lead_chorus_solo", roles=("chorus",), mode="solo",
-               lick_genre="blues", tags=("blues",), program=27, weight=3,
-               velocity=92,
-               label="Blues solo chorus",
-               description="Call-and-response blue-note solo over the 12-bar "
-                           "chorus — bends, vibrato and space.")
-_add_lead_tech("blues_guitar_solo", roles=("bridge",), mode="solo",
-               lick_genre="blues", tags=("blues",), program=27, weight=3,
-               label="Blues guitar solo",
-               description="Call-and-response blue-note solo — bends, vibrato and "
-                           "space, building to a 12-bar turnaround.")
 
-# ----- LEAD GUITAR (Country) ------------------------------------------------
-# Major-pentatonic chicken-pickin' with snapped attacks, sixth double-stops
-# and oblique pedal-steel bends. Twangy clean-electric tone (27).
-_add_lead_tech("country_lead_riff_verse", roles=("intro", "verse", "outro"), mode="riff",
-               lick_genre="country", tags=("country",), program=27, velocity=90,
-               label="Country lead riff (verse)",
-               description="Chicken-pickin' double-stop riff with snapped attacks.")
-_add_lead_tech("country_lead_riff_chorus", roles=("chorus",), mode="riff",
-               lick_genre="country", tags=("country",), program=27, velocity=96,
-               label="Country lead (chorus)",
-               description="Twangy double-stop chorus hook with oblique bends.")
-_add_lead_tech("country_guitar_solo", roles=("bridge",), mode="solo",
-               lick_genre="country", tags=("country",), program=27, weight=3,
-               label="Country guitar solo",
-               description="Chicken-pickin' solo — sixth double-stops, oblique "
-                           "pedal-steel bends and snapped attacks, into a turnaround.")
+_register(
+    name="lead_guitar_engine",
+    label="Lead guitar (riff/solo engine)",
+    description="Genre-aware lead guitar — repeating riff hooks in "
+                "intro/verse/chorus/outro and a call-and-response solo in "
+                "the solo section, with bends, vibrato and double-stops.",
+    instruments=("lead_guitar",),
+    roles=("intro", "verse", "chorus", "bridge", "outro"),
+    apply=_lead_guitar_engine,
+)
 
 
 # ----- POP ------------------------------------------------------------------

@@ -76,6 +76,9 @@ _NAME_HINT_FAMILIES: list[tuple[str, str]] = [
     # Strings (orchestral, separate from synth pads).
     ("string section", "strings"), ("violin", "strings"),
     ("viola", "strings"), ("cello", "strings"), ("contrabass", "strings"),
+    # Lead guitar — must beat the bare "guitar" -> chords hint below so
+    # the riff/solo voice mixes as a forward lead, not a rhythm comp.
+    ("lead guitar", "lead"),
     # Chord / lead.
     ("chord", "chords"), ("rhodes", "chords"), ("piano", "chords"),
     ("rhythm gt", "chords"), ("comp", "chords"), ("organ", "chords"),

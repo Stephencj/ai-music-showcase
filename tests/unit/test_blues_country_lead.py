@@ -40,14 +40,17 @@ class TestGenreLeads(unittest.TestCase):
                       "no double-stop sibling track for country")
         self.assertGreater(len(by_name["Lead Guitar (dbl)"].notes), 0)
 
-    def test_country_uses_lead_techniques(self):
-        enabled = tuple(STYLES["country_full"].default_instruments)
-        out = compose_song(genre="country_full", seed=11,
-                           enabled_instruments=enabled, skip_audio=True)
-        picks = {s["technique"] for s in out["selections"]
-                 if s.get("instrument") == "lead_guitar"}
-        self.assertTrue(any("country" in p for p in picks),
-                        f"no country lead technique fired; got {picks}")
+    def test_lead_engine_is_deterministic_per_genre(self):
+        """One lead technique fires for every genre (no cross-genre leakage);
+        the vocabulary is chosen by song genre, not by a random pick."""
+        for genre in ("rock_anthem_full", "blues_12bar_full", "country_full"):
+            enabled = tuple(STYLES[genre].default_instruments)
+            out = compose_song(genre=genre, seed=11,
+                               enabled_instruments=enabled, skip_audio=True)
+            picks = {s["technique"] for s in out["selections"]
+                     if s.get("instrument") == "lead_guitar"}
+            self.assertEqual(picks, {"lead_guitar_engine"},
+                             f"{genre} lead picks not deterministic: {picks}")
 
 
 if __name__ == "__main__":
