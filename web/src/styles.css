@@ -519,3 +519,9 @@ audio { width: 100%; margin: 8px 0 12px; }
   position: absolute; top: 0; left: 5px; font-size: 11px; font-weight: 600;
   color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
 }
+
+/* Tap-to-seek on chart cells */
+.chart-cell { cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+.chart-cell:hover { border-color: var(--accent-2); }
+.chart-cell:active { transform: scale(0.96); }
+.chart-cell.active:active { transform: scale(1.0); }

@@ -215,6 +215,12 @@ export default function PracticeScreen() {
 
   const modeIntervals = (MODES.find((m) => m.id === keyMode) || MODES[0]).intervals;
 
+  // Seek playback to a chord's start (tap a cell to jump there).
+  function seekTo(time: number) {
+    const a = audioRef.current;
+    if (a) { a.currentTime = time; setT(time); }
+  }
+
   // Display label for a chord under the current notation + selected tonic/mode.
   function labelFor(c: { symbol: string; root: string | null; quality: string | null }): string {
     if (c.symbol === "N.C.") return "—";
@@ -396,7 +402,8 @@ export default function PracticeScreen() {
                           .filter((s) => s.start_bar >= sec.start_bar && s.start_bar <= sec.end_bar)
                           .map((s) => (
                             <Cell key={s.start_bar} span={s} text={labelFor(s)}
-                              active={s === active} cellRef={s === active ? activeRef : undefined} />
+                              active={s === active} cellRef={s === active ? activeRef : undefined}
+                              onSeek={() => seekTo(s.start_time)} />
                           ))}
                       </div>
                     </div>
@@ -405,7 +412,8 @@ export default function PracticeScreen() {
                   <div className="chart-grid">
                     {score.chord_spans.map((s) => (
                       <Cell key={s.start_bar} span={s} text={labelFor(s)}
-                        active={s === active} cellRef={s === active ? activeRef : undefined} />
+                        active={s === active} cellRef={s === active ? activeRef : undefined}
+                        onSeek={() => seekTo(s.start_time)} />
                     ))}
                   </div>
                 )}
@@ -418,16 +426,18 @@ export default function PracticeScreen() {
 }
 
 function Cell({
-  span, text, active, cellRef,
+  span, text, active, cellRef, onSeek,
 }: {
   span: ChordSpan;
   text: string;
   active: boolean;
   cellRef?: React.RefObject<HTMLDivElement | null>;
+  onSeek?: () => void;
 }) {
   const bars = span.end_bar - span.start_bar + 1;
   return (
-    <div ref={cellRef} className={`chart-cell${active ? " active" : ""}`} data-bars={bars}>
+    <div ref={cellRef} className={`chart-cell${active ? " active" : ""}`} data-bars={bars}
+      onClick={onSeek} role="button" tabIndex={0}>
       <div className="cell-chord">{text}</div>
       {bars > 1 && <div className="cell-bars">{bars} bars</div>}
     </div>
