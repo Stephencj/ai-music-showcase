@@ -6,9 +6,10 @@ and drum patterns for import into any DAW.
 """
 
 import logging
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 import pretty_midi
@@ -1781,6 +1782,25 @@ class NoteEvent:
 
 
 @dataclass
+class BendEvent:
+    """A pitch-bend breakpoint, stored in *semitones* (range-independent).
+
+    Converted to pretty_midi's 14-bit value at build time using the
+    owning track's ``bend_range_st`` so callers never juggle 14-bit math.
+    """
+    time: float          # Seconds
+    semitones: float     # Offset from concert pitch (+up / -down)
+
+
+@dataclass
+class CCEvent:
+    """A MIDI control-change event (also used to carry RPN bend-range setup)."""
+    time: float
+    number: int          # CC controller number
+    value: int           # 0-127
+
+
+@dataclass
 class Track:
     """A collection of notes assigned to an instrument."""
     name: str
@@ -1788,6 +1808,12 @@ class Track:
     channel: int = 0
     notes: list[NoteEvent] = field(default_factory=list)
     is_drum: bool = False   # If True, uses channel 9
+    # Expressive articulation, emitted alongside notes at build time.
+    bends: list[BendEvent] = field(default_factory=list)
+    ccs: list[CCEvent] = field(default_factory=list)
+    # FluidSynth's default pitch-bend range is +/-2 semitones; widen it
+    # (via an RPN CC sequence) for bends beyond a whole tone.
+    bend_range_st: float = 2.0
 
 
 # ---------------------------------------------------------------------------
@@ -4005,6 +4031,140 @@ class MidiExporter:
         self.tracks.append(track)
         return self
 
+    # -- articulation (bends / vibrato / legato) ----------------------------
+    #
+    # Guitar lead playing *is* articulation — bends, slides, vibrato and
+    # legato. These primitives store pitch motion in semitones on the
+    # Track; ``build()`` converts to pretty_midi pitch-bend events. A
+    # render spike confirmed FluidSynth honours pretty_midi ``pitch_bends``
+    # through the per-track stem path, so no renderer-level work is needed.
+
+    def _ensure_bend_range(self, track: Track, needed_st: float) -> None:
+        """Widen the track's pitch-bend range if a bend exceeds it.
+
+        FluidSynth defaults to +/-2 semitones (one whole tone) — enough for
+        the common half/full bend. Bigger bends raise the range, emitted as
+        an RPN sequence at build time.
+        """
+        need = int(math.ceil(abs(needed_st)))
+        if need > int(round(track.bend_range_st)):
+            track.bend_range_st = float(need)
+
+    def _emit_bend(
+        self,
+        track: Track,
+        start: float,
+        dur: float,
+        from_st: float,
+        to_st: float,
+        curve: str = "ease_out",
+        steps: int = 10,
+    ) -> None:
+        """Append a pitch-bend ramp from ``from_st`` to ``to_st`` semitones.
+
+        ``ease_out`` (default) rises fast then settles, like a real finger
+        bend; ``ease_in`` is the inverse; ``linear`` is a straight ramp.
+        Pre-bend (bent before the pick) vs bend-and-release is just the
+        caller's choice of ``from``/``to``.
+        """
+        self._ensure_bend_range(track, max(abs(from_st), abs(to_st)))
+        dur = max(dur, 1e-3)
+        for i in range(steps + 1):
+            p = i / steps
+            if curve == "ease_out":
+                shaped = 1.0 - (1.0 - p) ** 2
+            elif curve == "ease_in":
+                shaped = p * p
+            else:
+                shaped = p
+            val = from_st + (to_st - from_st) * shaped
+            track.bends.append(BendEvent(time=start + p * dur, semitones=val))
+
+    def _emit_vibrato(
+        self,
+        track: Track,
+        start: float,
+        dur: float,
+        depth_st: float = 0.3,
+        rate_hz: float = 5.5,
+        delay: float = 0.08,
+        steps_per_cycle: int = 8,
+    ) -> None:
+        """Append a sinusoidal pitch-bend LFO (vibrato) after a short delay."""
+        self._ensure_bend_range(track, depth_st)
+        end = start + max(dur, 1e-3)
+        t = start + delay
+        if t >= end:
+            return
+        period = 1.0 / max(rate_hz, 0.1)
+        step = max(period / max(steps_per_cycle, 1), 1e-3)
+        while t < end:
+            phase = (t - start - delay) * rate_hz * 2.0 * math.pi
+            track.bends.append(BendEvent(time=t, semitones=depth_st * math.sin(phase)))
+            t += step
+
+    def add_articulated_note(
+        self,
+        track_name: str,
+        pitch: int,
+        start: float,
+        dur: float,
+        *,
+        velocity: int = 90,
+        program: int = 0,
+        is_drum: bool = False,
+        bend: Optional[tuple[float, float]] = None,
+        bend_curve: str = "ease_out",
+        vibrato: Optional[Union[bool, dict]] = None,
+        reset_after: bool = True,
+    ) -> Track:
+        """Add a note plus optional pitch articulation.
+
+        ``bend`` is a ``(from_st, to_st)`` semitone ramp over the note —
+        e.g. ``(0, 1)`` bends up a semitone, ``(2, 0)`` is a pre-bend
+        released down a whole tone. ``vibrato=True`` (or a kwargs dict)
+        adds a vibrato LFO. After articulation the wheel is reset to 0 at
+        the note boundary so the next note rings true. Legato (hammer-on /
+        pull-off) needs no flag here — just overlap two notes' times.
+        """
+        track = self._track_for(track_name, program=program, is_drum=is_drum)
+        end = start + max(dur, 1e-3)
+        track.notes.append(NoteEvent(pitch=pitch, start=start, end=end, velocity=velocity))
+        articulated = False
+        if bend is not None:
+            self._emit_bend(track, start, dur, bend[0], bend[1], curve=bend_curve)
+            articulated = True
+        if vibrato:
+            opts = vibrato if isinstance(vibrato, dict) else {}
+            self._emit_vibrato(track, start, dur, **opts)
+            articulated = True
+        if articulated and reset_after:
+            track.bends.append(BendEvent(time=end, semitones=0.0))
+        return track
+
+    def _apply_articulation(
+        self, instrument: "pretty_midi.Instrument", track: Track
+    ) -> None:
+        """Emit a track's bends/CCs onto a built pretty_midi Instrument."""
+        range_st = float(int(round(track.bend_range_st))) or 2.0
+        # Widen FluidSynth's pitch-bend range via RPN 0 when above the
+        # +/-2 semitone default (CC101/100 select RPN, CC6/38 = data).
+        if range_st > 2.0:
+            for num, val in ((101, 0), (100, 0), (6, int(range_st)), (38, 0)):
+                instrument.control_changes.append(
+                    pretty_midi.ControlChange(number=num, value=val, time=0.0)
+                )
+        for cc in track.ccs:
+            instrument.control_changes.append(
+                pretty_midi.ControlChange(number=cc.number, value=cc.value, time=cc.time)
+            )
+        for b in track.bends:
+            val14 = int(round(b.semitones / range_st * 8192))
+            val14 = max(-8192, min(8191, val14))
+            instrument.pitch_bends.append(
+                pretty_midi.PitchBend(pitch=val14, time=b.time)
+            )
+
     # -- export -------------------------------------------------------------
 
     def build(self) -> pretty_midi.PrettyMIDI:
@@ -4029,6 +4189,7 @@ class MidiExporter:
                     start=n.start,
                     end=n.end,
                 ))
+            self._apply_articulation(instrument, track)
             pm.instruments.append(instrument)
 
         return pm
@@ -4085,6 +4246,7 @@ class MidiExporter:
                     start=n.start,
                     end=n.end,
                 ))
+            self._apply_articulation(instrument, track)
             pm.instruments.append(instrument)
             yield track.name, pm
 
