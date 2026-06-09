@@ -965,12 +965,15 @@ DRUM_PATTERNS_4_4: dict[str, tuple[list, str]] = {
         ("maracas",      _hh([i * 0.25 for i in range(16)], mult=0.35)),
     ], "16th"),
     "hiphop_perc_layer": ([
-        # DJ-style top layer nudged off the grid — shaker/tambourine/clap/open
-        # hat doubling the backbeat + filling 16ths, no kick/snare.
-        ("cabasa",       _hh([i * 0.25 for i in range(16)], mult=0.4), 0.05),
-        ("tambourine",   _h([1, 3]), 0.0),
-        ("clap",         [(1, 0.5), (3, 0.5)], -0.03),
-        ("hihat_open",   [(1.5, 0.6), (3.5, 0.6)], 0.045),
+        # Hip-hop layer that sits WITH the kit via placement/velocity, not by
+        # being empty: sparse syncopated 808 sub-kick drops (off the main
+        # downbeat), a backbeat clap doubling the snare, soft ghost-note snare
+        # 16ths for texture, plus an off-grid shaker/open-hat DJ top.
+        ("kick",         [(2.5, 0.7), (3.75, 0.55)]),                    # 808 drops, off-beat
+        ("clap",         [(1, 0.65), (3, 0.65)], -0.03),                 # backbeat clap, pushed
+        ("snare",        [(0.75, 0.26), (1.75, 0.3), (2.75, 0.26), (3.5, 0.32)]),  # ghost notes
+        ("cabasa",       _hh([i * 0.25 for i in range(16)], mult=0.32), 0.05),     # off-grid shaker
+        ("hihat_open",   [(1.5, 0.5), (3.5, 0.5)], 0.045),              # off-beat open hat, late
     ], "16th"),
 }
 
