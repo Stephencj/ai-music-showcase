@@ -147,6 +147,10 @@ public:
         generateButton.onClick = [this] { generateSong(); };
         addAndMakeVisible (generateButton);
 
+        loadBlockButton.setButtonText ("Load Block");        // pull a saved/scanned block into editable clips
+        loadBlockButton.onClick = [this] { pickAndLoadBlock(); };
+        addAndMakeVisible (loadBlockButton);
+
         timeline.getEdit = [this] { return edit.get(); };
         timeline.onSeek  = [this] (double sec) { if (edit) edit->getTransport().setPosition (te::TimePosition::fromSeconds (sec)); };
         addAndMakeVisible (timeline);
@@ -204,6 +208,8 @@ public:
         fb (keyLbl, keyEdit, 30, 44); fb (tempoLbl, tempoEdit, 44, 50);
         fb (barsLbl, barsEdit, 34, 44); fb (genreLbl, genreEdit, 44, 150);
         generateButton.setBounds (genRow.removeFromLeft (130));
+        genRow.removeFromLeft (8);
+        loadBlockButton.setBounds (genRow.removeFromLeft (110));
         r.removeFromTop (8);
 
         auto tr = r.removeFromTop (28);                        // VCR transport above the timeline
@@ -1251,6 +1257,56 @@ private:
         status.setText ("Generated " + String ((int) entries.size()) + " tracks: " + built.joinIntoString (", ") + " @ " + String (tempo, 0) + " bpm. Press Play.", dontSendNotification);
     }
 
+    //== load a saved/scanned block into editable clips =======================
+    // The backend's /api/blocks/{name}/notes returns the SAME shape as
+    // /api/generate-arrangement (tempo/bars/key/scale/tracks[{track,notes}]),
+    // so we can reuse onArrangement() to build the editable MIDI clips — that's
+    // how a scanned score lands in the piano-roll for hand-correction.
+    void pickAndLoadBlock()
+    {
+        const auto url = serverBase + "/api/blocks";
+        Component::SafePointer<MainComponent> safe (this);
+        status.setText ("Fetching blocks...", dontSendNotification);
+        Thread::launch ([safe, url]
+        {
+            var resp;
+            auto opts = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress)
+                            .withConnectionTimeoutMs (30000);
+            if (auto s = juce::URL (url).createInputStream (opts)) resp = JSON::parse (s->readEntireStreamAsString());
+            MessageManager::callAsync ([safe, resp] { if (safe != nullptr) safe->showBlockMenu (resp); });
+        });
+    }
+
+    void showBlockMenu (const var& resp)
+    {
+        auto* arr = resp.getArray();
+        if (arr == nullptr || arr->isEmpty())
+        { status.setText ("No blocks found (is the backend running on " + serverBase + "?).", dontSendNotification); return; }
+        StringArray names;
+        for (auto& bv : *arr) { auto nm = bv.getProperty ("name", "").toString(); if (nm.isNotEmpty()) names.add (nm); }
+        names.sort (true);
+        PopupMenu m;
+        for (int i = 0; i < names.size(); ++i) m.addItem (i + 1, names[i]);
+        Component::SafePointer<MainComponent> safe (this);
+        m.showMenuAsync (PopupMenu::Options().withTargetComponent (&loadBlockButton),
+            [safe, names] (int r) { if (safe != nullptr && r > 0) safe->loadBlock (names[r - 1]); });
+    }
+
+    void loadBlock (const String& name)
+    {
+        status.setText ("Loading " + name + "...", dontSendNotification);
+        const auto url = serverBase + "/api/blocks/" + juce::URL::addEscapeChars (name, false) + "/notes";
+        Component::SafePointer<MainComponent> safe (this);
+        Thread::launch ([safe, url]
+        {
+            var resp;
+            auto opts = juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress)
+                            .withConnectionTimeoutMs (60000);
+            if (auto s = juce::URL (url).createInputStream (opts)) resp = JSON::parse (s->readEntireStreamAsString());
+            MessageManager::callAsync ([safe, resp] { if (safe != nullptr) safe->onArrangement (resp); });
+        });
+    }
+
     //== regenerate one track ==================================================
     void clearTrackClips (te::AudioTrack* track) { juce::Array<te::Clip*> clips (track->getClips()); for (auto* c : clips) c->removeFromParent(); }
 
@@ -1651,7 +1707,7 @@ private:
         Label      header, status;
     Label      keyLbl, tempoLbl, barsLbl, genreLbl;
     TextEditor keyEdit, tempoEdit, barsEdit, genreEdit;
-    TextButton generateButton;
+    TextButton generateButton, loadBlockButton;
     Timeline   timeline;
     struct MixerArea : public Component
     {
