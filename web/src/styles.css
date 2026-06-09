@@ -577,9 +577,17 @@ audio { width: 100%; margin: 8px 0 12px; }
 .sheet-wrap { background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); }
 .sheet-status { font-size: 12px; color: var(--muted); padding: 6px 10px; background: var(--card); }
 .sheet-status:empty { display: none; }
-.sheet { max-height: 62vh; overflow: auto; background: #fff; }
+/* Horizontal layout: one continuous staff that scrolls left-right. */
+.sheet { overflow-x: auto; overflow-y: hidden; background: #fff; }
 
 /* AlphaTab playback cursor (sheet music) — make it clearly visible */
 .sheet .at-cursor-bar { background: rgba(56,189,248,0.16); }
 .sheet .at-cursor-beat { background: var(--accent-2); width: 2px; }
 .sheet .at-highlight * { fill: var(--accent-2) !important; stroke: var(--accent-2) !important; }
+
+/* Diagram mode toggle + full-neck/wide layouts */
+.diagram-block { display: flex; flex-direction: column; gap: 8px; }
+.diagram-mode { align-self: flex-start; }
+.diagrams-wide { grid-template-columns: 1fr; }   /* stack: each gets full width */
+.diagram-piano-wide { width: 100%; max-height: 96px; }
+.diagram-guitar-neck { width: 100%; max-height: 130px; }

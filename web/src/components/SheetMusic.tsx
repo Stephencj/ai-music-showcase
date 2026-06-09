@@ -69,10 +69,12 @@ export default function SheetMusic({
           enableElementHighlighting: true,
           scrollMode: 3,            // smooth
           scrollSpeed: 300,
-          scrollOffsetY: -100,
+          // Keep the cursor toward the left so you read the music flowing in.
+          scrollOffsetX: -120,
           scrollElement: hostRef.current,
         },
-        display: { layoutMode: 0 }, // page mode — wraps like sheet music
+        display: { layoutMode: 1 }, // Horizontal — one continuous staff that
+                                    // scrolls right-to-left, not page-wrapped
       });
       apiRef.current = api;
 

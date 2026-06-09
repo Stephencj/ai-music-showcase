@@ -40,6 +40,8 @@ export default function PracticeScreen() {
     } catch { return { nowPlaying: true, diagrams: true, roll: true, chart: true }; }
   });
   const [showSettings, setShowSettings] = useState(false);
+  // Diagram mode: chord-shape (practice) vs full neck (what's on the page).
+  const [neckMode, setNeckMode] = useState(() => localStorage.getItem("practice.neck") === "1");
   const [audioSrc, setAudioSrc] = useState<string>("");
   const [progression, setProgression] = useState<string[]>([]);
 
@@ -295,6 +297,14 @@ export default function PracticeScreen() {
   // For section looping, play the WAV (sample-accurate seeks — no MP3 decoder
   // priming gap), which keeps loops tight without losing pitch-preserved speed.
   const sectionLooping = loop.startsWith("s");
+  // Real pitch range of what's driving the diagrams, for the wide piano span.
+  const partRange = useMemo(() => {
+    if (!diagramNotes.length) return undefined;
+    let lo = 128, hi = 0;
+    for (const n of diagramNotes) { lo = Math.min(lo, n.pitch); hi = Math.max(hi, n.pitch); }
+    return [lo, hi] as [number, number];
+  }, [diagramNotes]);
+
   const playSrc = (solo && selectedTrack && blockName)
     ? api.partAudioUrl(blockName, partIdx)
     : sectionLooping
@@ -544,11 +554,21 @@ export default function PracticeScreen() {
           )}
 
           {panels.diagrams && ((livePitches && livePitches.length) || active?.root) && (
-            <ChordDiagram
-              root={active?.root || "C"}
-              quality={active?.quality || "maj"}
-              activePitches={partNotes ? livePitches : undefined}
-            />
+            <div className="diagram-block">
+              <div className="seg diagram-mode">
+                <button className={!neckMode ? "on" : ""}
+                  onClick={() => { setNeckMode(false); localStorage.setItem("practice.neck", "0"); }}>Chord</button>
+                <button className={neckMode ? "on" : ""}
+                  onClick={() => { setNeckMode(true); localStorage.setItem("practice.neck", "1"); }}>Full neck</button>
+              </div>
+              <ChordDiagram
+                root={active?.root || "C"}
+                quality={active?.quality || "maj"}
+                activePitches={partNotes ? livePitches : undefined}
+                range={partRange}
+                neck={neckMode}
+              />
+            </div>
           )}
 
           {panels.roll && partRollNotes.length > 0 && (
