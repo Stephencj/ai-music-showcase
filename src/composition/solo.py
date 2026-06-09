@@ -79,6 +79,56 @@ def _choose(pool: list[Lick], prev: Optional[Lick], rng) -> Lick:
     return top[int(rng.integers(len(top)))]
 
 
+def build_riff(
+    midi: MidiExporter,
+    *,
+    bars: int,
+    progression,
+    key: str,
+    scale_type: str = "minor",
+    genre: str = "rock",
+    rng=None,
+    track_name: str = "Lead",
+    program: int = 30,
+    velocity: int = 92,
+    swing: float = 0.0,
+    octave: int = 4,
+    bar_offset: int = 0,
+    repeat_every: int = 2,
+) -> list[tuple[int, str]]:
+    """Render a repeating verse/chorus riff (memorable, not a wandering solo).
+
+    Picks one riff lick and restates it each bar — transposed to follow the
+    chord changes — varying it occasionally so it stays alive. This is the
+    repetition-driven hook the research says makes leads catchy.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+    if bars <= 0:
+        return []
+    events = expand_progression_plan(progression, bars)
+    riffs = licks_for(genre, "riff") or licks_for(genre)
+    base = riffs[int(rng.integers(len(riffs)))]
+    bpb = midi.beats_per_bar
+    placements: list[tuple[int, str]] = []
+    for bar in range(bars):
+        if bar > 0 and bar % repeat_every == 0 and rng.random() < 0.5:
+            op = _VARIATIONS[int(rng.integers(len(_VARIATIONS)))]
+            lick = vary_lick(base, op)
+        else:
+            lick = base
+        chord = chord_at_position(events, float(bar)) or "I"
+        render_lick(
+            midi, lick,
+            key=key, chord_symbol=chord, scale_type=scale_type,
+            bar_start_beats=(bar_offset + bar) * bpb,
+            octave=octave, track_name=track_name, program=program,
+            velocity=velocity, swing=swing,
+        )
+        placements.append((bar_offset + bar, lick.name))
+    return placements
+
+
 def build_solo(
     midi: MidiExporter,
     *,

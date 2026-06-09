@@ -15,6 +15,9 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+import numpy as np
+
+from src.composition.solo import build_riff, build_solo
 from src.composition.techniques import BANK, Technique, TechniqueContext
 
 
@@ -1017,6 +1020,58 @@ def _add_melody_tech(name, *, roles, label, description,
     _register(name=name, label=label, description=description,
               instruments=instruments, roles=roles, tags=tags,
               weight=weight, apply=_apply)
+
+
+def _add_lead_tech(name, *, roles, mode, label, description,
+                   tags=(), weight=1, lick_genre="rock",
+                   program=30, octave=4, velocity=94,
+                   instruments=("lead_guitar",)):
+    """Register a lead-guitar technique driven by the lick/solo engine.
+
+    ``mode="solo"`` builds a phrased, building solo (call-and-response +
+    intensity arc + turnaround); ``mode="riff"`` repeats a transposable
+    riff lick for a memorable verse/chorus hook. ``lick_genre`` selects
+    the lick vocabulary (rock / blues / country). Defaults to the
+    ``lead_guitar`` instrument id so it only fires when that instrument
+    is enabled — never leaking onto vocals or other melody instruments.
+    """
+    def _apply(midi, ctx):
+        eff_program, eff_track = _route_kwargs(ctx, program, "Lead Guitar")
+        rng = np.random.default_rng(_seed(ctx))
+        common = dict(
+            bars=ctx.bar_count, progression=ctx.progression,
+            key=ctx.key, scale_type=ctx.scale, genre=lick_genre, rng=rng,
+            track_name=eff_track or "Lead Guitar",
+            program=eff_program if eff_program is not None else program,
+            velocity=velocity, swing=ctx.swing, octave=octave,
+            bar_offset=ctx.start_bar,
+        )
+        if mode == "solo":
+            build_solo(midi, **common)
+        else:
+            build_riff(midi, **common)
+    _register(name=name, label=label, description=description,
+              instruments=instruments, roles=roles, tags=tags,
+              weight=weight, apply=_apply)
+
+
+# ----- LEAD GUITAR (Rock) ---------------------------------------------------
+# A repeating riff hook in verses/choruses and a real call-and-response
+# solo in the bridge/solo section (the "Solo" label maps to the bridge
+# role). Only fire for the ``lead_guitar`` instrument.
+_add_lead_tech("rock_lead_riff_verse", roles=("verse",), mode="riff",
+               lick_genre="rock", tags=("rock",), velocity=88,
+               label="Rock lead riff (verse)",
+               description="Repeating pentatonic guitar riff with bends — a verse hook.")
+_add_lead_tech("rock_lead_riff_chorus", roles=("chorus",), mode="riff",
+               lick_genre="rock", tags=("rock",), velocity=98,
+               label="Rock lead riff (chorus)",
+               description="Driving, higher-energy chorus riff with bends.")
+_add_lead_tech("rock_guitar_solo", roles=("bridge",), mode="solo",
+               lick_genre="rock", tags=("rock",), weight=3,
+               label="Rock guitar solo",
+               description="Call-and-response pentatonic solo with bends, "
+                           "building through a register climb to a turnaround.")
 
 
 # ----- POP ------------------------------------------------------------------
