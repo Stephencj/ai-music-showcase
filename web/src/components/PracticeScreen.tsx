@@ -221,13 +221,20 @@ export default function PracticeScreen() {
     if (a) { a.currentTime = time; setT(time); }
   }
 
-  // Display label for a chord under the current notation + selected tonic/mode.
-  function labelFor(c: { symbol: string; root: string | null; quality: string | null }): string {
-    if (c.symbol === "N.C.") return "—";
-    if (notation === "chord" || !c.root || !c.quality) return c.symbol;
-    return notation === "nashville"
-      ? nashvilleFor(c.root, c.quality, tonic, modeIntervals)
-      : romanFor(c.root, c.quality, tonic, modeIntervals);
+  // All three labels for a chord, with the selected notation emphasized
+  // (primary) and the others shown small (secondary) — switching notation
+  // changes emphasis rather than hiding the rest.
+  type Labels = { primary: string; secondary: string };
+  function labelParts(c: { symbol: string; root: string | null; quality: string | null }): Labels {
+    if (c.symbol === "N.C." || !c.root || !c.quality) {
+      return { primary: c.symbol === "N.C." ? "—" : c.symbol, secondary: "" };
+    }
+    const chord = c.symbol;
+    const roman = romanFor(c.root, c.quality, tonic, modeIntervals);
+    const nash = nashvilleFor(c.root, c.quality, tonic, modeIntervals);
+    if (notation === "roman") return { primary: roman, secondary: `${chord} · ${nash}` };
+    if (notation === "nashville") return { primary: nash, secondary: `${chord} · ${roman}` };
+    return { primary: chord, secondary: `${roman} · ${nash}` };
   }
 
   const activeSection = useMemo(() => {
@@ -363,9 +370,9 @@ export default function PracticeScreen() {
             </div>
             <div className="np-chords">
               <div className="np-current">
-                <div className="np-big">{active ? labelFor(active) : "—"}</div>
-                {notation !== "chord" && active && active.symbol !== "N.C." && (
-                  <div className="np-alt">{active.symbol}</div>
+                <div className="np-big">{active ? labelParts(active).primary : "—"}</div>
+                {active && labelParts(active).secondary && (
+                  <div className="np-alt">{labelParts(active).secondary}</div>
                 )}
               </div>
               <div className="np-count">
@@ -374,7 +381,7 @@ export default function PracticeScreen() {
               </div>
               <div className="np-next">
                 <div className="np-next-label">next</div>
-                <div className="np-next-chord">{next ? labelFor(next) : "—"}</div>
+                <div className="np-next-chord">{next ? labelParts(next).primary : "—"}</div>
               </div>
             </div>
           </div>
@@ -390,7 +397,7 @@ export default function PracticeScreen() {
           </div>
 
           {view === "tape" ? (
-            <TapeView score={score} labelFor={labelFor} audioRef={audioRef} />
+            <TapeView score={score} labelParts={labelParts} audioRef={audioRef} />
           ) : (
             <div className="chart" ref={chartRef}>
               {score.sections.length > 0
@@ -401,7 +408,7 @@ export default function PracticeScreen() {
                         {score.chord_spans
                           .filter((s) => s.start_bar >= sec.start_bar && s.start_bar <= sec.end_bar)
                           .map((s) => (
-                            <Cell key={s.start_bar} span={s} text={labelFor(s)}
+                            <Cell key={s.start_bar} span={s} {...labelParts(s)}
                               active={s === active} cellRef={s === active ? activeRef : undefined}
                               onSeek={() => seekTo(s.start_time)} />
                           ))}
@@ -411,7 +418,7 @@ export default function PracticeScreen() {
                 : (
                   <div className="chart-grid">
                     {score.chord_spans.map((s) => (
-                      <Cell key={s.start_bar} span={s} text={labelFor(s)}
+                      <Cell key={s.start_bar} span={s} {...labelParts(s)}
                         active={s === active} cellRef={s === active ? activeRef : undefined}
                         onSeek={() => seekTo(s.start_time)} />
                     ))}
@@ -426,10 +433,11 @@ export default function PracticeScreen() {
 }
 
 function Cell({
-  span, text, active, cellRef, onSeek,
+  span, primary, secondary, active, cellRef, onSeek,
 }: {
   span: ChordSpan;
-  text: string;
+  primary: string;
+  secondary: string;
   active: boolean;
   cellRef?: React.RefObject<HTMLDivElement | null>;
   onSeek?: () => void;
@@ -438,7 +446,8 @@ function Cell({
   return (
     <div ref={cellRef} className={`chart-cell${active ? " active" : ""}`} data-bars={bars}
       onClick={onSeek} role="button" tabIndex={0}>
-      <div className="cell-chord">{text}</div>
+      <div className="cell-chord">{primary}</div>
+      {secondary && <div className="cell-sub">{secondary}</div>}
       {bars > 1 && <div className="cell-bars">{bars} bars</div>}
     </div>
   );

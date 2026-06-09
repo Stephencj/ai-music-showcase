@@ -525,3 +525,11 @@ audio { width: 100%; margin: 8px 0 12px; }
 .chart-cell:hover { border-color: var(--accent-2); }
 .chart-cell:active { transform: scale(0.96); }
 .chart-cell.active:active { transform: scale(1.0); }
+
+/* Grid + tape: secondary (de-emphasized) labels under the primary */
+.cell-sub { font-size: 11px; color: var(--muted); margin-top: 2px; font-weight: 500; letter-spacing: 0.02em; }
+.chart-cell.active .cell-sub { color: rgba(255,255,255,0.88); }
+.tape-chord { flex-direction: column; gap: 1px; }
+.tape-chord .tape-chord-primary { font-size: 22px; font-weight: 700; line-height: 1; }
+.tape-chord .tape-chord-sub { font-size: 11px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+.tape-chord.on .tape-chord-sub { color: rgba(255,255,255,0.85); }

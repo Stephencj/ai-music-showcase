@@ -11,10 +11,11 @@ const PPS = 120;          // pixels per second of music
 const PLAYHEAD = 0.26;    // now-line position as a fraction of the lane width
 
 export default function TapeView({
-  score, labelFor, audioRef,
+  score, labelParts, audioRef,
 }: {
   score: ScoreData;
-  labelFor: (c: { symbol: string; root: string | null; quality: string | null }) => string;
+  labelParts: (c: { symbol: string; root: string | null; quality: string | null })
+    => { primary: string; secondary: string };
   audioRef: React.RefObject<HTMLAudioElement | null>;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -67,7 +68,10 @@ export default function TapeView({
               width: Math.max(46, (s.end_time - s.start_time) * PPS - 4),
             }}
           >
-            <span>{labelFor(s as ChordSpan)}</span>
+            <span className="tape-chord-primary">{labelParts(s as ChordSpan).primary}</span>
+            {labelParts(s as ChordSpan).secondary && (
+              <span className="tape-chord-sub">{labelParts(s as ChordSpan).secondary}</span>
+            )}
           </div>
         ))}
       </div>
