@@ -572,3 +572,9 @@ audio { width: 100%; margin: 8px 0 12px; }
 .gear-btn { background: var(--bg-2); border: 1px solid rgba(255,255,255,0.12); color: var(--text); border-radius: 8px; width: 34px; height: 32px; font-size: 16px; cursor: pointer; }
 .settings-panel { display: flex; flex-wrap: wrap; gap: 12px; background: var(--card); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 10px 12px; }
 .settings-panel label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+
+/* Self-playing sheet music (AlphaTab) */
+.sheet-wrap { background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); }
+.sheet-status { font-size: 12px; color: var(--muted); padding: 6px 10px; background: var(--card); }
+.sheet-status:empty { display: none; }
+.sheet { max-height: 62vh; overflow: auto; background: #fff; }

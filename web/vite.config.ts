@@ -24,6 +24,11 @@ export default defineConfig({
         target: process.env.AI_MUSIC_BACKEND || "http://localhost:7860",
         changeOrigin: true,
       },
+      // AlphaTab JS + Bravura font + soundfont live under /static on the backend.
+      "/static": {
+        target: process.env.AI_MUSIC_BACKEND || "http://localhost:7860",
+        changeOrigin: true,
+      },
     },
   },
   // `vite preview` serves the built dist (this is what the :5174 cloudflared
@@ -35,6 +40,11 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/api": {
+        target: process.env.AI_MUSIC_BACKEND || "http://localhost:7860",
+        changeOrigin: true,
+      },
+      // AlphaTab JS + Bravura font + soundfont live under /static on the backend.
+      "/static": {
         target: process.env.AI_MUSIC_BACKEND || "http://localhost:7860",
         changeOrigin: true,
       },

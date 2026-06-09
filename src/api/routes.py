@@ -404,6 +404,17 @@ def block_notes_route(name: str) -> dict:
         raise HTTPException(404, f"No notes: {exc}")
 
 
+@router.get("/blocks/{name}/musicxml")
+def block_musicxml_route(name: str) -> FileResponse:
+    """Engraved MusicXML for a block — for AlphaTab to render as self-playing
+    sheet music."""
+    try:
+        return _serve(Path(service.block_musicxml(name)),
+                      "application/vnd.recordare.musicxml+xml")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, f"No musicxml: {exc}")
+
+
 @router.get("/blocks/{name}/part-audio/{track_index}")
 def block_part_audio_route(name: str, track_index: int) -> FileResponse:
     """Isolated (solo) audio for one track of a block, for part playthrough."""

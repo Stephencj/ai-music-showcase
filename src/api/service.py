@@ -550,6 +550,33 @@ def score_data(name: str) -> dict:
     return extract_score_data(pm, meta)
 
 
+def block_musicxml(name: str) -> str:
+    """Engraved-quality MusicXML for a block (cached), for AlphaTab to render as
+    real, self-playing sheet music. Uses the same MIDI→score conversion (key
+    signature + quantization) the PDFs use."""
+    from src.daw_integration.generic import blocks as block_store
+    from src.scoring.pdf_export import midi_to_score
+
+    midi = block_store._midi_path(name)
+    if not midi.exists():
+        raise ValueError("no MIDI for block")
+    cache = block_store.BLOCKS_DIR / f"{block_store._safe_name(name)}.musicxml"
+    if cache.exists() and cache.stat().st_mtime >= midi.stat().st_mtime:
+        return str(cache)
+
+    _pm, meta = block_store.load_block(name)
+    spec = meta.get("spec") or {}
+    score = midi_to_score(
+        midi,
+        key=spec.get("key") or meta.get("key") or "C",
+        scale=spec.get("scale") or meta.get("scale") or "major",
+        tempo=float(spec.get("tempo") or meta.get("tempo") or 120.0),
+        title=name,
+    )
+    score.write("musicxml", fp=str(cache))
+    return str(cache)
+
+
 def block_part_audio(name: str, track_index: int) -> str:
     """Render (and cache) a single track of a block in isolation, so a part can
     be played through on its own in practice mode. Returns the MP3 path."""

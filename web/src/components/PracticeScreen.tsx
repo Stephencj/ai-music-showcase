@@ -5,11 +5,12 @@ import type { Block, Preset } from "../types";
 import ChordDiagram from "./ChordDiagram";
 import TapeView from "./TapeView";
 import NotationRoll, { type RollNote } from "./NotationRoll";
+import SheetMusic from "./SheetMusic";
 import type { BlockNotes } from "../api";
 import { MODES, ALL_ROOTS, scaleToModeId, rootPc, romanFor, nashvilleFor } from "../chordLabels";
 
 type Notation = "chord" | "nashville" | "roman";
-type ChartView = "grid" | "tape";
+type ChartView = "grid" | "tape" | "sheet";
 type Mode = "block" | "upload" | "scan";
 
 const NOTATION_LABEL: Record<Notation, string> = {
@@ -253,22 +254,35 @@ export default function PracticeScreen() {
   const sourceIsSong = selected.startsWith("song:");
   const blockName = selected.startsWith("block:") ? selected.slice(6) : "";
 
-  // Selected part → notes in seconds for the roll + real-time diagrams.
   const selectedTrack = partNotes && partIdx >= 0 ? partNotes.tracks[partIdx] : null;
+
+  // The notation roll follows the selected part only.
   const partRollNotes: RollNote[] = useMemo(() => {
     if (!selectedTrack || !partNotes) return [];
     const spb = 60 / (partNotes.tempo || 120);
     return selectedTrack.notes.map(([pitch, sb, db]) => ({ pitch, start: sb * spb, dur: db * spb }));
   }, [selectedTrack, partNotes]);
 
+  // The piano/guitar light up the actual notes being hit: the selected part if
+  // one is chosen, otherwise every musical (non-drum) part.
+  const diagramNotes: RollNote[] = useMemo(() => {
+    if (!partNotes) return [];
+    const spb = 60 / (partNotes.tempo || 120);
+    const tracks = selectedTrack ? [selectedTrack] : partNotes.tracks.filter((t) => !t.is_drum);
+    const out: RollNote[] = [];
+    for (const tr of tracks)
+      for (const [pitch, sb, db] of tr.notes) out.push({ pitch, start: sb * spb, dur: db * spb });
+    return out;
+  }, [partNotes, selectedTrack]);
+
   // Notes sounding right now (rAF, but only re-render when the set changes).
   const [livePitches, setLivePitches] = useState<number[] | undefined>(undefined);
   useEffect(() => {
-    if (!partRollNotes.length) { setLivePitches(undefined); return; }
+    if (!diagramNotes.length) { setLivePitches(undefined); return; }
     let raf = 0, last = "";
     const tick = () => {
       const tt = audioRef.current?.currentTime ?? 0;
-      const ps = partRollNotes.filter((n) => tt >= n.start && tt < n.start + n.dur)
+      const ps = diagramNotes.filter((n) => tt >= n.start && tt < n.start + n.dur)
         .map((n) => n.pitch).sort((a, b) => a - b);
       const key = ps.join(",");
       if (key !== last) { last = key; setLivePitches(ps); }
@@ -276,7 +290,7 @@ export default function PracticeScreen() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [partRollNotes]);
+  }, [diagramNotes]);
 
   const playSrc = (solo && selectedTrack && blockName) ? api.partAudioUrl(blockName, partIdx) : audioSrc;
 
@@ -515,11 +529,11 @@ export default function PracticeScreen() {
             </div>
           )}
 
-          {panels.diagrams && (active?.root || (selectedTrack && livePitches && livePitches.length)) && (
+          {panels.diagrams && ((livePitches && livePitches.length) || active?.root) && (
             <ChordDiagram
               root={active?.root || "C"}
               quality={active?.quality || "maj"}
-              activePitches={selectedTrack ? livePitches : undefined}
+              activePitches={partNotes ? livePitches : undefined}
             />
           )}
 
@@ -534,6 +548,9 @@ export default function PracticeScreen() {
             <div className="seg view-toggle">
               <button className={view === "grid" ? "on" : ""} onClick={() => setView("grid")}>Grid</button>
               <button className={view === "tape" ? "on" : ""} onClick={() => setView("tape")}>Tape ▶</button>
+              {!sourceIsSong && (
+                <button className={view === "sheet" ? "on" : ""} onClick={() => setView("sheet")}>Sheet ♪</button>
+              )}
             </div>
             <button className="gear-btn" onClick={() => setShowSettings((s) => !s)} title="Practice settings">⚙</button>
           </div>
@@ -550,7 +567,11 @@ export default function PracticeScreen() {
           )}
           </div>
 
-          {panels.chart && (view === "tape" ? (
+          {panels.chart && (view === "sheet" ? (
+            blockName
+              ? <SheetMusic blockName={blockName} audioRef={audioRef} />
+              : <div className="practice-hint">Sheet view is available for blocks (songs show the chart).</div>
+          ) : view === "tape" ? (
             <TapeView score={score} labelParts={labelParts} audioRef={audioRef} onSeek={seekTo} />
           ) : (
             <div className="chart" ref={chartRef}>
