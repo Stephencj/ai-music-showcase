@@ -270,29 +270,18 @@ export default function PracticeScreen() {
   const diagramNotes: RollNote[] = useMemo(() => {
     if (!partNotes) return [];
     const spb = 60 / (partNotes.tempo || 120);
-    const tracks = selectedTrack ? [selectedTrack] : partNotes.tracks.filter((t) => !t.is_drum);
+    // Pitched diagrams: the selected part if it's melodic, else all musical
+    // (non-drum) parts — a selected DRUM part isn't pitched, so fall back.
+    const tracks = selectedTrack && !selectedTrack.is_drum
+      ? [selectedTrack] : partNotes.tracks.filter((t) => !t.is_drum);
     const out: RollNote[] = [];
     for (const tr of tracks)
       for (const [pitch, sb, db] of tr.notes) out.push({ pitch, start: sb * spb, dur: db * spb });
     return out;
   }, [partNotes, selectedTrack]);
 
-  // Notes sounding right now (rAF, but only re-render when the set changes).
-  const [livePitches, setLivePitches] = useState<number[] | undefined>(undefined);
-  useEffect(() => {
-    if (!diagramNotes.length) { setLivePitches(undefined); return; }
-    let raf = 0, last = "";
-    const tick = () => {
-      const tt = audioRef.current?.currentTime ?? 0;
-      const ps = diagramNotes.filter((n) => tt >= n.start && tt < n.start + n.dur)
-        .map((n) => n.pitch).sort((a, b) => a - b);
-      const key = ps.join(",");
-      if (key !== last) { last = key; setLivePitches(ps); }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [diagramNotes]);
+  // (The neck-mode diagrams drive their own highlights via rAF + DOM toggling
+  // from `diagramNotes` + audioRef, so no per-note React state is needed here.)
 
   // For section looping, play the WAV (sample-accurate seeks — no MP3 decoder
   // priming gap), which keeps loops tight without losing pitch-preserved speed.
@@ -498,14 +487,14 @@ export default function PracticeScreen() {
             </select>
           </div>
 
-          {!sourceIsSong && partNotes && partNotes.tracks.some((tr) => !tr.is_drum) && (
+          {!sourceIsSong && partNotes && partNotes.tracks.length > 0 && (
             <div className="part-row">
               <span className="speed-label">🎯 Part</span>
               <select value={partIdx} onChange={(e) => { setPartIdx(Number(e.target.value)); setSolo(false); }}>
                 <option value={-1}>Off — chords only</option>
-                {partNotes.tracks.map((tr, i) => (tr.is_drum ? null : (
-                  <option key={i} value={i}>{tr.track}</option>
-                )))}
+                {partNotes.tracks.map((tr, i) => (
+                  <option key={i} value={i}>{tr.track}{tr.is_drum ? " (drums)" : ""}</option>
+                ))}
               </select>
               {partIdx >= 0 && (
                 <label className="part-solo">
@@ -553,7 +542,7 @@ export default function PracticeScreen() {
             </div>
           )}
 
-          {panels.diagrams && ((livePitches && livePitches.length) || active?.root) && (
+          {panels.diagrams && (diagramNotes.length > 0 || active?.root) && (
             <div className="diagram-block">
               <div className="seg diagram-mode">
                 <button className={!neckMode ? "on" : ""}
@@ -564,7 +553,8 @@ export default function PracticeScreen() {
               <ChordDiagram
                 root={active?.root || "C"}
                 quality={active?.quality || "maj"}
-                activePitches={partNotes ? livePitches : undefined}
+                notes={partNotes ? diagramNotes : []}
+                audioRef={audioRef}
                 range={partRange}
                 neck={neckMode}
               />

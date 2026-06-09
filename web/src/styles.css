@@ -591,3 +591,10 @@ audio { width: 100%; margin: 8px 0 12px; }
 .diagrams-wide { grid-template-columns: 1fr; }   /* stack: each gets full width */
 .diagram-piano-wide { width: 100%; max-height: 96px; }
 .diagram-guitar-neck { width: 100%; max-height: 130px; }
+
+/* Neck-mode diagrams: highlight via toggled .lit class (DOM-driven, no re-render) */
+.diagram-piano-wide .pk { transition: fill 0.04s linear; }
+.diagram-piano-wide .pk.w.lit { fill: #7eb0ff; }
+.diagram-piano-wide .pk.b.lit { fill: #3b6fd6; }
+.diagram-guitar-neck .nd { display: none; }
+.diagram-guitar-neck .nd.lit { display: inline; fill: #38bdf8; }

@@ -87,20 +87,18 @@ export default function SheetMusic({
         const audioEl = audioRef.current;
         if (attached || !audioEl || !api.player || !api.player.output) return;
         attached = true;
-        const push = () => {
+        // Feed the cursor position every animation frame (not just on the
+        // ~4Hz timeupdate event) so the cursor + auto-scroll move smoothly.
+        let raf = requestAnimationFrame(function loop() {
           try { api.player.output.updatePosition(audioEl.currentTime * 1000); } catch { /* */ }
-        };
+          raf = requestAnimationFrame(loop);
+        });
         const onPlay = () => { try { api.play(); } catch { /* */ } };
         const onPause = () => { try { api.pause(); } catch { /* */ } };
-        audioEl.addEventListener("timeupdate", push);
-        audioEl.addEventListener("seeked", push);
-        audioEl.addEventListener("loadedmetadata", push);
         audioEl.addEventListener("play", onPlay);
         audioEl.addEventListener("pause", onPause);
         removeListeners = () => {
-          audioEl.removeEventListener("timeupdate", push);
-          audioEl.removeEventListener("seeked", push);
-          audioEl.removeEventListener("loadedmetadata", push);
+          cancelAnimationFrame(raf);
           audioEl.removeEventListener("play", onPlay);
           audioEl.removeEventListener("pause", onPause);
         };
@@ -117,7 +115,6 @@ export default function SheetMusic({
           seekTo(ms: number) { audioEl.currentTime = (ms || 0) / 1000; },
         };
         // If audio is already rolling, get the cursor going immediately.
-        push();
         if (!audioEl.paused) { try { api.play(); } catch { /* */ } }
       };
       attachBridge();                                  // try now
