@@ -4261,6 +4261,28 @@ class MidiExporter:
                 n.velocity = max(1, int(n.velocity * scale))
         return self
 
+    def scale_region_velocity(
+        self,
+        from_bar: int,
+        to_bar: int,
+        factor: float,
+        drum_factor: Optional[float] = None,
+    ) -> "MidiExporter":
+        """Flat-scale note velocities for notes starting in ``[from_bar,
+        to_bar)`` — used to give each song section its own energy level
+        (verses pulled back, choruses full). Drums use ``drum_factor`` when
+        given so the backbeat keeps its punch."""
+        start = from_bar * self.bar_duration
+        end = to_bar * self.bar_duration
+        for track in self.tracks:
+            f = drum_factor if (track.is_drum and drum_factor is not None) else factor
+            if abs(f - 1.0) < 1e-6:
+                continue
+            for n in track.notes:
+                if start - 1e-6 <= n.start < end - 1e-6:
+                    n.velocity = max(1, min(127, int(round(n.velocity * f))))
+        return self
+
     def add_notes(
         self,
         notes: list[NoteEvent],

@@ -412,6 +412,28 @@ def compose_song(
 
         rhythm_overrides_out.append(row)
 
+    # Per-section dynamics: scale velocities so sections have distinct
+    # energy (verses pulled back, choruses hit full) instead of everything
+    # sitting at one level. Chorus = 1.0 reference; drums keep most of their
+    # punch so the backbeat doesn't go limp in quiet sections.
+    _SECTION_ENERGY = {
+        "intro": 0.72, "verse": 0.82, "chorus": 1.0,
+        "bridge": 0.90, "outro": 0.74,
+    }
+    for section in sections:
+        s, e = int(section["start_bar"]), int(section["end_bar"])
+        label = (section.get("label") or "")
+        role = section.get("role") or role_for_label(label)
+        energy = _SECTION_ENERGY.get(role, 0.85)
+        lo = label.lower()
+        if "solo" in lo:
+            energy = max(energy, 0.96)       # solos ride energetic
+        elif "pre-chorus" in lo or "prechorus" in lo:
+            energy = 0.92                     # lift into the chorus
+        if abs(energy - 1.0) > 1e-6:
+            drum_f = 1.0 - (1.0 - energy) * 0.5
+            midi.scale_region_velocity(s, e + 1, energy, drum_factor=drum_f)
+
     # Save MIDI + WAV.
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
