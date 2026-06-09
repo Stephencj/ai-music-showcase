@@ -209,16 +209,17 @@ export default function PracticeScreen() {
     box.scrollTo({ top: box.scrollTop + (c.top - b.top) - b.height / 2 + c.height / 2, behavior: "smooth" });
   }, [activeSpanIdx, view]);
 
-  // Apply the practice speed to the audio element (preservesPitch keeps the
-  // key the same when slowing down). Re-applied when the source changes.
-  useEffect(() => {
-    const a = audioRef.current;
+  // Apply the practice speed to the audio element. Set preservesPitch BEFORE
+  // playbackRate (and across all vendor prefixes) so changing speed never
+  // shifts the key — important on iOS WKWebView.
+  function applyRate(a: HTMLAudioElement | null) {
     if (!a) return;
-    a.playbackRate = speed;
     a.preservesPitch = true;
-    // Vendor-prefixed aliases for older WebKit (iOS).
     (a as unknown as { webkitPreservesPitch?: boolean }).webkitPreservesPitch = true;
-  }, [speed, audioSrc, score]);
+    (a as unknown as { mozPreservesPitch?: boolean }).mozPreservesPitch = true;
+    a.playbackRate = speed;
+  }
+  useEffect(() => { applyRate(audioRef.current); }, [speed, audioSrc, score]);
 
   // Seed the tonic/mode selectors from the detected key whenever a new score
   // loads (the user can then override them across the full modal range).
@@ -357,7 +358,7 @@ export default function PracticeScreen() {
               }}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
-              onLoadedMetadata={(e) => { e.currentTarget.playbackRate = speed; }}
+              onLoadedMetadata={(e) => applyRate(e.currentTarget)}
               style={{ width: "100%" }}
             />
           )}
@@ -367,15 +368,13 @@ export default function PracticeScreen() {
               speed. Effective tempo shown for reference. */}
           <div className="speed-row">
             <span className="speed-label">Speed</span>
-            {[0.5, 0.75, 1, 1.25].map((s) => (
-              <button
-                key={s}
-                className={Math.abs(speed - s) < 0.001 ? "on" : ""}
-                onClick={() => setSpeed(s)}
-              >
-                {s === 1 ? "1×" : `${s}×`}
-              </button>
-            ))}
+            <input
+              className="speed-slider"
+              type="range" min={0.5} max={1.5} step={0.05}
+              value={speed}
+              onChange={(e) => setSpeed(Number(e.target.value))}
+            />
+            <button className="speed-reset" onClick={() => setSpeed(1)} title="Reset to 1×">{speed.toFixed(2)}×</button>
             <span className="speed-bpm">{Math.round(score.tempo * speed)} BPM</span>
           </div>
 

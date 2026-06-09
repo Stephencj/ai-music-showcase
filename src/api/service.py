@@ -551,11 +551,13 @@ def score_data(name: str) -> dict:
 
 
 def song_score_data(title: str) -> dict:
-    """Practice-chart score-data for a saved SONG (a timeline of blocks). The
-    blocks are concatenated into one MIDI, each timeline entry becomes a
-    section labelled by its block, and chords are detected over the whole
-    thing — so a full song can be practised just like a block."""
-    from src.daw_integration.generic import block_concat
+    """Practice-chart score-data for a saved SONG (a timeline of blocks).
+
+    Tempo-aware per section: each block's chords are detected at the block's OWN
+    tempo (via extract_score_data on the block), then stitched onto the song
+    timeline with the same cumulative offsets block_concat uses — so the chart
+    and cursor stay locked to the audio even when blocks have different tempos.
+    Each timeline entry becomes a labelled section."""
     from src.daw_integration.generic import blocks as block_store
     from src.daw_integration.generic import songs as song_store
     from src.daw_integration.generic.chord_analysis import extract_score_data
@@ -563,34 +565,69 @@ def song_score_data(title: str) -> dict:
     timeline = song_store.load_song_timeline(title).get("timeline") or []
     if not timeline:
         raise ValueError("song has no blocks")
-    pm, _info = block_concat.concat_blocks(timeline)
 
-    # Seed key/scale/tempo/meter from the first block.
-    _fpm, first_meta = block_store.load_block(timeline[0]["block_name"])
-    fspec = first_meta.get("spec") or {}
-    tempo = float(fspec.get("tempo") or first_meta.get("tempo") or 120.0)
-    ts = first_meta.get("time_signature") or fspec.get("time_signature") or [4, 4]
-    key = fspec.get("key") or first_meta.get("key") or "C"
-    scale = fspec.get("scale") or first_meta.get("scale") or "major"
+    spans: list[dict] = []
+    sections: list[dict] = []
+    cursor = 0.0          # seconds into the song
+    bar_off = 0           # bars into the song
+    key = scale = None
+    first_tempo = None
+    ts = [4, 4]
 
-    # One section per timeline entry, sized by the block's bars × repeat.
-    sections, cur = [], 0
     for entry in timeline:
         try:
-            _p, m = block_store.load_block(entry["block_name"])
+            pm_b, meta_b = block_store.load_block(entry["block_name"])
         except Exception:
             continue
-        span = max(1, round(int(m.get("bars") or 0) * float(entry.get("repeat") or 1)))
-        sections.append({"label": entry["block_name"], "role": "section",
-                         "start_bar": cur, "end_bar": cur + span - 1})
-        cur += span
+        bscore = extract_score_data(pm_b, meta_b)
+        bs = bscore["bar_seconds"]
+        bbars = int(bscore["bars"])
+        if not bbars or bs <= 0:
+            continue
+        if key is None:
+            key, scale = bscore["key"], bscore["scale"]
+            first_tempo, ts = bscore["tempo"], bscore["time_signature"]
 
-    meta = {
-        "tempo": tempo, "time_signature": ts, "bars": cur,
-        "spec": {"key": key, "scale": scale, "tempo": tempo,
-                 "time_signature": ts, "sections": sections},
+        repeat = float(entry.get("repeat") or 1)
+        full = int(repeat)
+        rem = round((repeat - full) * bbars)
+        sec_start_time, sec_start_bar = cursor, bar_off
+
+        def emit(max_bar: int, time_off: float, bar_offset: int):
+            for sp in bscore["chord_spans"]:
+                if sp["start_bar"] >= max_bar:
+                    continue
+                eb = min(sp["end_bar"], max_bar - 1)
+                spans.append({
+                    **sp,
+                    "start_bar": sp["start_bar"] + bar_offset,
+                    "end_bar": eb + bar_offset,
+                    "start_time": round(sp["start_time"] + time_off, 4),
+                    "end_time": round(min(sp["end_time"], max_bar * bs) + time_off, 4),
+                })
+
+        for _ in range(full):
+            emit(bbars, cursor, bar_off)
+            cursor += bbars * bs
+            bar_off += bbars
+        if rem > 0:
+            emit(rem, cursor, bar_off)
+            cursor += rem * bs
+            bar_off += rem
+
+        sections.append({
+            "label": entry["block_name"], "role": "section",
+            "start_bar": sec_start_bar, "end_bar": max(sec_start_bar, bar_off - 1),
+            "start_time": round(sec_start_time, 4), "end_time": round(cursor, 4),
+        })
+
+    return {
+        "key": key or "C", "scale": scale or "major",
+        "tempo": float(first_tempo or 120.0), "time_signature": list(ts),
+        "bars": bar_off, "bar_seconds": round(cursor / bar_off, 4) if bar_off else 0.0,
+        "beats_per_bar": int(ts[0]),
+        "sections": sections, "chords": [], "chord_spans": spans,
     }
-    return extract_score_data(pm, meta)
 
 
 def ensure_song_preview(title: str) -> str:

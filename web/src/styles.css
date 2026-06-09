@@ -539,3 +539,11 @@ audio { width: 100%; margin: 8px 0 12px; }
 
 .loop-row { display: flex; align-items: center; gap: 8px; }
 .loop-row select { padding: 7px 9px; border-radius: 8px; background: var(--bg-2); color: var(--text); border: 1px solid rgba(255,255,255,0.12); font-size: 13px; }
+
+/* Practice speed slider */
+.speed-slider { flex: 1; min-width: 100px; accent-color: var(--accent); height: 4px; }
+.speed-reset {
+  border: 1px solid rgba(255,255,255,0.12); background: var(--bg-2); color: var(--text);
+  border-radius: 8px; padding: 4px 8px; font-size: 13px; cursor: pointer;
+  font-variant-numeric: tabular-nums; min-width: 52px;
+}
