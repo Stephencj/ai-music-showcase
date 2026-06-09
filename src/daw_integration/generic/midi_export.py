@@ -955,6 +955,23 @@ DRUM_PATTERNS_4_4: dict[str, tuple[list, str]] = {
         ("maracas",      _hh([i * 0.25 for i in range(16)], mult=0.4)),
         ("cowbell",      _hh([0, 1, 2, 3], mult=0.55)),
     ], "16th"),
+    # ----- Add-on percussion LAYERS (no kick/snare) — sit alongside a main kit
+    # without competing, for the selectable "extra percussion" instruments.
+    "latin_perc_layer": ([
+        ("clave",        [(0, 0.8), (1.5, 0.8), (3, 0.8)]),      # 3-side son clave
+        ("conga_open",   _hh([1.5, 3.5], mult=0.8)),
+        ("conga_mute",   _hh([0.75, 2.75], mult=0.55)),
+        ("bongo_high",   _hh([0.5, 2.5], mult=0.55)),
+        ("maracas",      _hh([i * 0.25 for i in range(16)], mult=0.35)),
+    ], "16th"),
+    "hiphop_perc_layer": ([
+        # DJ-style top layer nudged off the grid — shaker/tambourine/clap/open
+        # hat doubling the backbeat + filling 16ths, no kick/snare.
+        ("cabasa",       _hh([i * 0.25 for i in range(16)], mult=0.4), 0.05),
+        ("tambourine",   _h([1, 3]), 0.0),
+        ("clap",         [(1, 0.5), (3, 0.5)], -0.03),
+        ("hihat_open",   [(1.5, 0.6), (3.5, 0.6)], 0.045),
+    ], "16th"),
 }
 
 DRUM_PATTERNS_3_4: dict[str, tuple[list, str]] = {

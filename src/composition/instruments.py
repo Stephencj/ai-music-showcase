@@ -114,6 +114,11 @@ def _add(inst: Instrument) -> None:
 # Rhythm — channel 10 drum kits
 _add(Instrument("drum_kit",   "Drum kit",   "rhythm", "drums", 0, is_drum=True))
 _add(Instrument("percussion", "Percussion", "rhythm", "drums", 0, is_drum=True))
+# Add-on percussion LAYERS — selectable alongside the main kit; the composer
+# renders them with a complementary (off-beat, no kick/snare) pattern so they
+# sit with the drums instead of competing. Role "percussion" → own track.
+_add(Instrument("latin_perc",  "Latin percussion",  "rhythm", "percussion", 0, is_drum=True))
+_add(Instrument("hiphop_perc", "Hip-hop percussion", "rhythm", "percussion", 0, is_drum=True))
 
 # Bass — written low (E1–G3 typical).
 _add(Instrument("electric_bass", "Electric Bass", "bass", "bass", 33, default_octave=2))

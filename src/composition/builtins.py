@@ -328,6 +328,35 @@ _register(name="fade_hat_only", label="Hat-only fade",
           apply=_drums_fade_hat_only)
 
 
+# ---- Add-on percussion layers (own track, complementary to the main kit) ----
+
+def _perc_latin(midi, ctx: TechniqueContext) -> None:
+    midi.add_drum_pattern(
+        pattern="latin_perc_layer", bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, density=1.0,
+        seed=_seed(ctx), swing=ctx.swing, track_name="Latin Percussion",
+    )
+
+
+def _perc_hiphop(midi, ctx: TechniqueContext) -> None:
+    midi.add_drum_pattern(
+        pattern="hiphop_perc_layer", bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, density=1.0,
+        seed=_seed(ctx), swing=ctx.swing, track_name="Hip-hop Percussion",
+    )
+
+
+_ALL_SECTION_ROLES = ("intro", "verse", "chorus", "bridge", "outro")
+_register(name="latin_perc_bed", label="Latin percussion (complementary)",
+          description="Congas/bongos/clave/maracas on the off-beats — sits with the kit.",
+          instruments=("latin_perc",), roles=_ALL_SECTION_ROLES, weight=2,
+          apply=_perc_latin)
+_register(name="hiphop_perc_top", label="Hip-hop percussion (complementary)",
+          description="Off-grid shaker/tambourine/clap/open-hat DJ layer over the kit.",
+          instruments=("hiphop_perc",), roles=_ALL_SECTION_ROLES, weight=2,
+          apply=_perc_hiphop)
+
+
 # ---------------------------------------------------------------------------
 # FUNK ROCK STARTER SET
 # ---------------------------------------------------------------------------
