@@ -11,12 +11,13 @@ const PPS = 120;          // pixels per second of music
 const PLAYHEAD = 0.26;    // now-line position as a fraction of the lane width
 
 export default function TapeView({
-  score, labelParts, audioRef,
+  score, labelParts, audioRef, onSeek,
 }: {
   score: ScoreData;
   labelParts: (c: { symbol: string; root: string | null; quality: string | null })
     => { primary: string; secondary: string };
   audioRef: React.RefObject<HTMLAudioElement | null>;
+  onSeek: (time: number) => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const laneRef = useRef<HTMLDivElement>(null);
@@ -63,6 +64,8 @@ export default function TapeView({
             key={s.start_bar}
             ref={(el) => { blockRefs.current[i] = el; }}
             className="tape-chord"
+            onClick={() => onSeek(s.start_time)}
+            role="button"
             style={{
               left: s.start_time * PPS,
               width: Math.max(46, (s.end_time - s.start_time) * PPS - 4),

@@ -397,7 +397,7 @@ export default function PracticeScreen() {
           </div>
 
           {view === "tape" ? (
-            <TapeView score={score} labelParts={labelParts} audioRef={audioRef} />
+            <TapeView score={score} labelParts={labelParts} audioRef={audioRef} onSeek={seekTo} />
           ) : (
             <div className="chart" ref={chartRef}>
               {score.sections.length > 0
