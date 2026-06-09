@@ -57,19 +57,28 @@ export default function SheetMusic({
         display: { layoutMode: 0 }, // page mode — wraps like sheet music
       });
 
-      // Drive the cursor from the practice audio element.
+      // Drive the cursor from the practice audio element. AlphaTab only shows
+      // and scrolls the cursor while its OWN player state is Playing, so we
+      // mirror the audio's play/pause into api.play()/api.pause() — otherwise
+      // the cursor stays parked even as updatePosition arrives.
       const audioEl = audioRef.current;
       if (audioEl && api.player && api.player.output) {
         const push = () => {
           try { api.player.output.updatePosition(audioEl.currentTime * 1000); } catch { /* */ }
         };
+        const onPlay = () => { try { api.play(); } catch { /* */ } };
+        const onPause = () => { try { api.pause(); } catch { /* */ } };
         audioEl.addEventListener("timeupdate", push);
         audioEl.addEventListener("seeked", push);
         audioEl.addEventListener("loadedmetadata", push);
+        audioEl.addEventListener("play", onPlay);
+        audioEl.addEventListener("pause", onPause);
         removeListeners = () => {
           audioEl.removeEventListener("timeupdate", push);
           audioEl.removeEventListener("seeked", push);
           audioEl.removeEventListener("loadedmetadata", push);
+          audioEl.removeEventListener("play", onPlay);
+          audioEl.removeEventListener("pause", onPause);
         };
         api.player.output.handler = {
           get backingTrackDuration() {
@@ -89,7 +98,14 @@ export default function SheetMusic({
       api.scoreLoaded.on((s: any) => {
         try { if (s?.tracks?.length) api.renderTracks(s.tracks); } catch { /* */ }
       });
-      api.renderFinished.on(() => setStatus(""));
+      api.renderFinished.on(() => {
+        setStatus("");
+        const a = audioRef.current;
+        if (a) {
+          try { api.player?.output?.updatePosition(a.currentTime * 1000); } catch { /* */ }
+          if (!a.paused) { try { api.play(); } catch { /* */ } }
+        }
+      });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       api.error.on((e: any) => setStatus("Couldn't render: " + (e?.message || e)));
 
