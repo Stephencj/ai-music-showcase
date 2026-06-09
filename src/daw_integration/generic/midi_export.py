@@ -2714,6 +2714,40 @@ class MidiExporter:
                 track.notes.append(NoteEvent(fifth, bar_start + beat * half,
                                              bar_start + beat * bpb, velocity))
 
+            elif pattern in ("eight_oh_eight", "sub_octave", "sub_onedrop", "sub_root"):
+                # Low sub-bass family (808 + genre subs). Mono root in a low
+                # octave — sub tones can't stack or they phase-cancel. Each
+                # candidate note is guarded to a minimum length so degenerate
+                # chord segments (from pacing) can't leave zero-length clicks.
+                bar_end = min(bar_start + self.bar_duration, _seg_end_time)
+
+                def _sub(p, st, en, v=velocity):
+                    if en - st > 0.04:
+                        track.notes.append(NoteEvent(p, st, min(en, _seg_end_time), v))
+
+                if pattern == "eight_oh_eight":
+                    # Trap 808: low root sustained/ringing across each chord
+                    # (mono). The syncopated trap bounce comes from the kick +
+                    # the hip-hop percussion layer; the 808 just locks the sub
+                    # to the chord roots underneath.
+                    _sub(root, bar_start, bar_end)
+
+                elif pattern == "sub_octave":
+                    # House/disco/funk octave pulse: root / root+octave 8ths.
+                    j = 0
+                    while bar_start + j * (beat / 2) < bar_end - 0.04:
+                        start = bar_start + j * (beat / 2)
+                        _sub(root if j % 2 == 0 else root + 12, start, start + beat / 2)
+                        j += 1
+
+                elif pattern == "sub_onedrop":
+                    # Reggae/dub: root on beat 3 (the "one drop"), held.
+                    three_t = bar_start + min(2.0, bpb - 1) * beat
+                    _sub(root, three_t if three_t < bar_end - 0.04 else bar_start, bar_end)
+
+                else:  # sub_root — sustained root per bar (techno/prog/default)
+                    _sub(root, bar_start, bar_end)
+
             elif pattern == "waltz_bass":
                 # 3/4 waltz: root on 1, fifth on 2, fifth on 3.
                 track.notes.append(NoteEvent(root, bar_start,

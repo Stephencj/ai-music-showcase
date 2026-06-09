@@ -365,7 +365,7 @@ def compose_song(
                 section_role=role, section_label=label,
                 instrument=instrument_token,
                 key=eff_key, scale=eff_scale,
-                tempo=eff_tempo,
+                tempo=eff_tempo, genre=genre,
                 time_signature=preset.time_signature,
                 progression=section_prog,
                 swing=eff_swing,

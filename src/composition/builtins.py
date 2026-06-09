@@ -346,7 +346,41 @@ def _perc_hiphop(midi, ctx: TechniqueContext) -> None:
     )
 
 
+def _bass_808(midi, ctx: TechniqueContext) -> None:
+    # Trap/hip-hop 808 — syncopated root in a low octave, gliding/sustained.
+    midi.add_bass_line(
+        key=ctx.key, progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, scale_name=ctx.scale,
+        pattern="eight_oh_eight", octave=1, program=39,
+        seed=_seed(ctx), track_name="808 Bass",
+    )
+
+
+def _sub_bass(midi, ctx: TechniqueContext) -> None:
+    # Genre-aware sub: octave pulse for dance, one-drop for reggae, else a
+    # sustained root. (808s and subs are mono in a low octave — never stacked.)
+    g = (ctx.genre or "").lower()
+    if any(k in g for k in ("house", "disco", "funk", "edm", "dance", "afro")):
+        pat = "sub_octave"
+    elif any(k in g for k in ("reggae", "dub")):
+        pat = "sub_onedrop"
+    else:
+        pat = "sub_root"
+    midi.add_bass_line(
+        key=ctx.key, progression=ctx.progression, bars=ctx.bar_count,
+        bar_offset=ctx.start_bar, scale_name=ctx.scale,
+        pattern=pat, octave=1, program=38,
+        seed=_seed(ctx), track_name="Sub Bass",
+    )
+
+
 _ALL_SECTION_ROLES = ("intro", "verse", "chorus", "bridge", "outro")
+_register(name="bass_808_glide", label="808 Bass (trap)",
+          description="Syncopated 808 sub-kick root with glide/sustain — follows the kick.",
+          instruments=("bass_808",), roles=_ALL_SECTION_ROLES, weight=2, apply=_bass_808)
+_register(name="sub_bass_genre", label="Sub Bass (genre-aware)",
+          description="Pure low sub that follows genre rules (octave pulse / one-drop / sustained).",
+          instruments=("sub_bass",), roles=_ALL_SECTION_ROLES, weight=2, apply=_sub_bass)
 _register(name="latin_perc_bed", label="Latin percussion (complementary)",
           description="Congas/bongos/clave/maracas on the off-beats — sits with the kit.",
           instruments=("latin_perc",), roles=_ALL_SECTION_ROLES, weight=2,

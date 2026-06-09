@@ -41,6 +41,8 @@ class TechniqueContext:
     progression: list             # MidiExporter-compatible chord plan
     rng: np.random.Generator      # seed-isolated per (section, instrument)
     swing: float = 0.0
+    genre: str = ""               # style preset id, so genre-aware techniques
+                                  # (e.g. the sub-bass) can adapt their pattern
     # When ``compose_song`` knows the specific Instrument routing for
     # this cell, it's attached here. Factory-built techniques in
     # builtins.py read .program and .track_name from it so the

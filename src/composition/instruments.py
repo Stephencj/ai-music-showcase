@@ -122,6 +122,10 @@ _add(Instrument("hiphop_perc", "Hip-hop percussion", "rhythm", "percussion", 0, 
 
 # Bass — written low (E1–G3 typical).
 _add(Instrument("electric_bass", "Electric Bass", "bass", "bass", 33, default_octave=2))
+# Sub-bass instruments — synth sub in a low octave. The 808 follows trap rules
+# (syncopated root, glide); the sub-bass adapts its pattern to the genre.
+_add(Instrument("bass_808", "808 Bass",  "bass", "bass", 39, default_octave=1))
+_add(Instrument("sub_bass", "Sub Bass",  "bass", "bass", 38, default_octave=1))
 _add(Instrument("upright_bass",  "Upright Bass",  "bass", "bass", 32, default_octave=2))
 _add(Instrument("synth_bass",    "Synth Bass",    "bass", "bass", 38, default_octave=2))
 
