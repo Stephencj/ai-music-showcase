@@ -960,7 +960,7 @@ STYLES: dict[str, StylePreset] = {
                  "bass_pattern": "walking"},
             ],
         },
-        default_instruments=['drum_kit', 'electric_bass', 'electric_guitar_clean', 'organ_hammond'],
+        default_instruments=['drum_kit', 'electric_bass', 'electric_guitar_clean', 'organ_hammond', 'lead_guitar'],
         pacing_options=('uniform_1',),
         bridge_pacing_options=('uniform_1',),
     ),

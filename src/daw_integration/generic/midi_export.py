@@ -30,6 +30,9 @@ SCALES = {
     "pentatonic_major": [0, 2, 4, 7, 9],
     "pentatonic_minor": [0, 3, 5, 7, 10],
     "blues":            [0, 3, 5, 6, 7, 10],
+    # 9-note major/minor blend over dominant chords — the shared lead
+    # vocabulary of blues, rock and country (mixolydian + blues scale).
+    "mixolydian_blues": [0, 2, 3, 4, 5, 6, 7, 9, 10],
     "dorian":           [0, 2, 3, 5, 7, 9, 10],
     "phrygian":         [0, 1, 3, 5, 7, 8, 10],   # Spanish/flamenco color
     "lydian":           [0, 2, 4, 6, 7, 9, 11],   # major with #4 — Vai / dreamy

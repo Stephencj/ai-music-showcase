@@ -233,8 +233,42 @@ _ROCK_LICKS = [
     ]),
 ]
 
+# Blues: blue-note (b5) call/response with space and shuffle phrasing.
+# Written in the "blues" scale: [root, b3, 4, b5, 5, b7] -> idx 0..5.
+_BLUES_LICKS = [
+    Lick("blues_call_a", "blues", "call", [
+        _ln(3, 0.0, 0.5, articulation="bend_half"),          # b5 blue note, bent
+        _ln(4, 0.5, 1.0, strong=True, articulation="vibrato"),  # 5
+        _ln(None, 1.5, 0.5),                                  # space
+        _ln(1, 2.0, 1.0, articulation="bend_whole"),          # b3 bent
+        _ln(0, 3.0, 1.0, strong=True),                        # root
+    ]),
+    Lick("blues_resp_a", "blues", "response", [
+        _ln(5, 0.0, 0.5),                                     # b7
+        _ln(4, 0.5, 0.5),                                     # 5
+        _ln(3, 1.0, 0.5, articulation="bend_half"),           # b5
+        _ln(2, 1.5, 0.5),                                     # 4
+        _ln(1, 2.0, 0.5),                                     # b3
+        _ln(0, 2.5, 1.5, strong=True, articulation="vibrato"),  # root resolve
+    ]),
+    Lick("blues_shuffle_riff", "blues", "riff", [
+        _ln(0, 0.0, 0.5, strong=True), _ln(4, 0.5, 0.5),
+        _ln(0, 1.0, 0.5), _ln(5, 1.5, 0.5),
+        _ln(0, 2.0, 0.5, strong=True), _ln(4, 2.5, 0.5),
+        _ln(0, 3.0, 0.5), _ln(5, 3.5, 0.5),
+    ]),
+    Lick("blues_turnaround", "blues", "turnaround", [
+        _ln(5, 0.0, 0.5, articulation="bend_half"),
+        _ln(4, 0.5, 0.5), _ln(2, 1.0, 0.5), _ln(1, 1.5, 0.5),
+        _ln(0, 2.0, 1.0, strong=True),
+        _ln(3, 3.0, 0.5, articulation="bend_half"),           # b5 lead-in
+        _ln(4, 3.5, 0.5, strong=True, articulation="vibrato"),
+    ]),
+]
+
 LICKS: dict[str, list[Lick]] = {
     "rock": _ROCK_LICKS,
+    "blues": _BLUES_LICKS,
 }
 
 

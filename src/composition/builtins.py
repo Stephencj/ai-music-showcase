@@ -1073,6 +1073,29 @@ _add_lead_tech("rock_guitar_solo", roles=("bridge",), mode="solo",
                description="Call-and-response pentatonic solo with bends, "
                            "building through a register climb to a turnaround.")
 
+# ----- LEAD GUITAR (Blues) --------------------------------------------------
+# Blue-note (b5) call-and-response with shuffle phrasing and space. The
+# 12-bar form's choruses double as solo choruses, so cover verse/chorus
+# (riff/comping fills) and bridge (full solo). Clean electric tone (27).
+_add_lead_tech("blues_lead_riff_verse", roles=("verse",), mode="riff",
+               lick_genre="blues", tags=("blues",), program=27, velocity=84,
+               label="Blues lead fills (verse)",
+               description="Sparse blue-note shuffle fills between vocal phrases.")
+# In a 12-bar blues every chorus IS a solo chorus, so the chorus cell
+# solos (call-and-response, building) rather than looping a riff. A
+# bridge solo is also registered for blues songs that have one.
+_add_lead_tech("blues_lead_chorus_solo", roles=("chorus",), mode="solo",
+               lick_genre="blues", tags=("blues",), program=27, weight=3,
+               velocity=92,
+               label="Blues solo chorus",
+               description="Call-and-response blue-note solo over the 12-bar "
+                           "chorus — bends, vibrato and space.")
+_add_lead_tech("blues_guitar_solo", roles=("bridge",), mode="solo",
+               lick_genre="blues", tags=("blues",), program=27, weight=3,
+               label="Blues guitar solo",
+               description="Call-and-response blue-note solo — bends, vibrato and "
+                           "space, building to a 12-bar turnaround.")
+
 
 # ----- POP ------------------------------------------------------------------
 _add_chord_tech("pop_chord_pad_intro", rhythm="pad",
