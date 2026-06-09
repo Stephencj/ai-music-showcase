@@ -171,6 +171,15 @@ def scan_to_midi(image_path: str, out_dir: Path, timeout: int = 600) -> dict:
         except Exception:
             pass
 
+    # Quantize onsets/durations to a 16th + 8th-triplet grid. OMR timing is
+    # slightly ragged (durations read a hair long/short), which both wobbles the
+    # playback and inflates the bar count when measures don't sum to the meter.
+    # Snapping to the grid tightens the rhythm and the bar structure.
+    try:
+        score.quantize(quarterLengthDivisors=(4, 3), inPlace=True, recurse=True)
+    except Exception:
+        pass
+
     midi_path = out_dir / f"{Path(image_path).stem}.mid"
     score.write("midi", fp=str(midi_path))
 
