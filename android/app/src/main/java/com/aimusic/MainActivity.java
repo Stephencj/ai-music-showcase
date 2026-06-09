@@ -30,11 +30,12 @@ import androidx.webkit.WebViewFeature;
 import java.util.Collections;
 
 /**
- * Self-contained app: the React UI is bundled in the APK (assets/web) and
- * served to the WebView over a virtual https origin via WebViewAssetLoader,
- * so the screen loads instantly from the device — a flaky connection can no
- * longer leave it blank. Only the music data is fetched from the Mac's API,
- * whose address is injected as the web app's apiBase before it runs.
+ * Thin WebView shell that loads the React UI LIVE from the Mac's /app endpoint
+ * (found via Bonjour/mDNS, with a saved/manual fallback) — the same model as
+ * iOS, so the app always shows the latest web build with no APK rebuild. The
+ * page is same-origin with the API, so /api calls are relative. (A flaky/absent
+ * Mac shows a load error rather than a stale screen — the trade for staying
+ * current.)
  */
 public class MainActivity extends Activity {
 
@@ -86,14 +87,9 @@ public class MainActivity extends Activity {
 
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
-                String path = req.getUrl().getPath();
-                // Serve index.html ourselves with the API base injected inline,
-                // so it works on ANY WebView (no addDocumentStartJavaScript /
-                // androidx feature needed — Amazon's WebView may lack it).
-                if (path != null && path.endsWith("/index.html")) {
-                    WebResourceResponse r = injectedIndexHtml();
-                    if (r != null) return r;
-                }
+                // Live load from the Mac: let everything go to the network.
+                // (assetLoader only matches the bundled appassets origin, which
+                // we no longer load — it returns null for the Mac's URLs.)
                 return assetLoader.shouldInterceptRequest(req.getUrl());
             }
 
@@ -190,18 +186,38 @@ public class MainActivity extends Activity {
         discoveryListener = null;
     }
 
-    /** Remember the API base (injected into index.html as it's served), then
-     * load the bundled UI. Also try addDocumentStartJavaScript as a backup. */
+    /** Load the UI LIVE from the Mac (its /app bundle), so the app always
+     * shows the latest web build with no APK rebuild — same model as iOS. The
+     * page is then same-origin with the API, so /api calls are relative; we
+     * inject a fetch-error diagnostic at document start for that origin. */
     private void startApp(String base) {
         this.apiBase = base;
+        final String origin = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            String js = "try{localStorage.setItem('aimusic.apiBase'," + jsString(base) + ");}catch(e){}";
             try {
-                WebViewCompat.addDocumentStartJavaScript(web, js, Collections.singleton(APP_ORIGIN));
+                WebViewCompat.addDocumentStartJavaScript(web, diagnosticJs(origin),
+                        Collections.singleton(origin));
             } catch (Exception ignored) {
             }
         }
-        web.loadUrl(APP_URL);
+        web.loadUrl(origin + "/app/");
+    }
+
+    /** JS injected before the live page runs: pin /api to the same origin and
+     * surface any failed /api call as a red diagnostic bar. */
+    private String diagnosticJs(String origin) {
+        String b = jsString(origin);
+        return "(function(){"
+                + "try{localStorage.setItem('aimusic.apiBase','');}catch(e){}"
+                + "function show(m){try{var d=document.getElementById('aimusic_diag')||document.createElement('div');"
+                + "d.id='aimusic_diag';d.style.cssText='position:fixed;bottom:0;left:0;right:0;max-height:40%;overflow:auto;"
+                + "background:#b00020;color:#fff;font:11px monospace;padding:6px;z-index:2147483647;white-space:pre-wrap';"
+                + "d.textContent='Server: '+(" + b + ")+'\\n'+m;(document.body||document.documentElement).appendChild(d);}catch(e){}"
+                + "try{console.error('AIMUSIC_DIAG '+m);}catch(e){}}"
+                + "var of=window.fetch;window.fetch=function(u,o){return of(u,o).then(function(res){"
+                + "if(!res.ok&&(''+u).indexOf('/api/')>=0)show('HTTP '+res.status+' for '+u);return res;})"
+                + ".catch(function(err){show('FETCH FAILED: '+u+'\\n'+err);throw err;});};"
+                + "})();";
     }
 
     /** Serve the bundled index.html with the API base injected inline so the
