@@ -536,3 +536,6 @@ audio { width: 100%; margin: 8px 0 12px; }
 
 .tape-chord { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .tape-chord:active { filter: brightness(1.2); }
+
+.loop-row { display: flex; align-items: center; gap: 8px; }
+.loop-row select { padding: 7px 9px; border-radius: 8px; background: var(--bg-2); color: var(--text); border: 1px solid rgba(255,255,255,0.12); font-size: 13px; }

@@ -33,6 +33,8 @@ export default function PracticeScreen() {
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
+  // Loop: "off" | "all" | "s<sectionIndex>" (loop a single section).
+  const [loop, setLoop] = useState("off");
   // Tonic + mode the Roman/Nashville numbers are computed against. Seeded from
   // the detected key, but fully selectable across the modal range for learning.
   const [tonic, setTonic] = useState("C");
@@ -325,7 +327,13 @@ export default function PracticeScreen() {
               ref={audioRef}
               src={audioSrc}
               controls
-              onTimeUpdate={(e) => setT(e.currentTarget.currentTime)}
+              loop={loop === "all"}
+              onTimeUpdate={(e) => {
+                const ct = e.currentTarget.currentTime;
+                const sec = loop.startsWith("s") ? score.sections[Number(loop.slice(1))] : null;
+                if (sec && ct >= sec.end_time - 0.03) { e.currentTarget.currentTime = sec.start_time; return; }
+                setT(ct);
+              }}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
               onLoadedMetadata={(e) => { e.currentTarget.playbackRate = speed; }}
@@ -348,6 +356,24 @@ export default function PracticeScreen() {
               </button>
             ))}
             <span className="speed-bpm">{Math.round(score.tempo * speed)} BPM</span>
+          </div>
+
+          <div className="loop-row">
+            <span className="speed-label">🔁 Loop</span>
+            <select
+              value={loop}
+              onChange={(e) => {
+                const v = e.target.value;
+                setLoop(v);
+                if (v.startsWith("s")) seekTo(score.sections[Number(v.slice(1))].start_time);
+              }}
+            >
+              <option value="off">Off</option>
+              <option value="all">Whole</option>
+              {score.sections.map((s, i) => (
+                <option key={`${s.label}-${s.start_bar}`} value={`s${i}`}>{s.label}</option>
+              ))}
+            </select>
           </div>
 
           {mode === "upload" && (
