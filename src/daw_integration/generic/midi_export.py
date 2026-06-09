@@ -1234,6 +1234,31 @@ DRUM_PATTERNS_BY_METER: dict[tuple[int, int], dict[str, tuple[list, str]]] = {
 }
 
 
+# Transition fills (4/4) — occupy the LAST TWO BEATS of a section's final
+# bar, leading into the next section. Offsets are absolute beats from the
+# bar start (so they slot into beats 2.0–4.0); the groove still plays the
+# first half of the bar. A real drummer's tell that the section is turning
+# over — the lack of these is what makes looped drums sound machine-made.
+DRUM_FILLS: dict[str, list] = {
+    "tom_roll": [
+        ("kick",     [(2.0, 0.9)]),
+        ("snare",    [(2.0, 0.8), (2.5, 0.85)]),
+        ("tom_mid",  [(3.0, 0.85), (3.25, 0.82)]),
+        ("tom_low",  [(3.5, 0.92), (3.75, 1.0)]),
+    ],
+    "snare_build": [
+        ("snare", [(2.0, 0.55), (2.25, 0.6), (2.5, 0.68), (2.75, 0.72),
+                   (3.0, 0.8), (3.25, 0.85), (3.5, 0.92), (3.75, 1.0)]),
+    ],
+    "tom_cascade": [
+        ("snare",    [(2.0, 0.85)]),
+        ("tom_high", [(2.5, 0.8), (2.75, 0.82)]),
+        ("tom_mid",  [(3.0, 0.85), (3.25, 0.88)]),
+        ("tom_low",  [(3.5, 0.95), (3.75, 1.0)]),
+    ],
+}
+
+
 # ---------------------------------------------------------------------------
 # Drum grid helpers (for the clickable editor in app.py)
 # ---------------------------------------------------------------------------
@@ -3284,8 +3309,15 @@ class MidiExporter:
         bar_offset: int = 0,
         density: float = 1.0,
         seed: Optional[int] = None,
+        fill_last_bar: bool = False,
+        fill_prob: float = 0.0,
     ) -> "MidiExporter":
         """Add a drum pattern.
+
+        ``fill_last_bar`` + ``fill_prob`` insert a transition fill (tom roll
+        / snare build) over the last two beats of the final bar — the
+        section turning over into the next. 4/4 only; sections shorter than
+        2 bars are left alone. ``fill_prob`` is the chance of firing.
 
         Built-in patterns (all 1 bar of 4/4, velocity is the base — accents
         and ghosts scale off of it):
@@ -3348,8 +3380,17 @@ class MidiExporter:
         # Primary hits — never thinned out even at low density
         primary = {"kick", "snare"}
 
+        bpb = self.beats_per_bar
         for bar in range(bars):
             bar_start = (bar_offset + bar) * self.bar_duration
+            # Transition fill on the section's last bar: the groove plays
+            # the first half, a fill takes the last two beats.
+            do_fill = (
+                fill_last_bar and bar == bars - 1 and bars >= 2
+                and self.time_signature == (4, 4)
+                and rng.random() < fill_prob
+            )
+            fill_from = bpb - 2.0
             for entry in hits:
                 # A layer is (drum_name, [(offset, vel_mult), ...]) with an
                 # optional trailing layer-shift in beats for DJ-blend grooves.
@@ -3360,6 +3401,9 @@ class MidiExporter:
                     layer_shift = 0.0
                 midi_note = GM_DRUMS.get(drum_name, 36)
                 for beat_offset, vel_mult in offset_vels:
+                    # Clear the back half of the bar for the fill.
+                    if do_fill and beat_offset >= fill_from:
+                        continue
                     if drum_name not in primary and rng.random() > density:
                         continue
                     swung = apply_swing(beat_offset, swing, grid=grid)
@@ -3368,6 +3412,16 @@ class MidiExporter:
                         t = 0.0  # never push a hit before the song start
                     vel = int(velocity * vel_mult)
                     track.notes.append(NoteEvent(midi_note, t, t + gate, vel))
+
+            if do_fill:
+                fill_name = sorted(DRUM_FILLS)[int(rng.integers(len(DRUM_FILLS)))]
+                for drum_name, offset_vels in DRUM_FILLS[fill_name]:
+                    midi_note = GM_DRUMS.get(drum_name, 38)
+                    for beat_offset, vel_mult in offset_vels:
+                        t = bar_start + beat_offset * beat
+                        track.notes.append(
+                            NoteEvent(midi_note, t, t + gate, int(velocity * vel_mult))
+                        )
 
         return self
 

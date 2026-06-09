@@ -970,6 +970,17 @@ def _add_drum_tech(name, *, pattern, roles, label, description,
         inst = getattr(ctx, "instrument_obj", None)
         if inst is not None:
             kwargs["track_name"] = inst.label
+        # Transition fill on the section's last bar — the main kit only
+        # (tom/snare fills don't belong on a conga/percussion layer), and
+        # not on intros. Tasteful, role-scaled probability.
+        is_perc_layer = inst is not None and getattr(inst, "role", None) == "percussion"
+        if not is_perc_layer:
+            role = ctx.section_role
+            kwargs["fill_last_bar"] = True
+            kwargs["fill_prob"] = {
+                "verse": 0.4, "chorus": 0.55, "bridge": 0.6,
+                "outro": 0.5, "intro": 0.0,
+            }.get(role, 0.4)
         # add_drum_pattern self-heals a meter-incompatible pattern by
         # falling back to a meter-appropriate default.
         midi.add_drum_pattern(**kwargs)
