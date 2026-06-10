@@ -932,6 +932,45 @@ audio { width: 100%; margin: 8px 0 12px; }
   .diagrams-wide { grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); }
 }
 
+/* ── Fullscreen-desktop "stage breakout" ──────────────────────────────────
+   The app column stays centered & readable for controls, but the actual
+   practice surfaces (chord grid, tape, sheet, tab, notation roll, live
+   diagrams) break OUT of that column to use the full monitor width. Each is
+   re-centered on the viewport via symmetric negative margins, so nothing
+   overflows horizontally (width + the two margins always sum to the column). */
+@media (min-width: 1500px) {
+  .practice .diagram-block,
+  .practice .roll-card,
+  .practice .sheet-host,
+  .practice .tab-card,
+  .practice .tape,
+  .practice .chart {
+    width: min(92vw, 1880px);
+    margin-left: calc(50% - min(46vw, 940px));
+    margin-right: calc(50% - min(46vw, 940px));
+  }
+  /* More chords per row → far less vertical scrolling on a wide chart. */
+  .practice .chart-grid { grid-template-columns: repeat(6, 1fr); }
+  /* Taller chart now that we have the room (was 46vh). */
+  .practice .chart { max-height: 60vh; }
+  /* Live-diagram tiles get even wider min so they fill the breakout. */
+  .practice .diagrams-wide { grid-template-columns: repeat(auto-fit, minmax(560px, 1fr)); }
+}
+
+@media (min-width: 2000px) {
+  .practice .diagram-block,
+  .practice .roll-card,
+  .practice .sheet-host,
+  .practice .tab-card,
+  .practice .tape,
+  .practice .chart {
+    width: min(90vw, 2360px);
+    margin-left: calc(50% - min(45vw, 1180px));
+    margin-right: calc(50% - min(45vw, 1180px));
+  }
+  .practice .chart-grid { grid-template-columns: repeat(8, 1fr); }
+}
+
 /* Pointer (mouse) devices: tighter, denser hit areas than the touch sizing. */
 @media (hover: hover) and (pointer: fine) and (min-width: 900px) {
   .mini-transport button, .mini-speed button { cursor: pointer; }
