@@ -471,7 +471,13 @@ audio { width: 100%; margin: 8px 0 12px; }
 .inst-orient { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .voice-stack { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; align-items: flex-start; margin-top: 4px; }
 .voice-slot { display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: 6px 8px; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; background: rgba(255,255,255,0.02); }
+  padding: 6px 8px; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px;
+  background: rgba(255,255,255,0.02); box-sizing: border-box; flex: 0 0 auto; }
+/* Lock a fixed width per fingering kind so the row never reflows as the note /
+   aperture text changes or a member idles. */
+.voice-slot.voice-valves { width: 116px; }
+.voice-slot.voice-keys { width: 96px; }
+.voice-slot.voice-slide { width: 210px; }
 .voice-slot.hidden { display: none; }
 /* Held (between notes): keep the position visible but dim it — a softer tone
    of the bright "hit" colour, so you read where your fingers should be. */
@@ -484,15 +490,16 @@ audio { width: 100%; margin: 8px 0 12px; }
 .voice-slot .valve, .voice-slot .slide-pos, .voice-slot .ww-key { transition: fill 0.08s, stroke 0.08s; }
 .voice-member { font-size: 10px; font-weight: 700; color: rgba(120,170,255,0.85);
   text-transform: uppercase; letter-spacing: 0.04em; }
-.inst-note.vsmall { font-size: 13px; min-height: 18px; }
+.inst-note.vsmall { font-size: 13px; min-height: 18px; white-space: nowrap; }
 .brass-valves-mini { width: 78px; height: 36px; }
 .trombone-mini { width: 100%; max-width: 220px; height: 36px; }
 .ww-mini { width: 50px; height: 110px; }
 .aperture { width: 40px; height: 22px; flex: 0 0 auto; }
 .ap-lips { fill: #5b3b46; stroke: #8a5a68; stroke-width: 1; }
 .ap-open { fill: #0a0f1c; transition: ry 0.08s; }
-.ap-mini { display: flex; align-items: center; gap: 5px; }
-.ap-label { font-size: 10px; color: var(--accent-2); }
+.ap-mini { display: flex; align-items: center; justify-content: center; gap: 5px; }
+.ap-label { font-size: 10px; color: var(--accent-2); display: inline-block;
+  width: 56px; white-space: nowrap; overflow: hidden; }
 
 /* Woodwind body (upright, mouthpiece at top) */
 .ww-keys { width: 100%; max-height: 200px; }

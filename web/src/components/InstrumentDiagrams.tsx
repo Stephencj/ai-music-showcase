@@ -141,7 +141,7 @@ export function FingeringDiagram({ notes, audioRef, members }: {
       <div className="inst-orient">{orient}</div>
       <div className="voice-stack">
         {members.map((m, s) => (
-          <div key={s} className="voice-slot" ref={(el) => { slotEls.current[s] = el; }}>
+          <div key={s} className={`voice-slot voice-${m.kind}`} ref={(el) => { slotEls.current[s] = el; }}>
             {isSection && <div className="voice-member">{m.label}</div>}
             <div className="inst-note vsmall" ref={(el) => { noteEls.current[s] = el; }}>—</div>
             {m.kind === "valves" ? (
