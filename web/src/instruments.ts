@@ -87,6 +87,54 @@ export const TROMBONE_SLIDE: Record<number, number> = {
   0: 6, 1: 5, 2: 4, 3: 3, 4: 2, 5: 1, 6: 5, 7: 4, 8: 3, 9: 2, 10: 1, 11: 7,
 };
 
+// ── Aperture / harmonics ─────────────────────────────────────────────────────
+// A valve combo (or slide position) only sets the tube LENGTH; which note you
+// get is the harmonic (partial) you lock in with the lip aperture — tighter
+// aperture + faster air = higher partial. So the real fingering depends on the
+// note's octave, not just its pitch class. We pick, for the actual written
+// note, the combo whose harmonic series lands closest to it on a low partial.
+const VALVES_BY_DROP = [[], [2], [1], [1, 2], [2, 3], [1, 3], [1, 2, 3]]; // semitone drop → valves
+const TRUMPET_F0 = 48;   // written open fundamental ≈ C3 (Bb trumpet)
+const TROMBONE_F0 = 34;  // 1st-position fundamental ≈ Bb1 (concert)
+
+function bestHarmonic(note: number, fundamentals: number[]): { idx: number; partial: number } {
+  // A combo only "plays" the note if one of its harmonics is within ~a
+  // quartertone (the 7th partial is the most off, ~0.35 semitone). Among those,
+  // prefer the lowest partial, then the most open combo.
+  let best: { idx: number; partial: number; score: number } | null = null;
+  let fallback: { idx: number; partial: number; err: number } | null = null;
+  for (let idx = 0; idx < fundamentals.length; idx++) {
+    const f0 = fundamentals[idx];
+    const p = Math.max(2, Math.min(9, Math.round(2 ** ((note - f0) / 12))));
+    const err = Math.abs(note - (f0 + 12 * Math.log2(p)));
+    if (!fallback || err < fallback.err) fallback = { idx, partial: p, err };
+    if (err > 0.5) continue;
+    const score = p + idx * 0.1;
+    if (!best || score < best.score) best = { idx, partial: p, score };
+  }
+  const r = best ?? fallback;
+  return r ? { idx: r.idx, partial: r.partial } : { idx: 0, partial: 0 };
+}
+
+export function trumpetFingering(written: number): { valves: number[]; partial: number } {
+  const { idx, partial } = bestHarmonic(written, VALVES_BY_DROP.map((_, d) => TRUMPET_F0 - d));
+  return { valves: VALVES_BY_DROP[idx], partial };
+}
+
+export function trombonePosition(concert: number): { pos: number; partial: number } {
+  const { idx, partial } = bestHarmonic(concert, [0, 1, 2, 3, 4, 5, 6].map((d) => TROMBONE_F0 - d));
+  return { pos: idx + 1, partial };
+}
+
+/** Lip-opening size + label for a harmonic — tighter (smaller) for higher partials. */
+export function apertureFor(partial: number): { ry: number; word: string } {
+  if (!partial) return { ry: 6, word: "" };
+  return {
+    ry: Math.max(1.5, Math.min(7.5, 8 - (partial - 2) * 0.8)),
+    word: partial <= 3 ? "open" : partial <= 6 ? "medium" : "tight",
+  };
+}
+
 // ── Woodwind (simplified, sax/flute-style) ──────────────────────────────────
 // A column of keys top→bottom: octave key, then 6 main tone holes (L1-3, R1-3).
 // `closed` lists which hole indices (0..5) are covered for the WRITTEN pitch

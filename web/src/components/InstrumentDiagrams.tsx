@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import {
-  DRUM_LAYOUT, TRUMPET_VALVES, TROMBONE_SLIDE, brassKind, woodwindKeys,
+  DRUM_LAYOUT, trumpetFingering, trombonePosition, apertureFor, brassKind, woodwindKeys,
   WW_KEY_LABELS, transposeWritten, notesAt, noteName,
 } from "../instruments";
 
@@ -18,7 +18,6 @@ function topNote(ns: NoteSec[]): number | null {
   for (const n of ns) if (best == null || n.pitch > best) best = n.pitch;
   return best;
 }
-const pcOf = (p: number) => ((p % 12) + 12) % 12;
 
 // ── Drums ───────────────────────────────────────────────────────────────────
 export function DrumDiagram({ notes, audioRef }: { notes: NoteSec[]; audioRef: AudioRef }) {
@@ -62,9 +61,18 @@ export function BrassDiagram({ notes, audioRef, name }: { notes: NoteSec[]; audi
   const valveRefs = useRef<(Element | null)[]>([]);
   const slideRefs = useRef<Map<number, Element>>(new Map());
   const headRef = useRef<HTMLDivElement>(null);
+  const apertureRef = useRef<SVGEllipseElement>(null);
+  const partialRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let raf = 0;
+    const setAperture = (partial: number) => {
+      const { ry, word } = apertureFor(partial);
+      apertureRef.current?.setAttribute("ry", String(ry));
+      if (partialRef.current) {
+        partialRef.current.textContent = partial ? `partial ${partial} · aperture ${word}` : "—";
+      }
+    };
     const tick = () => {
       const t = audioRef.current?.currentTime ?? 0;
       const top = topNote(notesAt(notes, t));
@@ -72,17 +80,20 @@ export function BrassDiagram({ notes, audioRef, name }: { notes: NoteSec[]; audi
         if (headRef.current) headRef.current.textContent = "—";
         valveRefs.current.forEach((el) => el?.classList.remove("pressed"));
         slideRefs.current.forEach((el) => el.classList.remove("on"));
+        setAperture(0);
       } else {
         const written = top + transpose;
         if (headRef.current) {
           headRef.current.textContent = transpose ? `${noteName(written)} ▸ ${noteName(top)} (concert)` : noteName(top);
         }
         if (kind === "valves") {
-          const combo = TRUMPET_VALVES[pcOf(written)] ?? [];
-          valveRefs.current.forEach((el, i) => el?.classList.toggle("pressed", combo.includes(i + 1)));
+          const { valves, partial } = trumpetFingering(written);
+          valveRefs.current.forEach((el, i) => el?.classList.toggle("pressed", valves.includes(i + 1)));
+          setAperture(partial);
         } else {
-          const pos = TROMBONE_SLIDE[pcOf(top)] ?? 1; // trombone is concert pitch
+          const { pos, partial } = trombonePosition(top); // trombone is concert pitch
           slideRefs.current.forEach((el, p) => el.classList.toggle("on", p === pos));
+          setAperture(partial);
         }
       }
       raf = requestAnimationFrame(tick);
@@ -138,6 +149,16 @@ export function BrassDiagram({ notes, audioRef, name }: { notes: NoteSec[]; audi
           <text x={182} y={50} className="brass-cap" textAnchor="end">out ▸</text>
         </svg>
       )}
+      {/* Aperture / harmonic: the valve combo or slide only sets the tube
+          length — which note sounds is the partial you lock in with the lip
+          aperture. Tighter aperture (smaller opening) → higher partial. */}
+      <div className="aperture-row">
+        <svg className="aperture" viewBox="0 0 56 30" aria-label="lip aperture">
+          <rect x={5} y={5} width={46} height={20} rx={10} className="ap-lips" />
+          <ellipse ref={apertureRef} cx={28} cy={15} rx={13} ry={6} className="ap-open" />
+        </svg>
+        <div className="ap-label" ref={partialRef}>—</div>
+      </div>
     </div>
   );
 }

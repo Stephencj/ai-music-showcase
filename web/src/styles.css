@@ -467,6 +467,13 @@ audio { width: 100%; margin: 8px 0 12px; }
 .slide-pos.on { fill: #59e7c2; stroke: #59e7c2; }
 .slide-num { fill: rgba(238,242,251,0.7); font-size: 10px; }
 
+/* Aperture / harmonic readout (shared by valves + slide) */
+.aperture-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 2px; }
+.aperture { width: 56px; height: 30px; flex: 0 0 auto; }
+.ap-lips { fill: #5b3b46; stroke: #8a5a68; stroke-width: 1; }
+.ap-open { fill: #0a0f1c; transition: ry 0.08s; }
+.ap-label { font-size: 11px; color: var(--accent-2); }
+
 /* Woodwind body (upright, mouthpiece at top) */
 .ww-keys { width: 100%; max-height: 200px; }
 .ww-body { fill: #10182b; stroke: rgba(255,255,255,0.08); stroke-width: 1; }
