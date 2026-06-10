@@ -637,7 +637,7 @@ audio { width: 100%; margin: 8px 0 12px; }
 .diagram-block { display: flex; flex-direction: column; gap: 8px; }
 .diagram-mode { align-self: flex-start; }
 .diagram-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.diagram-bar-left { display: flex; align-items: center; gap: 10px; }
+.diagram-bar-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 /* Compact transport snug beside the Chord/Full-neck toggle — no extra vertical
    space (buttons sit at the toggle's height). */
 .mini-transport { display: flex; align-items: center; gap: 4px; }
@@ -648,6 +648,14 @@ audio { width: 100%; margin: 8px 0 12px; }
 }
 .mini-transport button:hover { background: var(--accent-2); }
 .mini-transport .mt-play { min-width: 34px; font-size: 14px; }
+/* Quick practice-speed chips, right of the transport. */
+.mini-speed { display: flex; align-items: center; gap: 4px; }
+.mini-speed button {
+  height: 28px; padding: 0 8px; border-radius: 6px; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--card); color: var(--muted);
+}
+.mini-speed button:hover { color: var(--text); }
+.mini-speed button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .capo-ctl { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .capo-ctl button {
   width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border);

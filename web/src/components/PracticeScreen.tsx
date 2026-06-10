@@ -475,9 +475,17 @@ export default function PracticeScreen() {
     if (!a) return;
     if (a.paused) a.play().catch(() => {}); else a.pause();
   }
-  function skip(delta: number) {
+  // Jump to bar boundaries: forward → next downbeat; back → start of the
+  // current bar (or the previous one if we're right at the start).
+  function skipBar(dir: number) {
+    const bs = score?.bar_seconds || 0;
+    if (!bs) return;
     const cur = playhead.current?.currentTime ?? t;
-    seekTo(Math.max(0, cur + delta));
+    const curBar = Math.floor(cur / bs + 1e-6);
+    const target = dir > 0
+      ? (curBar + 1) * bs
+      : (cur - curBar * bs > 0.2 ? curBar * bs : (curBar - 1) * bs);
+    seekTo(Math.max(0, target));
   }
 
   // All three labels for a chord, with the selected notation emphasized
@@ -705,10 +713,18 @@ export default function PracticeScreen() {
                   {/* Compact transport: same as the top player, snug beside the toggle. */}
                   {audioSrc && (
                     <div className="mini-transport">
-                      <button onClick={() => skip(-5)} title="Back 5s" aria-label="Back 5 seconds">⏪</button>
+                      <button onClick={() => skipBar(-1)} title="Back a bar" aria-label="Back one bar">⏮</button>
                       <button onClick={togglePlayback} className="mt-play" title="Play / pause"
                         aria-label="Play or pause">{isPlaying ? "⏸" : "▶"}</button>
-                      <button onClick={() => skip(5)} title="Forward 5s" aria-label="Forward 5 seconds">⏩</button>
+                      <button onClick={() => skipBar(1)} title="Forward a bar" aria-label="Forward one bar">⏭</button>
+                    </div>
+                  )}
+                  {audioSrc && (
+                    <div className="mini-speed">
+                      {[0.5, 0.75, 1].map((s) => (
+                        <button key={s} className={Math.abs(speed - s) < 0.01 ? "on" : ""}
+                          onClick={() => setSpeed(s)} title={`${s}× speed`}>{s}×</button>
+                      ))}
                     </div>
                   )}
                 </div>
