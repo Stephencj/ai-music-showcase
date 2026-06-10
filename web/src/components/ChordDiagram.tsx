@@ -52,7 +52,7 @@ function CompactPiano({ tones, root }: { tones: Set<number>; root: number }) {
     preserveAspectRatio="xMidYMid meet" role="img" aria-label="piano chord">{whites}{blacks}</svg>;
 }
 
-const STRING_PCS = [4, 9, 2, 7, 11, 4];
+// Nice open-position voicings (preferred when the root has one).
 const OPEN: Record<string, number[]> = {
   "C:maj": [-1, 3, 2, 0, 1, 0], "C:7": [-1, 3, 2, 3, 1, 0], "C:maj7": [-1, 3, 2, 0, 0, 0],
   "A:maj": [-1, 0, 2, 2, 2, 0], "A:min": [-1, 0, 2, 2, 1, 0], "A:7": [-1, 0, 2, 0, 2, 0],
@@ -62,21 +62,45 @@ const OPEN: Record<string, number[]> = {
   "D:maj": [-1, -1, 0, 2, 3, 2], "D:min": [-1, -1, 0, 2, 3, 1], "D:7": [-1, -1, 0, 2, 1, 2],
   "D:min7": [-1, -1, 0, 2, 1, 1], "D:maj7": [-1, -1, 0, 2, 2, 2],
 };
+// Movable barre shapes as fret offsets from the barre, strings low→high
+// (E A D G B e); -1 = muted. Two forms per quality (root on the 6th-string =
+// "E shape", or 5th-string = "A shape"); we pick whichever sits lowest on the
+// neck so each chord shows its easiest CORRECT voicing — no maj/min fakes.
+const E_OPEN_PC = 4, A_OPEN_PC = 9;
 const E_SHAPE: Record<string, number[]> = {
-  maj: [0, 2, 2, 1, 0, 0], min: [0, 2, 2, 0, 0, 0], "7": [0, 2, 0, 1, 0, 0], min7: [0, 2, 0, 0, 0, 0], maj7: [0, 2, 1, 1, 0, 0],
+  maj: [0, 2, 2, 1, 0, 0], min: [0, 2, 2, 0, 0, 0], "7": [0, 2, 0, 1, 0, 0],
+  maj7: [0, 2, 1, 1, 0, 0], min7: [0, 2, 0, 0, 0, 0], "6": [0, 2, 2, 1, 2, 0],
+  min6: [0, 2, 2, 0, 2, 0], sus4: [0, 2, 2, 2, 0, 0], sus2: [0, 2, 4, 4, 0, 0],
+  aug: [0, 3, 2, 1, 1, 0], dim7: [0, 1, 2, 0, 2, 0],
 };
-const GUITAR_REDUCE: Record<string, string> = {
-  "6": "maj", min6: "min", dim: "min", aug: "maj", sus2: "maj", sus4: "maj", dim7: "min", m7b5: "min7",
+const A_SHAPE: Record<string, number[]> = {
+  maj: [-1, 0, 2, 2, 2, 0], min: [-1, 0, 2, 2, 1, 0], "7": [-1, 0, 2, 0, 2, 0],
+  maj7: [-1, 0, 2, 1, 2, 0], min7: [-1, 0, 2, 0, 1, 0], "6": [-1, 0, 2, 2, 2, 2],
+  min6: [-1, 0, 2, 2, 1, 2], sus4: [-1, 0, 2, 2, 3, 0], sus2: [-1, 0, 2, 2, 0, 0],
+  aug: [-1, 0, 3, 2, 2, 1], dim7: [-1, 0, 1, 2, 1, 2], m7b5: [-1, 0, 1, 0, 1, -1],
+  dim: [-1, 0, 1, 2, 1, -1],
 };
 function guitarShape(root: string, quality: string): { frets: number[]; approx: boolean } {
-  const q0 = TEMPLATES[quality] ? quality : "maj";
-  let q = q0; let approx = false;
+  const q = TEMPLATES[quality] ? quality : "maj";
+  const approx = !TEMPLATES[quality];               // unknown quality only
   const open = OPEN[`${root}:${q}`];
-  if (open) return { frets: open, approx: false };
-  if (!E_SHAPE[q]) { q = GUITAR_REDUCE[q] || "maj"; approx = q !== q0; }
-  if (!E_SHAPE[q]) { q = "maj"; approx = true; }
-  const barre = ((rootPc(root) - STRING_PCS[0]) % 12 + 12) % 12;
-  return { frets: E_SHAPE[q].map((o) => barre + o), approx };
+  if (open) return { frets: open, approx };
+  const rpc = rootPc(root);
+  const cands: { barre: number; frets: number[] }[] = [];
+  if (E_SHAPE[q]) {
+    const b = ((rpc - E_OPEN_PC) % 12 + 12) % 12;
+    cands.push({ barre: b, frets: E_SHAPE[q].map((o) => (o < 0 ? -1 : b + o)) });
+  }
+  if (A_SHAPE[q]) {
+    const b = ((rpc - A_OPEN_PC) % 12 + 12) % 12;
+    cands.push({ barre: b, frets: A_SHAPE[q].map((o) => (o < 0 ? -1 : b + o)) });
+  }
+  if (!cands.length) {
+    const b = ((rpc - E_OPEN_PC) % 12 + 12) % 12;
+    return { frets: E_SHAPE.maj.map((o) => b + o), approx: true };
+  }
+  cands.sort((x, y) => x.barre - y.barre);          // lowest on the neck wins
+  return { frets: cands[0].frets, approx };
 }
 function ChordShapeGuitar({ root, quality }: { root: string; quality: string }) {
   const { frets, approx } = guitarShape(root, quality);
