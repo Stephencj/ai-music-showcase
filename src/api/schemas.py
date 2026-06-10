@@ -37,6 +37,12 @@ class GenerateRequest(BaseModel):
     split_into_blocks: bool = False        # one block per section (mix & match)
 
 
+class ParsePromptRequest(BaseModel):
+    """Natural-language song description → a SongPlan that pre-fills the
+    Generate form (rule-based, deterministic)."""
+    prompt: str = ""
+
+
 class GeneratePartRequest(BaseModel):
     """DAW-channel part generation (VST/host bridge). Given musical context,
     generate ONE part that fits — MIDI note-list (+ optional rendered WAV)."""

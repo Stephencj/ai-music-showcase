@@ -131,6 +131,21 @@ export interface SongRenderResult {
   urls: JobUrls;
 }
 
+// Result of POST /api/parse-prompt — a natural-language description parsed
+// into Generate-form fields, plus a transparency report.
+export interface SongPlan {
+  genre: string;
+  key: string | null;
+  scale: string | null;
+  tempo: number | null;
+  swing: number | null;
+  sections: string[];
+  section_presets: Record<string, string>;
+  instruments: string[];
+  understood: string[];
+  notes: string[];
+}
+
 export interface GenerateBody {
   genre: string;
   key?: string | null;

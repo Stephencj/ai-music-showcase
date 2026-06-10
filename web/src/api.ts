@@ -5,6 +5,7 @@ import type {
   Job,
   JobUrls,
   Preset,
+  SongPlan,
   SongRenderResult,
   TimelineEntry,
 } from "./types";
@@ -37,6 +38,9 @@ async function jpost<T>(p: string, body?: unknown): Promise<T> {
 export const getPresets = () => jget<Preset[]>("/api/presets");
 export const getInstruments = () => jget<Family[]>("/api/instruments");
 export const getMasterPresets = () => jget<string[]>("/api/master-presets");
+
+export const parsePrompt = (prompt: string) =>
+  jpost<SongPlan>("/api/parse-prompt", { prompt });
 
 export const generate = (body: GenerateBody) =>
   jpost<{ job_id: string }>("/api/generate", body);

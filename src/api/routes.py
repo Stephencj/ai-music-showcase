@@ -31,6 +31,7 @@ from .schemas import (
     GenerateRequest,
     GeneratePartRequest,
     LyricsDraftRequest,
+    ParsePromptRequest,
     PhoneticRequest,
     RenameRequest,
     SaveBlockFromJobRequest,
@@ -99,6 +100,15 @@ _DEFAULT_INSTRUMENT_IDS = {"drum_kit", "electric_bass", "piano"}
 # --------------------------------------------------------------------------
 # Generation
 # --------------------------------------------------------------------------
+@router.post("/parse-prompt")
+def parse_prompt_route(req: ParsePromptRequest) -> dict:
+    """Parse a plain-English song description into a SongPlan (genre, per-section
+    presets, key/scale/tempo/swing, instruments) that pre-fills the Generate
+    form. Deterministic + rule-based — no model call."""
+    from src.composition.nl_parser import parse_prompt
+    return parse_prompt(req.prompt or "")
+
+
 @router.post("/generate")
 def generate(req: GenerateRequest) -> dict:
     if req.genre not in STYLES:
