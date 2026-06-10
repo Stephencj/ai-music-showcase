@@ -10,9 +10,9 @@ import TabView from "./TabView";
 import { isFrettedTrack, isGuitarTrack, isKeysTrack, stringLabelsFor, assignFrets,
   detectInstrumentId, instrumentById, instrumentFor, STRING_INSTRUMENTS } from "../guitarTab";
 import type { TabNote } from "../guitarTab";
-import { DrumDiagram, BrassDiagram, WoodwindDiagram } from "./InstrumentDiagrams";
+import { DrumDiagram, FingeringDiagram } from "./InstrumentDiagrams";
 import CircleOfFifths from "./CircleOfFifths";
-import { familyFor } from "../instruments";
+import { familyFor, voiceSpecsFor } from "../instruments";
 import * as webmidi from "../webmidi";
 import type { MidiOut } from "../webmidi";
 import { LoopPlayer } from "../loopPlayer";
@@ -890,9 +890,7 @@ export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
                           </div>
                           {d.slot.kind === "drums"
                             ? <DrumDiagram notes={d.drumNotes || []} audioRef={playhead} />
-                            : d.slot.kind === "brass"
-                              ? <BrassDiagram notes={d.notes} audioRef={playhead} name={d.instName || ""} />
-                              : <WoodwindDiagram notes={d.notes} audioRef={playhead} name={d.instName || ""} />}
+                            : <FingeringDiagram notes={d.notes} audioRef={playhead} members={voiceSpecsFor(d.instName || "")} />}
                         </div>
                       );
                     })}

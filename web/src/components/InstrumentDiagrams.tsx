@@ -1,24 +1,21 @@
 import { useEffect, useRef } from "react";
 import {
-  DRUM_LAYOUT, trumpetFingering, trombonePosition, apertureFor, brassKind, woodwindKeys,
-  WW_KEY_LABELS, transposeWritten, notesAt, noteName,
+  DRUM_LAYOUT, trumpetFingering, trombonePosition, apertureFor, woodwindKeys,
+  WW_KEY_LABELS, notesAt, noteName,
 } from "../instruments";
+import type { VoiceSpec } from "../instruments";
 
-// Live diagrams for drums, brass and woodwind. Each builds a static SVG once
-// and follows the practice playhead with its own requestAnimationFrame loop,
-// DOM-toggling classes (no per-frame React re-render). Brass/woodwind are
-// transposition-aware (fingering for the WRITTEN note) and show one fingering
-// per sounding voice (a wind section is a trio — up to 3 separate figures).
+// Live diagrams for drums and pitched winds/brass. Each builds a static SVG
+// once and follows the practice playhead with its own requestAnimationFrame
+// loop, DOM-toggling classes (no per-frame React re-render).
 
 export interface NoteSec { pitch: number; start: number; dur: number }
 type AudioRef = React.RefObject<HTMLAudioElement | null>;
 
-const MAX_VOICES = 3;   // winds/brass cap at a trio
-// Sounding pitches at time t, highest first, capped — one per fingering voice.
-function voicesAt(ns: NoteSec[], t: number): number[] {
-  return notesAt(ns, t).map((n) => n.pitch).sort((a, b) => b - a).slice(0, MAX_VOICES);
+// Sounding pitches at time t, highest first, capped to `max` — one per voice.
+function voicesAt(ns: NoteSec[], t: number, max: number): number[] {
+  return notesAt(ns, t).map((n) => n.pitch).sort((a, b) => b - a).slice(0, max);
 }
-const SLOTS = [0, 1, 2];
 
 // ── Drums ───────────────────────────────────────────────────────────────────
 export function DrumDiagram({ notes, audioRef }: { notes: NoteSec[]; audioRef: AudioRef }) {
@@ -55,145 +52,120 @@ export function DrumDiagram({ notes, audioRef }: { notes: NoteSec[]; audioRef: A
   );
 }
 
-// ── Brass (valves or trombone slide) — one figure per sounding voice ─────────
-export function BrassDiagram({ notes, audioRef, name }: { notes: NoteSec[]; audioRef: AudioRef; name: string }) {
-  const kind = brassKind(name);
-  const transpose = transposeWritten(name);
+// ── Winds / brass — one fingering figure per voice/member ────────────────────
+// `members` is the per-voice plan: a section's member instruments (each its own
+// fingering kind + transposition), or a single solo instrument. Voices are
+// assigned highest→lowest to the members (top of the chord = top of the
+// section).
+export function FingeringDiagram({ notes, audioRef, members }: {
+  notes: NoteSec[]; audioRef: AudioRef; members: VoiceSpec[];
+}) {
+  const n = Math.max(1, members.length);
+  const isSection = members.length > 1;
   const slotEls = useRef<(HTMLDivElement | null)[]>([]);
   const noteEls = useRef<(HTMLDivElement | null)[]>([]);
   const partEls = useRef<(HTMLSpanElement | null)[]>([]);
   const apEls = useRef<(SVGEllipseElement | null)[]>([]);
-  const valveEls = useRef<(Element | null)[][]>([[], [], []]);
-  const slideEls = useRef<Map<number, Element>[]>([new Map(), new Map(), new Map()]);
+  const valveEls = useRef<(Element | null)[][]>([]);
+  const slideEls = useRef<Map<number, Element>[]>([]);
+  const keyEls = useRef<(Element | null)[][]>([]);
 
   useEffect(() => {
     let raf = 0;
     const tick = () => {
       const t = audioRef.current?.currentTime ?? 0;
-      const vs = voicesAt(notes, t);
-      for (let s = 0; s < MAX_VOICES; s++) {
+      const vs = voicesAt(notes, t, n);
+      for (let s = 0; s < n; s++) {
         const slot = slotEls.current[s];
         if (s >= vs.length) { slot?.classList.add("hidden"); continue; }
         slot?.classList.remove("hidden");
-        const concert = vs[s], written = concert + transpose;
+        const m = members[s];
+        const concert = vs[s], written = concert + m.transpose;
         if (noteEls.current[s]) {
-          noteEls.current[s]!.textContent = transpose ? `${noteName(written)} ▸ ${noteName(concert)}` : noteName(written);
+          noteEls.current[s]!.textContent = m.transpose
+            ? `${noteName(written)} ▸ ${noteName(concert)}` : noteName(written);
         }
-        let partial = 0;
-        if (kind === "valves") {
-          const r = trumpetFingering(written); partial = r.partial;
-          valveEls.current[s].forEach((el, i) => el?.classList.toggle("pressed", r.valves.includes(i + 1)));
+        if (m.kind === "valves") {
+          const r = trumpetFingering(written);
+          (valveEls.current[s] ?? []).forEach((el, i) => el?.classList.toggle("pressed", r.valves.includes(i + 1)));
+          const { ry, word } = apertureFor(r.partial);
+          apEls.current[s]?.setAttribute("ry", String(ry));
+          if (partEls.current[s]) partEls.current[s]!.textContent = r.partial ? `p${r.partial} · ${word}` : "";
+        } else if (m.kind === "slide") {
+          const r = trombonePosition(concert);
+          slideEls.current[s]?.forEach((el, p) => el.classList.toggle("on", p === r.pos));
+          const { ry, word } = apertureFor(r.partial);
+          apEls.current[s]?.setAttribute("ry", String(ry));
+          if (partEls.current[s]) partEls.current[s]!.textContent = r.partial ? `p${r.partial} · ${word}` : "";
         } else {
-          const r = trombonePosition(concert); partial = r.partial;  // trombone is concert pitch
-          slideEls.current[s].forEach((el, p) => el.classList.toggle("on", p === r.pos));
+          const { holes, oct } = woodwindKeys(written);
+          (keyEls.current[s] ?? []).forEach((el, i) => el?.classList.toggle("closed", i === 0 ? oct : holes.includes(i - 1)));
         }
-        const { ry, word } = apertureFor(partial);
-        apEls.current[s]?.setAttribute("ry", String(ry));
-        if (partEls.current[s]) partEls.current[s]!.textContent = partial ? `p${partial} · ${word}` : "";
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [notes, audioRef, kind, transpose]);
+  }, [notes, audioRef, members, n]);
 
   slotEls.current = []; noteEls.current = []; partEls.current = []; apEls.current = [];
-  valveEls.current = [[], [], []]; slideEls.current = [new Map(), new Map(), new Map()];
+  valveEls.current = members.map(() => []); slideEls.current = members.map(() => new Map());
+  keyEls.current = members.map(() => []);
+
+  const orient = members.some((m) => m.kind === "valves")
+    ? "valves: 1 nearest you · 3 toward bell" : isSection ? "top → bottom of the section" : "mouthpiece ▴";
 
   return (
     <div className="inst-fig">
-      <div className="inst-orient">
-        {kind === "valves" ? "1 nearest you · 3 toward bell" : "◂ in (you)   ·   out ▸"}
-      </div>
+      <div className="inst-orient">{orient}</div>
       <div className="voice-stack">
-        {SLOTS.map((s) => (
+        {members.map((m, s) => (
           <div key={s} className="voice-slot hidden" ref={(el) => { slotEls.current[s] = el; }}>
+            {isSection && <div className="voice-member">{m.label}</div>}
             <div className="inst-note vsmall" ref={(el) => { noteEls.current[s] = el; }}>—</div>
-            {kind === "valves" ? (
+            {m.kind === "valves" ? (
               <svg className="brass-valves-mini" viewBox="0 0 86 40" preserveAspectRatio="xMidYMid meet" aria-label="valves">
                 {[0, 1, 2].map((i) => {
                   const cx = 17 + i * 26;
                   return (
                     <g key={i}>
-                      <circle ref={(el) => { valveEls.current[s][i] = el; }} className="valve" cx={cx} cy={16} r={11} />
+                      <circle ref={(el) => { (valveEls.current[s] ??= [])[i] = el; }} className="valve" cx={cx} cy={16} r={11} />
                       <text x={cx} y={37} className="valve-num" textAnchor="middle">{i + 1}</text>
                     </g>
                   );
                 })}
               </svg>
-            ) : (
+            ) : m.kind === "slide" ? (
               <svg className="trombone-mini" viewBox="0 0 168 28" preserveAspectRatio="xMidYMid meet" aria-label="slide">
                 {[1, 2, 3, 4, 5, 6, 7].map((p) => {
                   const x = 6 + (p - 1) * 23;
                   return (
                     <g key={p}>
-                      <rect ref={(el) => { if (el) slideEls.current[s].set(p, el); }} className="slide-pos" x={x} y={4} width={18} height={20} rx={3} />
+                      <rect ref={(el) => { if (el) (slideEls.current[s] ??= new Map()).set(p, el); }} className="slide-pos" x={x} y={4} width={18} height={20} rx={3} />
                       <text x={x + 9} y={18} className="slide-num" textAnchor="middle">{p}</text>
                     </g>
                   );
                 })}
               </svg>
-            )}
-            <div className="ap-mini">
-              <svg className="aperture" viewBox="0 0 40 22" aria-label="aperture">
-                <rect x={3} y={4} width={34} height={14} rx={7} className="ap-lips" />
-                <ellipse ref={(el) => { apEls.current[s] = el; }} cx={20} cy={11} rx={9} ry={5} className="ap-open" />
+            ) : (
+              <svg className="ww-mini" viewBox="0 0 50 118" preserveAspectRatio="xMidYMid meet" aria-label="woodwind keys">
+                <rect x={22} y={6} width={12} height={106} rx={6} className="ww-body" />
+                <circle ref={(el) => { (keyEls.current[s] ??= [])[0] = el; }} className="ww-key oct" cx={10} cy={20} r={5} />
+                {WW_KEY_LABELS.slice(1).map((lab, j) => {
+                  const cy = 30 + j * 13 + (j >= 3 ? 8 : 0);
+                  return <circle key={lab} ref={(el) => { (keyEls.current[s] ??= [])[j + 1] = el; }} className="ww-key" cx={28} cy={cy} r={5} />;
+                })}
               </svg>
-              <span className="ap-label" ref={(el) => { partEls.current[s] = el; }} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Woodwind (simplified) — one fingering per sounding voice ─────────────────
-export function WoodwindDiagram({ notes, audioRef, name }: { notes: NoteSec[]; audioRef: AudioRef; name: string }) {
-  const transpose = transposeWritten(name);
-  const slotEls = useRef<(HTMLDivElement | null)[]>([]);
-  const noteEls = useRef<(HTMLDivElement | null)[]>([]);
-  const keyEls = useRef<(Element | null)[][]>([[], [], []]); // [slot][0=octave, 1..6 holes]
-
-  useEffect(() => {
-    let raf = 0;
-    const tick = () => {
-      const t = audioRef.current?.currentTime ?? 0;
-      const vs = voicesAt(notes, t);
-      for (let s = 0; s < MAX_VOICES; s++) {
-        const slot = slotEls.current[s];
-        if (s >= vs.length) { slot?.classList.add("hidden"); continue; }
-        slot?.classList.remove("hidden");
-        const concert = vs[s], written = concert + transpose;
-        if (noteEls.current[s]) {
-          noteEls.current[s]!.textContent = transpose ? `${noteName(written)} ▸ ${noteName(concert)}` : noteName(written);
-        }
-        const { holes, oct } = woodwindKeys(written);
-        keyEls.current[s].forEach((el, i) => el?.classList.toggle("closed", i === 0 ? oct : holes.includes(i - 1)));
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [notes, audioRef, transpose]);
-
-  slotEls.current = []; noteEls.current = []; keyEls.current = [[], [], []];
-
-  return (
-    <div className="inst-fig">
-      <div className="inst-orient">mouthpiece ▴ · simplified</div>
-      <div className="voice-stack">
-        {SLOTS.map((s) => (
-          <div key={s} className="voice-slot hidden" ref={(el) => { slotEls.current[s] = el; }}>
-            <div className="inst-note vsmall" ref={(el) => { noteEls.current[s] = el; }}>—</div>
-            <svg className="ww-mini" viewBox="0 0 50 118" preserveAspectRatio="xMidYMid meet" aria-label="woodwind keys">
-              <rect x={22} y={6} width={12} height={106} rx={6} className="ww-body" />
-              <circle ref={(el) => { keyEls.current[s][0] = el; }} className="ww-key oct" cx={10} cy={20} r={5} />
-              {WW_KEY_LABELS.slice(1).map((lab, j) => {
-                const cy = 30 + j * 13 + (j >= 3 ? 8 : 0);
-                return <circle key={lab} ref={(el) => { keyEls.current[s][j + 1] = el; }} className="ww-key" cx={28} cy={cy} r={5} />;
-              })}
-            </svg>
+            )}
+            {(m.kind === "valves" || m.kind === "slide") && (
+              <div className="ap-mini">
+                <svg className="aperture" viewBox="0 0 40 22" aria-label="aperture">
+                  <rect x={3} y={4} width={34} height={14} rx={7} className="ap-lips" />
+                  <ellipse ref={(el) => { apEls.current[s] = el; }} cx={20} cy={11} rx={9} ry={5} className="ap-open" />
+                </svg>
+                <span className="ap-label" ref={(el) => { partEls.current[s] = el; }} />
+              </div>
+            )}
           </div>
         ))}
       </div>

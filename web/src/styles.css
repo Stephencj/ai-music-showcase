@@ -473,6 +473,8 @@ audio { width: 100%; margin: 8px 0 12px; }
 .voice-slot { display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 6px 8px; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; background: rgba(255,255,255,0.02); }
 .voice-slot.hidden { display: none; }
+.voice-member { font-size: 10px; font-weight: 700; color: rgba(120,170,255,0.85);
+  text-transform: uppercase; letter-spacing: 0.04em; }
 .inst-note.vsmall { font-size: 13px; min-height: 18px; }
 .brass-valves-mini { width: 78px; height: 36px; }
 .trombone-mini { width: 100%; max-width: 220px; height: 36px; }

@@ -153,7 +153,7 @@ _add(Instrument("synth_lead",            "Synth Lead",           "chord_lead", "
 _add(Instrument("brass_section", "Brass Section", "brass", "chords", 61,
                 is_section=True,
                 members=("trumpet", "trombone", "sax_alto", "sax_tenor"),
-                default_octave=4, voicing_role="pad", max_voices=3))
+                default_octave=4, voicing_role="pad", max_voices=4))
 _add(Instrument("trumpet",       "Trumpet",       "brass", "melody", 56, default_octave=5))
 _add(Instrument("trombone",      "Trombone",      "brass", "melody", 57, default_octave=4))
 _add(Instrument("sax_alto",      "Alto Sax",      "brass", "melody", 65, default_octave=5))
@@ -165,7 +165,7 @@ _add(Instrument("sax_baritone",  "Baritone Sax",  "brass", "melody", 67, default
 _add(Instrument("woodwind_section", "Woodwind Section", "woodwind", "chords", 71,
                 is_section=True,
                 members=("flute", "clarinet", "oboe", "bassoon"),
-                default_octave=5, voicing_role="top", max_voices=3))
+                default_octave=5, voicing_role="top", max_voices=4))
 _add(Instrument("flute",    "Flute",    "woodwind", "melody", 73, default_octave=5))
 _add(Instrument("clarinet", "Clarinet", "woodwind", "melody", 71, default_octave=5))
 _add(Instrument("oboe",     "Oboe",     "woodwind", "melody", 68, default_octave=5))

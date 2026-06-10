@@ -161,6 +161,41 @@ export function woodwindKeys(written: number): { holes: number[]; oct: boolean }
   return { holes: WW_HOLES[((written % 12) + 12) % 12] ?? [], oct: written >= 74 };
 }
 
+// ── Section members / voices ─────────────────────────────────────────────────
+// A "section" is an ensemble: each chord voice is played by a different member
+// instrument, each with its OWN fingering kind + transposition. A solo wind is
+// a single monophonic voice. `voiceSpecsFor` returns the per-voice plan,
+// ordered top → bottom (highest register first), used to render one fingering
+// figure per voice.
+export type FingerKind = "valves" | "slide" | "keys";
+export interface VoiceSpec { label: string; kind: FingerKind; transpose: number }
+
+export function memberKind(name: string): FingerKind {
+  const n = name.toLowerCase();
+  if (/trombone/.test(n)) return "slide";
+  if (/trumpet|cornet|flugel|tuba|euphonium|\bhorn\b/.test(n)) return "valves";
+  return "keys"; // sax, flute, clarinet, oboe, bassoon, etc.
+}
+function memberSpec(name: string): VoiceSpec {
+  return { label: name, kind: memberKind(name), transpose: transposeWritten(name) };
+}
+
+// Section → member instruments, top (highest) → bottom.
+const SECTIONS: Record<string, string[]> = {
+  "brass section": ["Alto Sax", "Trumpet", "Tenor Sax", "Trombone"],
+  "woodwind section": ["Flute", "Oboe", "Clarinet", "Bassoon"],
+};
+
+/** Per-voice fingering plan for a track: a section's members, or the solo
+ *  instrument as a single voice. */
+export function voiceSpecsFor(trackName: string): VoiceSpec[] {
+  const key = trackName.toLowerCase().trim();
+  for (const sec of Object.keys(SECTIONS)) {
+    if (key.includes(sec)) return SECTIONS[sec].map(memberSpec);
+  }
+  return [memberSpec(trackName)];
+}
+
 // ── shared ──────────────────────────────────────────────────────────────────
 /** Notes (in seconds) sounding at time t — already converted to seconds. */
 export function notesAt<T extends { start: number; dur: number }>(notes: T[], t: number): T[] {
