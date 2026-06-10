@@ -22,7 +22,7 @@ instruments:
 - name: Brass Section
   program: 61
   is_drum: false
-  n_notes: 1616
+  n_notes: 1408
 - name: Lead Vocal
   program: 53
   is_drum: false
@@ -31,7 +31,7 @@ instruments:
   program: 52
   is_drum: false
   n_notes: 102
-n_notes: 4156
+n_notes: 3948
 spec:
   genre: soul_motown_full
   key: C#

@@ -22,8 +22,8 @@ instruments:
 - name: Brass Section
   program: 61
   is_drum: false
-  n_notes: 864
-n_notes: 2790
+  n_notes: 848
+n_notes: 2774
 spec:
   genre: disco_full
   key: A

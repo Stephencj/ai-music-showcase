@@ -26,12 +26,12 @@ instruments:
 - name: Brass Section
   program: 61
   is_drum: false
-  n_notes: 992
+  n_notes: 928
 - name: Lead
   program: 26
   is_drum: false
   n_notes: 48
-n_notes: 4981
+n_notes: 4917
 spec:
   genre: pop
   key: C

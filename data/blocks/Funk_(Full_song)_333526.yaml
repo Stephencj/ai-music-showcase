@@ -26,7 +26,7 @@ instruments:
 - name: Brass Section
   program: 61
   is_drum: false
-  n_notes: 656
+  n_notes: 608
 - name: Electric Guitar (dirty)
   program: 29
   is_drum: false
@@ -35,7 +35,7 @@ instruments:
   program: 26
   is_drum: false
   n_notes: 48
-n_notes: 3653
+n_notes: 3605
 spec:
   genre: funk_full_song
   key: G#

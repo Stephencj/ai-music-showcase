@@ -12,9 +12,17 @@ import type { VoiceSpec } from "../instruments";
 export interface NoteSec { pitch: number; start: number; dur: number }
 type AudioRef = React.RefObject<HTMLAudioElement | null>;
 
-// Sounding pitches at time t, highest first, capped to `max` — one per voice.
+// Distinct sounding pitches at time t, highest first, capped to `max` — one per
+// voice (dedupes octave/unison doublings so they don't waste voice slots).
 function voicesAt(ns: NoteSec[], t: number, max: number): number[] {
-  return notesAt(ns, t).map((n) => n.pitch).sort((a, b) => b - a).slice(0, max);
+  const out: number[] = [];
+  const seen = new Set<number>();
+  for (const p of notesAt(ns, t).map((n) => n.pitch).sort((a, b) => b - a)) {
+    if (seen.has(p)) continue;
+    seen.add(p); out.push(p);
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
 // ── Drums ───────────────────────────────────────────────────────────────────

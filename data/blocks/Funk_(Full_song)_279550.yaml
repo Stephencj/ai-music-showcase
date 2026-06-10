@@ -26,12 +26,12 @@ instruments:
 - name: Brass Section
   program: 61
   is_drum: false
-  n_notes: 1200
+  n_notes: 992
 - name: Lead
   program: 26
   is_drum: false
   n_notes: 48
-n_notes: 5045
+n_notes: 4837
 spec:
   genre: funk_full_song
   key: C

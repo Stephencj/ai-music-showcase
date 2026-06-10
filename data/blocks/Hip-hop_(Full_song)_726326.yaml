@@ -30,12 +30,12 @@ instruments:
 - name: Brass Section
   program: 61
   is_drum: false
-  n_notes: 856
+  n_notes: 776
 - name: Acoustic Guitar
   program: 25
   is_drum: false
   n_notes: 784
-n_notes: 4915
+n_notes: 4835
 spec:
   genre: hip_hop_full
   key: A
