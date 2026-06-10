@@ -288,6 +288,105 @@ def _normalize_percussion(score) -> int:
     return n
 
 
+# Standard-convention notation per instrument: how many semitones to transpose
+# a CONCERT part up to its WRITTEN key, and which clef it reads in. Our MIDI is
+# concert pitch; transposing winds read in a written key (trumpet up a tone,
+# alto sax up a 6th, …), and low instruments read in bass (or viola in alto)
+# clef. Matched longest/most-specific first.
+_INSTRUMENT_RULES = [
+    (r"bari(tone)?\s*sax", 21, None),
+    (r"tenor\s*sax", 14, None),
+    (r"alto\s*sax", 9, None),
+    (r"sopran(o|ino)\s*sax", 2, None),
+    (r"bass\s*clarinet", 14, None),
+    (r"clarinet", 2, None),
+    (r"trumpet|cornet|flugel", 2, None),
+    (r"french\s*horn|\bhorn\b", 7, None),
+    (r"piccolo", 0, None),
+    (r"flute", 0, None),
+    (r"english\s*horn|cor\s*anglais", 7, None),
+    (r"oboe", 0, None),
+    (r"bassoon", 0, "bass"),
+    (r"trombone|tuba|euphonium", 0, "bass"),
+    (r"viola", 0, "alto"),
+    (r"violoncello|cello", 0, "bass"),
+    (r"contrabass|double\s*bass|upright\s*bass", 0, "bass"),
+    (r"violin|fiddle", 0, None),
+    (r"\bbass\b", 0, "bass"),   # electric/synth/808/sub bass → bass clef
+]
+# Named intervals give proper diatonic spelling (chromatic int can mis-spell).
+_WRITTEN_INTERVAL = {2: "M2", 7: "P5", 9: "M6", 14: "M9", 21: "M13"}
+
+# Sharp major keys that need >7 sharps are spelled with their flat enharmonic
+# (e.g. A# major → Bb major, 2 flats) — the standard convention. music21 uses
+# "-" for flat. Minor keys spell fine as sharps, so leave them.
+_ENHARM_MAJOR = {"A#": "B-", "D#": "E-", "G#": "A-", "C#": "D-"}
+
+
+def _normalize_key(key: str, mode: str) -> str:
+    return _ENHARM_MAJOR.get(key, key) if mode == "major" else key
+
+
+def _instrument_info(name: str):
+    """(written_transpose_semitones, clef_name) for a track name; (0, None) if
+    it's a concert-treble instrument."""
+    import re
+    n = (name or "").lower()
+    if "bass clarinet" in n:  # don't let \bbass\b steal it
+        return 14, None
+    for pat, semis, clef in _INSTRUMENT_RULES:
+        if re.search(pat, n):
+            return semis, clef
+    return 0, None
+
+
+def _apply_concert_conventions(score, key: str, mode: str):
+    """Per non-drum part: insert the (written-transposed) key signature,
+    transpose the written instruments to their read key, and set the clef —
+    so each part is notated per standard convention. Display-only: notes are
+    written-pitch (the Sheet cursor follows our concert audio by time)."""
+    import music21
+
+    def _is_drum(part) -> bool:
+        nm = str(getattr(part, "partName", "") or "")
+        return "drum" in nm.lower() or "perc" in nm.lower()
+
+    key = _normalize_key(key, mode)   # A# major → Bb major, etc.
+
+    for part in score.parts:
+        if _is_drum(part):
+            continue
+        semis, clef_name = _instrument_info(str(getattr(part, "partName", "") or ""))
+        # key signature, transposed to the written key
+        try:
+            ks = music21.key.Key(key, mode)
+            if semis:
+                iv = _WRITTEN_INTERVAL.get(semis)
+                ks = ks.transpose(music21.interval.Interval(iv) if iv else semis)
+            part.insert(0, ks)
+        except Exception:
+            logger.warning("could not insert key sig on %r", getattr(part, "partName", "?"))
+        # transpose the notes to the written key (not the key sig — already done)
+        if semis:
+            try:
+                iv = _WRITTEN_INTERVAL.get(semis)
+                part.transpose(
+                    music21.interval.Interval(iv) if iv else semis,
+                    inPlace=True,
+                    classFilterList=[music21.note.Note, music21.chord.Chord],
+                )
+            except Exception:
+                logger.exception("transpose failed on %r", getattr(part, "partName", "?"))
+        # clef
+        if clef_name:
+            try:
+                c = music21.clef.BassClef() if clef_name == "bass" else music21.clef.AltoClef()
+                meas = part.recurse().getElementsByClass(music21.stream.Measure).first()
+                (meas if meas is not None else part).insert(0, c)
+            except Exception:
+                logger.warning("could not set %s clef on %r", clef_name, getattr(part, "partName", "?"))
+
+
 def midi_to_score(
     midi_path: "Path | str",
     *,
@@ -316,11 +415,8 @@ def midi_to_score(
         logger.info("normalized %d percussion chords", converted)
 
     mode = "major" if (scale or "major").lower().startswith("maj") else "minor"
-    try:
-        ks = music21.key.Key(key, mode)
-        score.insert(0, ks)
-    except Exception:
-        logger.warning("could not inject key %r %r — skipping", key, mode)
+    # (Key signatures are inserted per-part below, transposed for written
+    # instruments — see _apply_concert_conventions.)
 
     # Quantize melodic parts with the triplet grid so swung 8ths
     # show as actual triplet 8ths; FORCE drum parts onto a straight
@@ -359,6 +455,12 @@ def midi_to_score(
                 "quantize failed on part %r — engraving raw rhythms",
                 getattr(part, "partName", "?"),
             )
+
+    # Per-instrument notation: written-key transposition + clef + key sig.
+    try:
+        _apply_concert_conventions(score, key, mode)
+    except Exception:
+        logger.exception("could not apply concert conventions — engraving concert pitch")
 
     # Engrave a "Swing" performance instruction at the top of the score
     # so the player knows to swing the straight 8ths.
