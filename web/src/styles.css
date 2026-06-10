@@ -765,3 +765,45 @@ audio { width: 100%; margin: 8px 0 12px; }
 .tab-note.past .tab-fret { fill: rgba(207,224,255,0.4); }
 .tab-note.on .tab-note-bg { fill: #59e7c2; stroke: #59e7c2; }
 .tab-note.on .tab-fret { fill: #04241c; }
+
+/* ── Desktop / large-screen layout (device-aware) ─────────────────────────
+   Phones get the single-column app above; from tablet width up we use the
+   real estate: wider container, diagrams tiled across, a floating nav. */
+@media (min-width: 900px) {
+  .app { max-width: 1080px; padding: 0 24px calc(104px); }
+  .action-bar .inner { max-width: 1080px; }
+  .topbar { padding: 16px 6px 14px; }
+  .topbar .title { font-size: 20px; }
+
+  /* Bottom tab bar → a centered floating pill (not a full-width phone bar). */
+  .tabbar {
+    left: 50%; right: auto; bottom: 18px; transform: translateX(-50%);
+    width: min(620px, 80vw);
+    border: 1px solid rgba(255,255,255,0.10); border-top: 1px solid rgba(255,255,255,0.10);
+    border-radius: 18px; box-shadow: 0 10px 34px rgba(0,0,0,0.45); overflow: hidden;
+  }
+
+  /* Live diagrams (piano/necks) tile across the width instead of stacking. */
+  .diagrams-wide { grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 16px; }
+  .diagram-piano-wide { max-height: 128px; }
+  .diagram-guitar-neck { max-height: 172px; }
+  .diagram-add { justify-content: flex-start; }
+
+  /* Chord-shape pair sits comfortably, not edge-to-edge. */
+  .diagrams { gap: 16px; }
+
+  /* Practice control rows read better with a touch more room. */
+  .speed-row, .loop-row, .midi-row { gap: 12px; }
+}
+
+@media (min-width: 1300px) {
+  .app { max-width: 1280px; }
+  .action-bar .inner { max-width: 1280px; }
+  .diagrams-wide { grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); }
+}
+
+/* Pointer (mouse) devices: tighter, denser hit areas than the touch sizing. */
+@media (hover: hover) and (pointer: fine) and (min-width: 900px) {
+  .mini-transport button, .mini-speed button { cursor: pointer; }
+  .block-card:hover { border-color: rgba(255,255,255,0.18); }
+}
