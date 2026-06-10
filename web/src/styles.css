@@ -637,6 +637,17 @@ audio { width: 100%; margin: 8px 0 12px; }
 .diagram-block { display: flex; flex-direction: column; gap: 8px; }
 .diagram-mode { align-self: flex-start; }
 .diagram-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.diagram-bar-left { display: flex; align-items: center; gap: 10px; }
+/* Compact transport snug beside the Chord/Full-neck toggle — no extra vertical
+   space (buttons sit at the toggle's height). */
+.mini-transport { display: flex; align-items: center; gap: 4px; }
+.mini-transport button {
+  height: 28px; min-width: 30px; padding: 0 6px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--card); color: var(--text);
+  font-size: 13px; line-height: 1; cursor: pointer;
+}
+.mini-transport button:hover { background: var(--accent-2); }
+.mini-transport .mt-play { min-width: 34px; font-size: 14px; }
 .capo-ctl { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .capo-ctl button {
   width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border);

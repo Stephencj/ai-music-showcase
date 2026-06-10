@@ -467,6 +467,19 @@ export default function PracticeScreen() {
     if (a) { a.currentTime = time; setT(time); }
   }
 
+  // Unified transport (works whether the native <audio> or the loop engine is
+  // driving) for the compact mid-screen controls.
+  function togglePlayback() {
+    if (sectionLooping) { toggleEngine(); return; }
+    const a = audioRef.current;
+    if (!a) return;
+    if (a.paused) a.play().catch(() => {}); else a.pause();
+  }
+  function skip(delta: number) {
+    const cur = playhead.current?.currentTime ?? t;
+    seekTo(Math.max(0, cur + delta));
+  }
+
   // All three labels for a chord, with the selected notation emphasized
   // (primary) and the others shown small (secondary) — switching notation
   // changes emphasis rather than hiding the rest.
@@ -682,11 +695,22 @@ export default function PracticeScreen() {
           {panels.diagrams && (pianoNotes.length > 0 || guitarNotes.length > 0 || active?.root) && (
             <div className="diagram-block">
               <div className="diagram-bar">
-                <div className="seg diagram-mode">
-                  <button className={!neckMode ? "on" : ""}
-                    onClick={() => { setNeckMode(false); localStorage.setItem("practice.neck", "0"); }}>Chord</button>
-                  <button className={neckMode ? "on" : ""}
-                    onClick={() => { setNeckMode(true); localStorage.setItem("practice.neck", "1"); }}>Full neck</button>
+                <div className="diagram-bar-left">
+                  <div className="seg diagram-mode">
+                    <button className={!neckMode ? "on" : ""}
+                      onClick={() => { setNeckMode(false); localStorage.setItem("practice.neck", "0"); }}>Chord</button>
+                    <button className={neckMode ? "on" : ""}
+                      onClick={() => { setNeckMode(true); localStorage.setItem("practice.neck", "1"); }}>Full neck</button>
+                  </div>
+                  {/* Compact transport: same as the top player, snug beside the toggle. */}
+                  {audioSrc && (
+                    <div className="mini-transport">
+                      <button onClick={() => skip(-5)} title="Back 5s" aria-label="Back 5 seconds">⏪</button>
+                      <button onClick={togglePlayback} className="mt-play" title="Play / pause"
+                        aria-label="Play or pause">{isPlaying ? "⏸" : "▶"}</button>
+                      <button onClick={() => skip(5)} title="Forward 5s" aria-label="Forward 5 seconds">⏩</button>
+                    </div>
+                  )}
                 </div>
                 {/* Capo (chord shapes): default auto-set for acoustic guitar, adjustable. */}
                 {!neckMode && (
