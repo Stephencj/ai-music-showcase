@@ -131,6 +131,27 @@ def run_generation(req, progress, job_id: str) -> dict:
             logger.warning("PDF export failed for job %s: %s", job_id, exc)
             pdf_path = None
 
+    # Generation provenance (also persisted on the saved block) → per-instrument
+    # regenerate, "Edit in Generate", and the exact realized chord progression
+    # for the Practice chart.
+    block_spec = {
+        "genre": genre,
+        "key": eff_key,
+        "scale": eff_scale,
+        "tempo": eff_tempo,
+        "time_signature": list(ts),
+        "seed": seed,
+        "swing": float(req.swing) if req.swing is not None else None,
+        "instruments": list(req.instruments),
+        "sections": [
+            {"start_bar": s["start_bar"], "end_bar": s["end_bar"],
+             "label": s["label"], "role": s["role"]}
+            for s in secs
+        ],
+        "progression": out.get("progression") or [],
+        "section": None,
+    }
+
     saved_block: str | None = None
     section_blocks: list[str] = []
     if req.save_as_block or req.split_into_blocks:
@@ -140,6 +161,7 @@ def run_generation(req, progress, job_id: str) -> dict:
             saved_block = _save_unique_block(
                 block_store, (req.block_name or preset.name).strip() or preset.name,
                 pm, tempo=eff_tempo, time_signature=ts, bars=total_bars,
+                spec=block_spec,
             )
         if req.split_into_blocks:
             progress("Splitting sections into blocks…", 0.96)
@@ -182,23 +204,9 @@ def run_generation(req, progress, job_id: str) -> dict:
             ],
         },
         # Generation provenance stored on saved blocks → enables
-        # per-instrument regenerate and "Edit in Generate".
-        "_spec": {
-            "genre": genre,
-            "key": eff_key,
-            "scale": eff_scale,
-            "tempo": eff_tempo,
-            "time_signature": list(ts),
-            "seed": seed,
-            "swing": float(req.swing) if req.swing is not None else None,
-            "instruments": list(req.instruments),
-            "sections": [
-                {"start_bar": s["start_bar"], "end_bar": s["end_bar"],
-                 "label": s["label"], "role": s["role"]}
-                for s in secs
-            ],
-            "section": None,
-        },
+        # per-instrument regenerate, "Edit in Generate", and the realized
+        # chord progression for the Practice chart.
+        "_spec": block_spec,
     }
 
 

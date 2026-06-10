@@ -145,6 +145,31 @@ def _detect_chord(
     return best
 
 
+def _chords_from_progression(stored: list, bars: int, bar_seconds: float,
+                             tonic_pc: int) -> list[dict]:
+    """Build per-bar chord entries from the composer's stored realized
+    progression. Each bar shows the chord active at its downbeat (sub-bar
+    changes collapse to one chord per bar, like the detection path)."""
+    per_bar: list[dict] = []
+    for bar in range(bars):
+        t0 = bar * bar_seconds
+        entry = {"bar": bar, "start_time": round(t0, 4),
+                 "end_time": round(t0 + bar_seconds, 4)}
+        chord = None
+        for c in stored:
+            if float(c["start_bar"]) <= bar + 1e-6 < float(c["end_bar"]):
+                chord = c
+                break
+        if chord is None:
+            entry.update({"root": None, "quality": None, "symbol": "N.C.",
+                          "roman": "", "nashville": ""})
+        else:
+            entry.update(_label_chord(int(chord["root_pc"]) % 12,
+                                      str(chord["quality"]), tonic_pc))
+        per_bar.append(entry)
+    return per_bar
+
+
 def extract_score_data(pm, meta: dict) -> dict:
     """Read per-bar chords + bar timings out of a rendered MIDI.
 
@@ -196,31 +221,39 @@ def extract_score_data(pm, meta: dict) -> dict:
         bars = max(bars, content_bars, 1)
 
     tonic = _tonic_pc(key)
-    per_bar: list[dict] = []
-    for bar in range(bars):
-        t0 = bar * bar_seconds
-        t1 = t0 + bar_seconds
-        chroma = [0.0] * 12
-        lowest_pitch = None
-        lowest_w = 0.0
-        for inst in harmony_insts:
-            for n in inst.notes:
-                ov = min(n.end, t1) - max(n.start, t0)
-                if ov <= 0:
-                    continue
-                chroma[n.pitch % 12] += ov
-                if lowest_pitch is None or n.pitch < lowest_pitch:
-                    lowest_pitch = n.pitch
-                    lowest_w = ov
-        bass_pc = lowest_pitch % 12 if lowest_pitch is not None else None
-        detected = _detect_chord(chroma, bass_pc)
-        entry = {"bar": bar, "start_time": round(t0, 4), "end_time": round(t1, 4)}
-        if detected is None:
-            entry.update({"root": None, "quality": None, "symbol": "N.C.",
-                          "roman": "", "nashville": ""})
-        else:
-            entry.update(_label_chord(detected[0], detected[1], tonic))
-        per_bar.append(entry)
+
+    # Prefer the composer's stored realized progression (exact intended chords)
+    # over re-detecting from the audio — better for the teaching chart. Stored
+    # as [{root_pc, quality, start_bar, end_bar}, …] covering the song's bars.
+    stored = spec.get("progression")
+    if stored:
+        per_bar = _chords_from_progression(stored, bars, bar_seconds, tonic)
+    else:
+        per_bar = []
+        for bar in range(bars):
+            t0 = bar * bar_seconds
+            t1 = t0 + bar_seconds
+            chroma = [0.0] * 12
+            lowest_pitch = None
+            lowest_w = 0.0
+            for inst in harmony_insts:
+                for n in inst.notes:
+                    ov = min(n.end, t1) - max(n.start, t0)
+                    if ov <= 0:
+                        continue
+                    chroma[n.pitch % 12] += ov
+                    if lowest_pitch is None or n.pitch < lowest_pitch:
+                        lowest_pitch = n.pitch
+                        lowest_w = ov
+            bass_pc = lowest_pitch % 12 if lowest_pitch is not None else None
+            detected = _detect_chord(chroma, bass_pc)
+            entry = {"bar": bar, "start_time": round(t0, 4), "end_time": round(t1, 4)}
+            if detected is None:
+                entry.update({"root": None, "quality": None, "symbol": "N.C.",
+                              "roman": "", "nashville": ""})
+            else:
+                entry.update(_label_chord(detected[0], detected[1], tonic))
+            per_bar.append(entry)
 
     # Merge consecutive identical chords into spans for chart display.
     spans: list[dict] = []

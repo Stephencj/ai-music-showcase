@@ -30,7 +30,9 @@ from src.composition.techniques import TechniqueContext, apply_technique
 from src.composition.voicing_layer import (
     assign_layered_voicings, effective_voicing,
 )
-from src.daw_integration.generic.midi_export import MidiExporter
+from src.daw_integration.generic.midi_export import (
+    MidiExporter, roman_to_semitone_offset, NOTE_NAMES, FLAT_TO_SHARP,
+)
 from src.daw_integration.generic.styles import STYLES
 
 
@@ -400,6 +402,15 @@ def compose_song(
     _lead_sections = _lead_guitar_section_plan(sections, seed, eff_knobs)
     _lead_fill_secs = _lead_fill_sections(sections, seed, eff_knobs, _lead_sections)
 
+    # Capture the realized (post-reharmonization) chord per segment so the
+    # Practice chart can show the exact intended progression rather than
+    # re-detecting it from the rendered audio.
+    try:
+        _tonic_pc = NOTE_NAMES.index(FLAT_TO_SHARP.get(eff_key, eff_key)) % 12
+    except ValueError:
+        _tonic_pc = 0
+    realized_progression: list[dict] = []
+
     pacing_picks: dict[str, object] = {}
     for sec_idx, section in enumerate(sections):
         s, e = int(section["start_bar"]), int(section["end_bar"])
@@ -426,6 +437,20 @@ def compose_song(
         section_prog = _slice_progression(
             paced_progression, eff_bars, s, e,
         )
+
+        # Resolve this section's realized chords to absolute (root_pc, quality)
+        # with absolute bar spans (same symbol→chord map the renderer uses).
+        _cur = 0.0
+        for _sym, _dur in section_prog:
+            _off, _qual = roman_to_semitone_offset(_sym, eff_scale)
+            realized_progression.append({
+                "root_pc": (_tonic_pc + _off) % 12,
+                "quality": _qual,
+                "symbol": _sym,
+                "start_bar": round(s + _cur, 4),
+                "end_bar": round(s + _cur + float(_dur), 4),
+            })
+            _cur += float(_dur)
 
         row = {
             "start_bar": s, "end_bar": e, "label": label, "role": role,
@@ -613,4 +638,5 @@ def compose_song(
         "genre": genre,
         "seed": int(seed),
         "bars": eff_bars,
+        "progression": realized_progression,
     }
