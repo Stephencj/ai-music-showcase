@@ -131,6 +131,28 @@ def _default_sections_for(genre: str) -> list[dict]:
     ]
 
 
+def _plays_in_section(inst_obj, role: str, has_harmonic: bool) -> bool:
+    """Conservative per-section arrangement mask — so not every instrument
+    plays in every section. Core instruments (chords/bass/melody/lead) always
+    play; only non-essential layers are dropped, and only when a harmonic
+    voice still carries the section (never leaves it empty).
+
+    - Backing vocals enter to lift the chorus/bridge/outro.
+    - Add-on percussion layers lift the chorus/bridge.
+    - The main kit holds off in the intro so the band kicks in at the verse.
+    """
+    if inst_obj is None:
+        return True
+    iid = getattr(inst_obj, "id", None)
+    if iid == "vocal_harmony":
+        return role in ("chorus", "bridge", "outro")
+    if getattr(inst_obj, "role", None) == "percussion":   # latin_perc / hiphop_perc
+        return role in ("chorus", "bridge")
+    if iid == "drum_kit" and role == "intro" and has_harmonic:
+        return False
+    return True
+
+
 def _sub_seed(master: int, *parts) -> int:
     """Derive a stable sub-seed from the master + arbitrary labels.
 
@@ -295,6 +317,11 @@ def compose_song(
         if role == "chords" and inst_obj is not None
     ]
     voicing_assignments = assign_layered_voicings(chord_role_instruments)
+    # Is there a harmonic voice (chords/melody) to carry a section if we
+    # drop a non-essential layer? Gates the intro drum-drop.
+    _has_harmonic = any(
+        r in ("chords", "melody") for _, r, _ in active_passes
+    )
 
     pacing_picks: dict[str, object] = {}
     for sec_idx, section in enumerate(sections):
@@ -330,6 +357,11 @@ def compose_song(
         }
 
         for instrument_token, inst_role, inst_obj in active_passes:
+            # Arrangement: drop non-essential layers in some sections so the
+            # band breathes (backing vox/percussion enter on the chorus;
+            # drums hold off in the intro).
+            if not _plays_in_section(inst_obj, role, _has_harmonic):
+                continue
             override_key = f"{role}:{instrument_token}"
             label_key = f"{label}:{instrument_token}"
             forced_name = (
