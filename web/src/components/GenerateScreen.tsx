@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../api";
 import type { BlockSpec, Family, GenerateBody, Job, JobResult, Preset } from "../types";
+import CircleOfFifths from "./CircleOfFifths";
 
-const KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const SCALES = [
   "major", "minor", "dorian", "phrygian", "lydian", "mixolydian", "locrian",
   "harmonic_minor", "melodic_minor", "pentatonic_major", "pentatonic_minor", "blues",
@@ -26,6 +26,7 @@ export default function GenerateScreen({
   const [presetId, setPresetId] = useState("");
   const [key, setKey] = useState("C");
   const [scale, setScale] = useState("major");
+  const [showKey, setShowKey] = useState(false);
   const [tempo, setTempo] = useState(120);
   const [seed, setSeed] = useState("");
   const [swing, setSwing] = useState<number | null>(null);
@@ -221,17 +222,18 @@ export default function GenerateScreen({
       <div className="card">
         <h2>Song</h2>
         <div className="row">
-          <label className="field"><span>Key</span>
-            <select value={key} onChange={(e) => setKey(e.target.value)}>
-              {KEYS.map((k) => <option key={k}>{k}</option>)}
-            </select>
-          </label>
-          <label className="field"><span>Mode / scale</span>
-            <select value={scale} onChange={(e) => setScale(e.target.value)}>
-              {SCALES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
-            </select>
+          <label className="field"><span>Key / scale</span>
+            <button type="button" className="keypick" onClick={() => setShowKey(true)}
+              title="Pick the key on the circle of fifths">
+              ◷ {key} {scale.replace(/_/g, " ")}
+            </button>
           </label>
         </div>
+        {showKey && (
+          <CircleOfFifths tonic={key} mode={scale} sharps
+            options={SCALES.map((s) => ({ id: s, label: s.replace(/_/g, " ") }))}
+            onTonic={setKey} onMode={setScale} onClose={() => setShowKey(false)} />
+        )}
         <div className="row">
           <label className="field"><span>Tempo (BPM)</span>
             <input type="number" min={40} max={240} value={tempo}

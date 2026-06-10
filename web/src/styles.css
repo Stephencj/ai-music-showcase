@@ -542,11 +542,12 @@ audio { width: 100%; margin: 8px 0 12px; }
   border: 1px solid rgba(255,255,255,0.12); background: var(--bg-2); color: var(--accent-2);
   border-radius: 8px; width: 30px; height: 30px; cursor: pointer; font-size: 15px;
 }
-.keymode-pick {
+.keymode-pick, .keypick {
   padding: 7px 12px; border-radius: 8px; background: var(--bg-2); color: var(--text);
   border: 1px solid rgba(255,255,255,0.12); font-size: 13px; cursor: pointer; font-weight: 600;
 }
-.keymode-pick:hover { border-color: var(--accent); }
+.keymode-pick:hover, .keypick:hover { border-color: var(--accent); }
+.keypick { width: 100%; text-align: left; text-transform: capitalize; }
 
 /* ── Circle of fifths key picker ─────────────────────────────────────────── */
 .cof-backdrop {
