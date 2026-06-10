@@ -102,13 +102,18 @@ function guitarShape(root: string, quality: string): { frets: number[]; approx: 
   cands.sort((x, y) => x.barre - y.barre);          // lowest on the neck wins
   return { frets: cands[0].frets, approx };
 }
-function ChordShapeGuitar({ root, quality }: { root: string; quality: string }) {
+// `shapeRoot`/`quality` are the SHAPE to finger (already transposed for the
+// capo by the caller). `capo` only changes how the top of the diagram is drawn:
+// with a capo the nut becomes the capo bar (the shape's "open" strings are
+// fretted at the capo), so frets are read relative to it.
+function ChordShapeGuitar({ root, quality, capo = 0 }: { root: string; quality: string; capo?: number }) {
   const { frets, approx } = guitarShape(root, quality);
   const played = frets.filter((f) => f > 0);
   const maxF = played.length ? Math.max(...played) : 1, minF = played.length ? Math.min(...played) : 1;
   const baseFret = maxF <= 4 ? 1 : minF, span = Math.max(4, maxF - baseFret + 1);
   const left = 26, top = 18, sw = 18, fh = 26;
   const width = left + 5 * sw + 16, height = top + span * fh + 12;
+  const atNut = baseFret === 1;
   const dots = frets.map((f, s) => {
     const x = left + s * sw;
     if (f < 0) return <text key={s} x={x} y={top - 6} className="g-x">×</text>;
@@ -117,8 +122,11 @@ function ChordShapeGuitar({ root, quality }: { root: string; quality: string }) 
   });
   return (
     <svg className="diagram-guitar" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label="guitar chord">
-      {baseFret === 1 ? <rect x={left} y={top} width={5 * sw} height={3} fill="#1e293b" />
-        : <text x={left - 10} y={top + fh * 0.6} className="g-fret">{baseFret}fr</text>}
+      {atNut
+        ? <rect x={left} y={top} width={5 * sw} height={capo > 0 ? 6 : 3} rx={capo > 0 ? 3 : 0}
+            fill={capo > 0 ? "#d97706" : "#1e293b"} />
+        : <text x={left - 10} y={top + fh * 0.6} className="g-fret">{capo > 0 ? capo + baseFret - 1 : baseFret}fr</text>}
+      {capo > 0 && atNut && <text x={left - 10} y={top + 6} className="g-fret" fill="#d97706">{capo}</text>}
       {Array.from({ length: span + 1 }, (_, i) => <line key={`f${i}`} x1={left} y1={top + i * fh} x2={left + 5 * sw} y2={top + i * fh} stroke="#94a3b8" strokeWidth={0.8} />)}
       {Array.from({ length: 6 }, (_, i) => <line key={`s${i}`} x1={left + i * sw} y1={top} x2={left + i * sw} y2={top + span * fh} stroke="#cbd5e1" strokeWidth={0.8} />)}
       {dots}
@@ -304,7 +312,7 @@ function NeckDiagrams({
 
 // ===========================================================================
 export default function ChordDiagram({
-  root, quality, audioRef, neck = false,
+  root, quality, audioRef, neck = false, capo = 0,
   pianoNotes = [], guitarNotes = [], guitarTab, pianoRange,
   parts = [], pianoIdx = -1, guitarIdx = -1, onPianoIdx = () => {}, onGuitarIdx = () => {},
 }: {
@@ -312,6 +320,7 @@ export default function ChordDiagram({
   quality: string;
   audioRef?: React.RefObject<HTMLAudioElement | null>;
   neck?: boolean;
+  capo?: number;   // Chord mode: finger the shape this many frets lower (capo)
   // Full-neck (live) mode: piano + guitar each follow their own selected part.
   pianoNotes?: RollNote[];
   guitarNotes?: RollNote[];
@@ -329,6 +338,11 @@ export default function ChordDiagram({
   }, [root, quality]);
 
   if (!neck) {
+    // With a capo, the shape you finger is the chord `capo` semitones lower
+    // (e.g. play a C shape with capo 2 to sound D). The piano still shows the
+    // real sounding chord tones.
+    const gRoot = FLAT_TO_SHARP[root] ?? root;
+    const shapeRoot = capo > 0 ? NOTE_NAMES[((rootPc(gRoot) - capo) % 12 + 12) % 12] : gRoot;
     return (
       <div className="diagrams">
         <div className="diagram-card">
@@ -336,8 +350,9 @@ export default function ChordDiagram({
           <CompactPiano tones={tones} root={rootPc(root) % 12} />
         </div>
         <div className="diagram-card">
-          <div className="diagram-title">Guitar</div>
-          <ChordShapeGuitar root={FLAT_TO_SHARP[root] ?? root} quality={quality} />
+          <div className="diagram-title">Guitar{capo > 0 ? ` · capo ${capo}` : ""}</div>
+          <ChordShapeGuitar root={shapeRoot} quality={quality} capo={capo} />
+          {capo > 0 && <div className="g-capo-note">play {shapeRoot} {quality} shape</div>}
         </div>
       </div>
     );

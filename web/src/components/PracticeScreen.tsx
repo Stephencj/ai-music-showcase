@@ -22,6 +22,15 @@ const NOTATION_LABEL: Record<Notation, string> = {
   roman: "Roman",
 };
 
+// Open-chord-friendly keys (C D E G A). For an acoustic guitar, default the
+// capo to the lowest fret that lands the song key on one of these, so the
+// player can use easy open shapes.
+const OPEN_KEY_PCS = [0, 2, 4, 7, 9];
+function autoCapo(keyPc: number): number {
+  for (let f = 0; f <= 7; f++) if (OPEN_KEY_PCS.includes(((keyPc - f) % 12 + 12) % 12)) return f;
+  return 0;
+}
+
 export default function PracticeScreen() {
   const [mode, setMode] = useState<Mode>("block");
   const [blocks, setBlocks] = useState<Block[]>([]);
@@ -39,6 +48,7 @@ export default function PracticeScreen() {
   const [guitarIdx, setGuitarIdx] = useState(-1);
   const [chartIdx, setChartIdx] = useState(-1);  // -1 = chords only (no part)
   const [solo, setSolo] = useState(false);       // play just the chart part
+  const [capo, setCapo] = useState(0);           // chord-shape capo (teaching)
   // Which panels show in the practice space (gear), persisted.
   const [panels, setPanels] = useState<Record<string, boolean>>(() => {
     try {
@@ -317,6 +327,15 @@ export default function PracticeScreen() {
   // Score section (sheet / tab / notation roll) follows the chart part.
   const chartRollNotes = useMemo(() => rollFrom(chartTrack), [chartTrack, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
   const chartTab = useMemo(() => tabFrom(chartTrack), [chartTrack, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Default the capo from the key when the guitar part is an ACOUSTIC (its
+  // shapes benefit from a capo); other guitars / re-selections reset to 0.
+  // Manual changes persist until the key or the selected guitar changes.
+  useEffect(() => {
+    if (!score) { setCapo(0); return; }
+    const acoustic = !!guitarTrack && /acoustic/i.test(guitarTrack.track);
+    setCapo(acoustic ? autoCapo(rootPc(score.key)) : 0);
+  }, [score?.key, guitarIdx, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // For section looping, play the WAV (sample-accurate seeks — no MP3 decoder
   // priming gap), which keeps loops tight without losing pitch-preserved speed.
@@ -662,17 +681,29 @@ export default function PracticeScreen() {
 
           {panels.diagrams && (pianoNotes.length > 0 || guitarNotes.length > 0 || active?.root) && (
             <div className="diagram-block">
-              <div className="seg diagram-mode">
-                <button className={!neckMode ? "on" : ""}
-                  onClick={() => { setNeckMode(false); localStorage.setItem("practice.neck", "0"); }}>Chord</button>
-                <button className={neckMode ? "on" : ""}
-                  onClick={() => { setNeckMode(true); localStorage.setItem("practice.neck", "1"); }}>Full neck</button>
+              <div className="diagram-bar">
+                <div className="seg diagram-mode">
+                  <button className={!neckMode ? "on" : ""}
+                    onClick={() => { setNeckMode(false); localStorage.setItem("practice.neck", "0"); }}>Chord</button>
+                  <button className={neckMode ? "on" : ""}
+                    onClick={() => { setNeckMode(true); localStorage.setItem("practice.neck", "1"); }}>Full neck</button>
+                </div>
+                {/* Capo (chord shapes): default auto-set for acoustic guitar, adjustable. */}
+                {!neckMode && (
+                  <div className="capo-ctl" title="Capo fret — shows the easier shapes you'd finger with a capo">
+                    <span>Capo</span>
+                    <button onClick={() => setCapo((c) => Math.max(0, c - 1))} aria-label="Capo down">–</button>
+                    <span className="capo-val">{capo === 0 ? "off" : capo}</span>
+                    <button onClick={() => setCapo((c) => Math.min(11, c + 1))} aria-label="Capo up">+</button>
+                  </div>
+                )}
               </div>
               <ChordDiagram
                 root={active?.root || "C"}
                 quality={active?.quality || "maj"}
                 audioRef={playhead}
                 neck={neckMode}
+                capo={capo}
                 // In Full-neck mode the piano and guitar each follow their own
                 // selected part: piano lights by pitch, the neck lights the exact
                 // fret being played (tab) — or by pitch for a bass part.

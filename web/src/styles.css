@@ -636,6 +636,15 @@ audio { width: 100%; margin: 8px 0 12px; }
 /* Diagram mode toggle + full-neck/wide layouts */
 .diagram-block { display: flex; flex-direction: column; gap: 8px; }
 .diagram-mode { align-self: flex-start; }
+.diagram-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.capo-ctl { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.capo-ctl button {
+  width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--card); color: var(--text); font-size: 15px; line-height: 1; cursor: pointer;
+}
+.capo-ctl button:active { background: var(--accent-2); }
+.capo-val { min-width: 26px; text-align: center; color: var(--text); font-weight: 600; }
+.g-capo-note { font-size: 11px; color: #d97706; text-align: center; margin-top: 2px; }
 .diagrams-wide { grid-template-columns: 1fr; }   /* stack: each gets full width */
 .diagram-piano-wide { width: 100%; max-height: 96px; }
 .diagram-guitar-neck { width: 100%; max-height: 130px; }
