@@ -52,3 +52,164 @@ spec:
     label: Outro
     role: outro
   section: null
+  progression:
+  - root_pc: 2
+    quality: maj
+    symbol: I
+    start_bar: 0.0
+    end_bar: 1.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 1.0
+    end_bar: 2.0
+  - root_pc: 9
+    quality: maj
+    symbol: V
+    start_bar: 2.0
+    end_bar: 3.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 3.0
+    end_bar: 4.0
+  - root_pc: 2
+    quality: maj
+    symbol: I
+    start_bar: 4.0
+    end_bar: 5.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 5.0
+    end_bar: 6.0
+  - root_pc: 9
+    quality: maj
+    symbol: V
+    start_bar: 6.0
+    end_bar: 7.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 7.0
+    end_bar: 8.0
+  - root_pc: 2
+    quality: maj
+    symbol: I
+    start_bar: 8.0
+    end_bar: 9.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 9.0
+    end_bar: 10.0
+  - root_pc: 9
+    quality: maj
+    symbol: V
+    start_bar: 10.0
+    end_bar: 11.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 11.0
+    end_bar: 12.0
+  - root_pc: 2
+    quality: maj
+    symbol: I
+    start_bar: 12.0
+    end_bar: 13.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 13.0
+    end_bar: 14.0
+  - root_pc: 9
+    quality: maj
+    symbol: V
+    start_bar: 14.0
+    end_bar: 15.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 15.0
+    end_bar: 16.0
+  - root_pc: 2
+    quality: maj
+    symbol: I
+    start_bar: 16.0
+    end_bar: 17.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 17.0
+    end_bar: 18.0
+  - root_pc: 9
+    quality: maj
+    symbol: V
+    start_bar: 18.0
+    end_bar: 19.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 19.0
+    end_bar: 20.0
+  - root_pc: 2
+    quality: maj
+    symbol: I
+    start_bar: 20.0
+    end_bar: 21.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 21.0
+    end_bar: 22.0
+  - root_pc: 9
+    quality: maj
+    symbol: V
+    start_bar: 22.0
+    end_bar: 23.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 23.0
+    end_bar: 24.0
+  - root_pc: 2
+    quality: maj
+    symbol: I
+    start_bar: 24.0
+    end_bar: 25.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 25.0
+    end_bar: 26.0
+  - root_pc: 9
+    quality: maj
+    symbol: V
+    start_bar: 26.0
+    end_bar: 27.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 27.0
+    end_bar: 28.0
+  - root_pc: 2
+    quality: maj
+    symbol: I
+    start_bar: 28.0
+    end_bar: 29.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 29.0
+    end_bar: 30.0
+  - root_pc: 9
+    quality: maj
+    symbol: V
+    start_bar: 30.0
+    end_bar: 31.0
+  - root_pc: 8
+    quality: maj
+    symbol: IV
+    start_bar: 31.0
+    end_bar: 32.0

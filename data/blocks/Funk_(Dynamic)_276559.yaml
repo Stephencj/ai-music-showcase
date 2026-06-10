@@ -83,3 +83,44 @@ spec:
     label: Drop
     role: chorus
   section: null
+  progression:
+  - root_pc: 8
+    quality: min7
+    symbol: i7
+    start_bar: 0.0
+    end_bar: 1.0
+  - root_pc: 1
+    quality: min
+    symbol: iv
+    start_bar: 1.0
+    end_bar: 2.0
+  - root_pc: 8
+    quality: min7
+    symbol: i7
+    start_bar: 2.0
+    end_bar: 3.0
+  - root_pc: 3
+    quality: '7'
+    symbol: V7
+    start_bar: 3.0
+    end_bar: 4.0
+  - root_pc: 8
+    quality: min7
+    symbol: i7
+    start_bar: 4.0
+    end_bar: 5.0
+  - root_pc: 8
+    quality: '7'
+    symbol: I7
+    start_bar: 5.0
+    end_bar: 6.0
+  - root_pc: 8
+    quality: min7
+    symbol: i7
+    start_bar: 6.0
+    end_bar: 7.0
+  - root_pc: 1
+    quality: '7'
+    symbol: IV7
+    start_bar: 7.0
+    end_bar: 8.0

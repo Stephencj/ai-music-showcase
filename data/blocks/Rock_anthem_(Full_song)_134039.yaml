@@ -78,3 +78,349 @@ spec:
     label: Outro
     role: outro
   section: null
+  progression:
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 0.0
+    end_bar: 2.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 2.0
+    end_bar: 4.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 4.0
+    end_bar: 5.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 5.0
+    end_bar: 6.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 6.0
+    end_bar: 8.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 8.0
+    end_bar: 10.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 10.0
+    end_bar: 12.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 12.0
+    end_bar: 13.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 13.0
+    end_bar: 14.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 14.0
+    end_bar: 16.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 16.0
+    end_bar: 18.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 18.0
+    end_bar: 19.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 19.0
+    end_bar: 20.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 20.0
+    end_bar: 22.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 22.0
+    end_bar: 24.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 24.0
+    end_bar: 25.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 25.0
+    end_bar: 26.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 26.0
+    end_bar: 27.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 27.0
+    end_bar: 28.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 28.0
+    end_bar: 29.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 29.0
+    end_bar: 30.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 30.0
+    end_bar: 31.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 31.0
+    end_bar: 32.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 32.0
+    end_bar: 33.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 33.0
+    end_bar: 34.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 34.0
+    end_bar: 35.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 35.0
+    end_bar: 36.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 36.0
+    end_bar: 37.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 37.0
+    end_bar: 38.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 38.0
+    end_bar: 39.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 39.0
+    end_bar: 40.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 40.0
+    end_bar: 42.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 42.0
+    end_bar: 44.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 44.0
+    end_bar: 45.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 45.0
+    end_bar: 46.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 46.0
+    end_bar: 48.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 48.0
+    end_bar: 50.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 50.0
+    end_bar: 51.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 51.0
+    end_bar: 52.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 52.0
+    end_bar: 54.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 54.0
+    end_bar: 56.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 56.0
+    end_bar: 58.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 58.0
+    end_bar: 60.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 60.0
+    end_bar: 61.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 61.0
+    end_bar: 62.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 62.0
+    end_bar: 64.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 64.0
+    end_bar: 66.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 66.0
+    end_bar: 67.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 67.0
+    end_bar: 68.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 68.0
+    end_bar: 70.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 70.0
+    end_bar: 72.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 72.0
+    end_bar: 74.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 74.0
+    end_bar: 76.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 76.0
+    end_bar: 77.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 77.0
+    end_bar: 78.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 78.0
+    end_bar: 80.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 80.0
+    end_bar: 82.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 82.0
+    end_bar: 83.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 83.0
+    end_bar: 84.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 84.0
+    end_bar: 86.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 86.0
+    end_bar: 88.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 88.0
+    end_bar: 89.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 89.0
+    end_bar: 90.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 90.0
+    end_bar: 91.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 91.0
+    end_bar: 92.0
+  - root_pc: 4
+    quality: min
+    symbol: i
+    start_bar: 92.0
+    end_bar: 93.0
+  - root_pc: 0
+    quality: maj
+    symbol: VI
+    start_bar: 93.0
+    end_bar: 94.0
+  - root_pc: 7
+    quality: maj
+    symbol: III
+    start_bar: 94.0
+    end_bar: 95.0
+  - root_pc: 2
+    quality: maj
+    symbol: VII
+    start_bar: 95.0
+    end_bar: 96.0
