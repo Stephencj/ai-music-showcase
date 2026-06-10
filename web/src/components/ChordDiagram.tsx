@@ -109,24 +109,42 @@ const FRETS = 19;                              // cover the tab's full range (as
 const INLAYS = new Set([3, 5, 7, 9, 12, 15, 17, 19]);
 function octaveFloor(p: number) { return Math.floor(p / 12) * 12; }
 
+type PartOpt = { idx: number; name: string };
+
+function PartSelect({ value, opts, onChange }: {
+  value: number; opts: PartOpt[]; onChange: (i: number) => void;
+}) {
+  return (
+    <select className="neck-part" value={value} onChange={(e) => onChange(Number(e.target.value))}
+      onClick={(e) => e.stopPropagation()}>
+      {value < 0 && <option value={-1}>—</option>}
+      {opts.map((o) => <option key={o.idx} value={o.idx}>{o.name}</option>)}
+    </select>
+  );
+}
+
 function NeckDiagrams({
-  notes, audioRef, range, chordTones, tabNotes,
+  pianoNotes, guitarTab, guitarNotes, audioRef, pianoRange, chordTones,
+  parts, pianoIdx, guitarIdx, onPianoIdx, onGuitarIdx,
 }: {
-  notes: RollNote[];
+  pianoNotes: RollNote[];
+  guitarTab?: TabNote[];       // exact string/fret of a guitar part (preferred)
+  guitarNotes: RollNote[];     // fallback pitch lighting (e.g. a bass part)
   audioRef?: React.RefObject<HTMLAudioElement | null>;
-  range?: [number, number];
+  pianoRange?: [number, number];
   chordTones: Set<number>;
-  // When a guitar part is selected we know the EXACT string/fret it's playing
-  // (from the tab). Light just those positions on the neck instead of every
-  // place the pitch could be fretted.
-  tabNotes?: TabNote[];
+  parts: PartOpt[];
+  pianoIdx: number;
+  guitarIdx: number;
+  onPianoIdx: (i: number) => void;
+  onGuitarIdx: (i: number) => void;
 }) {
   const [lo, hi] = useMemo(() => {
-    let a = range ? range[0] : 48, b = range ? range[1] : 83;
+    let a = pianoRange ? pianoRange[0] : 48, b = pianoRange ? pianoRange[1] : 83;
     a = octaveFloor(a); b = octaveFloor(b) + 11;
     while (b - a < 35) b += 12;
     return [Math.max(21, a), Math.min(108, b)];
-  }, [range]);
+  }, [pianoRange]);
 
   // Piano keys are keyed by pitch (one key per pitch). Neck dots are kept in
   // two indexes: by pitch (default lighting) and by "string:fret" position
@@ -192,68 +210,68 @@ function NeckDiagrams({
     const litPiano = (p: number, on: boolean) => pianoMap.get(p)?.forEach((el) => el.classList.toggle("lit", on));
     const litNeckPitch = (p: number, on: boolean) => neckMap.get(p)?.forEach((el) => el.classList.toggle("lit", on));
     const litNeckPos = (key: string, on: boolean) => posMap.get(key)?.classList.toggle("lit", on);
-    const clearAll = () => {
-      pianoMap.forEach((a) => a.forEach((el) => el.classList.remove("lit")));
-      neckMap.forEach((a) => a.forEach((el) => el.classList.remove("lit")));
-    };
-    clearAll();
+    pianoMap.forEach((a) => a.forEach((el) => el.classList.remove("lit")));
+    neckMap.forEach((a) => a.forEach((el) => el.classList.remove("lit")));
 
-    if (!notes.length) {
-      // No note data → light the chord's tones in every position (static).
+    const hasTab = !!(guitarTab && guitarTab.length);
+    const live = pianoNotes.length > 0 || hasTab || guitarNotes.length > 0;
+    if (!live) {
+      // No part playing → light the chord's tones in every position (static).
       pianoMap.forEach((a, p) => { if (chordTones.has(pc(p))) a.forEach((el) => el.classList.add("lit")); });
       neckMap.forEach((a, p) => { if (chordTones.has(pc(p))) a.forEach((el) => el.classList.add("lit")); });
       return;
     }
 
+    // Independent diffs so the piano and the neck can follow different parts.
+    const onPiano = new Set<number>(), onPos = new Set<string>(), onNeck = new Set<number>();
     let raf = 0;
-    if (tabNotes && tabNotes.length) {
-      // Guitar part selected: light only the exact fret position being played
-      // on the neck (one dot per note), and its key on the piano.
-      const onPos = new Set<string>(), onPitch = new Set<number>();
-      const tick = () => {
-        const t = audioRef?.current?.currentTime ?? 0;
-        const sndPos = new Set<string>(), sndPitch = new Set<number>();
-        for (const n of tabNotes) if (t >= n.start && t < n.start + n.dur) {
-          sndPos.add(`${n.string}:${n.fret}`); sndPitch.add(n.pitch);
-        }
-        for (const k of onPos) if (!sndPos.has(k)) { litNeckPos(k, false); onPos.delete(k); }
-        for (const k of sndPos) if (!onPos.has(k)) { litNeckPos(k, true); onPos.add(k); }
-        for (const p of onPitch) if (!sndPitch.has(p)) { litPiano(p, false); onPitch.delete(p); }
-        for (const p of sndPitch) if (!onPitch.has(p)) { litPiano(p, true); onPitch.add(p); }
-        raf = requestAnimationFrame(tick);
-      };
-      raf = requestAnimationFrame(tick);
-      return () => cancelAnimationFrame(raf);
-    }
-
-    // Default live: light the sounding pitch everywhere it appears.
-    const on = new Set<number>();
     const tick = () => {
       const t = audioRef?.current?.currentTime ?? 0;
-      const snd = new Set<number>();
-      for (const n of notes) if (t >= n.start && t < n.start + n.dur) snd.add(n.pitch);
-      for (const p of on) if (!snd.has(p)) { litPiano(p, false); litNeckPitch(p, false); on.delete(p); }
-      for (const p of snd) if (!on.has(p)) { litPiano(p, true); litNeckPitch(p, true); on.add(p); }
+      // piano ← its part (by pitch)
+      const sndPiano = new Set<number>();
+      for (const n of pianoNotes) if (t >= n.start && t < n.start + n.dur) sndPiano.add(n.pitch);
+      for (const p of onPiano) if (!sndPiano.has(p)) { litPiano(p, false); onPiano.delete(p); }
+      for (const p of sndPiano) if (!onPiano.has(p)) { litPiano(p, true); onPiano.add(p); }
+      // neck ← its part: exact fret (guitar tab) or by pitch (bass / fallback)
+      if (hasTab) {
+        const snd = new Set<string>();
+        for (const n of guitarTab!) if (t >= n.start && t < n.start + n.dur) snd.add(`${n.string}:${n.fret}`);
+        for (const k of onPos) if (!snd.has(k)) { litNeckPos(k, false); onPos.delete(k); }
+        for (const k of snd) if (!onPos.has(k)) { litNeckPos(k, true); onPos.add(k); }
+      } else {
+        const snd = new Set<number>();
+        for (const n of guitarNotes) if (t >= n.start && t < n.start + n.dur) snd.add(n.pitch);
+        for (const p of onNeck) if (!snd.has(p)) { litNeckPitch(p, false); onNeck.delete(p); }
+        for (const p of snd) if (!onNeck.has(p)) { litNeckPitch(p, true); onNeck.add(p); }
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
     // Rebuilt elements (new refs) whenever the key range changes.
-  }, [notes, audioRef, chordTones, lo, hi, tabNotes]);
+  }, [pianoNotes, guitarNotes, guitarTab, audioRef, chordTones, lo, hi]);
 
   // Reset the ref maps each render so stale element refs don't accumulate.
   pianoByPitch.current = new Map();
   neckByPitch.current = new Map();
   neckByPos.current = new Map();
 
+  const pianoLive = pianoNotes.length > 0;
+  const guitarLive = (guitarTab && guitarTab.length > 0) || guitarNotes.length > 0;
   return (
     <div className="diagrams diagrams-wide">
       <div className="diagram-card">
-        <div className="diagram-title">Piano{notes.length ? " · live" : ""}</div>
+        <div className="diagram-title">
+          <span>Piano{pianoLive ? " · live" : ""}</span>
+          <PartSelect value={pianoIdx} opts={parts} onChange={onPianoIdx} />
+        </div>
         <svg className="diagram-piano-wide" viewBox={`0 0 ${pianoW} ${wh}`} preserveAspectRatio="xMidYMid meet" aria-label="piano">{pianoEls}</svg>
       </div>
       <div className="diagram-card">
-        <div className="diagram-title">Guitar neck{notes.length ? " · live" : ""}</div>
+        <div className="diagram-title">
+          <span>Guitar neck{guitarLive ? " · live" : ""}</span>
+          <PartSelect value={guitarIdx} opts={parts} onChange={onGuitarIdx} />
+        </div>
         <svg className="diagram-guitar-neck" viewBox={`0 0 ${neckW} ${neckH}`} preserveAspectRatio="xMidYMid meet" aria-label="guitar neck">{neckEls}</svg>
       </div>
     </div>
@@ -262,15 +280,24 @@ function NeckDiagrams({
 
 // ===========================================================================
 export default function ChordDiagram({
-  root, quality, notes, audioRef, range, neck = false, tabNotes,
+  root, quality, audioRef, neck = false,
+  pianoNotes = [], guitarNotes = [], guitarTab, pianoRange,
+  parts = [], pianoIdx = -1, guitarIdx = -1, onPianoIdx = () => {}, onGuitarIdx = () => {},
 }: {
   root: string;
   quality: string;
-  notes?: RollNote[];
   audioRef?: React.RefObject<HTMLAudioElement | null>;
-  range?: [number, number];
   neck?: boolean;
-  tabNotes?: TabNote[];
+  // Full-neck (live) mode: piano + guitar each follow their own selected part.
+  pianoNotes?: RollNote[];
+  guitarNotes?: RollNote[];
+  guitarTab?: TabNote[];
+  pianoRange?: [number, number];
+  parts?: { idx: number; name: string }[];
+  pianoIdx?: number;
+  guitarIdx?: number;
+  onPianoIdx?: (i: number) => void;
+  onGuitarIdx?: (i: number) => void;
 }) {
   const tones = useMemo(() => {
     const offs = TEMPLATES[quality] || TEMPLATES.maj;
@@ -291,5 +318,9 @@ export default function ChordDiagram({
       </div>
     );
   }
-  return <NeckDiagrams notes={notes || []} audioRef={audioRef} range={range} chordTones={tones} tabNotes={tabNotes} />;
+  return <NeckDiagrams
+    pianoNotes={pianoNotes} guitarNotes={guitarNotes} guitarTab={guitarTab}
+    audioRef={audioRef} pianoRange={pianoRange} chordTones={tones}
+    parts={parts} pianoIdx={pianoIdx} guitarIdx={guitarIdx}
+    onPianoIdx={onPianoIdx} onGuitarIdx={onGuitarIdx} />;
 }

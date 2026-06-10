@@ -7,7 +7,7 @@ import TapeView from "./TapeView";
 import NotationRoll, { type RollNote } from "./NotationRoll";
 import SheetMusic from "./SheetMusic";
 import TabView from "./TabView";
-import { isFrettedTrack, isBassTrack, tuningFor, stringLabelsFor, assignFrets } from "../guitarTab";
+import { isFrettedTrack, isGuitarTrack, isKeysTrack, tuningFor, stringLabelsFor, assignFrets } from "../guitarTab";
 import { LoopPlayer } from "../loopPlayer";
 import type { BlockNotes } from "../api";
 import { MODES, ALL_ROOTS, scaleToModeId, rootPc, romanFor, nashvilleFor } from "../chordLabels";
@@ -33,8 +33,12 @@ export default function PracticeScreen() {
   const [score, setScore] = useState<ScoreData | null>(null);
   // Per-track notes for the notation roll + real-time diagrams (blocks only).
   const [partNotes, setPartNotes] = useState<BlockNotes | null>(null);
-  const [partIdx, setPartIdx] = useState(-1);   // -1 = no part selected
-  const [solo, setSolo] = useState(false);      // play just the selected part
+  // Independent part selectors: the piano diagram, the guitar neck diagram, and
+  // the score section (sheet / tab / notation roll) each pick their own part.
+  const [pianoIdx, setPianoIdx] = useState(-1);
+  const [guitarIdx, setGuitarIdx] = useState(-1);
+  const [chartIdx, setChartIdx] = useState(-1);  // -1 = chords only (no part)
+  const [solo, setSolo] = useState(false);       // play just the chart part
   // Which panels show in the practice space (gear), persisted.
   const [panels, setPanels] = useState<Record<string, boolean>>(() => {
     try {
@@ -105,7 +109,7 @@ export default function PracticeScreen() {
   useEffect(() => {
     if (mode !== "block" || !selected) return;
     setLoading(true); setScore(null); setErr(""); setT(0); setLoop("off");
-    setPartNotes(null); setPartIdx(-1); setSolo(false);
+    setPartNotes(null); setPianoIdx(-1); setGuitarIdx(-1); setChartIdx(-1); setSolo(false);
     if (selected.startsWith("song:")) {
       const title = selected.slice(5);
       setAudioSrc(api.songAudioUrl(title));
@@ -124,6 +128,20 @@ export default function PracticeScreen() {
       api.getBlockNotes(nm).then(setPartNotes).catch(() => setPartNotes(null));
     }
   }, [mode, selected, blocks]);
+
+  // Default each selector to the first relevant part once notes arrive: piano →
+  // first keyboard part, guitar → first guitar part, chart → first fretted part.
+  useEffect(() => {
+    if (!partNotes) return;
+    const ts = partNotes.tracks;
+    const firstMel = ts.findIndex((t) => !t.is_drum);
+    const firstKeys = ts.findIndex((t) => !t.is_drum && isKeysTrack(t.track));
+    const firstGtr = ts.findIndex((t) => isGuitarTrack(t.track));
+    const firstFret = ts.findIndex((t) => !t.is_drum && isFrettedTrack(t.track));
+    setPianoIdx(firstKeys >= 0 ? firstKeys : firstMel);
+    setGuitarIdx(firstGtr >= 0 ? firstGtr : firstFret >= 0 ? firstFret : firstMel);
+    setChartIdx(firstFret >= 0 ? firstFret : firstGtr >= 0 ? firstGtr : firstMel);
+  }, [partNotes]);
 
   async function onUpload(file: File) {
     setLoading(true); setScore(null); setErr(""); setT(0); setSimMsg("");
@@ -264,61 +282,55 @@ export default function PracticeScreen() {
   const sourceIsSong = selected.startsWith("song:");
   const blockName = selected.startsWith("block:") ? selected.slice(6) : "";
 
-  const selectedTrack = partNotes && partIdx >= 0 ? partNotes.tracks[partIdx] : null;
+  // Parts available to the selectors (pitched, non-drum). Drums can't be tabbed
+  // or shown on the piano/neck, so they're excluded.
+  const partOptions = useMemo(
+    () => (partNotes?.tracks ?? []).map((t, idx) => ({ idx, name: t.track, is_drum: t.is_drum }))
+      .filter((p) => !p.is_drum),
+    [partNotes]);
 
-  // The notation roll follows the selected part only.
-  const partRollNotes: RollNote[] = useMemo(() => {
-    if (!selectedTrack || !partNotes) return [];
+  const pianoTrack = partNotes && pianoIdx >= 0 ? partNotes.tracks[pianoIdx] : undefined;
+  const guitarTrack = partNotes && guitarIdx >= 0 ? partNotes.tracks[guitarIdx] : undefined;
+  const chartTrack = partNotes && chartIdx >= 0 ? partNotes.tracks[chartIdx] : undefined;
+
+  const rollFrom = (tr: typeof pianoTrack): RollNote[] => {
+    if (!tr || !partNotes || tr.is_drum) return [];
     const spb = 60 / (partNotes.tempo || 120);
-    return selectedTrack.notes.map(([pitch, sb, db]) => ({ pitch, start: sb * spb, dur: db * spb }));
-  }, [selectedTrack, partNotes]);
-
-  // Tab lane: show the selected part if it's a guitar/bass, otherwise the first
-  // fretted part in the block. Frets are computed from the MIDI pitches.
-  const tabData = useMemo(() => {
-    if (!partNotes) return null;
-    const track = (selectedTrack && !selectedTrack.is_drum && isFrettedTrack(selectedTrack.track))
-      ? selectedTrack
-      : partNotes.tracks.find((tr) => !tr.is_drum && isFrettedTrack(tr.track));
-    if (!track) return null;
-    const tuning = tuningFor(track.track);
+    return tr.notes.map(([pitch, sb, db]) => ({ pitch, start: sb * spb, dur: db * spb }));
+  };
+  const tabFrom = (tr: typeof pianoTrack) => {
+    if (!tr || !partNotes || tr.is_drum || !isFrettedTrack(tr.track)) return null;
+    const tuning = tuningFor(tr.track);
     const spb = 60 / (partNotes.tempo || 120);
-    const tabNotes = assignFrets(track.notes, tuning)
-      .map((f) => ({ ...f, start: f.start * spb, dur: f.dur * spb }));
-    return { name: track.track, labels: stringLabelsFor(tuning), tabNotes };
-  }, [partNotes, selectedTrack]);
+    const tabNotes = assignFrets(tr.notes, tuning).map((f) => ({ ...f, start: f.start * spb, dur: f.dur * spb }));
+    return { name: tr.track, labels: stringLabelsFor(tuning), tabNotes };
+  };
 
-  // The piano/guitar light up the actual notes being hit: the selected part if
-  // one is chosen, otherwise every musical (non-drum) part.
-  const diagramNotes: RollNote[] = useMemo(() => {
-    if (!partNotes) return [];
-    const spb = 60 / (partNotes.tempo || 120);
-    // Pitched diagrams: the selected part if it's melodic, else all musical
-    // (non-drum) parts — a selected DRUM part isn't pitched, so fall back.
-    const tracks = selectedTrack && !selectedTrack.is_drum
-      ? [selectedTrack] : partNotes.tracks.filter((t) => !t.is_drum);
-    const out: RollNote[] = [];
-    for (const tr of tracks)
-      for (const [pitch, sb, db] of tr.notes) out.push({ pitch, start: sb * spb, dur: db * spb });
-    return out;
-  }, [partNotes, selectedTrack]);
+  // Piano diagram follows its part (by pitch). Guitar neck follows its part — by
+  // exact fret (tab) when it's a guitar, else by pitch (bass uses a guitar neck).
+  const pianoNotes = useMemo(() => rollFrom(pianoTrack), [pianoTrack, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
+  const guitarNotes = useMemo(() => rollFrom(guitarTrack), [guitarTrack, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
+  const guitarTab = useMemo(
+    () => (guitarTrack && isGuitarTrack(guitarTrack.track) ? tabFrom(guitarTrack) : null),
+    [guitarTrack, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // (The neck-mode diagrams drive their own highlights via rAF + DOM toggling
-  // from `diagramNotes` + audioRef, so no per-note React state is needed here.)
+  // Score section (sheet / tab / notation roll) follows the chart part.
+  const chartRollNotes = useMemo(() => rollFrom(chartTrack), [chartTrack, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
+  const chartTab = useMemo(() => tabFrom(chartTrack), [chartTrack, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // For section looping, play the WAV (sample-accurate seeks — no MP3 decoder
   // priming gap), which keeps loops tight without losing pitch-preserved speed.
   const sectionLooping = loop.startsWith("s");
-  // Real pitch range of what's driving the diagrams, for the wide piano span.
-  const partRange = useMemo(() => {
-    if (!diagramNotes.length) return undefined;
+  // Real pitch range of the piano part, for the wide piano key span.
+  const pianoRange = useMemo(() => {
+    if (!pianoNotes.length) return undefined;
     let lo = 128, hi = 0;
-    for (const n of diagramNotes) { lo = Math.min(lo, n.pitch); hi = Math.max(hi, n.pitch); }
+    for (const n of pianoNotes) { lo = Math.min(lo, n.pitch); hi = Math.max(hi, n.pitch); }
     return [lo, hi] as [number, number];
-  }, [diagramNotes]);
+  }, [pianoNotes]);
 
-  const playSrc = (solo && selectedTrack && blockName)
-    ? api.partAudioUrl(blockName, partIdx)
+  const playSrc = (solo && chartTrack && blockName)
+    ? api.partAudioUrl(blockName, chartIdx)
     : sectionLooping
       ? (blockName ? api.blockFileUrl(blockName, "wav")
          : sourceIsSong ? api.songWavUrl(selected.slice(5)) : audioSrc)
@@ -609,22 +621,6 @@ export default function PracticeScreen() {
             </select>
           </div>
 
-          {!sourceIsSong && partNotes && partNotes.tracks.length > 0 && (
-            <div className="part-row">
-              <span className="speed-label">🎯 Part</span>
-              <select value={partIdx} onChange={(e) => { setPartIdx(Number(e.target.value)); setSolo(false); }}>
-                <option value={-1}>Off — chords only</option>
-                {partNotes.tracks.map((tr, i) => (
-                  <option key={i} value={i}>{tr.track}{tr.is_drum ? " (drums)" : ""}</option>
-                ))}
-              </select>
-              {partIdx >= 0 && (
-                <label className="part-solo">
-                  <input type="checkbox" checked={solo} onChange={(e) => setSolo(e.target.checked)} /> Solo
-                </label>
-              )}
-            </div>
-          )}
 
           {mode === "upload" && (
             <div className="gen-similar">
@@ -664,7 +660,7 @@ export default function PracticeScreen() {
             </div>
           )}
 
-          {panels.diagrams && (diagramNotes.length > 0 || active?.root) && (
+          {panels.diagrams && (pianoNotes.length > 0 || guitarNotes.length > 0 || active?.root) && (
             <div className="diagram-block">
               <div className="seg diagram-mode">
                 <button className={!neckMode ? "on" : ""}
@@ -675,26 +671,28 @@ export default function PracticeScreen() {
               <ChordDiagram
                 root={active?.root || "C"}
                 quality={active?.quality || "maj"}
-                notes={partNotes ? diagramNotes : []}
                 audioRef={playhead}
-                range={partRange}
                 neck={neckMode}
-                // A guitar part is selected → the full-neck diagram lights only
-                // the exact fret being played (the tab), not every position of
-                // the pitch. (Bass excluded: the diagram is a 6-string neck.)
-                tabNotes={
-                  selectedTrack && !selectedTrack.is_drum
-                  && isFrettedTrack(selectedTrack.track) && !isBassTrack(selectedTrack.track)
-                  && tabData ? tabData.tabNotes : undefined
-                }
+                // In Full-neck mode the piano and guitar each follow their own
+                // selected part: piano lights by pitch, the neck lights the exact
+                // fret being played (tab) — or by pitch for a bass part.
+                pianoNotes={pianoNotes}
+                pianoRange={pianoRange}
+                guitarTab={guitarTab ? guitarTab.tabNotes : undefined}
+                guitarNotes={guitarNotes}
+                parts={partOptions}
+                pianoIdx={pianoIdx}
+                guitarIdx={guitarIdx}
+                onPianoIdx={setPianoIdx}
+                onGuitarIdx={setGuitarIdx}
               />
             </div>
           )}
 
-          {panels.roll && partRollNotes.length > 0 && (
+          {panels.roll && chartRollNotes.length > 0 && (
             <div className="roll-card">
-              <div className="diagram-title">{selectedTrack?.track} — notation roll</div>
-              <NotationRoll notes={partRollNotes} audioRef={playhead} />
+              <div className="diagram-title">{chartTrack?.track} — notation roll</div>
+              <NotationRoll notes={chartRollNotes} audioRef={playhead} />
             </div>
           )}
 
@@ -709,6 +707,17 @@ export default function PracticeScreen() {
                 <button className={view === "tab" ? "on" : ""} onClick={() => setView("tab")}>Tab 🎸</button>
               )}
             </div>
+            {/* The score section (Sheet / Tab / notation roll) picks its part. */}
+            {!sourceIsSong && partOptions.length > 0 && (view === "sheet" || view === "tab") && (
+              <label className="chart-part">
+                <select value={chartIdx} onChange={(e) => { setChartIdx(Number(e.target.value)); setSolo(false); }}>
+                  {partOptions.map((p) => <option key={p.idx} value={p.idx}>{p.name}</option>)}
+                </select>
+                <span className="part-solo">
+                  <input type="checkbox" checked={solo} onChange={(e) => setSolo(e.target.checked)} /> Solo
+                </span>
+              </label>
+            )}
             <button className="gear-btn" onClick={() => setShowSettings((s) => !s)} title="Practice settings">⚙</button>
           </div>
           {showSettings && (
@@ -732,21 +741,21 @@ export default function PracticeScreen() {
             {blockName && (
               <div className={"sheet-host" + (view === "sheet" ? "" : " sheet-hidden")}
                 aria-hidden={view !== "sheet"}>
-                <SheetMusic blockName={blockName} audioRef={playhead} trackIndex={partIdx} />
+                <SheetMusic blockName={blockName} audioRef={playhead} trackIndex={chartIdx} />
               </div>
             )}
 
             {view === "tab" ? (
             !blockName
               ? <div className="practice-hint">Tab view is available for blocks (songs show the chart).</div>
-              : tabData && tabData.tabNotes.length
+              : chartTab && chartTab.tabNotes.length
                 ? (
                   <div className="tab-card">
-                    <div className="diagram-title">{tabData.name} — tab</div>
-                    <TabView tabNotes={tabData.tabNotes} stringLabels={tabData.labels} audioRef={playhead} />
+                    <div className="diagram-title">{chartTab.name} — tab</div>
+                    <TabView tabNotes={chartTab.tabNotes} stringLabels={chartTab.labels} audioRef={playhead} />
                   </div>
                 )
-                : <div className="practice-hint">No guitar or bass part in this block to tab. Pick a block with a guitar line.</div>
+                : <div className="practice-hint">This part isn't a guitar or bass — pick a fretted part above to tab it.</div>
           ) : view === "sheet" ? (
             blockName
               ? null /* shown by the pre-warmed sheet-host above */
