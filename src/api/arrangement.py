@@ -38,7 +38,8 @@ def available_sections(genre: str) -> list[dict]:
 
 
 def build_sections(genre: str, roles: list[str],
-                   section_presets: dict[str, str] | None = None) -> list[dict]:
+                   section_presets: dict[str, str] | None = None,
+                   section_overrides: dict[str, dict] | None = None) -> list[dict]:
     """Contiguous ``{start_bar, end_bar, label, role}`` for the chosen roles
     in canonical order. Empty ``roles`` → the genre's full default
     arrangement. Bar-lengths/labels come from the template when present.
@@ -72,7 +73,9 @@ def build_sections(genre: str, roles: list[str],
                 by_role[r] = (bars, s.get("label") or r.capitalize())
         secs = _from_roles(wanted, by_role)
 
-    return _attach_presets(secs, genre, section_presets)
+    _attach_presets(secs, genre, section_presets)
+    _attach_overrides(secs, section_overrides)
+    return secs
 
 
 def _attach_presets(secs: list[dict], genre: str,
@@ -85,6 +88,28 @@ def _attach_presets(secs: list[dict], genre: str,
         pid = (sp.get(s.get("role")) or "").strip()
         if pid and pid != genre:
             s["preset_id"] = pid
+    return secs
+
+
+def _attach_overrides(secs: list[dict],
+                      section_overrides: dict[str, dict] | None) -> list[dict]:
+    """Apply per-role playing-style overrides onto each section: ``knobs``
+    (merged into the section's knobs), ``energy`` (the section's level), and
+    ``feature_lead`` (force the solo/lead into it)."""
+    ov = section_overrides or {}
+    for s in secs:
+        o = ov.get(s.get("role"))
+        if not isinstance(o, dict):
+            continue
+        if isinstance(o.get("knobs"), dict) and o["knobs"]:
+            s["knobs"] = dict(o["knobs"])
+        if o.get("energy") is not None:
+            try:
+                s["energy"] = max(0.4, min(1.5, float(o["energy"])))
+            except (TypeError, ValueError):
+                pass
+        if o.get("feature_lead"):
+            s["feature_lead"] = True
     return secs
 
 

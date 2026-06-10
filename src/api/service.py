@@ -82,7 +82,8 @@ def run_generation(req, progress, job_id: str) -> dict:
     # Always a concrete section list so split-into-blocks uses the exact
     # boundaries compose_song laid the song down with. Per-role preset overrides
     # (multi-preset songs) are attached here as section["preset_id"].
-    secs = build_sections(genre, req.sections, getattr(req, "section_presets", None))
+    secs = build_sections(genre, req.sections, getattr(req, "section_presets", None),
+                          getattr(req, "section_overrides", None))
 
     job_dir = API_OUT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -145,10 +146,14 @@ def run_generation(req, progress, job_id: str) -> dict:
         "swing": float(req.swing) if req.swing is not None else None,
         "instruments": list(req.instruments),
         "section_presets": dict(getattr(req, "section_presets", None) or {}),
+        "section_overrides": dict(getattr(req, "section_overrides", None) or {}),
         "sections": [
             {"start_bar": s["start_bar"], "end_bar": s["end_bar"],
              "label": s["label"], "role": s["role"],
-             **({"preset_id": s["preset_id"]} if s.get("preset_id") else {})}
+             **({"preset_id": s["preset_id"]} if s.get("preset_id") else {}),
+             **({"knobs": s["knobs"]} if s.get("knobs") else {}),
+             **({"energy": s["energy"]} if s.get("energy") is not None else {}),
+             **({"feature_lead": True} if s.get("feature_lead") else {})}
             for s in secs
         ],
         "progression": out.get("progression") or [],

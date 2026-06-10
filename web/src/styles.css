@@ -926,6 +926,12 @@ audio { width: 100%; margin: 8px 0 12px; }
 .section-row > .chip { flex: 0 0 116px; text-align: left; }
 .section-row.off { opacity: 0.6; }
 .section-preset { flex: 1 1 auto; min-width: 0; max-width: 300px; }
+.section-badge {
+  flex: 0 0 auto; font-size: 11px; font-weight: 600; padding: 3px 8px;
+  border-radius: 999px; white-space: nowrap;
+  background: rgba(139,92,246,0.16); border: 1px solid rgba(139,92,246,0.4);
+  color: #c4b5fd;
+}
 
 /* "Describe your song" natural-language box on the Generate tab. */
 .describe-card { border: 1px solid rgba(139, 92, 246, 0.35); }

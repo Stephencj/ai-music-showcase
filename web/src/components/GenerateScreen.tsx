@@ -12,6 +12,16 @@ const SECTION_LABELS: Record<string, string> = {
   intro: "Intro", verse: "Verse", chorus: "Chorus", bridge: "Bridge", outro: "Outro",
 };
 
+// Short playing-style tags for a section's override (shown on the section row).
+function overrideBadges(o: import("../types").SectionOverride | undefined): string[] {
+  if (!o) return [];
+  const tags: string[] = [];
+  if (o.feature_lead) tags.push("🎸 solo");
+  if (o.energy != null) tags.push(o.energy < 0.85 ? "↓ sparse" : "↑ big");
+  if (o.knobs?.drum_fill && o.knobs.drum_fill > 1) tags.push("fills");
+  return tags;
+}
+
 export default function GenerateScreen({
   initialSpec,
   onSpecConsumed,
@@ -33,6 +43,8 @@ export default function GenerateScreen({
   const [swing, setSwing] = useState<number | null>(null);
   const [sections, setSections] = useState<Set<string>>(new Set());
   const [sectionPresets, setSectionPresets] = useState<Record<string, string>>({});  // role → preset id
+  const [sectionOverrides, setSectionOverrides] =
+    useState<Record<string, import("../types").SectionOverride>>({});  // role → playing-style
   const [instruments, setInstruments] = useState<Set<string>>(new Set());
   const [openFams, setOpenFams] = useState<Set<string>>(new Set());
   const [master, setMaster] = useState("default");
@@ -140,6 +152,7 @@ export default function GenerateScreen({
     const sp: Record<string, string> = { ...(spec.section_presets || {}) };
     for (const s of spec.sections || []) if (s.preset_id) sp[s.role] = s.preset_id;
     setSectionPresets(sp);
+    setSectionOverrides({ ...(spec.section_overrides || {}) });
   }
 
   function toggle(set: Set<string>, v: string, setter: (s: Set<string>) => void) {
@@ -159,6 +172,7 @@ export default function GenerateScreen({
     if (pl.tempo) setTempo(pl.tempo);
     if (pl.swing != null) setSwing(pl.swing);
     setSectionPresets(pl.section_presets || {});
+    setSectionOverrides(pl.section_overrides || {});
     if (pl.instruments?.length) {
       setInstruments((prev) => {
         const n = new Set(prev);
@@ -214,6 +228,7 @@ export default function GenerateScreen({
         swing,
         instruments: [...instruments], sections: [...sections],
         section_presets: sectionPresets,
+        section_overrides: sectionOverrides,
         with_pdf: withPdf, with_stems: withStems, master_preset: master,
       };
       const { job_id } = await api.generate(body);
@@ -362,6 +377,10 @@ export default function GenerateScreen({
                       return n;
                     })} />
                 )}
+                {on && overrideBadges(sectionOverrides[s.role]).map((b) => (
+                  <span key={b} className="section-badge"
+                    title="From your description — clear by removing it from the prompt">{b}</span>
+                ))}
               </div>
             );
           })}

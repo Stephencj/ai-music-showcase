@@ -22,11 +22,13 @@ class NlParserTests(unittest.TestCase):
     def test_plan_shape_and_valid_ids(self):
         p = parse_prompt("a funk song")
         for k in ("genre", "key", "scale", "tempo", "swing", "sections",
-                  "section_presets", "instruments", "understood", "notes"):
+                  "section_presets", "section_overrides", "instruments",
+                  "understood", "notes"):
             self.assertIn(k, p)
         self.assertIn(p["genre"], STYLES)
         self.assertEqual(p["sections"], [])
         self.assertIsInstance(p["section_presets"], dict)
+        self.assertIsInstance(p["section_overrides"], dict)
 
     def test_empty_prompt_defaults(self):
         p = parse_prompt("")
@@ -90,10 +92,31 @@ class NlParserTests(unittest.TestCase):
         for iid in p["instruments"]:
             self.assertIn(iid, INSTRUMENT_REGISTRY)
 
-    def test_style_hints_noted_not_applied(self):
+    def test_solo_becomes_section_override(self):
         p = parse_prompt("a rock song with a guitar solo in the bridge")
-        self.assertTrue(p["notes"])  # solo is surfaced as a note
-        self.assertEqual(p["section_presets"], {})  # but not turned into a preset
+        self.assertTrue(p["section_overrides"].get("bridge", {}).get("feature_lead"))
+        self.assertIn("lead_guitar", p["instruments"])
+
+    def test_solo_defaults_to_bridge(self):
+        p = parse_prompt("a funk song with a solo")
+        self.assertIn("bridge", p["section_overrides"])
+        self.assertTrue(p["section_overrides"]["bridge"].get("feature_lead"))
+
+    def test_sparse_and_big_bind_forward(self):
+        # Adjectives modify the section that FOLLOWS them.
+        p = parse_prompt("mellow sparse intro, big anthemic chorus")
+        self.assertLess(p["section_overrides"]["intro"]["energy"], 0.8)
+        self.assertGreater(p["section_overrides"]["chorus"]["energy"], 1.1)
+
+    def test_fills_to_section_knob(self):
+        p = parse_prompt("rock with lots of fills in the chorus")
+        self.assertGreater(
+            p["section_overrides"]["chorus"]["knobs"]["drum_fill"], 1.0)
+
+    def test_unplaceable_hint_is_noted(self):
+        p = parse_prompt("a song that builds")  # "build" has no section lever
+        self.assertTrue(p["notes"])
+        self.assertEqual(p["section_overrides"], {})
 
     def test_understood_always_has_genre(self):
         p = parse_prompt("anything")

@@ -91,6 +91,7 @@ export interface BlockSpec {
   swing?: number | null;
   instruments?: string[];
   section_presets?: Record<string, string>;
+  section_overrides?: Record<string, SectionOverride>;
   sections?: { start_bar: number; end_bar: number; label: string; role: string; preset_id?: string }[];
   section?: { start_bar: number; end_bar: number } | null;
   inferred?: boolean;
@@ -141,9 +142,16 @@ export interface SongPlan {
   swing: number | null;
   sections: string[];
   section_presets: Record<string, string>;
+  section_overrides: Record<string, SectionOverride>;
   instruments: string[];
   understood: string[];
   notes: string[];
+}
+
+export interface SectionOverride {
+  knobs?: Record<string, number>;
+  energy?: number;
+  feature_lead?: boolean;
 }
 
 export interface GenerateBody {
@@ -157,6 +165,7 @@ export interface GenerateBody {
   instruments: string[];
   sections: string[];
   section_presets?: Record<string, string>;   // role → preset id (multi-preset songs)
+  section_overrides?: Record<string, SectionOverride>;  // role → playing-style
   with_pdf: boolean;
   with_stems: boolean;
   master_preset: string;

@@ -28,6 +28,11 @@ class GenerateRequest(BaseModel):
     # mapped section renders in that preset's feel (progression/pacing/
     # techniques/reharm); key/scale/tempo stay global. Unmapped roles use genre.
     section_presets: dict[str, str] = Field(default_factory=dict)
+    # Per-section playing-style overrides: role → {knobs?: {...}, energy?: float,
+    # feature_lead?: bool}. `knobs` merge over the section's knobs (e.g.
+    # drum_fill); `energy` sets that section's level directly (sparse/big);
+    # `feature_lead` forces the lead/solo into that section.
+    section_overrides: dict[str, dict] = Field(default_factory=dict)
     with_stems: bool = False
     with_pdf: bool = True
     master_preset: Optional[str] = "default"

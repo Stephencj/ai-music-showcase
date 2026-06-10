@@ -400,6 +400,9 @@ def compose_song(
     # bridge sometimes, and joins the final chorus — not every section.
     # Plus occasional intro/outro riffs and short between-section fills.
     _lead_sections = _lead_guitar_section_plan(sections, seed, eff_knobs)
+    # Sections explicitly asked to feature the lead (a "guitar solo here")
+    # always get it, on top of the stochastic plan.
+    _lead_sections |= {i for i, s in enumerate(sections) if s.get("feature_lead")}
     _lead_fill_secs = _lead_fill_sections(sections, seed, eff_knobs, _lead_sections)
 
     # Capture the realized (post-reharmonization) chord per segment so the
@@ -433,7 +436,13 @@ def compose_song(
         if sec_genre != genre and sec_genre not in STYLES:
             sec_genre = genre
         sec_preset = STYLES.get(sec_genre, preset)
-        sec_knobs = resolve_knobs(sec_genre, knobs) if sec_genre != genre else eff_knobs
+        # Per-section knob overrides (playing-style directives) merge over the
+        # song knobs for this section only.
+        _sec_knob_ov = section.get("knobs") or None
+        if sec_genre != genre or _sec_knob_ov:
+            sec_knobs = resolve_knobs(sec_genre, {**(knobs or {}), **(_sec_knob_ov or {})})
+        else:
+            sec_knobs = eff_knobs
         sec_tags = (_GENRE_TAG_MAP.get(sec_genre, ()) if sec_genre != genre
                     else preferred_tags)
         # Progression source: explicit per-section override > the section
@@ -593,15 +602,21 @@ def compose_song(
         s, e = int(section["start_bar"]), int(section["end_bar"])
         label = (section.get("label") or "")
         role = section.get("role") or role_for_label(label)
-        energy = _SECTION_ENERGY.get(role, 0.85)
         lo = label.lower()
-        if "solo" in lo:
-            energy = max(energy, 0.96)       # solos ride energetic
-        elif "pre-chorus" in lo or "prechorus" in lo:
-            energy = 0.92                     # lift into the chorus
-        # Scale the deviation-from-full by the dynamics knob: 1.0 = normal
-        # contrast, 0 = flat (everything at chorus level), up to 2 = extreme.
-        energy = 1.0 + (energy - 1.0) * eff_knobs["dynamics"]
+        if section.get("energy") is not None:
+            # Explicit per-section level (a "sparse intro" / "big chorus"
+            # directive) — used directly, not scaled by the contrast knob.
+            energy = float(section["energy"])
+        else:
+            energy = _SECTION_ENERGY.get(role, 0.85)
+            if "solo" in lo or section.get("feature_lead"):
+                energy = max(energy, 0.96)   # solos ride energetic
+            elif "pre-chorus" in lo or "prechorus" in lo:
+                energy = 0.92                 # lift into the chorus
+            # Scale the deviation-from-full by the dynamics knob: 1.0 = normal
+            # contrast, 0 = flat (everything at chorus level), up to 2 = extreme.
+            sec_dyn = (section.get("knobs") or {}).get("dynamics", eff_knobs["dynamics"])
+            energy = 1.0 + (energy - 1.0) * sec_dyn
         if abs(energy - 1.0) > 1e-6:
             drum_f = 1.0 - (1.0 - energy) * 0.5
             midi.scale_region_velocity(s, e + 1, energy, drum_factor=drum_f)

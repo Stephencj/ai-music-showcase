@@ -121,14 +121,27 @@ _INSTRUMENT_LEXICON: list[tuple[str, str]] = [
     (r"\b(harmonies|backing\s+vocals?)\b", "vocal_harmony"),
 ]
 
-# playing-style directives we recognise but can't fully act on yet.
+# playing-style directives → an effect kind. When bound to a section they
+# become per-section overrides; otherwise they're surfaced as notes.
 _STYLE_HINTS: list[tuple[str, str]] = [
-    (r"\bguitar\s+solo\b|\bsolo\b", "a solo"),
-    (r"\b(sparse|stripped|minimal|mellow|quiet|laid[\s-]?back)\b", "a sparse/quiet feel"),
-    (r"\b(big|huge|anthemic|massive|powerful|energetic|hard)\b", "a big/energetic feel"),
-    (r"\b(lots of )?fills?\b", "drum fills"),
-    (r"\b(build|builds|building)\b", "a build"),
+    (r"\bguitar\s+solo\b|\bsolo\b", "solo"),
+    (r"\b(sparse|stripped|minimal|mellow|quiet|laid[\s-]?back)\b", "sparse"),
+    (r"\b(big|huge|anthemic|massive|powerful|energetic)\b", "big"),
+    (r"\b(lots\s+of\s+)?fills?\b", "fills"),
+    (r"\b(buildup|build[\s-]?up|building|builds|build)\b", "build"),
 ]
+_HINT_DESC = {
+    "solo": "a solo", "sparse": "a sparse/quiet feel", "big": "a big/energetic feel",
+    "fills": "drum fills", "build": "a build",
+}
+# kind → per-section override fragment. "build" has no clean per-section lever
+# yet, so it stays note-only (absent here).
+_HINT_EFFECT: dict[str, dict] = {
+    "sparse": {"energy": 0.62},
+    "big": {"energy": 1.25},
+    "fills": {"knobs": {"drum_fill": 1.7}},
+    "solo": {"feature_lead": True, "energy": 0.97},
+}
 
 _WORD_TEMPOS: list[tuple[str, int]] = [
     (r"\bvery\s+fast\b|\bfrantic\b", 160),
@@ -303,16 +316,55 @@ def parse_prompt(text: str) -> dict:
         understood.append("Add: " + ", ".join(
             getattr(regn.get(i), "label", i) for i in instruments))
 
-    # ── playing-style hints (recognised, mostly not yet actionable) ──────────
-    seen_hints: list[str] = []
-    for pat, desc in _STYLE_HINTS:
-        if re.search(pat, low) and desc not in seen_hints:
-            seen_hints.append(desc)
-    if seen_hints:
+    # ── playing-style hints → per-section overrides ──────────────────────────
+    # Bind each hint to the nearest section (same adjacency rule as genres);
+    # an unbound "solo" defaults to the bridge (the classic spot). Bound hints
+    # become section_overrides; anything we can't place becomes a note.
+    section_overrides: dict[str, dict] = {}
+
+    def _merge_override(role: str, eff: dict) -> None:
+        cur = section_overrides.setdefault(role, {})
+        for k, v in eff.items():
+            if k == "knobs":
+                cur.setdefault("knobs", {}).update(v)
+            else:
+                cur[k] = v
+
+    hint_hits = _all_matches(raw, _STYLE_HINTS)
+    unplaced: list[str] = []
+    applied: set[tuple[str, str]] = set()   # (role, kind) already recorded
+    for (hs, he, kind) in hint_hits:
+        # A style word modifies the section it precedes ("big chorus", "solo …
+        # in the bridge"), so prefer the nearest section to the RIGHT; fall
+        # back to the nearest on the left only if none is in range.
+        fwd = bwd = None
+        best_fwd = best_bwd = BIND_WINDOW + 1
+        for (ss, se, r) in section_hits:
+            if ss >= he and ss - he < best_fwd:
+                best_fwd, fwd = ss - he, r
+            elif hs >= se and hs - se < best_bwd:
+                best_bwd, bwd = hs - se, r
+        role = fwd if fwd is not None else bwd
+        if role is None and kind == "solo":
+            role = "bridge"             # default solo location
+        eff = _HINT_EFFECT.get(kind)
+        if role and eff:
+            if (role, kind) in applied:
+                continue
+            applied.add((role, kind))
+            _merge_override(role, eff)
+            if kind == "solo" and "lead_guitar" not in instruments:
+                instruments.append("lead_guitar")
+            understood.append(f"{role.capitalize()} → {_HINT_DESC[kind]}")
+        else:
+            d = _HINT_DESC.get(kind, kind)
+            if d not in unplaced:
+                unplaced.append(d)
+    if unplaced:
         notes.append(
-            "Noticed " + ", ".join(seen_hints)
-            + " — per-section playing styles (solo/dynamics/fills) are coming "
-              "in the next update, so those weren't applied yet.")
+            "Noticed " + ", ".join(unplaced)
+            + " — couldn't tie that to a specific section, so it wasn't applied. "
+              "Try naming the section (e.g. “big chorus”, “sparse intro”).")
 
     return {
         "genre": genre,
@@ -322,6 +374,7 @@ def parse_prompt(text: str) -> dict:
         "swing": swing,
         "sections": [],                 # leave empty → genre's full arrangement
         "section_presets": section_presets,
+        "section_overrides": section_overrides,
         "instruments": instruments,
         "understood": understood,
         "notes": notes,
