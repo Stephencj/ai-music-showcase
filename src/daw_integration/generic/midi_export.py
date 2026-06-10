@@ -2105,6 +2105,7 @@ class MidiExporter:
         voicing_variety: float = 0.0,
         voicing_family: str = "diatonic_color",
         seed: Optional[int] = None,
+        max_voices: Optional[int] = None,
     ) -> "MidiExporter":
         """Add a chord progression using Roman numerals.
 
@@ -2190,6 +2191,11 @@ class MidiExporter:
                 scale_degree_seventh=scale_seventh,
                 scale_degree_ninth=scale_ninth,
             )
+            # Cap polyphony for monophonic/small-ensemble instruments (a wind
+            # section is a trio, not a 5-note keyboard voicing). Keep the lowest
+            # voices (root + 3rd + 5th for a trio) — a clean, realistic chord.
+            if max_voices is not None and len(pitches) > max_voices:
+                pitches = sorted(pitches)[:max_voices]
             seg_start_time = base_t + event.start_bar * self.bar_duration
             seg_end_time = base_t + event.end_bar * self.bar_duration
             seg_duration_beats = event.duration_bars * bpb

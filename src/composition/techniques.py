@@ -243,9 +243,14 @@ class _RoutedMidi:
             program, track_name = inst.program, inst.track_name
             default_octave = getattr(inst, "default_octave", None)
             voicing_role = getattr(self._ctx, "voicing_role", None)
+            max_voices = getattr(inst, "max_voices", None)
+            is_chords = name == "add_chord_progression"
             def routed(*args, **kwargs):
                 kwargs["program"] = program
                 kwargs["track_name"] = track_name
+                # Cap chord polyphony for monophonic / small-ensemble winds.
+                if is_chords and max_voices is not None:
+                    kwargs.setdefault("max_voices", max_voices)
                 # setdefault — techniques that pin an octave explicitly
                 # (e.g. a brass-shout lead at octave 5) win; everything
                 # else gets the instrument's registered default register.

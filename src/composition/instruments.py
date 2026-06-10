@@ -90,6 +90,11 @@ class Instrument:
     # a canonical role regardless of the stack (``synth_pad`` is
     # always a pad, ``woodwind_section`` always caps the top).
     voicing_role: Optional[str] = None
+    # Cap on simultaneous chord voices for this instrument. A wind/brass
+    # section is realistically a small ensemble (a trio), and a single wind is
+    # monophonic — so they should never voice a dense 4-/5-note chord. ``None``
+    # = no cap (keyboards, guitars, string sections play full voicings).
+    max_voices: Optional[int] = None
 
     @property
     def track_name(self) -> str:
@@ -148,7 +153,7 @@ _add(Instrument("synth_lead",            "Synth Lead",           "chord_lead", "
 _add(Instrument("brass_section", "Brass Section", "brass", "chords", 61,
                 is_section=True,
                 members=("trumpet", "trombone", "sax_alto", "sax_tenor"),
-                default_octave=4, voicing_role="pad"))
+                default_octave=4, voicing_role="pad", max_voices=3))
 _add(Instrument("trumpet",       "Trumpet",       "brass", "melody", 56, default_octave=5))
 _add(Instrument("trombone",      "Trombone",      "brass", "melody", 57, default_octave=4))
 _add(Instrument("sax_alto",      "Alto Sax",      "brass", "melody", 65, default_octave=5))
@@ -160,7 +165,7 @@ _add(Instrument("sax_baritone",  "Baritone Sax",  "brass", "melody", 67, default
 _add(Instrument("woodwind_section", "Woodwind Section", "woodwind", "chords", 71,
                 is_section=True,
                 members=("flute", "clarinet", "oboe", "bassoon"),
-                default_octave=5, voicing_role="top"))
+                default_octave=5, voicing_role="top", max_voices=3))
 _add(Instrument("flute",    "Flute",    "woodwind", "melody", 73, default_octave=5))
 _add(Instrument("clarinet", "Clarinet", "woodwind", "melody", 71, default_octave=5))
 _add(Instrument("oboe",     "Oboe",     "woodwind", "melody", 68, default_octave=5))
