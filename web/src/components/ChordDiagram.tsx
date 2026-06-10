@@ -105,8 +105,8 @@ function ChordShapeGuitar({ root, quality }: { root: string; quality: string }) 
 
 // ===== NECK MODE (full neck + wide piano, DOM-toggled highlights) ==========
 const STRING_MIDI = [64, 59, 55, 50, 45, 40]; // high-E..low-E (top..bottom)
-const FRETS = 15;
-const INLAYS = new Set([3, 5, 7, 9, 12, 15]);
+const FRETS = 19;                              // cover the tab's full range (assignFrets maxFret)
+const INLAYS = new Set([3, 5, 7, 9, 12, 15, 17, 19]);
 function octaveFloor(p: number) { return Math.floor(p / 12) * 12; }
 
 function NeckDiagrams({

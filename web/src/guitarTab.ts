@@ -39,32 +39,52 @@ export interface TabNote {
 }
 
 /**
- * Greedily place each note on a string/fret. A note can usually be played in
- * several spots; we pick the one that keeps the fretting hand near where it
- * just was (so the line stays in one position) while gently preferring lower
- * frets. Notes outside the instrument's range are dropped.
+ * Place notes on string/fret positions for tab.
+ *
+ * Notes that start together form a chord, and a string can only sound one note
+ * at a time — so within each onset group we assign DISTINCT strings, giving the
+ * highest note first pick (it "wins" its preferred string; lower tones move to
+ * the next-best free string). Otherwise a note can usually be played in several
+ * spots, so we pick the one that keeps the fretting hand near where it just was
+ * (the line stays in position) while gently preferring lower frets. The melody
+ * (top note of each group) anchors the hand for the next group. Notes that
+ * can't be voiced on a free string in range are dropped.
  */
 export function assignFrets(
   notes: [number, number, number][], // [pitch, start, dur]
   tuning: number[],
   maxFret = 19,
 ): TabNote[] {
+  const EPS = 1e-3; // notes within this many beats count as one strum/chord
   const sorted = [...notes].sort((a, b) => a[1] - b[1]);
-  let prevFret = 2; // anchor low on the neck at the start
   const out: TabNote[] = [];
-  for (const [pitch, start, dur] of sorted) {
-    let best: { string: number; fret: number } | null = null;
-    let bestCost = Infinity;
-    for (let s = 0; s < tuning.length; s++) {
-      const fret = pitch - tuning[s];
-      if (fret < 0 || fret > maxFret) continue;
-      // Stay near the previous hand position; mildly favour lower frets.
-      const cost = Math.abs(fret - prevFret) + fret * 0.1;
-      if (cost < bestCost) { bestCost = cost; best = { string: s, fret }; }
+  let prevFret = 2; // anchor low on the neck at the start
+  let i = 0;
+  while (i < sorted.length) {
+    // Gather the onset group, then voice it highest-pitch first.
+    let j = i;
+    const start0 = sorted[i][1];
+    while (j < sorted.length && Math.abs(sorted[j][1] - start0) <= EPS) j++;
+    const group = sorted.slice(i, j).sort((a, b) => b[0] - a[0]);
+    const used = new Set<number>();
+    let topFret: number | null = null;
+    for (const [pitch, start, dur] of group) {
+      let best: { string: number; fret: number } | null = null;
+      let bestCost = Infinity;
+      for (let s = 0; s < tuning.length; s++) {
+        if (used.has(s)) continue;                 // string already taken this chord
+        const fret = pitch - tuning[s];
+        if (fret < 0 || fret > maxFret) continue;
+        const cost = Math.abs(fret - prevFret) + fret * 0.1;
+        if (cost < bestCost) { bestCost = cost; best = { string: s, fret }; }
+      }
+      if (!best) continue; // no free in-range string — can't voice this tone
+      used.add(best.string);
+      if (topFret === null) topFret = best.fret;   // highest note placed first
+      out.push({ string: best.string, fret: best.fret, start, dur, pitch });
     }
-    if (!best) continue; // unreachable on this neck — skip rather than fake it
-    prevFret = best.fret;
-    out.push({ string: best.string, fret: best.fret, start, dur, pitch });
+    if (topFret !== null) prevFret = topFret;       // hand follows the top line
+    i = j;
   }
   return out;
 }
