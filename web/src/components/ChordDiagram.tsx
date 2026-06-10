@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { RollNote } from "./NotationRoll";
 import type { TabNote } from "../guitarTab";
+import { stringLabelsFor, STANDARD_GUITAR } from "../guitarTab";
 
 // Two modes:
 //  • "chord" (practice): guitar chord SHAPE/fingering + chord tones on a
@@ -135,9 +136,7 @@ function ChordShapeGuitar({ root, quality, capo = 0 }: { root: string; quality: 
   );
 }
 
-// ===== NECK MODE (full neck + wide piano, DOM-toggled highlights) ==========
-const STRING_MIDI = [64, 59, 55, 50, 45, 40]; // high-E..low-E (top..bottom)
-const FRETS = 19;                              // cover the tab's full range (assignFrets maxFret)
+// ===== LIVE MODE (fingerboard + wide piano, DOM-toggled highlights) =========
 const INLAYS = new Set([3, 5, 7, 9, 12, 15, 17, 19]);
 function octaveFloor(p: number) { return Math.floor(p / 12) * 12; }
 
@@ -157,12 +156,15 @@ function PartSelect({ value, opts, onChange }: {
 
 export interface PartOption { idx: number; name: string }
 
-// One live diagram card — a piano OR a guitar neck — bound to a single part.
-// Runs its own rAF highlight driver: the piano lights by pitch; the neck lights
-// the exact fret played (tab) for a guitar, or by pitch for a bass. Multiple of
+// One live diagram card — a piano, or a string-instrument fingerboard. The
+// piano lights by pitch; the neck lights the EXACT fret played (tab), the same
+// positions the Tab view shows, on a fingerboard drawn from the instrument's
+// own tuning (guitar 6/7, bass 4/5, violin, cello, mandolin, …). Multiple of
 // these can be shown at once (one per channel/instrument).
 export function LiveDiagram({
   kind, notes, tab, range, audioRef, parts, partIdx, onPartIdx, onRemove,
+  tuning = STANDARD_GUITAR, frets = 19, instLabel = "Guitar",
+  instOptions, instId, onInst,
 }: {
   kind: "piano" | "neck";
   notes: RollNote[];
@@ -173,6 +175,13 @@ export function LiveDiagram({
   partIdx: number;
   onPartIdx: (i: number) => void;
   onRemove?: () => void;
+  // neck only:
+  tuning?: number[];
+  frets?: number;
+  instLabel?: string;
+  instOptions?: { id: string; label: string }[];
+  instId?: string;
+  onInst?: (id: string) => void;
 }) {
   const [lo, hi] = useMemo(() => {
     let a = range ? range[0] : 48, b = range ? range[1] : 83;
@@ -187,10 +196,8 @@ export function LiveDiagram({
     if (!el) return;
     const a = byPitch.current.get(p) || []; a.push(el); byPitch.current.set(p, a);
   };
-  const putPos = (p: number, s: number, f: number, el: Element | null) => {
-    if (!el) return;
-    const a = byPitch.current.get(p) || []; a.push(el); byPitch.current.set(p, a);
-    byPos.current.set(`${s}:${f}`, el);
+  const putPos = (s: number, f: number, el: Element | null) => {
+    if (el) byPos.current.set(`${s}:${f}`, el);
   };
 
   // ---- build the SVG for this kind ----
@@ -216,42 +223,47 @@ export function LiveDiagram({
     }
     svg = <svg className="diagram-piano-wide" viewBox={`0 0 ${pianoW} ${wh}`} preserveAspectRatio="xMidYMid meet" aria-label="piano">{els}</svg>;
   } else {
-    const nl = 22, nt = 12, fw = 26, sg = 14;
-    const neckW = nl + FRETS * fw + 10, neckH = nt + 5 * sg + 18;
+    const nl = 30, nt = 12, fw = 26, sg = 14;
+    const nStr = tuning.length;
+    const labels = stringLabelsFor(tuning);
+    const lastY = nt + (nStr - 1) * sg;
+    const neckW = nl + frets * fw + 10, neckH = lastY + 18;
     const yOf = (s: number) => nt + s * sg;
     const els: React.ReactNode[] = [];
-    INLAYS.forEach((f) => els.push(<circle key={`in${f}`} cx={nl + (f - 0.5) * fw} cy={nt + 2.5 * sg} r={2.5} fill="#cbd5e1" />));
-    for (let f = 0; f <= FRETS; f++) {
+    INLAYS.forEach((f) => { if (f <= frets) els.push(<circle key={`in${f}`} cx={nl + (f - 0.5) * fw} cy={nt + ((nStr - 1) / 2) * sg} r={2.5} fill="#cbd5e1" />); });
+    for (let f = 0; f <= frets; f++) {
       const x = nl + f * fw;
-      els.push(<line key={`f${f}`} x1={x} y1={nt} x2={x} y2={nt + 5 * sg} stroke={f === 0 ? "#1e293b" : "#94a3b8"} strokeWidth={f === 0 ? 3 : 0.8} />);
+      els.push(<line key={`f${f}`} x1={x} y1={nt} x2={x} y2={lastY} stroke={f === 0 ? "#1e293b" : "#94a3b8"} strokeWidth={f === 0 ? 3 : 0.8} />);
       if (f > 0) els.push(<text key={`fn${f}`} x={nl + (f - 0.5) * fw} y={neckH - 4} fontSize={8} fill="#64748b" textAnchor="middle">{f}</text>);
     }
-    for (let s = 0; s < 6; s++) {
-      els.push(<line key={`s${s}`} x1={nl} y1={yOf(s)} x2={nl + FRETS * fw} y2={yOf(s)} stroke="#cbd5e1" strokeWidth={0.9} />);
-      for (let f = 0; f <= FRETS; f++) {
-        const p = STRING_MIDI[s] + f;
+    for (let s = 0; s < nStr; s++) {
+      els.push(<text key={`sl${s}`} x={6} y={yOf(s) + 3} fontSize={8} fill="#94a3b8"
+        fontFamily="ui-monospace, Menlo, monospace">{labels[s]}</text>);
+      els.push(<line key={`s${s}`} x1={nl} y1={yOf(s)} x2={nl + frets * fw} y2={yOf(s)} stroke="#cbd5e1" strokeWidth={0.9} />);
+      for (let f = 0; f <= frets; f++) {
         const cx = f === 0 ? nl - 9 : nl + (f - 0.5) * fw;
-        els.push(<circle key={`d${s}-${f}`} ref={(el) => putPos(p, s, f, el)} className="nd" cx={cx} cy={yOf(s)} r={f === 0 ? 5 : 6} />);
+        els.push(<circle key={`d${s}-${f}`} ref={(el) => putPos(s, f, el)} className="nd" cx={cx} cy={yOf(s)} r={f === 0 ? 5 : 6} />);
       }
     }
-    svg = <svg className="diagram-guitar-neck" viewBox={`0 0 ${neckW} ${neckH}`} preserveAspectRatio="xMidYMid meet" aria-label="guitar neck">{els}</svg>;
+    svg = <svg className="diagram-guitar-neck" viewBox={`0 0 ${neckW} ${neckH}`} preserveAspectRatio="xMidYMid meet" aria-label="fingerboard">{els}</svg>;
   }
 
-  // ---- highlight driver (its own rAF; piano by pitch, neck by tab position) ----
-  const hasTab = kind === "neck" && !!(tab && tab.length);
+  // ---- highlight driver: piano by pitch, neck by exact tab position ----
+  const isNeck = kind === "neck";
   useEffect(() => {
     const pitchMap = byPitch.current, posMap = byPos.current;
     const litPitch = (p: number, on: boolean) => pitchMap.get(p)?.forEach((el) => el.classList.toggle("lit", on));
     const litPos = (k: string, on: boolean) => posMap.get(k)?.classList.toggle("lit", on);
     pitchMap.forEach((a) => a.forEach((el) => el.classList.remove("lit")));
+    posMap.forEach((el) => el.classList.remove("lit"));
 
     const onPitch = new Set<number>(), onPosSet = new Set<string>();
     let raf = 0;
     const tick = () => {
       const t = audioRef?.current?.currentTime ?? 0;
-      if (hasTab) {
+      if (isNeck) {
         const snd = new Set<string>();
-        for (const n of tab!) if (t >= n.start && t < n.start + n.dur) snd.add(`${n.string}:${n.fret}`);
+        for (const n of tab ?? []) if (t >= n.start && t < n.start + n.dur) snd.add(`${n.string}:${n.fret}`);
         for (const k of onPosSet) if (!snd.has(k)) { litPos(k, false); onPosSet.delete(k); }
         for (const k of snd) if (!onPosSet.has(k)) { litPos(k, true); onPosSet.add(k); }
       } else {
@@ -264,18 +276,24 @@ export function LiveDiagram({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [notes, tab, hasTab, audioRef, lo, hi]);
+  }, [notes, tab, isNeck, audioRef, lo, hi]);
 
   // Reset the ref maps each render so stale element refs don't accumulate.
   byPitch.current = new Map();
   byPos.current = new Map();
 
-  const live = hasTab ? tab!.length > 0 : notes.length > 0;
+  const live = isNeck ? !!(tab && tab.length) : notes.length > 0;
   return (
     <div className="diagram-card">
       <div className="diagram-title">
-        <span>{kind === "piano" ? "Piano" : "Guitar"}{live ? " · live" : ""}</span>
+        <span>{isNeck ? instLabel : "Piano"}{live ? " · live" : ""}</span>
         <span className="dc-head-ctl">
+          {isNeck && instOptions && onInst && (
+            <select className="neck-part" value={instId} onChange={(e) => onInst(e.target.value)}
+              onClick={(e) => e.stopPropagation()} title="Instrument / tuning">
+              {instOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+          )}
           <PartSelect value={partIdx} opts={parts} onChange={onPartIdx} />
           {onRemove && <button className="dc-remove" onClick={onRemove} title="Remove this diagram" aria-label="Remove">✕</button>}
         </span>

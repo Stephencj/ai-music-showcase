@@ -9,9 +9,51 @@ export const STANDARD_BASS = [43, 38, 33, 28];           // G D A E
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
-/** A track whose part reads naturally as tab (guitar or bass, not a bassoon). */
+// String-instrument fingerboard registry. `tuning` is the open-string MIDI from
+// the TOP tab line (highest) to the bottom (lowest); `frets` is how many to draw
+// (and the assignment ceiling). Fretless bowed instruments are shown as a
+// position chart. Add an entry here to support another instrument.
+export interface StringInstrument { id: string; label: string; tuning: number[]; frets: number; fretted: boolean }
+export const STRING_INSTRUMENTS: StringInstrument[] = [
+  { id: "guitar6", label: "Guitar (6)", tuning: [64, 59, 55, 50, 45, 40], frets: 19, fretted: true },
+  { id: "guitar7", label: "Guitar (7)", tuning: [64, 59, 55, 50, 45, 40, 35], frets: 19, fretted: true },
+  { id: "bass4", label: "Bass (4)", tuning: [43, 38, 33, 28], frets: 19, fretted: true },
+  { id: "bass5", label: "Bass (5)", tuning: [43, 38, 33, 28, 23], frets: 19, fretted: true },
+  { id: "violin", label: "Violin", tuning: [76, 69, 62, 55], frets: 16, fretted: false },
+  { id: "viola", label: "Viola", tuning: [69, 62, 55, 48], frets: 16, fretted: false },
+  { id: "cello", label: "Cello", tuning: [57, 50, 43, 36], frets: 16, fretted: false },
+  { id: "doublebass", label: "Upright Bass", tuning: [43, 38, 33, 28], frets: 16, fretted: false },
+  { id: "mandolin", label: "Mandolin", tuning: [76, 69, 62, 55], frets: 17, fretted: true },
+  { id: "ukulele", label: "Ukulele", tuning: [69, 64, 60, 67], frets: 14, fretted: true },
+  { id: "banjo", label: "Banjo (5)", tuning: [62, 59, 55, 50, 67], frets: 19, fretted: true },
+];
+const BY_ID = new Map(STRING_INSTRUMENTS.map((s) => [s.id, s]));
+export function instrumentById(id: string): StringInstrument {
+  return BY_ID.get(id) ?? STRING_INSTRUMENTS[0];
+}
+
+/** Best fingerboard for a track name (defaults to a 6-string guitar). */
+export function detectInstrumentId(name: string): string {
+  const n = name.toLowerCase();
+  if (/banjo/.test(n)) return "banjo";
+  if (/mandolin/.test(n)) return "mandolin";
+  if (/ukulele|\buke\b/.test(n)) return "ukulele";
+  if (/viola/.test(n)) return "viola";
+  if (/cello|violoncello/.test(n)) return "cello";
+  if (/violin|fiddle/.test(n)) return "violin";
+  if (/(upright|double|contra)\s*bass/.test(n)) return "doublebass";
+  if (/\bbass\b/.test(n) && !/bassoon/.test(n)) return /\b5|five|5[- ]?string/.test(n) ? "bass5" : "bass4";
+  if (/guitar/.test(n)) return /\b7|seven|7[- ]?string/.test(n) ? "guitar7" : "guitar6";
+  return "guitar6";
+}
+export function instrumentFor(name: string): StringInstrument {
+  return instrumentById(detectInstrumentId(name));
+}
+
+/** A track whose part reads naturally as tab/fingerboard. */
 export function isFrettedTrack(name: string): boolean {
-  return /guitar|\bbass\b/i.test(name) && !/bassoon/i.test(name);
+  return /guitar|\bbass\b|violin|viola|cello|fiddle|mandolin|ukulele|\buke\b|banjo/i.test(name)
+    && !/bassoon/i.test(name);
 }
 
 export function isBassTrack(name: string): boolean {
@@ -29,7 +71,7 @@ export function isKeysTrack(name: string): boolean {
 }
 
 export function tuningFor(name: string): number[] {
-  return isBassTrack(name) ? STANDARD_BASS : STANDARD_GUITAR;
+  return instrumentFor(name).tuning;
 }
 
 /** String labels top→bottom (the top/highest string lowercased, classic style). */

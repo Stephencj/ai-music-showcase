@@ -7,7 +7,9 @@ import TapeView from "./TapeView";
 import NotationRoll, { type RollNote } from "./NotationRoll";
 import SheetMusic from "./SheetMusic";
 import TabView from "./TabView";
-import { isFrettedTrack, isGuitarTrack, isKeysTrack, tuningFor, stringLabelsFor, assignFrets } from "../guitarTab";
+import { isFrettedTrack, isGuitarTrack, isKeysTrack, stringLabelsFor, assignFrets,
+  detectInstrumentId, instrumentById, instrumentFor, STRING_INSTRUMENTS } from "../guitarTab";
+import type { TabNote } from "../guitarTab";
 import * as webmidi from "../webmidi";
 import type { MidiOut } from "../webmidi";
 import { LoopPlayer } from "../loopPlayer";
@@ -46,7 +48,7 @@ export default function PracticeScreen() {
   const [partNotes, setPartNotes] = useState<BlockNotes | null>(null);
   // Live diagrams: a dynamic list of piano / guitar-neck cards, each bound to a
   // part (channel). Defaults to one piano + one guitar; add/remove as needed.
-  const [liveSlots, setLiveSlots] = useState<{ id: number; kind: "piano" | "neck"; partIdx: number }[]>([]);
+  const [liveSlots, setLiveSlots] = useState<{ id: number; kind: "piano" | "neck"; partIdx: number; instId?: string }[]>([]);
   const slotId = useRef(1);
   const [chartIdx, setChartIdx] = useState(-1);  // score section part (-1 = chords only)
   const [solo, setSolo] = useState(false);       // play just the chart part
@@ -325,12 +327,14 @@ export default function PracticeScreen() {
     const spb = 60 / (partNotes.tempo || 120);
     return tr.notes.map(([pitch, sb, db]) => ({ pitch, start: sb * spb, dur: db * spb }));
   };
+  // Tab for the score-section (Tab view) — instrument-aware, gated to fretted
+  // parts (the chart shows a hint otherwise).
   const tabFrom = (tr: typeof chartTrack) => {
     if (!tr || !partNotes || tr.is_drum || !isFrettedTrack(tr.track)) return null;
-    const tuning = tuningFor(tr.track);
+    const inst = instrumentFor(tr.track);
     const spb = 60 / (partNotes.tempo || 120);
-    const tabNotes = assignFrets(tr.notes, tuning).map((f) => ({ ...f, start: f.start * spb, dur: f.dur * spb }));
-    return { name: tr.track, labels: stringLabelsFor(tuning), tabNotes };
+    const tabNotes = assignFrets(tr.notes, inst.tuning, inst.frets).map((f) => ({ ...f, start: f.start * spb, dur: f.dur * spb }));
+    return { name: inst.label, labels: stringLabelsFor(inst.tuning), tabNotes };
   };
   const rangeOf = (ns: RollNote[]): [number, number] | undefined => {
     if (!ns.length) return undefined;
@@ -339,14 +343,28 @@ export default function PracticeScreen() {
     return [lo, hi];
   };
 
-  // Per-slot data for the live diagrams: each slot's part → notes, plus a tab
-  // (exact frets) for a guitar neck on a guitar part, and a key range for piano.
+  // Per-slot data for the live diagrams. Piano → notes + key range. Neck → the
+  // exact tab positions (same as the Tab view) on the instrument's own
+  // fingerboard: tuning auto-detected from the part name, overridable per card.
   const slotData = useMemo(() => liveSlots.map((s) => {
     const tr = partNotes && s.partIdx >= 0 ? partNotes.tracks[s.partIdx] : undefined;
     const notes = rollFrom(tr);
-    const tab = (s.kind === "neck" && tr && isGuitarTrack(tr.track)) ? tabFrom(tr)?.tabNotes : undefined;
     const range = s.kind === "piano" ? rangeOf(notes) : undefined;
-    return { slot: s, notes, tab, range };
+    let tab: TabNote[] | undefined;
+    let tuning: number[] | undefined;
+    let frets: number | undefined;
+    let instLabel: string | undefined;
+    let instId: string | undefined;
+    if (s.kind === "neck") {
+      instId = s.instId || (tr ? detectInstrumentId(tr.track) : "guitar6");
+      const inst = instrumentById(instId);
+      tuning = inst.tuning; frets = inst.frets; instLabel = inst.label;
+      const spb = partNotes ? 60 / (partNotes.tempo || 120) : 0.5;
+      tab = (tr && partNotes && !tr.is_drum)
+        ? assignFrets(tr.notes, inst.tuning, inst.frets).map((f) => ({ ...f, start: f.start * spb, dur: f.dur * spb }))
+        : [];
+    }
+    return { slot: s, notes, range, tab, tuning, frets, instLabel, instId };
   }), [liveSlots, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Score section (sheet / tab / notation roll) follows the chart part.
@@ -804,12 +822,17 @@ export default function PracticeScreen() {
                 // own part (channel). Add more of either; remove down to one.
                 <>
                   <div className="diagrams diagrams-wide">
-                    {slotData.map(({ slot, notes, tab, range }) => (
-                      <LiveDiagram key={slot.id} kind={slot.kind} notes={notes} tab={tab} range={range}
-                        audioRef={playhead} parts={partOptions} partIdx={slot.partIdx}
-                        onPartIdx={(i) => setLiveSlots((s) => s.map((x) => x.id === slot.id ? { ...x, partIdx: i } : x))}
+                    {slotData.map((d) => (
+                      <LiveDiagram key={d.slot.id} kind={d.slot.kind} notes={d.notes}
+                        tab={d.tab} range={d.range}
+                        tuning={d.tuning} frets={d.frets} instLabel={d.instLabel}
+                        instOptions={d.slot.kind === "neck" ? STRING_INSTRUMENTS : undefined}
+                        instId={d.instId}
+                        onInst={(id) => setLiveSlots((s) => s.map((x) => x.id === d.slot.id ? { ...x, instId: id } : x))}
+                        audioRef={playhead} parts={partOptions} partIdx={d.slot.partIdx}
+                        onPartIdx={(i) => setLiveSlots((s) => s.map((x) => x.id === d.slot.id ? { ...x, partIdx: i, instId: undefined } : x))}
                         onRemove={liveSlots.length > 1
-                          ? () => setLiveSlots((s) => s.filter((x) => x.id !== slot.id)) : undefined} />
+                          ? () => setLiveSlots((s) => s.filter((x) => x.id !== d.slot.id)) : undefined} />
                     ))}
                   </div>
                   <div className="diagram-add">
