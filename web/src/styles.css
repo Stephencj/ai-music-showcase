@@ -691,3 +691,24 @@ audio { width: 100%; margin: 8px 0 12px; }
   .kk-line.active { font-size: 23px; }
   .kk-controls .btn, .kk-controls .chip { flex: 1 1 auto; }
 }
+
+/* ── Guitar tab lane (Practice → Tab) ────────────────────────────── */
+.tab-card { margin-top: 10px; }
+.tab-lane-wrap {
+  width: 100%; overflow: hidden;
+  background: linear-gradient(180deg, #10182b 0%, #0b1120 100%);
+  border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;
+  padding: 6px 4px;
+}
+.tab-lane { display: block; width: 100%; }
+.tab-string { stroke: rgba(255,255,255,0.16); stroke-width: 1; }
+.tab-strlabel { fill: rgba(238,242,251,0.55); font-size: 12px; font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.tab-now { stroke: rgba(255,255,255,0.4); stroke-width: 2; stroke-dasharray: 4 5; }
+.tab-note-bg { fill: #1d2c4d; stroke: rgba(120,170,255,0.5); stroke-width: 1; transition: fill 0.08s, stroke 0.08s; }
+.tab-fret { fill: #cfe0ff; font-size: 12px; font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; transition: fill 0.08s; }
+.tab-note.past .tab-note-bg { fill: rgba(40,54,84,0.6); stroke: rgba(120,170,255,0.18); }
+.tab-note.past .tab-fret { fill: rgba(207,224,255,0.4); }
+.tab-note.on .tab-note-bg { fill: #59e7c2; stroke: #59e7c2; }
+.tab-note.on .tab-fret { fill: #04241c; }

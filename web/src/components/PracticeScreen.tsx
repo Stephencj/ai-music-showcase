@@ -6,11 +6,14 @@ import ChordDiagram from "./ChordDiagram";
 import TapeView from "./TapeView";
 import NotationRoll, { type RollNote } from "./NotationRoll";
 import SheetMusic from "./SheetMusic";
+import TabView from "./TabView";
+import { isFrettedTrack, tuningFor, stringLabelsFor, assignFrets } from "../guitarTab";
+import { LoopPlayer } from "../loopPlayer";
 import type { BlockNotes } from "../api";
 import { MODES, ALL_ROOTS, scaleToModeId, rootPc, romanFor, nashvilleFor } from "../chordLabels";
 
 type Notation = "chord" | "nashville" | "roman";
-type ChartView = "grid" | "tape" | "sheet";
+type ChartView = "grid" | "tape" | "sheet" | "tab";
 type Mode = "block" | "upload" | "scan";
 
 const NOTATION_LABEL: Record<Notation, string> = {
@@ -60,6 +63,11 @@ export default function PracticeScreen() {
   const [keyMode, setKeyMode] = useState("major");
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Seamless/pitch-preserved section-loop engine (Web Audio + SoundTouch).
+  // Only engaged for the section-loop case; ordinary playback stays native.
+  const engineRef = useRef<LoopPlayer | null>(null);
+  const [engPlaying, setEngPlaying] = useState(false);
+  const [engErr, setEngErr] = useState("");
 
   // "Generate similar" (upload mode)
   const [simGenre, setSimGenre] = useState<string>("");
@@ -265,6 +273,21 @@ export default function PracticeScreen() {
     return selectedTrack.notes.map(([pitch, sb, db]) => ({ pitch, start: sb * spb, dur: db * spb }));
   }, [selectedTrack, partNotes]);
 
+  // Tab lane: show the selected part if it's a guitar/bass, otherwise the first
+  // fretted part in the block. Frets are computed from the MIDI pitches.
+  const tabData = useMemo(() => {
+    if (!partNotes) return null;
+    const track = (selectedTrack && !selectedTrack.is_drum && isFrettedTrack(selectedTrack.track))
+      ? selectedTrack
+      : partNotes.tracks.find((tr) => !tr.is_drum && isFrettedTrack(tr.track));
+    if (!track) return null;
+    const tuning = tuningFor(track.track);
+    const spb = 60 / (partNotes.tempo || 120);
+    const tabNotes = assignFrets(track.notes, tuning)
+      .map((f) => ({ ...f, start: f.start * spb, dur: f.dur * spb }));
+    return { name: track.track, labels: stringLabelsFor(tuning), tabNotes };
+  }, [partNotes, selectedTrack]);
+
   // The piano/guitar light up the actual notes being hit: the selected part if
   // one is chosen, otherwise every musical (non-drum) part.
   const diagramNotes: RollNote[] = useMemo(() => {
@@ -301,29 +324,114 @@ export default function PracticeScreen() {
          : sourceIsSong ? api.songWavUrl(selected.slice(5)) : audioSrc)
       : audioSrc;
 
-  // Section looping driven by rAF (60fps) instead of timeupdate (~4Hz), and
-  // seeking back a hair BEFORE the section end so the element never fires
-  // 'ended' (which would stop playback on the last section) and there's no
-  // quarter-second overshoot — tight, snappy loops.
+  // Section looping runs on the SoundTouch engine (seamless, in-memory loop;
+  // pitch locked while speed time-stretches) rather than the native element —
+  // a decoder reseek on <audio> always leaves a gap at the seam.
+  const sectionLoopingRef = useRef(sectionLooping);
+  sectionLoopingRef.current = sectionLooping;
+
+  // A unified playhead all the visual consumers (chart, roll, diagrams, sheet)
+  // read via `.current.currentTime` / `.current.paused`. It transparently
+  // reflects the engine while a section loop is active and the native element
+  // otherwise, so none of the children need to know which is driving.
+  const playhead = useMemo(() => ({
+    get current() {
+      const e = engineRef.current;
+      if (sectionLoopingRef.current && e) {
+        return { currentTime: e.getTime(), paused: !e.playing } as unknown as HTMLAudioElement;
+      }
+      return audioRef.current;
+    },
+  }), []) as unknown as React.RefObject<HTMLAudioElement | null>;
+
+  // Engage / tear down the loop engine when entering / leaving a section loop,
+  // or when the loop section or audio source changes. Native audio is paused
+  // while the engine drives; on exit we hand the position back to it.
   useEffect(() => {
-    if (!loop.startsWith("s") || !score) return;
+    if (!sectionLooping || !score) return;
     const sec = score.sections[Number(loop.slice(1))];
     if (!sec) return;
+    const a = audioRef.current;
+    const startAt = a ? a.currentTime : sec.start_time;
+    if (a) a.pause();
+    const eng = engineRef.current || (engineRef.current = new LoopPlayer());
+    let cancelled = false;
+    // Resume here at the position within THIS section, else from its start.
+    const from = startAt >= sec.start_time && startAt < sec.end_time ? startAt : sec.start_time;
+    setEngErr("");
+    (async () => {
+      try {
+        await eng.load(playSrc);
+        if (cancelled) return;
+        // Bounds + tempo BEFORE play so the freshly-built shifter loops the
+        // right region (avoids inheriting the previous section's bounds).
+        eng.setTempo(speed);
+        eng.setLoop(sec.start_time, sec.end_time);
+        await eng.play(from);
+        if (cancelled) { eng.pause(); return; }
+        setEngPlaying(true);
+      } catch (e) {
+        console.warn("section-loop engine failed:", e);
+        setEngErr(String((e as Error)?.message || e));
+        setEngPlaying(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      const t0 = eng.getTime();
+      eng.pause();
+      setEngPlaying(false);
+      // Hand the position back to the native element for seamless resume.
+      const el = audioRef.current;
+      if (el) { try { el.currentTime = Math.min(t0, (el.duration || t0)); } catch { /* not ready */ } }
+    };
+    // playing intentionally excluded: engine owns transport during loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionLooping, loop, score, playSrc]);
+
+  // Live tempo changes while looping (no rebuild — SoundTouch retimes in place).
+  useEffect(() => {
+    if (sectionLooping && engineRef.current) engineRef.current.setTempo(speed);
+  }, [speed, sectionLooping]);
+
+  // Drive the chart timeline `t` from the engine clock while looping (the
+  // native element is paused, so its timeupdate won't fire).
+  useEffect(() => {
+    if (!sectionLooping) return;
     let raf = 0;
     const tick = () => {
-      const a = audioRef.current;
-      if (a && a.currentTime >= sec.end_time - 0.06) {
-        a.currentTime = sec.start_time;
-        if (a.paused && playing) a.play().catch(() => {});
-      }
+      const e = engineRef.current;
+      if (e) setT(e.getTime());
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [loop, score, playing]);
+  }, [sectionLooping]);
+
+  // Release the audio context when the screen unmounts.
+  useEffect(() => () => { engineRef.current?.destroy(); engineRef.current = null; }, []);
+
+  function toggleEngine() {
+    const e = engineRef.current;
+    if (!e) return;
+    if (e.playing) { e.pause(); setEngPlaying(false); return; }
+    // Resume from where we are, but if that's outside the section (e.g. after
+    // an error) fall back to the section start. This press is a user gesture,
+    // so it reliably resumes a suspended AudioContext.
+    setEngErr("");
+    e.play().then(() => setEngPlaying(true)).catch((err) => {
+      setEngErr(String((err as Error)?.message || err));
+    });
+  }
+
+  // Unified "is something playing" for the now-playing beat counter.
+  const isPlaying = sectionLooping ? engPlaying : playing;
 
   // Seek playback to a chord's start (tap a cell to jump there).
   function seekTo(time: number) {
+    if (sectionLoopingRef.current && engineRef.current) {
+      engineRef.current.seek(time); setT(time); return;
+    }
     const a = audioRef.current;
     if (a) { a.currentTime = time; setT(time); }
   }
@@ -440,7 +548,7 @@ export default function PracticeScreen() {
               src={playSrc}
               controls
               loop={loop === "all"}
-              onTimeUpdate={(e) => setT(e.currentTarget.currentTime)}
+              onTimeUpdate={(e) => { if (!sectionLooping) setT(e.currentTarget.currentTime); }}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
               onLoadedMetadata={(e) => {
@@ -450,8 +558,22 @@ export default function PracticeScreen() {
                   if (sec) e.currentTarget.currentTime = sec.start_time;
                 }
               }}
-              style={{ width: "100%" }}
+              style={{ width: "100%", display: sectionLooping ? "none" : "block" }}
             />
+          )}
+          {/* During a section loop the SoundTouch engine is the audio source;
+              give it its own transport (the native controls are hidden). */}
+          {sectionLooping && (
+            <div className="engine-transport">
+              <button className="engine-play" onClick={toggleEngine}>
+                {engPlaying ? "⏸" : "▶"}
+              </button>
+              <span className="engine-label">
+                {engErr
+                  ? `⚠ Loop engine: ${engErr}`
+                  : `🔁 Looping ${score.sections[Number(loop.slice(1))]?.label || "section"} — seamless, pitch-locked`}
+              </span>
+            </div>
           )}
 
           {/* Practice speed — change playback rate without dropping pitch. The
@@ -474,9 +596,9 @@ export default function PracticeScreen() {
             <select
               value={loop}
               onChange={(e) => {
-                const v = e.target.value;
-                setLoop(v);
-                if (v.startsWith("s")) seekTo(score.sections[Number(v.slice(1))].start_time);
+                // Section loops are positioned by the engine effect; "off" /
+                // "all" stay on the native element wherever it already is.
+                setLoop(e.target.value);
               }}
             >
               <option value="off">Off</option>
@@ -531,7 +653,7 @@ export default function PracticeScreen() {
                   )}
                 </div>
                 <div className="np-count">
-                  {playing && beatsToNext != null ? `${beatsToNext}` : "·"}
+                  {isPlaying && beatsToNext != null ? `${beatsToNext}` : "·"}
                   <span>beats</span>
                 </div>
                 <div className="np-next">
@@ -554,7 +676,7 @@ export default function PracticeScreen() {
                 root={active?.root || "C"}
                 quality={active?.quality || "maj"}
                 notes={partNotes ? diagramNotes : []}
-                audioRef={audioRef}
+                audioRef={playhead}
                 range={partRange}
                 neck={neckMode}
               />
@@ -564,7 +686,7 @@ export default function PracticeScreen() {
           {panels.roll && partRollNotes.length > 0 && (
             <div className="roll-card">
               <div className="diagram-title">{selectedTrack?.track} — notation roll</div>
-              <NotationRoll notes={partRollNotes} audioRef={audioRef} />
+              <NotationRoll notes={partRollNotes} audioRef={playhead} />
             </div>
           )}
 
@@ -574,6 +696,9 @@ export default function PracticeScreen() {
               <button className={view === "tape" ? "on" : ""} onClick={() => setView("tape")}>Tape ▶</button>
               {!sourceIsSong && (
                 <button className={view === "sheet" ? "on" : ""} onClick={() => setView("sheet")}>Sheet ♪</button>
+              )}
+              {!sourceIsSong && (
+                <button className={view === "tab" ? "on" : ""} onClick={() => setView("tab")}>Tab 🎸</button>
               )}
             </div>
             <button className="gear-btn" onClick={() => setShowSettings((s) => !s)} title="Practice settings">⚙</button>
@@ -591,12 +716,23 @@ export default function PracticeScreen() {
           )}
           </div>
 
-          {panels.chart && (view === "sheet" ? (
+          {panels.chart && (view === "tab" ? (
+            !blockName
+              ? <div className="practice-hint">Tab view is available for blocks (songs show the chart).</div>
+              : tabData && tabData.tabNotes.length
+                ? (
+                  <div className="tab-card">
+                    <div className="diagram-title">{tabData.name} — tab</div>
+                    <TabView tabNotes={tabData.tabNotes} stringLabels={tabData.labels} audioRef={playhead} />
+                  </div>
+                )
+                : <div className="practice-hint">No guitar or bass part in this block to tab. Pick a block with a guitar line.</div>
+          ) : view === "sheet" ? (
             blockName
-              ? <SheetMusic blockName={blockName} audioRef={audioRef} trackIndex={partIdx} />
+              ? <SheetMusic blockName={blockName} audioRef={playhead} trackIndex={partIdx} />
               : <div className="practice-hint">Sheet view is available for blocks (songs show the chart).</div>
           ) : view === "tape" ? (
-            <TapeView score={score} labelParts={labelParts} audioRef={audioRef} onSeek={seekTo} />
+            <TapeView score={score} labelParts={labelParts} audioRef={playhead} onSeek={seekTo} />
           ) : (
             <div className="chart" ref={chartRef}>
               {score.sections.length > 0
