@@ -882,6 +882,20 @@ audio { width: 100%; margin: 8px 0 12px; }
 .tab-note.on .tab-note-bg { fill: #59e7c2; stroke: #59e7c2; }
 .tab-note.on .tab-fret { fill: #04241c; }
 
+/* Wind/brass fingering "tab" — markers on engaged valve/slide/key rows. */
+.wtab-mark { fill: #1d2c4d; stroke: rgba(120,170,255,0.5); stroke-width: 1; transition: fill 0.08s, stroke 0.08s; }
+.wtab-open { fill: rgba(207,224,255,0.55); font-size: 13px; font-weight: 700; }
+.wtab-label { fill: rgba(238,242,251,0.7); font-size: 11px; font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; transition: fill 0.08s; }
+.wtab-sub { fill: rgba(238,242,251,0.4); font-size: 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.wtab-note.past .wtab-mark { fill: rgba(40,54,84,0.6); stroke: rgba(120,170,255,0.18); }
+.wtab-note.past .wtab-label { fill: rgba(238,242,251,0.35); }
+.wtab-note.past .wtab-open { fill: rgba(207,224,255,0.22); }
+.wtab-note.on .wtab-mark { fill: #59e7c2; stroke: #59e7c2; }
+.wtab-note.on .wtab-label { fill: #59e7c2; }
+.wtab-note.on .wtab-open { fill: #59e7c2; }
+
 /* ── Desktop / large-screen layout (device-aware) ─────────────────────────
    Phones get the single-column app above; from tablet width up we use the
    real estate: wider container, diagrams tiled across, a floating nav. */

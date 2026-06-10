@@ -7,6 +7,7 @@ import TapeView from "./TapeView";
 import NotationRoll, { type RollNote } from "./NotationRoll";
 import SheetMusic from "./SheetMusic";
 import TabView from "./TabView";
+import WindTabView from "./WindTabView";
 import { isFrettedTrack, isGuitarTrack, isKeysTrack, stringLabelsFor, assignFrets,
   detectInstrumentId, instrumentById, instrumentFor, STRING_INSTRUMENTS } from "../guitarTab";
 import type { TabNote } from "../guitarTab";
@@ -980,7 +981,25 @@ export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
                     <TabView tabNotes={chartTab.tabNotes} stringLabels={chartTab.labels} audioRef={playhead} />
                   </div>
                 )
-                : <div className="practice-hint">This part isn't a guitar or bass — pick a fretted part above to tab it.</div>
+                : (() => {
+                    // No fret tab → if it's a single wind/brass part, show the
+                    // wind "tab" (valve/slide/key lane). Sections are too busy.
+                    const fam = chartTrack ? familyFor(chartTrack.track, !!chartTrack.is_drum) : null;
+                    const specs = chartTrack ? voiceSpecsFor(chartTrack.track) : [];
+                    if ((fam === "brass" || fam === "woodwind") && specs.length === 1) {
+                      return (
+                        <div className="tab-card">
+                          <div className="diagram-title">{chartTrack!.track} — fingering tab</div>
+                          <WindTabView notes={chartRollNotes} audioRef={playhead}
+                            kind={specs[0].kind} transpose={specs[0].transpose} />
+                        </div>
+                      );
+                    }
+                    if ((fam === "brass" || fam === "woodwind") && specs.length > 1) {
+                      return <div className="practice-hint">Ensemble parts are easier to read on the Live diagram — pick a single wind instrument to tab it.</div>;
+                    }
+                    return <div className="practice-hint">This part isn't a guitar or bass — pick a fretted part above to tab it.</div>;
+                  })()
           ) : view === "sheet" ? (
             blockName
               ? null /* shown by the pre-warmed sheet-host above */
