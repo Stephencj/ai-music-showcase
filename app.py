@@ -1213,6 +1213,9 @@ def _generate_full_song(
     woodwind_sel: list[str],
     strings_sel: list[str],
     vocal_sel: list[str],
+    k_lead: float = 100, k_chordvar: float = 35, k_dyn: float = 100,
+    k_drumfill: float = 100, k_bass: float = 18, k_reharm: float = 12,
+    k_lintro: float = 30, k_loutro: float = 30, k_lfills: float = 40,
 ) -> tuple:
     """Wire the 🎲 Generate full song button to the TechniqueBank.
 
@@ -1235,10 +1238,23 @@ def _generate_full_song(
     ))
     if not enabled:
         raise gr.Error("Pick at least one instrument.")
+    # UI sliders are percentages; the knobs API wants 0..1 / multipliers.
+    knobs = {
+        "lead_amount": k_lead / 100.0,
+        "voicing_variety": k_chordvar / 100.0,
+        "dynamics": k_dyn / 100.0,
+        "drum_fill": k_drumfill / 100.0,
+        "bass_inversion": k_bass / 100.0,
+        "reharm_prob": k_reharm / 100.0,
+        "lead_intro": k_lintro / 100.0,
+        "lead_outro": k_loutro / 100.0,
+        "lead_fills": k_lfills / 100.0,
+    }
     try:
         out = compose_song(
             genre=style_name, seed=seed,
             enabled_instruments=enabled,
+            knobs=knobs,
         )
     except gr.Error:
         raise
@@ -4653,16 +4669,73 @@ def build_app() -> gr.Blocks:
                               "bump the seed for variation._",
                     )
 
+                    with gr.Accordion("🎛 Feel & arrangement", open=False):
+                        gr.Markdown(
+                            "_Tune the generation. Sliders snap to the genre's "
+                            "defaults when you pick a Style; move them to "
+                            "override. Leave them be for the genre's natural feel._"
+                        )
+                        with gr.Row():
+                            k_lead = gr.Slider(
+                                0, 200, value=100, step=5, label="Lead amount %",
+                                info="How much the lead guitar plays (verses / "
+                                     "bridge solo / final chorus). 0 = no lead.")
+                            k_chordvar = gr.Slider(
+                                0, 100, value=35, step=5, label="Chord variety %",
+                                info="Per-chord voicing variety (vs. uniform 7ths).")
+                            k_dyn = gr.Slider(
+                                0, 200, value=100, step=5, label="Dynamics %",
+                                info="Section energy contrast. 0 = flat / even.")
+                        with gr.Row():
+                            k_drumfill = gr.Slider(
+                                0, 200, value=100, step=5, label="Drum fills %",
+                                info="Transition fills at section turnarounds.")
+                            k_bass = gr.Slider(
+                                0, 100, value=18, step=2, label="Bass motion %",
+                                info="Passing bass inversions (slash chords).")
+                        with gr.Accordion("Advanced", open=False):
+                            with gr.Row():
+                                k_reharm = gr.Slider(
+                                    0, 100, value=12, step=2,
+                                    label="Reharmonization %",
+                                    info="Secondary doms / borrowed / tritone subs.")
+                                k_lintro = gr.Slider(
+                                    0, 100, value=30, step=5, label="Lead intro %")
+                                k_loutro = gr.Slider(
+                                    0, 100, value=30, step=5, label="Lead outro %")
+                                k_lfills = gr.Slider(
+                                    0, 100, value=40, step=5, label="Lead fills %",
+                                    info="Short lead pickups in non-featured sections.")
+
                     random_song_btn.click(
                         _generate_full_song,
                         inputs=[style_dd, random_song_seed,
                                 rhythm_select, bass_select, chord_lead_select,
                                 brass_select, woodwind_select, strings_select,
-                                vocal_select],
+                                vocal_select,
+                                k_lead, k_chordvar, k_dyn, k_drumfill, k_bass,
+                                k_reharm, k_lintro, k_loutro, k_lfills],
                         outputs=[midi_audio, midi_file, compose_info,
                                  random_song_summary,
                                  rhythm_overrides_state,
                                  random_song_seed],
+                    )
+
+                    # Snap the genre-dependent knobs to the picked style's
+                    # defaults (the genre-independent ones keep their value).
+                    def _knob_defaults_for_style(style_name):
+                        from src.composition.knobs import default_knobs
+                        d = default_knobs(style_name)
+                        return (
+                            gr.update(value=round(d["voicing_variety"] * 100)),
+                            gr.update(value=round(d["bass_inversion"] * 100)),
+                            gr.update(value=round(d["reharm_prob"] * 100)),
+                        )
+
+                    style_dd.change(
+                        _knob_defaults_for_style,
+                        inputs=[style_dd],
+                        outputs=[k_chordvar, k_bass, k_reharm],
                     )
 
                     with gr.Row():
