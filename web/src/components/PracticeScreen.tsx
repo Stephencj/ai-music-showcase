@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../api";
 import type { ScoreData, ChordSpan } from "../api";
 import type { Block, Preset } from "../types";
-import ChordDiagram from "./ChordDiagram";
+import ChordDiagram, { LiveDiagram } from "./ChordDiagram";
 import TapeView from "./TapeView";
 import NotationRoll, { type RollNote } from "./NotationRoll";
 import SheetMusic from "./SheetMusic";
@@ -44,11 +44,11 @@ export default function PracticeScreen() {
   const [score, setScore] = useState<ScoreData | null>(null);
   // Per-track notes for the notation roll + real-time diagrams (blocks only).
   const [partNotes, setPartNotes] = useState<BlockNotes | null>(null);
-  // Independent part selectors: the piano diagram, the guitar neck diagram, and
-  // the score section (sheet / tab / notation roll) each pick their own part.
-  const [pianoIdx, setPianoIdx] = useState(-1);
-  const [guitarIdx, setGuitarIdx] = useState(-1);
-  const [chartIdx, setChartIdx] = useState(-1);  // -1 = chords only (no part)
+  // Live diagrams: a dynamic list of piano / guitar-neck cards, each bound to a
+  // part (channel). Defaults to one piano + one guitar; add/remove as needed.
+  const [liveSlots, setLiveSlots] = useState<{ id: number; kind: "piano" | "neck"; partIdx: number }[]>([]);
+  const slotId = useRef(1);
+  const [chartIdx, setChartIdx] = useState(-1);  // score section part (-1 = chords only)
   const [solo, setSolo] = useState(false);       // play just the chart part
   const [capo, setCapo] = useState(0);           // chord-shape capo (teaching)
   // Real-time MIDI out: stream this block's notes to a hardware/virtual port.
@@ -127,7 +127,7 @@ export default function PracticeScreen() {
   useEffect(() => {
     if (mode !== "block" || !selected) return;
     setLoading(true); setScore(null); setErr(""); setT(0); setLoop("off");
-    setPartNotes(null); setPianoIdx(-1); setGuitarIdx(-1); setChartIdx(-1); setSolo(false);
+    setPartNotes(null); setLiveSlots([]); setChartIdx(-1); setSolo(false);
     if (selected.startsWith("song:")) {
       const title = selected.slice(5);
       setAudioSrc(api.songAudioUrl(title));
@@ -147,8 +147,8 @@ export default function PracticeScreen() {
     }
   }, [mode, selected, blocks]);
 
-  // Default each selector to the first relevant part once notes arrive: piano →
-  // first keyboard part, guitar → first guitar part, chart → first fretted part.
+  // Seed defaults once notes arrive: a piano card on the first keyboard part and
+  // a guitar card on the first guitar part; chart → first fretted part.
   useEffect(() => {
     if (!partNotes) return;
     const ts = partNotes.tracks;
@@ -156,10 +156,21 @@ export default function PracticeScreen() {
     const firstKeys = ts.findIndex((t) => !t.is_drum && isKeysTrack(t.track));
     const firstGtr = ts.findIndex((t) => isGuitarTrack(t.track));
     const firstFret = ts.findIndex((t) => !t.is_drum && isFrettedTrack(t.track));
-    setPianoIdx(firstKeys >= 0 ? firstKeys : firstMel);
-    setGuitarIdx(firstGtr >= 0 ? firstGtr : firstFret >= 0 ? firstFret : firstMel);
+    setLiveSlots([
+      { id: slotId.current++, kind: "piano", partIdx: firstKeys >= 0 ? firstKeys : firstMel },
+      { id: slotId.current++, kind: "neck", partIdx: firstGtr >= 0 ? firstGtr : firstFret >= 0 ? firstFret : firstMel },
+    ]);
     setChartIdx(firstFret >= 0 ? firstFret : firstGtr >= 0 ? firstGtr : firstMel);
   }, [partNotes]);
+
+  function addSlot(kind: "piano" | "neck") {
+    const ts = partNotes?.tracks ?? [];
+    const pref = kind === "piano"
+      ? ts.findIndex((t) => !t.is_drum && isKeysTrack(t.track))
+      : ts.findIndex((t) => isGuitarTrack(t.track));
+    const partIdx = pref >= 0 ? pref : ts.findIndex((t) => !t.is_drum);
+    setLiveSlots((s) => [...s, { id: slotId.current++, kind, partIdx }]);
+  }
 
   async function onUpload(file: File) {
     setLoading(true); setScore(null); setErr(""); setT(0); setSimMsg("");
@@ -307,54 +318,54 @@ export default function PracticeScreen() {
       .filter((p) => !p.is_drum),
     [partNotes]);
 
-  const pianoTrack = partNotes && pianoIdx >= 0 ? partNotes.tracks[pianoIdx] : undefined;
-  const guitarTrack = partNotes && guitarIdx >= 0 ? partNotes.tracks[guitarIdx] : undefined;
   const chartTrack = partNotes && chartIdx >= 0 ? partNotes.tracks[chartIdx] : undefined;
 
-  const rollFrom = (tr: typeof pianoTrack): RollNote[] => {
+  const rollFrom = (tr: typeof chartTrack): RollNote[] => {
     if (!tr || !partNotes || tr.is_drum) return [];
     const spb = 60 / (partNotes.tempo || 120);
     return tr.notes.map(([pitch, sb, db]) => ({ pitch, start: sb * spb, dur: db * spb }));
   };
-  const tabFrom = (tr: typeof pianoTrack) => {
+  const tabFrom = (tr: typeof chartTrack) => {
     if (!tr || !partNotes || tr.is_drum || !isFrettedTrack(tr.track)) return null;
     const tuning = tuningFor(tr.track);
     const spb = 60 / (partNotes.tempo || 120);
     const tabNotes = assignFrets(tr.notes, tuning).map((f) => ({ ...f, start: f.start * spb, dur: f.dur * spb }));
     return { name: tr.track, labels: stringLabelsFor(tuning), tabNotes };
   };
+  const rangeOf = (ns: RollNote[]): [number, number] | undefined => {
+    if (!ns.length) return undefined;
+    let lo = 128, hi = 0;
+    for (const n of ns) { lo = Math.min(lo, n.pitch); hi = Math.max(hi, n.pitch); }
+    return [lo, hi];
+  };
 
-  // Piano diagram follows its part (by pitch). Guitar neck follows its part — by
-  // exact fret (tab) when it's a guitar, else by pitch (bass uses a guitar neck).
-  const pianoNotes = useMemo(() => rollFrom(pianoTrack), [pianoTrack, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
-  const guitarNotes = useMemo(() => rollFrom(guitarTrack), [guitarTrack, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
-  const guitarTab = useMemo(
-    () => (guitarTrack && isGuitarTrack(guitarTrack.track) ? tabFrom(guitarTrack) : null),
-    [guitarTrack, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Per-slot data for the live diagrams: each slot's part → notes, plus a tab
+  // (exact frets) for a guitar neck on a guitar part, and a key range for piano.
+  const slotData = useMemo(() => liveSlots.map((s) => {
+    const tr = partNotes && s.partIdx >= 0 ? partNotes.tracks[s.partIdx] : undefined;
+    const notes = rollFrom(tr);
+    const tab = (s.kind === "neck" && tr && isGuitarTrack(tr.track)) ? tabFrom(tr)?.tabNotes : undefined;
+    const range = s.kind === "piano" ? rangeOf(notes) : undefined;
+    return { slot: s, notes, tab, range };
+  }), [liveSlots, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Score section (sheet / tab / notation roll) follows the chart part.
   const chartRollNotes = useMemo(() => rollFrom(chartTrack), [chartTrack, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
   const chartTab = useMemo(() => tabFrom(chartTrack), [chartTrack, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Default the capo from the key when the guitar part is an ACOUSTIC (its
-  // shapes benefit from a capo); other guitars / re-selections reset to 0.
-  // Manual changes persist until the key or the selected guitar changes.
+  // Default the capo from the key when a guitar diagram is on an ACOUSTIC part
+  // (its shapes benefit from a capo); otherwise reset to 0. Manual changes
+  // persist until the key or the diagram parts change.
   useEffect(() => {
     if (!score) { setCapo(0); return; }
-    const acoustic = !!guitarTrack && /acoustic/i.test(guitarTrack.track);
+    const acoustic = liveSlots.some((s) => s.kind === "neck"
+      && partNotes && s.partIdx >= 0 && /acoustic/i.test(partNotes.tracks[s.partIdx]?.track || ""));
     setCapo(acoustic ? autoCapo(rootPc(score.key)) : 0);
-  }, [score?.key, guitarIdx, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [score?.key, liveSlots, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // For section looping, play the WAV (sample-accurate seeks — no MP3 decoder
   // priming gap), which keeps loops tight without losing pitch-preserved speed.
   const sectionLooping = loop.startsWith("s");
-  // Real pitch range of the piano part, for the wide piano key span.
-  const pianoRange = useMemo(() => {
-    if (!pianoNotes.length) return undefined;
-    let lo = 128, hi = 0;
-    for (const n of pianoNotes) { lo = Math.min(lo, n.pitch); hi = Math.max(hi, n.pitch); }
-    return [lo, hi] as [number, number];
-  }, [pianoNotes]);
 
   const playSrc = (solo && chartTrack && blockName)
     ? api.partAudioUrl(blockName, chartIdx)
@@ -750,7 +761,7 @@ export default function PracticeScreen() {
             </div>
           )}
 
-          {panels.diagrams && (pianoNotes.length > 0 || guitarNotes.length > 0 || active?.root) && (
+          {panels.diagrams && (partOptions.length > 0 || active?.root) && (
             <div className="diagram-block">
               <div className="diagram-bar">
                 <div className="diagram-bar-left">
@@ -788,25 +799,31 @@ export default function PracticeScreen() {
                   </div>
                 )}
               </div>
-              <ChordDiagram
-                root={active?.root || "C"}
-                quality={active?.quality || "maj"}
-                audioRef={playhead}
-                neck={neckMode}
-                capo={capo}
-                // In Full-neck mode the piano and guitar each follow their own
-                // selected part: piano lights by pitch, the neck lights the exact
-                // fret being played (tab) — or by pitch for a bass part.
-                pianoNotes={pianoNotes}
-                pianoRange={pianoRange}
-                guitarTab={guitarTab ? guitarTab.tabNotes : undefined}
-                guitarNotes={guitarNotes}
-                parts={partOptions}
-                pianoIdx={pianoIdx}
-                guitarIdx={guitarIdx}
-                onPianoIdx={setPianoIdx}
-                onGuitarIdx={setGuitarIdx}
-              />
+              {neckMode ? (
+                // Full-neck (live): a list of piano / guitar cards, each on its
+                // own part (channel). Add more of either; remove down to one.
+                <>
+                  <div className="diagrams diagrams-wide">
+                    {slotData.map(({ slot, notes, tab, range }) => (
+                      <LiveDiagram key={slot.id} kind={slot.kind} notes={notes} tab={tab} range={range}
+                        audioRef={playhead} parts={partOptions} partIdx={slot.partIdx}
+                        onPartIdx={(i) => setLiveSlots((s) => s.map((x) => x.id === slot.id ? { ...x, partIdx: i } : x))}
+                        onRemove={liveSlots.length > 1
+                          ? () => setLiveSlots((s) => s.filter((x) => x.id !== slot.id)) : undefined} />
+                    ))}
+                  </div>
+                  <div className="diagram-add">
+                    <button className="btn ghost sm" onClick={() => addSlot("piano")}>+ Piano</button>
+                    <button className="btn ghost sm" onClick={() => addSlot("neck")}>+ Guitar</button>
+                  </div>
+                </>
+              ) : (
+                <ChordDiagram
+                  root={active?.root || "C"}
+                  quality={active?.quality || "maj"}
+                  capo={capo}
+                />
+              )}
             </div>
           )}
 

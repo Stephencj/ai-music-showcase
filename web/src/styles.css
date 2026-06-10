@@ -426,6 +426,13 @@ audio { width: 100%; margin: 8px 0 12px; }
 }
 .diagram-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);
   display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dc-head-ctl { display: flex; align-items: center; gap: 6px; }
+.dc-remove {
+  width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--card); color: var(--muted); font-size: 12px; line-height: 1; cursor: pointer;
+}
+.dc-remove:hover { color: #ff8a8a; border-color: #ff8a8a; }
+.diagram-add { display: flex; gap: 8px; margin-top: 8px; }
 /* Per-diagram part picker (piano / guitar neck) and the score-section picker. */
 .neck-part, .chart-part select {
   text-transform: none; letter-spacing: normal; font-size: 12px; max-width: 52%;
