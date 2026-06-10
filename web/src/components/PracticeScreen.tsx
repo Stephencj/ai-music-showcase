@@ -10,6 +10,8 @@ import TabView from "./TabView";
 import { isFrettedTrack, isGuitarTrack, isKeysTrack, stringLabelsFor, assignFrets,
   detectInstrumentId, instrumentById, instrumentFor, STRING_INSTRUMENTS } from "../guitarTab";
 import type { TabNote } from "../guitarTab";
+import { DrumDiagram, BrassDiagram, WoodwindDiagram } from "./InstrumentDiagrams";
+import { familyFor } from "../instruments";
 import * as webmidi from "../webmidi";
 import type { MidiOut } from "../webmidi";
 import { LoopPlayer } from "../loopPlayer";
@@ -48,7 +50,8 @@ export default function PracticeScreen() {
   const [partNotes, setPartNotes] = useState<BlockNotes | null>(null);
   // Live diagrams: a dynamic list of piano / guitar-neck cards, each bound to a
   // part (channel). Defaults to one piano + one guitar; add/remove as needed.
-  const [liveSlots, setLiveSlots] = useState<{ id: number; kind: "piano" | "neck"; partIdx: number; instId?: string }[]>([]);
+  type LiveKind = "piano" | "neck" | "drums" | "brass" | "woodwind";
+  const [liveSlots, setLiveSlots] = useState<{ id: number; kind: LiveKind; partIdx: number; instId?: string }[]>([]);
   const slotId = useRef(1);
   const [chartIdx, setChartIdx] = useState(-1);  // score section part (-1 = chords only)
   const [solo, setSolo] = useState(false);       // play just the chart part
@@ -165,13 +168,17 @@ export default function PracticeScreen() {
     setChartIdx(firstFret >= 0 ? firstFret : firstGtr >= 0 ? firstGtr : firstMel);
   }, [partNotes]);
 
-  function addSlot(kind: "piano" | "neck") {
+  function addSlot(kind: LiveKind) {
     const ts = partNotes?.tracks ?? [];
-    const pref = kind === "piano"
-      ? ts.findIndex((t) => !t.is_drum && isKeysTrack(t.track))
-      : ts.findIndex((t) => isGuitarTrack(t.track));
-    const partIdx = pref >= 0 ? pref : ts.findIndex((t) => !t.is_drum);
-    setLiveSlots((s) => [...s, { id: slotId.current++, kind, partIdx }]);
+    let idx = -1;
+    if (kind === "drums") idx = ts.findIndex((t) => t.is_drum);
+    else if (kind === "piano") idx = ts.findIndex((t) => !t.is_drum && isKeysTrack(t.track));
+    else if (kind === "neck") idx = ts.findIndex((t) => isGuitarTrack(t.track));
+    else if (kind === "brass") idx = ts.findIndex((t) => !t.is_drum && familyFor(t.track, false) === "brass");
+    else if (kind === "woodwind") idx = ts.findIndex((t) => !t.is_drum && familyFor(t.track, false) === "woodwind");
+    if (idx < 0) idx = ts.findIndex((t) => (kind === "drums" ? t.is_drum : !t.is_drum));
+    if (idx < 0) idx = ts.findIndex((t) => !t.is_drum);
+    setLiveSlots((s) => [...s, { id: slotId.current++, kind, partIdx: idx }]);
   }
 
   async function onUpload(file: File) {
@@ -319,6 +326,11 @@ export default function PracticeScreen() {
     () => (partNotes?.tracks ?? []).map((t, idx) => ({ idx, name: t.track, is_drum: t.is_drum }))
       .filter((p) => !p.is_drum),
     [partNotes]);
+  // Drum tracks (for a drums diagram's part picker).
+  const drumOptions = useMemo(
+    () => (partNotes?.tracks ?? []).map((t, idx) => ({ idx, name: t.track, is_drum: t.is_drum }))
+      .filter((p) => p.is_drum),
+    [partNotes]);
 
   const chartTrack = partNotes && chartIdx >= 0 ? partNotes.tracks[chartIdx] : undefined;
 
@@ -348,6 +360,7 @@ export default function PracticeScreen() {
   // fingerboard: tuning auto-detected from the part name, overridable per card.
   const slotData = useMemo(() => liveSlots.map((s) => {
     const tr = partNotes && s.partIdx >= 0 ? partNotes.tracks[s.partIdx] : undefined;
+    const spb = partNotes ? 60 / (partNotes.tempo || 120) : 0.5;
     const notes = rollFrom(tr);
     const range = s.kind === "piano" ? rangeOf(notes) : undefined;
     let tab: TabNote[] | undefined;
@@ -355,16 +368,23 @@ export default function PracticeScreen() {
     let frets: number | undefined;
     let instLabel: string | undefined;
     let instId: string | undefined;
+    let drumNotes: RollNote[] | undefined;
+    let instName: string | undefined;
     if (s.kind === "neck") {
       instId = s.instId || (tr ? detectInstrumentId(tr.track) : "guitar6");
       const inst = instrumentById(instId);
       tuning = inst.tuning; frets = inst.frets; instLabel = inst.label;
-      const spb = partNotes ? 60 / (partNotes.tempo || 120) : 0.5;
       tab = (tr && partNotes && !tr.is_drum)
         ? assignFrets(tr.notes, inst.tuning, inst.frets).map((f) => ({ ...f, start: f.start * spb, dur: f.dur * spb }))
         : [];
+    } else if (s.kind === "drums") {
+      drumNotes = (tr && tr.is_drum)
+        ? tr.notes.map(([pitch, sb, db]) => ({ pitch, start: sb * spb, dur: db * spb }))
+        : [];
+    } else if (s.kind === "brass" || s.kind === "woodwind") {
+      instName = tr?.track ?? "";
     }
-    return { slot: s, notes, range, tab, tuning, frets, instLabel, instId };
+    return { slot: s, notes, range, tab, tuning, frets, instLabel, instId, drumNotes, instName };
   }), [liveSlots, partNotes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Score section (sheet / tab / notation roll) follows the chart part.
@@ -818,26 +838,60 @@ export default function PracticeScreen() {
                 )}
               </div>
               {neckMode ? (
-                // Full-neck (live): a list of piano / guitar cards, each on its
-                // own part (channel). Add more of either; remove down to one.
+                // Full-neck (live): a list of instrument cards (piano, string
+                // fingerboards, drum kit, brass valves/slide, woodwind keys),
+                // each on its own part/channel. Add more; remove down to one.
                 <>
                   <div className="diagrams diagrams-wide">
-                    {slotData.map((d) => (
-                      <LiveDiagram key={d.slot.id} kind={d.slot.kind} notes={d.notes}
-                        tab={d.tab} range={d.range}
-                        tuning={d.tuning} frets={d.frets} instLabel={d.instLabel}
-                        instOptions={d.slot.kind === "neck" ? STRING_INSTRUMENTS : undefined}
-                        instId={d.instId}
-                        onInst={(id) => setLiveSlots((s) => s.map((x) => x.id === d.slot.id ? { ...x, instId: id } : x))}
-                        audioRef={playhead} parts={partOptions} partIdx={d.slot.partIdx}
-                        onPartIdx={(i) => setLiveSlots((s) => s.map((x) => x.id === d.slot.id ? { ...x, partIdx: i, instId: undefined } : x))}
-                        onRemove={liveSlots.length > 1
-                          ? () => setLiveSlots((s) => s.filter((x) => x.id !== d.slot.id)) : undefined} />
-                    ))}
+                    {slotData.map((d) => {
+                      const setPart = (i: number) => setLiveSlots((s) => s.map((x) => x.id === d.slot.id ? { ...x, partIdx: i, instId: undefined } : x));
+                      const remove = liveSlots.length > 1
+                        ? () => setLiveSlots((s) => s.filter((x) => x.id !== d.slot.id)) : undefined;
+                      if (d.slot.kind === "piano" || d.slot.kind === "neck") {
+                        return (
+                          <LiveDiagram key={d.slot.id} kind={d.slot.kind} notes={d.notes}
+                            tab={d.tab} range={d.range}
+                            tuning={d.tuning} frets={d.frets} instLabel={d.instLabel}
+                            instOptions={d.slot.kind === "neck" ? STRING_INSTRUMENTS : undefined}
+                            instId={d.instId}
+                            onInst={(id) => setLiveSlots((s) => s.map((x) => x.id === d.slot.id ? { ...x, instId: id } : x))}
+                            audioRef={playhead} parts={partOptions} partIdx={d.slot.partIdx}
+                            onPartIdx={setPart} onRemove={remove} />
+                        );
+                      }
+                      // drums / brass / woodwind: card wrapper + the figure
+                      const opts = d.slot.kind === "drums" ? drumOptions : partOptions;
+                      const title = d.slot.kind === "drums" ? "Drums"
+                        : (d.instName || (d.slot.kind === "brass" ? "Brass" : "Woodwind"));
+                      return (
+                        <div key={d.slot.id} className="diagram-card">
+                          <div className="diagram-title">
+                            <span>{title}</span>
+                            <span className="dc-head-ctl">
+                              <select className="neck-part" value={d.slot.partIdx}
+                                onChange={(e) => setPart(Number(e.target.value))}>
+                                {opts.length === 0 && <option value={-1}>—</option>}
+                                {opts.map((o) => <option key={o.idx} value={o.idx}>{o.name}</option>)}
+                              </select>
+                              {remove && <button className="dc-remove" onClick={remove} aria-label="Remove">✕</button>}
+                            </span>
+                          </div>
+                          {d.slot.kind === "drums"
+                            ? <DrumDiagram notes={d.drumNotes || []} audioRef={playhead} />
+                            : d.slot.kind === "brass"
+                              ? <BrassDiagram notes={d.notes} audioRef={playhead} name={d.instName || ""} />
+                              : <WoodwindDiagram notes={d.notes} audioRef={playhead} name={d.instName || ""} />}
+                        </div>
+                      );
+                    })}
                   </div>
                   <div className="diagram-add">
-                    <button className="btn ghost sm" onClick={() => addSlot("piano")}>+ Piano</button>
-                    <button className="btn ghost sm" onClick={() => addSlot("neck")}>+ Guitar</button>
+                    <span className="diagram-add-label">+ Add:</span>
+                    <button className="btn ghost sm" onClick={() => addSlot("piano")}>Piano</button>
+                    <button className="btn ghost sm" onClick={() => addSlot("neck")}>Guitar</button>
+                    <button className="btn ghost sm" onClick={() => addSlot("drums")}>Drums</button>
+                    <button className="btn ghost sm" onClick={() => addSlot("brass")}>Brass</button>
+                    <button className="btn ghost sm" onClick={() => addSlot("woodwind")}>Woodwind</button>
                   </div>
                 </>
               ) : (

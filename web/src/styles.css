@@ -432,7 +432,33 @@ audio { width: 100%; margin: 8px 0 12px; }
   background: var(--card); color: var(--muted); font-size: 12px; line-height: 1; cursor: pointer;
 }
 .dc-remove:hover { color: #ff8a8a; border-color: #ff8a8a; }
-.diagram-add { display: flex; gap: 8px; margin-top: 8px; }
+.diagram-add { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.diagram-add-label { font-size: 12px; color: var(--muted); }
+
+/* ── Drum / Brass / Woodwind live diagrams ──────────────────────────────── */
+.inst-fig { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 0; }
+.inst-note { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--text);
+  min-height: 16px; letter-spacing: 0.02em; }
+.inst-hint { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.drum-kit { width: 100%; max-height: 220px; display: block; }
+.drum-pad { fill: #1d2c4d; stroke: rgba(120,170,255,0.45); stroke-width: 0.8; transition: fill 0.05s; }
+.drum-pad.perc { fill: #18233c; stroke: rgba(120,170,255,0.28); }
+.drum-pad.lit { fill: #59e7c2; stroke: #59e7c2; }
+.drum-label { fill: rgba(238,242,251,0.6); pointer-events: none; }
+.brass-valves { width: 100%; max-height: 150px; }
+.valve-casing { fill: #10182b; stroke: rgba(255,255,255,0.10); stroke-width: 1; }
+.valve { fill: #1d2c4d; stroke: rgba(120,170,255,0.5); stroke-width: 1.2; transition: fill 0.05s; }
+.valve.pressed { fill: #59e7c2; stroke: #59e7c2; }
+.valve-num { fill: var(--muted); font-size: 9px; }
+.trombone-slide { width: 100%; max-height: 70px; }
+.slide-pos { fill: #1d2c4d; stroke: rgba(120,170,255,0.4); stroke-width: 0.8; transition: fill 0.05s; }
+.slide-pos.on { fill: #59e7c2; stroke: #59e7c2; }
+.slide-num { fill: rgba(238,242,251,0.7); font-size: 10px; }
+.ww-keys { width: 100%; max-height: 170px; }
+.ww-key { fill: #1d2c4d; stroke: rgba(120,170,255,0.5); stroke-width: 1; transition: fill 0.05s; }
+.ww-key.oct { stroke-dasharray: 3 2; }
+.ww-key.closed { fill: #59e7c2; stroke: #59e7c2; }
+.ww-klabel { fill: var(--muted); font-size: 9px; font-family: ui-monospace, Menlo, monospace; }
 /* Per-diagram part picker (piano / guitar neck) and the score-section picker. */
 .neck-part, .chart-part select {
   text-transform: none; letter-spacing: normal; font-size: 12px; max-width: 52%;
