@@ -944,6 +944,7 @@ def _add_bass_tech(name, *, pattern, roles, label, description,
             approach_tones=approach_tones,
             seed=_seed(ctx),
             swing=max(ctx.swing, swing_floor or 0.0),
+            inversion_prob=harmony_profile(ctx.genre).bass_inversion,
         )
         if velocity is not None:
             kwargs["velocity"] = velocity

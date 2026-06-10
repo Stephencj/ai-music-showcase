@@ -27,28 +27,31 @@ class HarmonyProfile:
     # Base per-section probability of applying a reharm strategy in a
     # verse/chorus (scaled up for bridges). Higher = more adventurous.
     reharm_prob: float
+    # Per-bar chance of a passing bass inversion (slash chord) on the
+    # simple root/root_fifth patterns, for smoother bass motion.
+    bass_inversion: float = 0.0
 
 
 # Tasteful diatonic colour — pop / country / generic. Sparse secondary doms.
 _TASTEFUL = HarmonyProfile(
     voicing_variety=0.35, voicing_family="diatonic_color",
-    reharm=(("with_secondary_doms", 1),), reharm_prob=0.12,
+    reharm=(("with_secondary_doms", 1),), reharm_prob=0.12, bass_inversion=0.18,
 )
 # Rock / metal — power-driven, basically no reharm.
 _ROCK = HarmonyProfile(
     voicing_variety=0.30, voicing_family="rock",
-    reharm=(), reharm_prob=0.0,
+    reharm=(), reharm_prob=0.0, bass_inversion=0.0,
 )
 # Jazz / funk / soul / blues — extended colour + adventurous reharm.
 _JAZZ = HarmonyProfile(
     voicing_variety=0.60, voicing_family="jazz",
     reharm=(("with_secondary_doms", 2), ("with_tritone_sub", 1),
-            ("with_borrowed_chords", 1)), reharm_prob=0.38,
+            ("with_borrowed_chords", 1)), reharm_prob=0.38, bass_inversion=0.28,
 )
 # Classical / cinematic — triadic + suspensions, occasional secondary dom.
 _CLASSICAL = HarmonyProfile(
     voicing_variety=0.25, voicing_family="classical",
-    reharm=(("with_secondary_doms", 1),), reharm_prob=0.10,
+    reharm=(("with_secondary_doms", 1),), reharm_prob=0.10, bass_inversion=0.15,
 )
 # Blues — rich jazzy voicings, but the 12-bar FORM is rigid: never repace
 # or reharmonize it (that breaks the canonical I7-IV7-V7 structure).

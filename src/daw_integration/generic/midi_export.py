@@ -276,6 +276,26 @@ VOICING_PALETTES: dict[str, dict[str, list[str]]] = {
 }
 
 
+def _smooth_bass_root(root, quality, prev_bass, rng, prob):
+    """Optionally substitute a chord inversion (3rd/5th in the bass) to
+    smooth a leaping bass line — a tasteful slash chord. Keeps the root
+    most of the time; only inverts when the root leaps and an inversion
+    turns it into stepwise motion from the previous bass note."""
+    if prev_bass is None or prob <= 0.0 or rng.random() >= prob:
+        return root
+    if abs(root - prev_bass) <= 4:        # already a small step — keep the root
+        return root
+    third = root + (3 if quality in ("min", "dim", "min7") else 4)
+    fifth = root + 7
+    cands = [third, fifth, third - 12, fifth - 12]
+    best = min(cands, key=lambda c: abs(c - prev_bass))
+    # Accept the inversion only when it genuinely smooths (a step) and stays
+    # within an octave of the real root (so it still reads as this chord).
+    if abs(best - prev_bass) <= 4 and abs(best - root) <= 12:
+        return best
+    return root
+
+
 def _chord_function(root_degree: Optional[int]) -> str:
     """Harmonic function from a chord's scale-degree index (0 = tonic).
 
@@ -2864,8 +2884,14 @@ class MidiExporter:
         seed: Optional[int] = None,
         approach_tones: bool = False,
         pattern_overrides: Optional[list[dict]] = None,
+        inversion_prob: float = 0.0,
     ) -> "MidiExporter":
         """Add a bass line that follows the chord progression.
+
+        ``inversion_prob`` (root / root_fifth patterns) is the per-bar
+        chance of playing a chord inversion (3rd/5th) in the bass instead
+        of the root when it smooths a leaping line — a tasteful slash-chord
+        passing motion. ``0.0`` (default) = always the root.
 
         Patterns:
           - ``root`` — whole-note roots
@@ -2918,9 +2944,10 @@ class MidiExporter:
         # overrides resolve against the original each iteration —
         # otherwise the first override would stick.
         master_pattern = pattern
+        prev_bass: Optional[int] = None
 
         for bar_idx, (bar_start, symbol, _seg_end_time) in enumerate(loop_tasks):
-            offset, _ = roman_to_semitone_offset(symbol, scale_name)
+            offset, _bass_quality = roman_to_semitone_offset(symbol, scale_name)
             root = root_midi + offset
             fifth = root + 7
             _notes_before = len(track.notes)
@@ -2942,14 +2969,23 @@ class MidiExporter:
                     if next_pat not in ("walking", "walking_swing"):
                         bar_approach = True
 
+            # Tasteful passing inversion (slash chord) on the downbeat root
+            # for the simple patterns, to smooth a leaping bass line.
+            eff_root = root
+            if pattern in ("root", "root_fifth"):
+                eff_root = _smooth_bass_root(
+                    root, _bass_quality, prev_bass, rng, inversion_prob,
+                )
+            prev_bass = eff_root
+
             if pattern == "root":
-                track.notes.append(NoteEvent(root, bar_start,
+                track.notes.append(NoteEvent(eff_root, bar_start,
                                              bar_start + self.bar_duration, velocity))
 
             elif pattern == "root_fifth":
-                # Half-bar root then half-bar fifth, scaled to meter.
+                # Half-bar root (or inversion) then half-bar fifth.
                 half = bpb / 2
-                track.notes.append(NoteEvent(root, bar_start,
+                track.notes.append(NoteEvent(eff_root, bar_start,
                                              bar_start + beat * half, velocity))
                 track.notes.append(NoteEvent(fifth, bar_start + beat * half,
                                              bar_start + beat * bpb, velocity))
