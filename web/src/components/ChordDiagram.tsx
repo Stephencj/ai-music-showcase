@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef } from "react";
 import type { RollNote } from "./NotationRoll";
 import type { TabNote } from "../guitarTab";
 import { stringLabelsFor, STANDARD_GUITAR } from "../guitarTab";
+import PickerField from "./PickerField";
+import InstrumentIcon from "./InstrumentIcon";
 
 // Two modes:
 //  • "chord" (practice): guitar chord SHAPE/fingering + chord tones on a
@@ -146,11 +148,13 @@ function PartSelect({ value, opts, onChange }: {
   value: number; opts: PartOpt[]; onChange: (i: number) => void;
 }) {
   return (
-    <select className="neck-part" value={value} onChange={(e) => onChange(Number(e.target.value))}
-      onClick={(e) => e.stopPropagation()}>
-      {value < 0 && <option value={-1}>—</option>}
-      {opts.map((o) => <option key={o.idx} value={o.idx}>{o.name}</option>)}
-    </select>
+    <span onClick={(e) => e.stopPropagation()}>
+      <PickerField value={String(value)} label="Part" placeholder="—"
+        fullWidth={false} className="part-pick"
+        options={opts.map((o) => ({ id: String(o.idx), label: o.name,
+          icon: <InstrumentIcon name={o.name} size={15} /> }))}
+        onChange={(id) => onChange(Number(id))} />
+    </span>
   );
 }
 
@@ -289,10 +293,13 @@ export function LiveDiagram({
         <span>{isNeck ? instLabel : "Piano"}{live ? " · live" : ""}</span>
         <span className="dc-head-ctl">
           {isNeck && instOptions && onInst && (
-            <select className="neck-part" value={instId} onChange={(e) => onInst(e.target.value)}
-              onClick={(e) => e.stopPropagation()} title="Instrument / tuning">
-              {instOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-            </select>
+            <span onClick={(e) => e.stopPropagation()}>
+              <PickerField value={instId ?? ""} label="Instrument / tuning"
+                fullWidth={false} className="part-pick"
+                options={instOptions.map((o) => ({ id: o.id, label: o.label,
+                  icon: <InstrumentIcon name={o.label} size={15} /> }))}
+                onChange={onInst} />
+            </span>
           )}
           <PartSelect value={partIdx} opts={parts} onChange={onPartIdx} />
           {onRemove && <button className="dc-remove" onClick={onRemove} title="Remove this diagram" aria-label="Remove">✕</button>}

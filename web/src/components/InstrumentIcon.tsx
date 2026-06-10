@@ -6,22 +6,35 @@ import type { JSX } from "react";
 
 export type IconKind =
   | "trumpet" | "trombone" | "tuba" | "horn"
-  | "sax" | "flute" | "clarinet" | "oboe" | "bassoon";
+  | "sax" | "flute" | "clarinet" | "oboe" | "bassoon"
+  | "piano" | "guitar" | "bass" | "drums" | "strings" | "vocal" | "mallet" | "note";
 
 // Order matters: more specific names first (e.g. "baritone sax" must hit sax
-// before "baritone horn" hits tuba; "english horn" must hit oboe before horn).
+// before "baritone horn" hits tuba; "english horn" must hit oboe before horn;
+// "bass clarinet"/"bassoon"/"bass drum"/"bass trombone" must resolve before the
+// bare "bass" → bass-guitar rule).
 export function iconKindFor(name: string): IconKind {
   const n = name.toLowerCase();
+  // winds / brass
   if (/sax/.test(n)) return "sax";
   if (/trombone/.test(n)) return "trombone";
   if (/tuba|sousaphone|euphonium|baritone\s*horn/.test(n)) return "tuba";
   if (/english\s*horn|cor\s*anglais|oboe/.test(n)) return "oboe";
   if (/french\s*horn|\bhorn\b/.test(n)) return "horn";
-  if (/trumpet|cornet|flugel/.test(n)) return "trumpet";
   if (/clarinet/.test(n)) return "clarinet";
   if (/bassoon/.test(n)) return "bassoon";
   if (/picc|flute|recorder|fife|whistle/.test(n)) return "flute";
-  return "trumpet";
+  if (/trumpet|cornet|flugel|brass/.test(n)) return "trumpet";
+  if (/woodwind/.test(n)) return "flute";
+  // rhythm section / others
+  if (/drum|percussion|\bkit\b|conga|bongo|timbale|cymbal|\btom\b|snare|kick|cajon/.test(n)) return "drums";
+  if (/\bbass\b/.test(n)) return "bass";
+  if (/guitar|uke|banjo|mandolin/.test(n)) return "guitar";
+  if (/violin|viola|cello|contrabass|fiddle|string|harp|pizz/.test(n)) return "strings";
+  if (/vocal|voice|choir|\bvox\b|sing|lead\s*vox|harmony/.test(n)) return "vocal";
+  if (/vibraphone|marimba|xylophone|glocken|\bbells?\b|mallet|celesta/.test(n)) return "mallet";
+  if (/piano|keys|keyboard|organ|synth|rhodes|wurli|clav|accordion|\bpad\b|epiano/.test(n)) return "piano";
+  return "note";
 }
 
 const GLYPH: Record<IconKind, JSX.Element> = {
@@ -84,6 +97,53 @@ const GLYPH: Record<IconKind, JSX.Element> = {
     <path d="M9 20h4" />
     <path d="M9 7.5q0-3 3-3" />
     <path d="M12 4.5l3.5-1.2" />
+  </>),
+  // Keyboard with key dividers and black keys.
+  piano: (<>
+    <rect x="2.5" y="7" width="19" height="10" rx="1.5" />
+    <path d="M7 7v10M12 7v10M17 7v10" />
+    <path d="M5.4 7v5M9.6 7v5M14.4 7v5M18.6 7v5" strokeWidth="2.2" />
+  </>),
+  // Round body + soundhole, neck up to the headstock.
+  guitar: (<>
+    <circle cx="8.5" cy="15.5" r="5" />
+    <circle cx="8.5" cy="15.5" r="1.6" />
+    <path d="M11.8 12.2l6.4-6.4" />
+    <path d="M18.2 5.8l1.8-1.8" />
+  </>),
+  // Same body, with tuner pegs to read as a (bass) guitar headstock.
+  bass: (<>
+    <circle cx="8.5" cy="16" r="4.6" />
+    <circle cx="8.5" cy="16" r="1.5" />
+    <path d="M11.6 12.9l6.6-6.6" />
+    <path d="M18.2 6.3l2-2M17 4.4l1.2 1.2M19.4 6.8l1.2 1.2" />
+  </>),
+  // Drum body, head ellipse, crossed sticks.
+  drums: (<>
+    <rect x="5" y="11" width="14" height="7" rx="1.2" />
+    <ellipse cx="12" cy="11" rx="7" ry="2.3" />
+    <path d="M6.5 8.5l4 2.2M17.5 6l-5 4.7" />
+  </>),
+  // Figure-8 violin body (overlapping bouts) + neck.
+  strings: (<>
+    <circle cx="9" cy="15.5" r="4" />
+    <circle cx="11" cy="9.5" r="3" />
+    <path d="M13 7.5l4.5-4.5" />
+  </>),
+  // Microphone: capsule, grille arc, stand.
+  vocal: (<>
+    <rect x="9" y="3" width="6" height="10" rx="3" />
+    <path d="M6 11a6 6 0 0012 0" />
+    <path d="M12 17v3M9 21h6" />
+  </>),
+  // Tuned bars (xylophone/marimba), descending lengths.
+  mallet: (<>
+    <path d="M5 8h14M5 12h11M5 16h8" strokeWidth="2" />
+  </>),
+  // Eighth note fallback.
+  note: (<>
+    <circle cx="8" cy="17" r="2.6" />
+    <path d="M10.6 17V5l7-2v3l-7 2" />
   </>),
 };
 

@@ -884,11 +884,11 @@ export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
                           <div className="diagram-title">
                             <span>{title}</span>
                             <span className="dc-head-ctl">
-                              <select className="neck-part" value={d.slot.partIdx}
-                                onChange={(e) => setPart(Number(e.target.value))}>
-                                {opts.length === 0 && <option value={-1}>—</option>}
-                                {opts.map((o) => <option key={o.idx} value={o.idx}>{o.name}</option>)}
-                              </select>
+                              <PickerField value={String(d.slot.partIdx)} label="Part" placeholder="—"
+                                fullWidth={false} className="part-pick"
+                                options={opts.map((o) => ({ id: String(o.idx), label: o.name,
+                                  icon: <InstrumentIcon name={o.name} size={15} /> }))}
+                                onChange={(id) => setPart(Number(id))} />
                               {remove && <button className="dc-remove" onClick={remove} aria-label="Remove">✕</button>}
                             </span>
                           </div>
@@ -942,14 +942,16 @@ export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
             </div>
             {/* The score section (Sheet / Tab / notation roll) picks its part. */}
             {!sourceIsSong && partOptions.length > 0 && (view === "sheet" || view === "tab") && (
-              <label className="chart-part">
-                <select value={chartIdx} onChange={(e) => { setChartIdx(Number(e.target.value)); setSolo(false); }}>
-                  {partOptions.map((p) => <option key={p.idx} value={p.idx}>{p.name}</option>)}
-                </select>
-                <span className="part-solo">
+              <div className="chart-part">
+                <PickerField value={String(chartIdx)} label="Part to notate" placeholder="Pick a part"
+                  fullWidth={false} className="part-pick"
+                  options={partOptions.map((p) => ({ id: String(p.idx), label: p.name,
+                    icon: <InstrumentIcon name={p.name} size={15} /> }))}
+                  onChange={(id) => { setChartIdx(Number(id)); setSolo(false); }} />
+                <label className="part-solo">
                   <input type="checkbox" checked={solo} onChange={(e) => setSolo(e.target.checked)} /> Solo
-                </span>
-              </label>
+                </label>
+              </div>
             )}
             <button className="gear-btn" onClick={() => setShowSettings((s) => !s)} title="Practice settings">⚙</button>
           </div>

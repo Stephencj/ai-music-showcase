@@ -918,6 +918,8 @@ audio { width: 100%; margin: 8px 0 12px; }
 .wtab-ap { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; margin-left: auto; }
 .wtab-ap .ap-label { white-space: nowrap; }
 .inst-ic { display: inline-block; vertical-align: -2px; flex: 0 0 auto; color: var(--accent-2); }
+/* Part/instrument pickers in tight header rows: cap width → name ellipsizes. */
+.part-pick { max-width: 190px; min-width: 0; font-size: 13px; padding: 7px 10px; }
 .pf-opt-ic { flex: 0 0 auto; display: inline-flex; color: var(--accent-2); }
 .pf-icon .inst-ic { color: inherit; }
 /* Clickable ensemble member in the live diagram → tabs that instrument. */
