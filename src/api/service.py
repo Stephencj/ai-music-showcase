@@ -608,6 +608,66 @@ def block_part_audio(name: str, track_index: int) -> str:
     return str(cache)
 
 
+def karaoke_data(name: str) -> dict:
+    """Karaoke payload for a block: the lead-vocal melody (pitch + timing) and
+    the lyrics aligned to those notes (per-word start/end seconds), for the
+    full-screen karaoke view's highlighted lyrics + scrolling pitch lane."""
+    from src.daw_integration.generic import blocks as block_store
+    from src.models.vocals.lyrics import (
+        align_words_to_notes, monophonic_line, select_vocal_tracks,
+    )
+
+    pm, meta = block_store.load_block(name)
+    spec = meta.get("spec") or {}
+    lead, _harms = select_vocal_tracks(pm)
+    notes = monophonic_line(lead)
+    note_list = [[int(p), round(s, 4), round(e, 4)] for (p, s, e) in notes]
+
+    # Strip [Section] header lines so they aren't sung/highlighted as words
+    # (and don't shift the word→note alignment — the melody was composed from
+    # the content lines only).
+    import re as _re
+    lyrics = meta.get("lyrics") or ""
+    sung_lyrics = "\n".join(
+        ln for ln in lyrics.splitlines()
+        if not _re.match(r"^\s*\[.*\]\s*$", ln)
+    )
+    words = []
+    for seg in align_words_to_notes(sung_lyrics, notes):
+        start = float(seg["start"])
+        dur = sum(float(d) for (_p, d) in seg["notes"])
+        words.append({"text": seg["text"], "start": round(start, 4),
+                      "end": round(start + dur, 4)})
+    return {
+        "duration": float(pm.get_end_time()),
+        "tempo": float(spec.get("tempo") or meta.get("tempo") or 120.0),
+        "key": spec.get("key") or meta.get("key") or "C",
+        "scale": spec.get("scale") or meta.get("scale") or "major",
+        "notes": note_list,        # [[pitch, start_sec, end_sec], ...]
+        "words": words,            # [{text, start, end}, ...]
+        "lyrics": lyrics,
+        "has_lead": bool(note_list),
+    }
+
+
+def vocal_guide_audio(name: str) -> str:
+    """Render the block's Lead Vocal track in isolation — the guide melody the
+    user sings along to in karaoke. Returns the MP3 path (reuses the cached
+    per-track render)."""
+    from src.daw_integration.generic import blocks as block_store
+
+    pm, _meta = block_store.load_block(name)
+    idx = None
+    for i, inst in enumerate(pm.instruments):
+        nm = (inst.name or "").lower()
+        if "lead vocal" in nm or (not inst.is_drum and inst.program in (52, 53, 54)):
+            idx = i
+            break
+    if idx is None:
+        raise ValueError("no Lead Vocal track to use as a guide")
+    return block_part_audio(name, idx)
+
+
 def song_score_data(title: str) -> dict:
     """Practice-chart score-data for a saved SONG (a timeline of blocks).
 

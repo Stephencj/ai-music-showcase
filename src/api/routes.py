@@ -424,6 +424,26 @@ def block_part_audio_route(name: str, track_index: int) -> FileResponse:
         raise HTTPException(404, f"No part audio: {exc}")
 
 
+@router.get("/blocks/{name}/karaoke")
+def block_karaoke(name: str) -> dict:
+    """Karaoke payload: lead-vocal melody notes (pitch+timing) + lyrics aligned
+    to those notes (per-word start/end), for the full-screen karaoke view."""
+    try:
+        return service.karaoke_data(name)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, f"No karaoke data: {exc}")
+
+
+@router.get("/blocks/{name}/vocal-guide-audio")
+def block_vocal_guide_audio(name: str) -> FileResponse:
+    """The block's Lead Vocal track rendered alone — the guide melody to sing
+    along to in karaoke."""
+    try:
+        return _serve(Path(service.vocal_guide_audio(name)), "audio/mpeg")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, f"No vocal guide audio: {exc}")
+
+
 @router.get("/blocks/{name}/score-data")
 def block_score_data(name: str) -> dict:
     """Per-bar chords (symbol / Roman / Nashville) + bar timings for the

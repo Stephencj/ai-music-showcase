@@ -296,8 +296,8 @@ audio { width: 100%; margin: 8px 0 12px; }
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .section-voices { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
-.sv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 8px; border-radius: 8px; background: var(--bg-2); }
-.sv-label { font-size: 12px; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 8px; border-radius: 8px; background: var(--bg-2); flex-wrap: wrap; }
+.sv-label { font-size: 12px; color: var(--text); flex: 1 1 55%; min-width: 0; }
 .sv-role { color: var(--muted); }
 .sv-hint { color: var(--accent-2); }
 .sv-toggle { display: flex; gap: 4px; flex-shrink: 0; }
@@ -307,10 +307,28 @@ audio { width: 100%; margin: 8px 0 12px; }
 .at-row .te-note { display: inline-flex; align-items: center; }
 .rec-dot { color: var(--danger); animation: rec-blink 1s steps(2, start) infinite; }
 @keyframes rec-blink { to { opacity: 0.3; } }
-.voc-row { display: flex; gap: 8px; align-items: center; }
-.voc-row > input, .voc-row > select { flex: 1; min-width: 0; }
+.voc-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.voc-row > input, .voc-row > select { flex: 1 1 140px; min-width: 0; }
 .voc-theme { padding: 9px 10px; }
 .vocals audio { width: 100%; }
+
+/* Mobile: stack the vocal controls into full-width, tappable rows instead
+   of cramming selects/chips/buttons into one overflowing line. */
+@media (max-width: 560px) {
+  .bc-detail { padding: 2px 6px 12px; }
+  .vocals { padding: 8px; }
+  .voc-row, .at-row, .sv-row { gap: 6px; }
+  .voc-row > select, .voc-row > input { flex-basis: 100%; min-height: 40px; font-size: 14px; }
+  .voc-row .btn, .voc-row .chip, .at-row .btn, .at-row .chip, .at-row select {
+    min-height: 40px; font-size: 14px;
+  }
+  .voc-row .btn, .voc-row .chip { flex: 1 1 auto; }
+  .lyrics-area { font-size: 15px; }
+  .phonetic-text { font-size: 14px; }
+  .sv-label { flex-basis: 100%; }
+  .sv-toggle { width: 100%; }
+  .sv-toggle .chip { flex: 1 1 0; min-height: 36px; }
+}
 
 /* Tag editor in expanded card */
 .tag-edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -539,6 +557,21 @@ audio { width: 100%; margin: 8px 0 12px; }
 
 .loop-row { display: flex; align-items: center; gap: 8px; }
 .loop-row select { padding: 7px 9px; border-radius: 8px; background: var(--bg-2); color: var(--text); border: 1px solid rgba(255,255,255,0.12); font-size: 13px; }
+
+/* Section-loop engine transport (replaces native controls while looping) */
+.engine-transport {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; border-radius: 10px;
+  background: linear-gradient(135deg, rgba(124,92,255,0.16), rgba(56,132,255,0.16));
+  border: 1px solid rgba(124,92,255,0.35);
+}
+.engine-play {
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%;
+  border: none; cursor: pointer; font-size: 16px; line-height: 1;
+  color: #fff; background: linear-gradient(135deg, var(--violet), var(--blue));
+}
+.engine-play:active { transform: scale(0.94); }
+.engine-label { font-size: 12.5px; color: var(--muted); }
 
 /* Practice speed slider */
 .speed-slider { flex: 1; min-width: 100px; accent-color: var(--accent); height: 4px; }
