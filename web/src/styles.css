@@ -35,6 +35,8 @@ body {
   margin: 0 auto;
   padding: 0 16px calc(152px + env(safe-area-inset-bottom));
 }
+/* Tab panes stay mounted (state persists); only the active one shows. */
+.tab-pane.hidden { display: none; }
 
 /* Header */
 .topbar {

@@ -20,15 +20,19 @@ export default function App() {
         </div>
       </header>
 
-      {tab === "generate" ? (
+      {/* All three screens stay mounted so switching tabs never loses your
+          in-progress work; only the active one is shown. */}
+      <div className={"tab-pane" + (tab === "generate" ? "" : " hidden")}>
         <GenerateScreen initialSpec={editSpec} onSpecConsumed={() => setEditSpec(null)} />
-      ) : tab === "compose" ? (
+      </div>
+      <div className={"tab-pane" + (tab === "compose" ? "" : " hidden")}>
         <ComposeScreen
           onEditInGenerate={(spec) => { setEditSpec(spec); setTab("generate"); }}
         />
-      ) : (
+      </div>
+      <div className={"tab-pane" + (tab === "practice" ? "" : " hidden")}>
         <PracticeScreen />
-      )}
+      </div>
 
       <nav className="tabbar">
         <button className={tab === "generate" ? "on" : ""} onClick={() => setTab("generate")}>
