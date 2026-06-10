@@ -45,13 +45,31 @@ class TestRockLeadIntegration(unittest.TestCase):
         # Bends survive the MIDI round-trip (articulation rendered + serialized).
         self.assertGreater(len(lead.pitch_bends), 10, "no bends on the lead")
 
-    def test_solo_section_is_not_silent(self):
-        """The solo section (bars 72-87 of rock_anthem_full) must contain
-        lead-guitar notes — the old behaviour rendered a silent pad there."""
-        lead = _compose()["Lead Guitar"]
-        lo, hi = 72 * _BAR_DUR, 88 * _BAR_DUR
-        in_solo = [n for n in lead.notes if lo <= n.start < hi]
-        self.assertTrue(in_solo, "solo section has no lead-guitar notes")
+    def test_lead_is_featured_not_constant(self):
+        """The lead is featured, not wallpaper: it must NOT play the intro
+        (bars 0-7) and must join the FINAL chorus (bars 72? no — Chorus 2 =
+        bars 56-71 in rock_anthem_full)."""
+        from src.composition.song_composer import (
+            _lead_guitar_section_plan, _default_sections_for,
+        )
+        secs = _default_sections_for(ROCK)
+        # Final chorus is always in the plan; intro/outro never; not all.
+        for seed in range(8):
+            plan = _lead_guitar_section_plan(secs, seed)
+            roles = [(secs[i]["role"], secs[i]["label"]) for i in plan]
+            self.assertLess(len(plan), len(secs), "lead plays every section")
+            self.assertNotIn("intro", [r for r, _ in roles])
+            self.assertNotIn("outro", [r for r, _ in roles])
+            chorus_idxs = [i for i, s in enumerate(secs) if s["role"] == "chorus"]
+            self.assertIn(chorus_idxs[-1], plan, "lead misses the final chorus")
+            # Earlier choruses are NOT joined.
+            for ci in chorus_idxs[:-1]:
+                self.assertNotIn(ci, plan, "lead joined a non-final chorus")
+
+    def test_lead_absent_from_intro_in_render(self):
+        lead = _compose(7)["Lead Guitar"]
+        intro = [n for n in lead.notes if n.start < 8 * _BAR_DUR]
+        self.assertFalse(intro, "lead guitar should not play the intro")
 
     def test_deterministic(self):
         self.assertEqual(

@@ -153,6 +153,46 @@ def _plays_in_section(inst_obj, role: str, has_harmonic: bool) -> bool:
     return True
 
 
+def _lead_guitar_section_plan(sections: list[dict], seed: int) -> set:
+    """Which section indices the LEAD GUITAR actually plays in.
+
+    A lead is featured, not wallpaper: it riffs the odd verse/interlude,
+    sometimes takes the bridge as a solo, and comes in for the FINAL
+    chorus payoff — it does NOT play every section. Deterministic per
+    seed. Returns the set of section indices where the lead plays.
+    """
+    rng = np.random.default_rng(_sub_seed(seed, "lead_arrangement"))
+    roled = [
+        (i, (s.get("role") or role_for_label(s.get("label", ""))),
+         (s.get("label", "") or "").lower())
+        for i, s in enumerate(sections)
+    ]
+    play: set = set()
+
+    # Choruses: only the FINAL one (the big finish the lead joins).
+    chorus_idxs = [i for i, r, _ in roled if r == "chorus"]
+    if chorus_idxs:
+        play.add(chorus_idxs[-1])
+
+    # Verses / interludes: a riff in some — usually the last verse, the
+    # earlier ones only now and then.
+    verse_idxs = [i for i, r, _ in roled if r == "verse"]
+    for pos, i in enumerate(verse_idxs):
+        is_last = pos == len(verse_idxs) - 1
+        if rng.random() < (0.65 if is_last else 0.25):
+            play.add(i)
+
+    # Bridge: a solo sometimes (more often when the section is literally
+    # labelled a solo).
+    for i, r, label in roled:
+        if r == "bridge":
+            if rng.random() < (0.85 if "solo" in label else 0.55):
+                play.add(i)
+
+    # Intro / outro: leave the lead out.
+    return play
+
+
 def _sub_seed(master: int, *parts) -> int:
     """Derive a stable sub-seed from the master + arbitrary labels.
 
@@ -322,6 +362,9 @@ def compose_song(
     _has_harmonic = any(
         r in ("chords", "melody") for _, r, _ in active_passes
     )
+    # Featured lead-guitar arrangement: it riffs the odd verse, solos the
+    # bridge sometimes, and joins the final chorus — not every section.
+    _lead_sections = _lead_guitar_section_plan(sections, seed)
 
     pacing_picks: dict[str, object] = {}
     for sec_idx, section in enumerate(sections):
@@ -361,6 +404,11 @@ def compose_song(
             # band breathes (backing vox/percussion enter on the chorus;
             # drums hold off in the intro).
             if not _plays_in_section(inst_obj, role, _has_harmonic):
+                continue
+            # Lead guitar is featured, not constant: only the sections in
+            # its plan (some verses, the bridge sometimes, the final chorus).
+            if (getattr(inst_obj, "id", None) == "lead_guitar"
+                    and sec_idx not in _lead_sections):
                 continue
             override_key = f"{role}:{instrument_token}"
             label_key = f"{label}:{instrument_token}"
