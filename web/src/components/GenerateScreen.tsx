@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../api";
 import type { BlockSpec, Family, GenerateBody, Job, JobResult, Preset } from "../types";
 import CircleOfFifths from "./CircleOfFifths";
+import PickerField from "./PickerField";
 
 const SCALES = [
   "major", "minor", "dorian", "phrygian", "lydian", "mixolydian", "locrian",
@@ -206,17 +207,9 @@ export default function GenerateScreen({
     <>
       <div className="card">
         <h2>Preset</h2>
-        <select
-          value={presetId}
-          onChange={(e) => {
-            const p = presets.find((x) => x.id === e.target.value);
-            if (p) applyPreset(p);
-          }}
-        >
-          {presets.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+        <PickerField value={presetId} label="Preset" placeholder="Pick a preset" icon="🎛" searchable
+          options={presets.map((p) => ({ id: p.id, label: p.name }))}
+          onChange={(id) => { const p = presets.find((x) => x.id === id); if (p) applyPreset(p); }} />
       </div>
 
       <div className="card">
@@ -292,9 +285,8 @@ export default function GenerateScreen({
       <div className="card">
         <h2>Output</h2>
         <label className="field"><span>Master preset</span>
-          <select value={master} onChange={(e) => setMaster(e.target.value)}>
-            {masters.map((m) => <option key={m}>{m}</option>)}
-          </select>
+          <PickerField value={master} label="Master preset" icon="🎚"
+            options={masters.map((m) => ({ id: m, label: m }))} onChange={setMaster} />
         </label>
         <div className="chips">
           <button className={"chip" + (withPdf ? " on" : "")} onClick={() => setWithPdf(!withPdf)}>PDF score</button>

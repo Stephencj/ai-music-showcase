@@ -23,6 +23,7 @@ import type { Block, BlockSpec, SectionVoice, SongRenderResult } from "../types"
 import Waveform from "./Waveform";
 import Sparkline from "./Sparkline";
 import KaraokeScreen from "./KaraokeScreen";
+import PickerField from "./PickerField";
 
 interface TLItem {
   id: string;
@@ -279,10 +280,8 @@ export default function ComposeScreen({
         {songs.length > 0 && (
           <label className="field" style={{ marginTop: 12 }}>
             <span>Load saved song</span>
-            <select value="" onChange={(e) => onLoad(e.target.value)}>
-              <option value="">— pick —</option>
-              {songs.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <PickerField value="" label="Load saved song" placeholder="— pick a song —" icon="📂" searchable
+              options={songs.map((s) => ({ id: s, label: s }))} onChange={onLoad} />
           </label>
         )}
         {msg && <div className="ok" style={{ marginTop: 6 }}>{msg}</div>}
@@ -363,15 +362,11 @@ export default function ComposeScreen({
           <>
             <div className="lib-controls">
               <input className="lib-search" type="text" placeholder="Search blocks…" value={query} onChange={(e) => setQuery(e.target.value)} />
-              <select value={sortBy} onChange={(e) => changeSort(e.target.value as SortKey)}>
-                <option value="name">Name</option>
-                <option value="created">Recent</option>
-                <option value="tempo">Tempo</option>
-                <option value="bars">Bars</option>
-                <option value="notes">Notes</option>
-                <option value="duration">Duration</option>
-                <option value="vocals">Vocals</option>
-              </select>
+              <PickerField value={sortBy} label="Sort by" icon="↕" fullWidth={false} className="lib-sort"
+                options={[["name", "Name"], ["created", "Recent"], ["tempo", "Tempo"], ["bars", "Bars"],
+                  ["notes", "Notes"], ["duration", "Duration"], ["vocals", "Vocals"]]
+                  .map(([id, label]) => ({ id, label }))}
+                onChange={(id) => changeSort(id as SortKey)} />
               <button className="btn ghost" style={{ width: "auto" }} title="Sort direction"
                 onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}>
                 {sortDir === "asc" ? "▲" : "▼"}
@@ -780,12 +775,10 @@ function BlockCard({
                   ))}
                 </select>
               )}
-              <select value={voice} onChange={(e) => setVoice(e.target.value)} title="Voice">
-                {voiceOptions.length === 0 && <option value="">default</option>}
-                {voiceOptions.map((v) => (
-                  <option key={v} value={v}>{v.replace(/^tiger_/, "")}</option>
-                ))}
-              </select>
+              <PickerField value={voice} label="Voice" placeholder="default" title="Voice"
+                fullWidth={false} className="voc-pick"
+                options={voiceOptions.map((v) => ({ id: v, label: v.replace(/^tiger_/, "") }))}
+                onChange={setVoice} />
               <button className={"chip" + (harmonies ? " on" : "")} onClick={() => setHarmonies((h) => !h)} title="Stack harmony/backing lines">＋harmonies</button>
               <button className={"chip" + (clarity ? " on" : "")} onClick={() => setClarity((c) => !c)} title="Clarity mode: cap high notes, gap words, de-melisma for clearer diction (trades a little melody)">✦clarity</button>
               <button className={"chip" + (showPhonetic ? " on" : "")} onClick={() => setShowPhonetic((s) => !s)} title="Edit how each word is pronounced (ARPABET) to fix the voice's diction">🗣 phonetic</button>

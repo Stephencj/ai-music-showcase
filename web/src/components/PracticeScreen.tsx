@@ -13,7 +13,8 @@ import { isFrettedTrack, isGuitarTrack, isKeysTrack, stringLabelsFor, assignFret
 import type { TabNote } from "../guitarTab";
 import { DrumDiagram, FingeringDiagram } from "./InstrumentDiagrams";
 import CircleOfFifths from "./CircleOfFifths";
-import { familyFor, voiceSpecsFor } from "../instruments";
+import { familyFor, voiceSpecsFor, voiceLine } from "../instruments";
+import PickerField from "./PickerField";
 import * as webmidi from "../webmidi";
 import type { MidiOut } from "../webmidi";
 import { LoopPlayer } from "../loopPlayer";
@@ -57,6 +58,7 @@ export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
   const slotId = useRef(1);
   const [chartIdx, setChartIdx] = useState(-1);  // score section part (-1 = chords only)
   const [solo, setSolo] = useState(false);       // play just the chart part
+  const [tabMember, setTabMember] = useState(0); // which ensemble member the wind tab shows
   const [capo, setCapo] = useState(0);           // chord-shape capo (teaching)
   // Real-time MIDI out: stream this block's notes to a hardware/virtual port.
   const [midiOuts, setMidiOuts] = useState<MidiOut[]>([]);
@@ -891,7 +893,11 @@ export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
                           </div>
                           {d.slot.kind === "drums"
                             ? <DrumDiagram notes={d.drumNotes || []} audioRef={playhead} />
-                            : <FingeringDiagram notes={d.notes} audioRef={playhead} members={voiceSpecsFor(d.instName || "")} />}
+                            : <FingeringDiagram notes={d.notes} audioRef={playhead}
+                                members={voiceSpecsFor(d.instName || "")}
+                                onPickMember={blockName ? (mi) => {
+                                  setChartIdx(d.slot.partIdx); setTabMember(mi); setSolo(false); setView("tab");
+                                } : undefined} />}
                         </div>
                       );
                     })}
@@ -982,21 +988,34 @@ export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
                   </div>
                 )
                 : (() => {
-                    // No fret tab → if it's a single wind/brass part, show the
-                    // wind "tab" (valve/slide/key lane). Sections are too busy.
+                    // No fret tab → if it's a wind/brass part, show the wind
+                    // "tab" (valve/slide/key lane). A section is an ensemble, so
+                    // we tab ONE member at a time — pick which with the chooser.
                     const fam = chartTrack ? familyFor(chartTrack.track, !!chartTrack.is_drum) : null;
                     const specs = chartTrack ? voiceSpecsFor(chartTrack.track) : [];
-                    if ((fam === "brass" || fam === "woodwind") && specs.length === 1) {
+                    if (fam === "brass" || fam === "woodwind") {
+                      const isEnsemble = specs.length > 1;
+                      const mi = Math.min(tabMember, specs.length - 1);
+                      const ms = specs[mi];
+                      // Section → extract that member's line; solo → the part as-is.
+                      const lane = isEnsemble ? voiceLine(chartRollNotes, mi, specs.length) : chartRollNotes;
                       return (
                         <div className="tab-card">
-                          <div className="diagram-title">{chartTrack!.track} — fingering tab</div>
-                          <WindTabView notes={chartRollNotes} audioRef={playhead}
-                            kind={specs[0].kind} transpose={specs[0].transpose} />
+                          <div className="diagram-title-row">
+                            <div className="diagram-title">
+                              {isEnsemble ? `${chartTrack!.track} · ${ms.label}` : chartTrack!.track} — fingering tab
+                            </div>
+                            {isEnsemble && (
+                              <PickerField value={String(mi)} label="Tab which instrument"
+                                icon="🎺" fullWidth={false} className="tab-member"
+                                options={specs.map((s, i) => ({ id: String(i), label: s.label }))}
+                                onChange={(id) => setTabMember(Number(id))} />
+                            )}
+                          </div>
+                          <WindTabView notes={lane} audioRef={playhead}
+                            kind={ms.kind} transpose={ms.transpose} />
                         </div>
                       );
-                    }
-                    if ((fam === "brass" || fam === "woodwind") && specs.length > 1) {
-                      return <div className="practice-hint">Ensemble parts are easier to read on the Live diagram — pick a single wind instrument to tab it.</div>;
                     }
                     return <div className="practice-hint">This part isn't a guitar or bass — pick a fretted part above to tab it.</div>;
                   })()

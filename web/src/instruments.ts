@@ -201,3 +201,29 @@ export function voiceSpecsFor(trackName: string): VoiceSpec[] {
 export function notesAt<T extends { start: number; dur: number }>(notes: T[], t: number): T[] {
   return notes.filter((n) => t >= n.start && t < n.start + n.dur);
 }
+
+/** Pull a single member's monophonic line out of a section's voiced chords.
+ *  Notes that start together (within ~60ms) form one chord; its distinct
+ *  pitches are ranked high→low and voice `voiceIdx` (0 = top of the section)
+ *  takes the matching pitch — mirroring how the live diagrams assign voices to
+ *  members. Lets an ensemble part be tabbed one instrument at a time. */
+export function voiceLine<T extends { pitch: number; start: number; dur: number }>(
+  notes: T[], voiceIdx: number, _nVoices: number,
+): { pitch: number; start: number; dur: number }[] {
+  const sorted = [...notes].sort((a, b) => a.start - b.start);
+  const groups: { start: number; notes: T[] }[] = [];
+  for (const n of sorted) {
+    const g = groups[groups.length - 1];
+    if (g && Math.abs(n.start - g.start) <= 0.06) g.notes.push(n);
+    else groups.push({ start: n.start, notes: [n] });
+  }
+  const out: { pitch: number; start: number; dur: number }[] = [];
+  for (const g of groups) {
+    const seen = new Set<number>();
+    const distinct = g.notes.slice().sort((a, b) => b.pitch - a.pitch)
+      .filter((n) => (seen.has(n.pitch) ? false : (seen.add(n.pitch), true)));
+    const pick = distinct[voiceIdx];
+    if (pick) out.push({ pitch: pick.pitch, start: g.start, dur: pick.dur });
+  }
+  return out;
+}

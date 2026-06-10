@@ -65,8 +65,9 @@ export function DrumDiagram({ notes, audioRef }: { notes: NoteSec[]; audioRef: A
 // fingering kind + transposition), or a single solo instrument. Voices are
 // assigned highest→lowest to the members (top of the chord = top of the
 // section).
-export function FingeringDiagram({ notes, audioRef, members }: {
+export function FingeringDiagram({ notes, audioRef, members, onPickMember }: {
   notes: NoteSec[]; audioRef: AudioRef; members: VoiceSpec[];
+  onPickMember?: (memberIdx: number) => void;   // click a member → tab that instrument
 }) {
   const n = Math.max(1, members.length);
   const isSection = members.length > 1;
@@ -141,8 +142,14 @@ export function FingeringDiagram({ notes, audioRef, members }: {
       <div className="inst-orient">{orient}</div>
       <div className="voice-stack">
         {members.map((m, s) => (
-          <div key={s} className={`voice-slot voice-${m.kind}`} ref={(el) => { slotEls.current[s] = el; }}>
-            {isSection && <div className="voice-member">{m.label}</div>}
+          <div key={s}
+            className={`voice-slot voice-${m.kind}` + (onPickMember ? " pickable" : "")}
+            ref={(el) => { slotEls.current[s] = el; }}
+            role={onPickMember ? "button" : undefined}
+            tabIndex={onPickMember ? 0 : undefined}
+            title={onPickMember ? `Tab ${m.label}` : undefined}
+            onClick={onPickMember ? () => onPickMember(s) : undefined}>
+            {isSection && <div className="voice-member">{m.label}{onPickMember ? " ›" : ""}</div>}
             <div className="inst-note vsmall" ref={(el) => { noteEls.current[s] = el; }}>—</div>
             {m.kind === "valves" ? (
               <svg className="brass-valves-mini" viewBox="0 0 86 40" preserveAspectRatio="xMidYMid meet" aria-label="valves">

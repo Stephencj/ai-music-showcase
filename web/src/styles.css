@@ -182,7 +182,7 @@ audio { width: 100%; margin: 8px 0 12px; }
    grid; an expanded card spans the full width for its detail/waveform. */
 .lib-controls { display: flex; gap: 8px; margin-top: 12px; }
 .lib-search { flex: 1; }
-.lib-controls select { flex: 0 0 auto; width: auto; }
+.lib-controls select, .lib-controls .lib-sort { flex: 0 0 auto; width: auto; }
 .block-list {
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
   align-items: start; margin-top: 10px;
@@ -310,7 +310,7 @@ audio { width: 100%; margin: 8px 0 12px; }
 .rec-dot { color: var(--danger); animation: rec-blink 1s steps(2, start) infinite; }
 @keyframes rec-blink { to { opacity: 0.3; } }
 .voc-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.voc-row > input, .voc-row > select { flex: 1 1 140px; min-width: 0; }
+.voc-row > input, .voc-row > select, .voc-row > .voc-pick { flex: 1 1 140px; min-width: 0; }
 .voc-theme { padding: 9px 10px; }
 .vocals audio { width: 100%; }
 
@@ -633,6 +633,53 @@ audio { width: 100%; margin: 8px 0 12px; }
 .cof-c-sig { fill: var(--accent-2); font-size: 11px; font-weight: 600; }
 .cof-hint { margin-top: 8px; text-align: center; font-size: 11px; color: var(--muted); }
 
+/* ── PickerField: button trigger + searchable list popup ─────────────────────
+   Shares the .cof-backdrop dimmer; .pf-popup is a taller variant of .cof-popup.
+   The trigger matches .keypick so list-pickers and the key wheel look alike. */
+.pickfield {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 12px; border-radius: 8px; background: var(--bg-2); color: var(--text);
+  border: 1px solid rgba(255,255,255,0.12); font-size: 13px; font-weight: 600;
+  cursor: pointer; text-align: left; min-width: 0;
+}
+.pickfield:hover:not(:disabled) { border-color: var(--accent); }
+.pickfield:disabled { opacity: 0.5; cursor: default; }
+.pf-full { width: 100%; }
+.pf-icon { flex: 0 0 auto; opacity: 0.85; }
+.pf-val { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-caret { flex: 0 0 auto; color: var(--muted); font-size: 11px; }
+
+.pf-popup {
+  width: min(420px, 94vw); max-height: min(72vh, 620px); display: flex; flex-direction: column;
+  background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+  padding: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.pf-search {
+  width: 100%; padding: 9px 11px; margin-bottom: 8px; border-radius: 9px;
+  background: var(--bg-2); color: var(--text); border: 1px solid rgba(255,255,255,0.14);
+  font-size: 14px;
+}
+.pf-search:focus { outline: none; border-color: var(--accent); }
+.pf-list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin: 0 -4px; padding: 0 4px; }
+.pf-group-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted);
+  padding: 8px 6px 4px; position: sticky; top: 0; background: var(--card);
+}
+.pf-opt {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left;
+  padding: 10px 10px; border-radius: 9px; border: 1px solid transparent;
+  background: transparent; color: var(--text); font-size: 14px; cursor: pointer;
+}
+.pf-opt:hover { background: var(--bg-2); }
+.pf-opt.sel { background: rgba(43,109,246,0.16); border-color: rgba(109,162,255,0.5); }
+.pf-opt-label { flex: 1 1 auto; min-width: 0; font-weight: 600; }
+.pf-opt-sub { flex: 0 0 auto; font-size: 12px; color: var(--muted); }
+.pf-opt-check { flex: 0 0 auto; color: var(--accent-2); font-weight: 700; }
+.pf-empty { padding: 16px 8px; text-align: center; color: var(--muted); font-size: 13px; }
+@media (hover: hover) and (pointer: fine) {
+  .pickfield, .pf-opt, .cof-close { cursor: pointer; }
+}
+
 /* Practice: pinned head + independently-scrolling chart */
 .practice-head { display: flex; flex-direction: column; gap: 12px; }
 .view-toggle { align-self: flex-start; }
@@ -863,6 +910,12 @@ audio { width: 100%; margin: 8px 0 12px; }
 
 /* ── Guitar tab lane (Practice → Tab) ────────────────────────────── */
 .tab-card { margin-top: 10px; }
+.diagram-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.diagram-title-row .diagram-title { flex: 1 1 auto; min-width: 0; }
+.tab-member { flex: 0 0 auto; }
+/* Clickable ensemble member in the live diagram → tabs that instrument. */
+.voice-slot.pickable { cursor: pointer; border-radius: 10px; transition: background 0.12s, box-shadow 0.12s; }
+.voice-slot.pickable:hover { background: rgba(89,231,194,0.08); box-shadow: inset 0 0 0 1px rgba(89,231,194,0.35); }
 .tab-lane-wrap {
   width: 100%; overflow: hidden;
   background: linear-gradient(180deg, #10182b 0%, #0b1120 100%);
