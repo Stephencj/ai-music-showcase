@@ -80,13 +80,21 @@ export function FingeringDiagram({ notes, audioRef, members }: {
 
   useEffect(() => {
     let raf = 0;
+    const clearSlot = (s: number) => {
+      (valveEls.current[s] ?? []).forEach((el) => el?.classList.remove("pressed"));
+      slideEls.current[s]?.forEach((el) => el.classList.remove("on"));
+      (keyEls.current[s] ?? []).forEach((el) => el?.classList.remove("closed"));
+      if (partEls.current[s]) partEls.current[s]!.textContent = "";
+      if (noteEls.current[s]) noteEls.current[s]!.textContent = "·";
+    };
     const tick = () => {
       const t = audioRef.current?.currentTime ?? 0;
       const vs = voicesAt(notes, t, n);
+      // Nothing sounding (an inter-note gap or rest): hold the last frame so the
+      // figures don't blink off and on. The figures stay on screen always.
+      if (vs.length === 0) { raf = requestAnimationFrame(tick); return; }
       for (let s = 0; s < n; s++) {
-        const slot = slotEls.current[s];
-        if (s >= vs.length) { slot?.classList.add("hidden"); continue; }
-        slot?.classList.remove("hidden");
+        if (s >= vs.length) { clearSlot(s); continue; }   // idle member in a thinner chord
         const m = members[s];
         const concert = vs[s], written = concert + m.transpose;
         if (noteEls.current[s]) {
@@ -128,7 +136,7 @@ export function FingeringDiagram({ notes, audioRef, members }: {
       <div className="inst-orient">{orient}</div>
       <div className="voice-stack">
         {members.map((m, s) => (
-          <div key={s} className="voice-slot hidden" ref={(el) => { slotEls.current[s] = el; }}>
+          <div key={s} className="voice-slot" ref={(el) => { slotEls.current[s] = el; }}>
             {isSection && <div className="voice-member">{m.label}</div>}
             <div className="inst-note vsmall" ref={(el) => { noteEls.current[s] = el; }}>—</div>
             {m.kind === "valves" ? (
