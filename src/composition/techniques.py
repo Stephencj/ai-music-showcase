@@ -59,6 +59,15 @@ class TechniqueContext:
     # chord-role instruments leave this None and the technique's
     # voicing flows through unchanged.
     voicing_role: Optional[str] = None
+    # Per-generation "feel" knobs (from src/composition/knobs.py), set by
+    # compose_song. ``None`` lets a technique fall back to the genre's
+    # harmony_profile default (so directly-constructed test ctxs are
+    # unchanged). ``drum_fill`` is a multiplier (default 1.0 = no change);
+    # ``lead_fill`` marks a section where the lead plays only a short fill.
+    voicing_variety: Optional[float] = None
+    bass_inversion: Optional[float] = None
+    drum_fill: float = 1.0
+    lead_fill: bool = False
 
     @property
     def bar_count(self) -> int:

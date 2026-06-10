@@ -24,6 +24,7 @@ import soundfile as sf
 
 from src.composition import BANK, role_for_label
 from src.composition.harmony import harmony_profile
+from src.composition.knobs import resolve_knobs
 from src.composition.pacing import apply_pacing, pick_pacing
 from src.composition.techniques import TechniqueContext, apply_technique
 from src.composition.voicing_layer import (
@@ -153,14 +154,20 @@ def _plays_in_section(inst_obj, role: str, has_harmonic: bool) -> bool:
     return True
 
 
-def _lead_guitar_section_plan(sections: list[dict], seed: int) -> set:
-    """Which section indices the LEAD GUITAR actually plays in.
+def _lead_guitar_section_plan(sections: list[dict], seed: int,
+                              knobs: Optional[dict] = None) -> set:
+    """Which section indices the LEAD GUITAR is FEATURED in.
 
     A lead is featured, not wallpaper: it riffs the odd verse/interlude,
-    sometimes takes the bridge as a solo, and comes in for the FINAL
-    chorus payoff — it does NOT play every section. Deterministic per
-    seed. Returns the set of section indices where the lead plays.
+    sometimes takes the bridge as a solo, comes in for the FINAL chorus
+    payoff, and — when the knobs allow — riffs the intro/outro. Probabilities
+    scale with ``knobs['lead_amount']`` (and the intro/outro knobs).
+    Deterministic per seed.
     """
+    knobs = knobs or {}
+    amt = knobs.get("lead_amount", 1.0)
+    p_intro = knobs.get("lead_intro", 0.0)
+    p_outro = knobs.get("lead_outro", 0.0)
     rng = np.random.default_rng(_sub_seed(seed, "lead_arrangement"))
     roled = [
         (i, (s.get("role") or role_for_label(s.get("label", ""))),
@@ -169,28 +176,50 @@ def _lead_guitar_section_plan(sections: list[dict], seed: int) -> set:
     ]
     play: set = set()
 
+    def _hit(base):
+        return rng.random() < min(1.0, base * amt)
+
     # Choruses: only the FINAL one (the big finish the lead joins).
     chorus_idxs = [i for i, r, _ in roled if r == "chorus"]
-    if chorus_idxs:
+    if chorus_idxs and _hit(1.0):
         play.add(chorus_idxs[-1])
 
-    # Verses / interludes: a riff in some — usually the last verse, the
-    # earlier ones only now and then.
+    # Verses / interludes: usually the last verse, earlier ones now and then.
     verse_idxs = [i for i, r, _ in roled if r == "verse"]
     for pos, i in enumerate(verse_idxs):
-        is_last = pos == len(verse_idxs) - 1
-        if rng.random() < (0.65 if is_last else 0.25):
+        if _hit(0.65 if pos == len(verse_idxs) - 1 else 0.25):
             play.add(i)
 
-    # Bridge: a solo sometimes (more often when the section is literally
-    # labelled a solo).
+    # Bridge solo sometimes (more when literally labelled a solo); intro/
+    # outro riffs per their own knobs, also scaled by lead_amount so
+    # lead_amount=0 means no lead anywhere.
     for i, r, label in roled:
-        if r == "bridge":
-            if rng.random() < (0.85 if "solo" in label else 0.55):
-                play.add(i)
-
-    # Intro / outro: leave the lead out.
+        if r == "bridge" and _hit(0.85 if "solo" in label else 0.55):
+            play.add(i)
+        elif r == "intro" and rng.random() < min(1.0, p_intro * amt):
+            play.add(i)
+        elif r == "outro" and rng.random() < min(1.0, p_outro * amt):
+            play.add(i)
     return play
+
+
+def _lead_fill_sections(sections: list[dict], seed: int, knobs: dict,
+                        featured: set) -> set:
+    """Mid-song sections where the lead (not featured) drops a SHORT fill —
+    a 1-bar turnaround pickup into the next section. Disjoint from the
+    featured set. Probability = ``knobs['lead_fills']``."""
+    prob = (knobs or {}).get("lead_fills", 0.0)
+    if prob <= 0.0:
+        return set()
+    rng = np.random.default_rng(_sub_seed(seed, "lead_fills"))
+    out: set = set()
+    for i, s in enumerate(sections):
+        if i in featured:
+            continue
+        role = s.get("role") or role_for_label(s.get("label", ""))
+        if role in ("verse", "chorus", "bridge") and rng.random() < prob:
+            out.add(i)
+    return out
 
 
 def _sub_seed(master: int, *parts) -> int:
@@ -258,6 +287,7 @@ def compose_song(
     bars: Optional[int] = None,
     swing: Optional[float] = None,
     progression: Optional[list] = None,
+    knobs: Optional[dict] = None,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     output_midi: str = DEFAULT_MIDI_NAME,
     output_wav: str = DEFAULT_WAV_NAME,
@@ -287,6 +317,8 @@ def compose_song(
     # overrides the preset's; it still flows through pacing/slicing per section.
     progression = list(progression) if progression else list(preset.progression)
     technique_overrides = technique_overrides or {}
+    # Per-generation feel knobs (UI overrides merged over genre defaults).
+    eff_knobs = resolve_knobs(genre, knobs)
 
     # Sections — caller-provided or derived from the preset variant.
     if sections is None:
@@ -364,7 +396,9 @@ def compose_song(
     )
     # Featured lead-guitar arrangement: it riffs the odd verse, solos the
     # bridge sometimes, and joins the final chorus — not every section.
-    _lead_sections = _lead_guitar_section_plan(sections, seed)
+    # Plus occasional intro/outro riffs and short between-section fills.
+    _lead_sections = _lead_guitar_section_plan(sections, seed, eff_knobs)
+    _lead_fill_secs = _lead_fill_sections(sections, seed, eff_knobs, _lead_sections)
 
     pacing_picks: dict[str, object] = {}
     for sec_idx, section in enumerate(sections):
@@ -383,7 +417,8 @@ def compose_song(
         )
         _hprof = harmony_profile(genre)
         pacing = pick_pacing(pacing_rng, preset, role,
-                             reharm=_hprof.reharm, reharm_prob=_hprof.reharm_prob)
+                             reharm=_hprof.reharm,
+                             reharm_prob=eff_knobs["reharm_prob"])
         pacing_picks[label] = pacing
         paced_progression = apply_pacing(
             progression, pacing, eff_key, eff_scale,
@@ -405,10 +440,12 @@ def compose_song(
             # drums hold off in the intro).
             if not _plays_in_section(inst_obj, role, _has_harmonic):
                 continue
-            # Lead guitar is featured, not constant: only the sections in
-            # its plan (some verses, the bridge sometimes, the final chorus).
-            if (getattr(inst_obj, "id", None) == "lead_guitar"
-                    and sec_idx not in _lead_sections):
+            # Lead guitar is featured, not constant: it plays its featured
+            # sections (some verses, bridge solo, final chorus, opt. intro/
+            # outro) or drops a short fill in a fill section; else it sits out.
+            is_lead = getattr(inst_obj, "id", None) == "lead_guitar"
+            lead_is_fill = is_lead and sec_idx in _lead_fill_secs
+            if is_lead and sec_idx not in _lead_sections and not lead_is_fill:
                 continue
             override_key = f"{role}:{instrument_token}"
             label_key = f"{label}:{instrument_token}"
@@ -457,6 +494,10 @@ def compose_song(
                 )),
                 instrument_obj=inst_obj,
                 voicing_role=voicing_assignments.get(instrument_token),
+                voicing_variety=eff_knobs["voicing_variety"],
+                bass_inversion=eff_knobs["bass_inversion"],
+                drum_fill=eff_knobs["drum_fill"],
+                lead_fill=(is_lead and lead_is_fill),
             )
             try:
                 apply_technique(midi, technique, ctx)
@@ -510,6 +551,9 @@ def compose_song(
             energy = max(energy, 0.96)       # solos ride energetic
         elif "pre-chorus" in lo or "prechorus" in lo:
             energy = 0.92                     # lift into the chorus
+        # Scale the deviation-from-full by the dynamics knob: 1.0 = normal
+        # contrast, 0 = flat (everything at chorus level), up to 2 = extreme.
+        energy = 1.0 + (energy - 1.0) * eff_knobs["dynamics"]
         if abs(energy - 1.0) > 1e-6:
             drum_f = 1.0 - (1.0 - energy) * 0.5
             midi.scale_region_velocity(s, e + 1, energy, drum_factor=drum_f)

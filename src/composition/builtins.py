@@ -18,8 +18,13 @@ from typing import Optional
 import numpy as np
 
 from src.composition.harmony import harmony_profile
+from src.composition.licks import licks_for, render_lick
 from src.composition.solo import build_riff, build_solo
 from src.composition.techniques import BANK, Technique, TechniqueContext
+from src.daw_integration.generic.midi_export import (
+    chord_at_position,
+    expand_progression_plan,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -912,12 +917,13 @@ def _add_chord_tech(name, *, rhythm, roles, label, description,
         # Genre-tuned per-chord voicing variety (on by default) — the
         # technique's ``voicing`` stays the home voicing, coloured per chord.
         prof = harmony_profile(ctx.genre)
+        vv = ctx.voicing_variety if ctx.voicing_variety is not None else prof.voicing_variety
         kwargs = dict(
             key=ctx.key, scale_name=ctx.scale,
             progression=ctx.progression, bars=ctx.bar_count,
             bar_offset=ctx.start_bar, rhythm=rhythm,
             voicing=voicing, swing=ctx.swing,
-            voicing_variety=prof.voicing_variety,
+            voicing_variety=vv,
             voicing_family=prof.voicing_family,
             seed=_seed(ctx),
         )
@@ -946,7 +952,8 @@ def _add_bass_tech(name, *, pattern, roles, label, description,
             approach_tones=approach_tones,
             seed=_seed(ctx),
             swing=max(ctx.swing, swing_floor or 0.0),
-            inversion_prob=harmony_profile(ctx.genre).bass_inversion,
+            inversion_prob=(ctx.bass_inversion if ctx.bass_inversion is not None
+                            else harmony_profile(ctx.genre).bass_inversion),
         )
         if velocity is not None:
             kwargs["velocity"] = velocity
@@ -979,11 +986,12 @@ def _add_drum_tech(name, *, pattern, roles, label, description,
         is_perc_layer = inst is not None and getattr(inst, "role", None) == "percussion"
         if not is_perc_layer:
             role = ctx.section_role
-            kwargs["fill_last_bar"] = True
-            kwargs["fill_prob"] = {
+            base_fill = {
                 "verse": 0.35, "chorus": 0.5, "bridge": 0.55,
                 "outro": 0.45, "intro": 0.0,
             }.get(role, 0.35)
+            kwargs["fill_last_bar"] = True
+            kwargs["fill_prob"] = max(0.0, min(1.0, base_fill * ctx.drum_fill))
         # add_drum_pattern self-heals a meter-incompatible pattern by
         # falling back to a meter-appropriate default.
         midi.add_drum_pattern(**kwargs)
@@ -1102,11 +1110,32 @@ _LEAD_PROGRAM = {"rock": 29, "blues": 27, "country": 27}
 def _lead_guitar_engine(midi, ctx):
     lick_genre = _LEAD_LICK_GENRE.get(ctx.genre, "rock")
     role = ctx.section_role
+    program = _LEAD_PROGRAM.get(lick_genre, 29)
+    eff_program, eff_track = _route_kwargs(ctx, program, "Lead Guitar")
+
+    # Fill mode: the lead isn't featured here — drop a single turnaround
+    # lick in the section's LAST bar as a pickup into the next section.
+    if getattr(ctx, "lead_fill", False):
+        rng = np.random.default_rng(_seed(ctx))
+        pool = licks_for(lick_genre, "turnaround") or licks_for(lick_genre)
+        if pool:
+            lick = pool[int(rng.integers(len(pool)))]
+            events = expand_progression_plan(ctx.progression, ctx.bar_count)
+            chord = chord_at_position(events, float(ctx.bar_count - 1)) or "I"
+            last_bar = ctx.start_bar + ctx.bar_count - 1
+            render_lick(
+                midi, lick, key=ctx.key, chord_symbol=chord,
+                scale_type=ctx.scale,
+                bar_start_beats=last_bar * midi.beats_per_bar,
+                octave=4, track_name=eff_track or "Lead Guitar",
+                program=eff_program if eff_program is not None else program,
+                velocity=100, swing=ctx.swing,
+            )
+        return
+
     # Solo in the bridge/solo section; in a 12-bar blues every chorus is a
     # solo chorus too. Everything else is a repeating riff hook.
     solo = role == "bridge" or (role == "chorus" and lick_genre == "blues")
-    program = _LEAD_PROGRAM.get(lick_genre, 29)
-    eff_program, eff_track = _route_kwargs(ctx, program, "Lead Guitar")
     # Forward velocities so the lead cuts through (it also lands in the
     # boosted "lead" mix family); the solo ramps higher across its arc.
     velocity = 114 if solo else 110
