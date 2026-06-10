@@ -607,6 +607,10 @@ audio { width: 100%; margin: 8px 0 12px; }
 .settings-panel label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
 
 /* Self-playing sheet music (AlphaTab) */
+.sheet-host { margin-top: 10px; }
+/* Hidden but still laid out full-width (not display:none) so AlphaTab keeps
+   measuring the host and stays engraved — switching to Sheet is then instant. */
+.sheet-host.sheet-hidden { height: 0; margin: 0; overflow: hidden; pointer-events: none; }
 .sheet-wrap { background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); }
 .sheet-status { font-size: 12px; color: var(--muted); padding: 6px 10px; background: var(--card); }
 .sheet-status:empty { display: none; }

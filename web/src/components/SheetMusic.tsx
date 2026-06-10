@@ -61,7 +61,11 @@ export default function SheetMusic({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const AT = (window as any).alphaTab;
       api = new AT.AlphaTabApi(hostRef.current, {
-        core: { fontDirectory: mediaUrl("/static/alphatab/font/") },
+        // enableLazyLoading:false so the whole block engraves up front even
+        // while the host is hidden (pre-warm) — otherwise AlphaTab defers
+        // painting off-screen partials and you'd see a render flash the first
+        // time the Sheet view is revealed.
+        core: { fontDirectory: mediaUrl("/static/alphatab/font/"), enableLazyLoading: false },
         player: {
           enablePlayer: true,
           playerMode: 4,            // EnabledExternalMedia — follow our <audio>

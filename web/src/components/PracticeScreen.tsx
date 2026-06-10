@@ -716,7 +716,19 @@ export default function PracticeScreen() {
           )}
           </div>
 
-          {panels.chart && (view === "tab" ? (
+          {panels.chart && (<>
+            {/* Pre-warmed, always-mounted sheet: AlphaTab stays engraved and
+                cursor-synced in the background, so switching to Sheet from any
+                other view is instant (no reload/engrave flash). Hidden via CSS
+                — kept full-width so AlphaTab still measures/lays out correctly. */}
+            {blockName && (
+              <div className={"sheet-host" + (view === "sheet" ? "" : " sheet-hidden")}
+                aria-hidden={view !== "sheet"}>
+                <SheetMusic blockName={blockName} audioRef={playhead} trackIndex={partIdx} />
+              </div>
+            )}
+
+            {view === "tab" ? (
             !blockName
               ? <div className="practice-hint">Tab view is available for blocks (songs show the chart).</div>
               : tabData && tabData.tabNotes.length
@@ -729,7 +741,7 @@ export default function PracticeScreen() {
                 : <div className="practice-hint">No guitar or bass part in this block to tab. Pick a block with a guitar line.</div>
           ) : view === "sheet" ? (
             blockName
-              ? <SheetMusic blockName={blockName} audioRef={playhead} trackIndex={partIdx} />
+              ? null /* shown by the pre-warmed sheet-host above */
               : <div className="practice-hint">Sheet view is available for blocks (songs show the chart).</div>
           ) : view === "tape" ? (
             <TapeView score={score} labelParts={labelParts} audioRef={playhead} onSeek={seekTo} />
@@ -760,7 +772,7 @@ export default function PracticeScreen() {
                   </div>
                 )}
             </div>
-          ))}
+          )}</>)}
         </>
       )}
     </div>
