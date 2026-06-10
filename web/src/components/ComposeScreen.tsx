@@ -22,6 +22,7 @@ import * as api from "../api";
 import type { Block, BlockSpec, SectionVoice, SongRenderResult } from "../types";
 import Waveform from "./Waveform";
 import Sparkline from "./Sparkline";
+import KaraokeScreen from "./KaraokeScreen";
 
 interface TLItem {
   id: string;
@@ -477,6 +478,7 @@ function BlockCard({
   const [muteSet, setMuteSet] = useState<Set<string>>(new Set());
   const [regenSet, setRegenSet] = useState<Set<string>>(new Set());
   const [editBusy, setEditBusy] = useState(false);
+  const [karaoke, setKaraoke] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Vocals panel state
@@ -663,6 +665,7 @@ function BlockCard({
 
   return (
     <div ref={drag.setNodeRef} className={"block-card" + (open ? " open" : "") + (drag.isDragging ? " dragging" : "")}>
+      {karaoke && <KaraokeScreen block={block.name} onClose={() => setKaraoke(false)} />}
       <div className="bc-row">
         <span
           className="bc-name"
@@ -785,6 +788,9 @@ function BlockCard({
               <button className="btn secondary sm" disabled={vocBusy || !lyrics.trim()} onClick={onSing}>
                 {vocBusy ? "Singing…" : "🎤 Sing it"}
               </button>
+              <button className="btn sm" disabled={!lyrics.trim()} onClick={() => setKaraoke(true)}
+                title="Full-screen karaoke: scrolling lyrics + a melody guide you sing along to, then auto-tuned to the melody">
+                ▶ Karaoke</button>
             </div>
             {showAutotune && (
               <div className="autotune-panel">

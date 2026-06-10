@@ -254,6 +254,26 @@ export const getSectionVoices = (name: string) =>
 // Download the composed vocal melody as a MIDI guide (for your DAW's Auto-Tune).
 export const vocalGuideUrl = (name: string) =>
   url(`/api/blocks/${encodeURIComponent(name)}/vocal-guide.mid`);
+
+// --- Karaoke (full-screen sing-along) ---
+export interface KaraokeData {
+  duration: number;
+  tempo: number;
+  key: string;
+  scale: string;
+  notes: [number, number, number][];                 // [pitch, startSec, endSec]
+  words: { text: string; start: number; end: number }[];
+  lyrics: string;
+  has_lead: boolean;
+}
+export const getKaraoke = (name: string) =>
+  jget<KaraokeData>(`/api/blocks/${encodeURIComponent(name)}/karaoke`);
+/** The block's full preview audio (instrumental + synth guide vocal) — the backing to sing over. */
+export const blockAudioUrl = (name: string) =>
+  url(`/api/blocks/${encodeURIComponent(name)}/audio`);
+/** The Lead Vocal track rendered alone — an audible guide of the melody to sing. */
+export const vocalGuideAudioUrl = (name: string) =>
+  url(`/api/blocks/${encodeURIComponent(name)}/vocal-guide-audio`);
 // Pitch-correct a recorded/uploaded vocal onto the block's melody (or its key).
 // Returns a job id; poll with pollVocal (same result shape as a vocal render).
 export const autotuneBlock = async (

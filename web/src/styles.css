@@ -631,3 +631,63 @@ audio { width: 100%; margin: 8px 0 12px; }
 .diagram-piano-wide .pk.b.lit { fill: #3b6fd6; }
 .diagram-guitar-neck .nd { display: none; }
 .diagram-guitar-neck .nd.lit { display: inline; fill: #38bdf8; }
+
+/* ── Full-screen Karaoke ─────────────────────────────────────────── */
+.karaoke {
+  position: fixed; inset: 0; z-index: 1000;
+  background: radial-gradient(120% 120% at 50% 0%, #14203a 0%, #0a0f1c 60%, #060912 100%);
+  color: #eef2fb; display: flex; flex-direction: column;
+  padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 12px);
+  overflow: hidden;
+}
+.kk-top { display: flex; align-items: center; gap: 12px; padding: 10px 2px; }
+.kk-title { font-weight: 600; font-size: 15px; opacity: 0.9; flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kk-close {
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(255,255,255,0.08); border: none; color: #eef2fb;
+  font-size: 18px; cursor: pointer;
+}
+.kk-close:hover { background: rgba(255,255,255,0.16); }
+.kk-err {
+  margin: 8px 0; padding: 10px 12px; border-radius: 10px;
+  background: rgba(255, 120, 120, 0.12); color: #ffd9d9; font-size: 14px;
+}
+.kk-lane {
+  width: 100%; height: 22vh; max-height: 200px; min-height: 110px;
+  display: block; margin: 4px 0 8px;
+}
+.kk-now { stroke: rgba(255,255,255,0.45); stroke-width: 2; stroke-dasharray: 4 5; }
+.kk-note { fill: rgba(120,170,255,0.45); transition: fill 0.08s linear; }
+.kk-note.on { fill: #59e7c2; }
+.kk-lyrics {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 14vh 6px; text-align: center;
+}
+.kk-line {
+  font-size: 19px; line-height: 1.4; color: rgba(238,242,251,0.32);
+  transition: color 0.2s, transform 0.2s; transform: scale(0.96);
+}
+.kk-line.past { color: rgba(238,242,251,0.22); }
+.kk-line.active { font-size: 26px; color: #eef2fb; transform: scale(1); font-weight: 600; }
+.kk-word { transition: color 0.1s; }
+.kk-line.active .kk-word.sung { color: #59e7c2; }
+.kk-line.active .kk-word.now { color: #ffe27a; text-shadow: 0 0 16px rgba(255,226,122,0.5); }
+.kk-controls {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  flex-wrap: wrap; padding: 10px 0 4px;
+}
+.kk-controls .btn, .kk-controls .chip { min-height: 44px; font-size: 15px; }
+.kk-controls .chip.on { background: #2b6df6; color: #fff; }
+.kk-status { text-align: center; font-size: 14px; opacity: 0.85; padding: 4px 0; }
+.kk-result { text-align: center; padding: 6px 0 2px; }
+.kk-result audio { width: 100%; max-width: 420px; margin-top: 6px; }
+
+@media (max-width: 560px) {
+  .karaoke { padding-left: 10px; padding-right: 10px; }
+  .kk-lyrics { padding: 10vh 4px; }
+  .kk-line { font-size: 17px; }
+  .kk-line.active { font-size: 23px; }
+  .kk-controls .btn, .kk-controls .chip { flex: 1 1 auto; }
+}
