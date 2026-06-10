@@ -80,6 +80,7 @@ export function FingeringDiagram({ notes, audioRef, members }: {
 
   useEffect(() => {
     let raf = 0;
+    let lastVs: number[] = [];
     const clearSlot = (s: number) => {
       (valveEls.current[s] ?? []).forEach((el) => el?.classList.remove("pressed"));
       slideEls.current[s]?.forEach((el) => el.classList.remove("on"));
@@ -90,13 +91,17 @@ export function FingeringDiagram({ notes, audioRef, members }: {
     const tick = () => {
       const t = audioRef.current?.currentTime ?? 0;
       const vs = voicesAt(notes, t, n);
-      // Nothing sounding (an inter-note gap or rest): hold the last frame so the
-      // figures don't blink off and on. The figures stay on screen always.
-      if (vs.length === 0) { raf = requestAnimationFrame(tick); return; }
+      // While a note sounds it's the bright "hit"; in the gap between notes we
+      // keep the SAME positions but dim them (a `held` tone) so you still see
+      // where your fingers should be without the figure flashing off.
+      const held = vs.length === 0;
+      const active = held ? lastVs : vs;
+      if (!held) lastVs = vs;
       for (let s = 0; s < n; s++) {
-        if (s >= vs.length) { clearSlot(s); continue; }   // idle member in a thinner chord
+        slotEls.current[s]?.classList.toggle("held", held && s < active.length);
+        if (s >= active.length) { clearSlot(s); continue; }   // idle member in a thinner chord
         const m = members[s];
-        const concert = vs[s], written = concert + m.transpose;
+        const concert = active[s], written = concert + m.transpose;
         if (noteEls.current[s]) {
           noteEls.current[s]!.textContent = m.transpose
             ? `${noteName(written)} ▸ ${noteName(concert)}` : noteName(written);
