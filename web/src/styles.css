@@ -467,12 +467,21 @@ audio { width: 100%; margin: 8px 0 12px; }
 .slide-pos.on { fill: #59e7c2; stroke: #59e7c2; }
 .slide-num { fill: rgba(238,242,251,0.7); font-size: 10px; }
 
-/* Aperture / harmonic readout (shared by valves + slide) */
-.aperture-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 2px; }
-.aperture { width: 56px; height: 30px; flex: 0 0 auto; }
+/* Per-voice fingering figures (a wind section is a trio → up to 3, separated) */
+.inst-orient { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.voice-stack { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; align-items: flex-start; margin-top: 4px; }
+.voice-slot { display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 6px 8px; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; background: rgba(255,255,255,0.02); }
+.voice-slot.hidden { display: none; }
+.inst-note.vsmall { font-size: 13px; min-height: 18px; }
+.brass-valves-mini { width: 78px; height: 36px; }
+.trombone-mini { width: 100%; max-width: 220px; height: 36px; }
+.ww-mini { width: 50px; height: 110px; }
+.aperture { width: 40px; height: 22px; flex: 0 0 auto; }
 .ap-lips { fill: #5b3b46; stroke: #8a5a68; stroke-width: 1; }
 .ap-open { fill: #0a0f1c; transition: ry 0.08s; }
-.ap-label { font-size: 11px; color: var(--accent-2); }
+.ap-mini { display: flex; align-items: center; gap: 5px; }
+.ap-label { font-size: 10px; color: var(--accent-2); }
 
 /* Woodwind body (upright, mouthpiece at top) */
 .ww-keys { width: 100%; max-height: 200px; }
