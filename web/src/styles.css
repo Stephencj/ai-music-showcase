@@ -439,24 +439,39 @@ audio { width: 100%; margin: 8px 0 12px; }
 
 /* ── Drum / Brass / Woodwind live diagrams ──────────────────────────────── */
 .inst-fig { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 0; }
-.inst-note { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--text);
-  min-height: 16px; letter-spacing: 0.02em; }
+.inst-note { font-family: ui-monospace, Menlo, monospace; font-size: 16px; font-weight: 700;
+  color: var(--text); min-height: 20px; letter-spacing: 0.02em; }
 .inst-hint { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
 .drum-kit { width: 100%; max-height: 220px; display: block; }
 .drum-pad { fill: #1d2c4d; stroke: rgba(120,170,255,0.45); stroke-width: 0.8; transition: fill 0.05s; }
 .drum-pad.perc { fill: #18233c; stroke: rgba(120,170,255,0.28); }
 .drum-pad.lit { fill: #59e7c2; stroke: #59e7c2; }
 .drum-label { fill: rgba(238,242,251,0.6); pointer-events: none; }
-.brass-valves { width: 100%; max-height: 150px; }
+
+/* Trumpet (side view, player at left) */
+.brass-valves { width: 100%; max-height: 170px; }
+.brass-mp { fill: #94a3b8; }
+.brass-tube { stroke: #6b7a93; stroke-width: 4; stroke-linecap: round; }
+.brass-bell { fill: #2a3550; stroke: #6b7a93; stroke-width: 1.5; }
 .valve-casing { fill: #10182b; stroke: rgba(255,255,255,0.10); stroke-width: 1; }
-.valve { fill: #1d2c4d; stroke: rgba(120,170,255,0.5); stroke-width: 1.2; transition: fill 0.05s; }
+.valve { fill: #1d2c4d; stroke: rgba(120,170,255,0.5); stroke-width: 1.2; transition: fill 0.06s; }
 .valve.pressed { fill: #59e7c2; stroke: #59e7c2; }
-.valve-num { fill: var(--muted); font-size: 9px; }
-.trombone-slide { width: 100%; max-height: 70px; }
-.slide-pos { fill: #1d2c4d; stroke: rgba(120,170,255,0.4); stroke-width: 0.8; transition: fill 0.05s; }
+.valve-num { fill: var(--text); font-size: 11px; font-weight: 700; }
+.brass-orient { fill: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; }
+.brass-cap { fill: var(--accent-2); font-size: 8.5px; }
+
+/* Trombone slide (player at left, slides out to the right) */
+.trombone-slide { width: 100%; max-height: 80px; }
+.tb-tube { stroke: #6b7a93; stroke-width: 3; stroke-linecap: round; }
+.slide-pos { fill: #1d2c4d; stroke: rgba(120,170,255,0.4); stroke-width: 0.8; transition: fill 0.06s; }
 .slide-pos.on { fill: #59e7c2; stroke: #59e7c2; }
 .slide-num { fill: rgba(238,242,251,0.7); font-size: 10px; }
-.ww-keys { width: 100%; max-height: 170px; }
+
+/* Woodwind body (upright, mouthpiece at top) */
+.ww-keys { width: 100%; max-height: 200px; }
+.ww-body { fill: #10182b; stroke: rgba(255,255,255,0.08); stroke-width: 1; }
+.ww-end { fill: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+.ww-hand { fill: rgba(120,170,255,0.7); font-size: 11px; font-weight: 700; }
 .ww-key { fill: #1d2c4d; stroke: rgba(120,170,255,0.5); stroke-width: 1; transition: fill 0.05s; }
 .ww-key.oct { stroke-dasharray: 3 2; }
 .ww-key.closed { fill: #59e7c2; stroke: #59e7c2; }
