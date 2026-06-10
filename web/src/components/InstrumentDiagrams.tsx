@@ -4,6 +4,7 @@ import {
   WW_KEY_LABELS, notesAt, noteName,
 } from "../instruments";
 import type { VoiceSpec } from "../instruments";
+import InstrumentIcon from "./InstrumentIcon";
 
 // Live diagrams for drums and pitched winds/brass. Each builds a static SVG
 // once and follows the practice playhead with its own requestAnimationFrame
@@ -149,7 +150,11 @@ export function FingeringDiagram({ notes, audioRef, members, onPickMember }: {
             tabIndex={onPickMember ? 0 : undefined}
             title={onPickMember ? `Tab ${m.label}` : undefined}
             onClick={onPickMember ? () => onPickMember(s) : undefined}>
-            {isSection && <div className="voice-member">{m.label}{onPickMember ? " ›" : ""}</div>}
+            {isSection && (
+              <div className="voice-member">
+                <InstrumentIcon name={m.label} size={13} /> {m.label}{onPickMember ? " ›" : ""}
+              </div>
+            )}
             <div className="inst-note vsmall" ref={(el) => { noteEls.current[s] = el; }}>—</div>
             {m.kind === "valves" ? (
               <svg className="brass-valves-mini" viewBox="0 0 86 40" preserveAspectRatio="xMidYMid meet" aria-label="valves">

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 // A modular field control: renders as a compact button showing the current
 // selection, and on tap opens a popup with a (optionally searchable) list. This
@@ -11,6 +12,7 @@ export interface PickerOption {
   label: string;
   sub?: string;     // small secondary line (e.g. tempo, note count)
   group?: string;   // optional section header to bucket options under
+  icon?: ReactNode; // leading glyph (e.g. an instrument icon)
 }
 
 export default function PickerField({
@@ -22,7 +24,7 @@ export default function PickerField({
   onChange: (id: string) => void;
   label?: string;                 // popup title (defaults to placeholder/“Select”)
   placeholder?: string;           // button text when nothing is selected
-  icon?: string;                  // leading glyph on the button
+  icon?: ReactNode;               // leading glyph on the button
   searchable?: boolean;           // force on/off (default: auto when >8 options)
   disabled?: boolean;
   title?: string;                 // native tooltip on the button
@@ -73,7 +75,7 @@ export default function PickerField({
       <button type="button" disabled={disabled} title={title}
         className={"pickfield" + (fullWidth ? " pf-full" : "") + (className ? " " + className : "")}
         onClick={() => setOpen(true)}>
-        {icon && <span className="pf-icon">{icon}</span>}
+        {(icon ?? current?.icon) && <span className="pf-icon">{icon ?? current?.icon}</span>}
         <span className="pf-val">{current?.label ?? placeholder ?? "Select…"}</span>
         <span className="pf-caret">▾</span>
       </button>
@@ -96,6 +98,7 @@ export default function PickerField({
                     <button key={o.id} type="button"
                       className={"pf-opt" + (o.id === value ? " sel" : "")}
                       onClick={() => { onChange(o.id); setOpen(false); }}>
+                      {o.icon && <span className="pf-opt-ic">{o.icon}</span>}
                       <span className="pf-opt-label">{o.label}</span>
                       {o.sub && <span className="pf-opt-sub">{o.sub}</span>}
                       {o.id === value && <span className="pf-opt-check">✓</span>}

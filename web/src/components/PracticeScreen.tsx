@@ -15,6 +15,7 @@ import { DrumDiagram, FingeringDiagram } from "./InstrumentDiagrams";
 import CircleOfFifths from "./CircleOfFifths";
 import { familyFor, voiceSpecsFor, voiceLine } from "../instruments";
 import PickerField from "./PickerField";
+import InstrumentIcon from "./InstrumentIcon";
 import * as webmidi from "../webmidi";
 import type { MidiOut } from "../webmidi";
 import { LoopPlayer } from "../loopPlayer";
@@ -999,21 +1000,25 @@ export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
                       const ms = specs[mi];
                       // Section → extract that member's line; solo → the part as-is.
                       const lane = isEnsemble ? voiceLine(chartRollNotes, mi, specs.length) : chartRollNotes;
+                      const title = (
+                        <span className="wtab-title-in">
+                          <InstrumentIcon name={ms.label} size={18} />
+                          {isEnsemble ? `${chartTrack!.track} · ${ms.label}` : chartTrack!.track} — fingering tab
+                        </span>
+                      );
+                      const control = isEnsemble ? (
+                        <PickerField value={String(mi)} label="Tab which instrument"
+                          fullWidth={false} className="tab-member"
+                          options={specs.map((s, i) => ({
+                            id: String(i), label: s.label,
+                            icon: <InstrumentIcon name={s.label} size={16} />,
+                          }))}
+                          onChange={(id) => setTabMember(Number(id))} />
+                      ) : null;
                       return (
                         <div className="tab-card">
-                          <div className="diagram-title-row">
-                            <div className="diagram-title">
-                              {isEnsemble ? `${chartTrack!.track} · ${ms.label}` : chartTrack!.track} — fingering tab
-                            </div>
-                            {isEnsemble && (
-                              <PickerField value={String(mi)} label="Tab which instrument"
-                                icon="🎺" fullWidth={false} className="tab-member"
-                                options={specs.map((s, i) => ({ id: String(i), label: s.label }))}
-                                onChange={(id) => setTabMember(Number(id))} />
-                            )}
-                          </div>
                           <WindTabView notes={lane} audioRef={playhead}
-                            kind={ms.kind} transpose={ms.transpose} />
+                            kind={ms.kind} transpose={ms.transpose} title={title} control={control} />
                         </div>
                       );
                     }

@@ -910,9 +910,16 @@ audio { width: 100%; margin: 8px 0 12px; }
 
 /* ── Guitar tab lane (Practice → Tab) ────────────────────────────── */
 .tab-card { margin-top: 10px; }
-.diagram-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
-.diagram-title-row .diagram-title { flex: 1 1 auto; min-width: 0; }
+/* Wind-tab header: title + member picker (left), live embouchure (right). */
+.wtab-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.wtab-title { flex: 1 1 auto; min-width: 120px; font-size: 13px; font-weight: 700; color: var(--accent-2); }
+.wtab-title-in { display: inline-flex; align-items: center; gap: 6px; }
 .tab-member { flex: 0 0 auto; }
+.wtab-ap { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; margin-left: auto; }
+.wtab-ap .ap-label { white-space: nowrap; }
+.inst-ic { display: inline-block; vertical-align: -2px; flex: 0 0 auto; color: var(--accent-2); }
+.pf-opt-ic { flex: 0 0 auto; display: inline-flex; color: var(--accent-2); }
+.pf-icon .inst-ic { color: inherit; }
 /* Clickable ensemble member in the live diagram → tabs that instrument. */
 .voice-slot.pickable { cursor: pointer; border-radius: 10px; transition: background 0.12s, box-shadow 0.12s; }
 .voice-slot.pickable:hover { background: rgba(89,231,194,0.08); box-shadow: inset 0 0 0 1px rgba(89,231,194,0.35); }

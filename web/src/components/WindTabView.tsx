@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { trumpetFingering, trombonePosition, woodwindKeys, noteName } from "../instruments";
+import type { ReactNode } from "react";
+import { trumpetFingering, trombonePosition, woodwindKeys, noteName, apertureFor } from "../instruments";
 import type { FingerKind } from "../instruments";
 
 // A "tab" for a single wind/brass instrument: a scrolling lane (like the guitar
@@ -15,13 +16,15 @@ const ROWS_BY_KIND: Record<FingerKind, string[]> = {
   keys: ["8va", "L1", "L2", "L3", "R1", "R2", "R3"],
 };
 
-interface FNote { start: number; dur: number; rows: number[]; label: string; sub: string }
+interface FNote { start: number; dur: number; rows: number[]; label: string; sub: string; partial: number; oct: boolean }
 
-export default function WindTabView({ notes, audioRef, kind, transpose }: {
+export default function WindTabView({ notes, audioRef, kind, transpose, title, control }: {
   notes: { pitch: number; start: number; dur: number }[];
   audioRef: React.RefObject<HTMLAudioElement | null>;
   kind: FingerKind;
   transpose: number;
+  title?: ReactNode;     // left side of the header bar
+  control?: ReactNode;   // e.g. the ensemble member picker, beside the title
 }) {
   const rows = ROWS_BY_KIND[kind];
 
@@ -30,20 +33,21 @@ export default function WindTabView({ notes, audioRef, kind, transpose }: {
     if (kind === "valves") {
       const w = nt.pitch + transpose, r = trumpetFingering(w);
       return { start: nt.start, dur: nt.dur, rows: r.valves.map((v) => v - 1),
-        label: noteName(w), sub: r.partial ? `p${r.partial}` : "" };
+        label: noteName(w), sub: r.partial ? `p${r.partial}` : "", partial: r.partial, oct: false };
     }
     if (kind === "slide") {
       const r = trombonePosition(nt.pitch);
-      return { start: nt.start, dur: nt.dur, rows: [r.pos - 1], label: noteName(nt.pitch), sub: r.partial ? `p${r.partial}` : "" };
+      return { start: nt.start, dur: nt.dur, rows: [r.pos - 1], label: noteName(nt.pitch), sub: r.partial ? `p${r.partial}` : "", partial: r.partial, oct: false };
     }
     const w = nt.pitch + transpose, { holes, oct } = woodwindKeys(w);
-    return { start: nt.start, dur: nt.dur, rows: [...(oct ? [0] : []), ...holes.map((h) => h + 1)], label: noteName(w), sub: "" };
+    return { start: nt.start, dur: nt.dur, rows: [...(oct ? [0] : []), ...holes.map((h) => h + 1)], label: noteName(w), sub: oct ? "8va" : "", partial: 0, oct };
   }), [notes, kind, transpose]);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(640);
   const [t, setT] = useState(0);
   const raf = useRef<number | null>(null);
+  const lastReg = useRef({ partial: 0, oct: false });
 
   useEffect(() => {
     const el = wrapRef.current; if (!el) return;
@@ -62,8 +66,38 @@ export default function WindTabView({ notes, audioRef, kind, transpose }: {
   const nowX = Math.round(w * NOW_FRAC);
   const rowY = (r: number) => PAD_TOP + r * ROW;
 
+  // Live embouchure, held through gaps so the lips don't snap to rest. Brass
+  // locks the pitch with the lip aperture for a given harmonic (drive = the
+  // partial). Woodwinds have an embouchure too: the flute's lip aperture and
+  // the reeds' firmness tighten for the upper register, which the octave/
+  // register key selects — so for keys we drive the aperture off `oct`.
+  const reed = kind === "keys";
+  const cur = fnotes.find((fn) => fn.start <= t && t < fn.start + fn.dur);
+  if (cur) lastReg.current = { partial: cur.partial, oct: cur.oct };
+  const partial = cur ? cur.partial : lastReg.current.partial;
+  const oct = cur ? cur.oct : lastReg.current.oct;
+  const ap = reed ? { ry: oct ? 3 : 6.5, word: oct ? "firm" : "relaxed" } : apertureFor(partial);
+  const apTag = reed
+    ? (oct ? "8va key · upper" : "low register")
+    : (partial ? `p${partial} · ${ap.word}` : "—");
+  const apTitle = reed
+    ? "Embouchure & register — firmer + octave key for the upper register"
+    : "Embouchure — lip aperture for the current harmonic";
+
   return (
-    <div className="tab-lane-wrap" ref={wrapRef}>
+    <div className="wtab">
+      <div className="wtab-header">
+        {title && <div className="wtab-title">{title}</div>}
+        {control}
+        <div className="wtab-ap" title={apTitle}>
+          <svg className="aperture" viewBox="0 0 40 22" aria-label="aperture">
+            <rect x={3} y={4} width={34} height={14} rx={7} className="ap-lips" />
+            <ellipse cx={20} cy={11} rx={9} ry={ap.ry} className="ap-open" />
+          </svg>
+          <span className="ap-label">{apTag}</span>
+        </div>
+      </div>
+      <div className="tab-lane-wrap" ref={wrapRef}>
       <svg className="tab-lane" width={w} height={H} role="img" aria-label="fingering tab">
         {rows.map((lab, r) => (
           <g key={r}>
@@ -93,6 +127,7 @@ export default function WindTabView({ notes, audioRef, kind, transpose }: {
           );
         })}
       </svg>
+      </div>
     </div>
   );
 }
