@@ -27,11 +27,12 @@ export default function App() {
       </div>
       <div className={"tab-pane" + (tab === "compose" ? "" : " hidden")}>
         <ComposeScreen
+          active={tab === "compose"}
           onEditInGenerate={(spec) => { setEditSpec(spec); setTab("generate"); }}
         />
       </div>
       <div className={"tab-pane" + (tab === "practice" ? "" : " hidden")}>
-        <PracticeScreen />
+        <PracticeScreen isActive={tab === "practice"} />
       </div>
 
       <nav className="tabbar">

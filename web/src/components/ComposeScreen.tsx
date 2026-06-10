@@ -67,8 +67,10 @@ let _currentAudio: HTMLAudioElement | null = null;
 
 export default function ComposeScreen({
   onEditInGenerate,
+  active,
 }: {
   onEditInGenerate: (spec: BlockSpec) => void;
+  active?: boolean;
 }) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [timeline, setTimeline] = useState<TLItem[]>([]);
@@ -116,6 +118,9 @@ export default function ComposeScreen({
     } catch (e) { setErr(String(e)); }
   }
   useEffect(() => { refresh(); }, []);
+  // Re-pull the library when this tab becomes active so blocks generated/saved
+  // in another tab show up (only the list refreshes — timeline/song are kept).
+  useEffect(() => { if (active) refresh(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [active]);
 
   // timeline ops
   const add = (name: string) =>

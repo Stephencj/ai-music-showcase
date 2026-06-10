@@ -38,7 +38,7 @@ function autoCapo(keyPc: number): number {
   return 0;
 }
 
-export default function PracticeScreen() {
+export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
   const [mode, setMode] = useState<Mode>("block");
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [songs, setSongs] = useState<string[]>([]);
@@ -125,6 +125,14 @@ export default function PracticeScreen() {
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Re-pull blocks/songs when this tab becomes active, so blocks generated or
+  // saved in another tab appear here (the current selection/score is kept).
+  useEffect(() => {
+    if (!isActive) return;
+    api.getBlocks().then((bs) => setBlocks(bs.filter((b) => b.has_preview))).catch(() => {});
+    api.listSongs().then((r) => setSongs(r.songs || [])).catch(() => {});
+  }, [isActive]);
 
   useEffect(() => {
     try { localStorage.setItem("practice.panels", JSON.stringify(panels)); } catch { /* ignore */ }
