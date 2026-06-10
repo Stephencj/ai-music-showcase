@@ -567,6 +567,9 @@ audio { width: 100%; margin: 8px 0 12px; }
 .tape-chord:active { filter: brightness(1.2); }
 
 .loop-row { display: flex; align-items: center; gap: 8px; }
+.midi-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.midi-row .chip.on { background: #d92b2b; color: #fff; border-color: #d92b2b; }
+.midi-err { font-size: 12px; color: #ffb4b4; }
 .loop-row select { padding: 7px 9px; border-radius: 8px; background: var(--bg-2); color: var(--text); border: 1px solid rgba(255,255,255,0.12); font-size: 13px; }
 
 /* Section-loop engine transport (replaces native controls while looping) */

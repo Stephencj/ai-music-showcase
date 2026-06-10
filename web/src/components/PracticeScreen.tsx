@@ -8,6 +8,8 @@ import NotationRoll, { type RollNote } from "./NotationRoll";
 import SheetMusic from "./SheetMusic";
 import TabView from "./TabView";
 import { isFrettedTrack, isGuitarTrack, isKeysTrack, tuningFor, stringLabelsFor, assignFrets } from "../guitarTab";
+import * as webmidi from "../webmidi";
+import type { MidiOut } from "../webmidi";
 import { LoopPlayer } from "../loopPlayer";
 import type { BlockNotes } from "../api";
 import { MODES, ALL_ROOTS, scaleToModeId, rootPc, romanFor, nashvilleFor } from "../chordLabels";
@@ -49,6 +51,12 @@ export default function PracticeScreen() {
   const [chartIdx, setChartIdx] = useState(-1);  // -1 = chords only (no part)
   const [solo, setSolo] = useState(false);       // play just the chart part
   const [capo, setCapo] = useState(0);           // chord-shape capo (teaching)
+  // Real-time MIDI out: stream this block's notes to a hardware/virtual port.
+  const [midiOuts, setMidiOuts] = useState<MidiOut[]>([]);
+  const [midiOutId, setMidiOutId] = useState("");
+  const [midiOn, setMidiOn] = useState(false);
+  const [midiErr, setMidiErr] = useState("");
+  const [midiReady, setMidiReady] = useState(false);
   // Which panels show in the practice space (gear), persisted.
   const [panels, setPanels] = useState<Record<string, boolean>>(() => {
     try {
@@ -475,6 +483,21 @@ export default function PracticeScreen() {
     if (!a) return;
     if (a.paused) a.play().catch(() => {}); else a.pause();
   }
+  // Ask for MIDI access (user gesture) and populate the output list.
+  async function enableMidi() {
+    setMidiErr("");
+    try {
+      const outs = await webmidi.initMidi();
+      setMidiOuts(outs);
+      setMidiOutId((cur) => cur || outs[0]?.id || "");
+      webmidi.onStateChange(() => setMidiOuts(webmidi.listOutputs()));
+      setMidiReady(true);
+      if (!outs.length) setMidiErr("No MIDI outputs found — connect a device or a virtual port.");
+    } catch (e) {
+      setMidiErr(String(e instanceof Error ? e.message : e));
+    }
+  }
+
   // Jump to bar boundaries: forward → next downbeat; back → start of the
   // current bar (or the previous one if we're right at the start).
   function skipBar(dir: number) {
@@ -660,6 +683,33 @@ export default function PracticeScreen() {
               ))}
             </select>
           </div>
+
+          {/* Real-time MIDI out: stream this block's notes to a hardware/virtual
+              port as it plays (one channel per track; drums → ch 10). */}
+          {partNotes && partNotes.tracks.length > 0 && webmidi.midiSupported() && (
+            <div className="midi-row">
+              <span className="speed-label">🎹 MIDI out</span>
+              {!midiReady ? (
+                <button className="btn ghost sm" onClick={enableMidi}>Enable</button>
+              ) : (
+                <>
+                  <select value={midiOutId} onChange={(e) => setMidiOutId(e.target.value)}>
+                    {midiOuts.length === 0 && <option value="">no outputs</option>}
+                    {midiOuts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                  <button className={"chip" + (midiOn ? " on" : "")} disabled={!midiOutId}
+                    onClick={() => setMidiOn((v) => !v)}
+                    title="Stream notes to the selected output while playing">
+                    {midiOn ? "● sending" : "send"}</button>
+                </>
+              )}
+              {midiErr && <span className="midi-err">{midiErr}</span>}
+            </div>
+          )}
+          {midiOn && midiOutId && partNotes && (
+            <MidiStreamer tracks={partNotes.tracks} tempo={partNotes.tempo}
+              outputId={midiOutId} audioRef={playhead} />
+          )}
 
 
           {mode === "upload" && (
@@ -865,6 +915,45 @@ export default function PracticeScreen() {
       )}
     </div>
   );
+}
+
+// Streams the block's notes to a MIDI output, following the playhead. On each
+// frame it computes which (channel,pitch) should sound and diffs against what's
+// currently on — sending note-on/off. Handles seek, loop and pause (notes that
+// fall out of the sounding set, or everything when paused, get note-off).
+function MidiStreamer({ tracks, tempo, outputId, audioRef }: {
+  tracks: BlockNotes["tracks"];
+  tempo: number;
+  outputId: string;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
+}) {
+  useEffect(() => {
+    const spb = 60 / (tempo || 120);
+    const chans = webmidi.channelsFor(tracks.map((t) => t.is_drum));
+    const events = tracks.flatMap((t, ti) =>
+      t.notes.map(([p, sb, db]) => ({ ch: chans[ti], pitch: p, start: sb * spb, end: (sb + db) * spb })));
+    const active = new Set<string>();
+    let raf = 0;
+    const tick = () => {
+      const a = audioRef.current;
+      const playing = !!a && !a.paused;
+      const t = a?.currentTime ?? 0;
+      const want = new Set<string>();
+      if (playing) {
+        for (const e of events) if (t >= e.start && t < e.end) want.add(`${e.ch}:${e.pitch}`);
+      }
+      for (const k of active) {
+        if (!want.has(k)) { const [ch, p] = k.split(":").map(Number); webmidi.noteOff(outputId, ch, p); active.delete(k); }
+      }
+      for (const k of want) {
+        if (!active.has(k)) { const [ch, p] = k.split(":").map(Number); webmidi.noteOn(outputId, ch, p); active.add(k); }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); webmidi.allOff(outputId); };
+  }, [tracks, tempo, outputId, audioRef]);
+  return null;
 }
 
 function Cell({
