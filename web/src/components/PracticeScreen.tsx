@@ -11,6 +11,7 @@ import { isFrettedTrack, isGuitarTrack, isKeysTrack, stringLabelsFor, assignFret
   detectInstrumentId, instrumentById, instrumentFor, STRING_INSTRUMENTS } from "../guitarTab";
 import type { TabNote } from "../guitarTab";
 import { DrumDiagram, BrassDiagram, WoodwindDiagram } from "./InstrumentDiagrams";
+import CircleOfFifths from "./CircleOfFifths";
 import { familyFor } from "../instruments";
 import * as webmidi from "../webmidi";
 import type { MidiOut } from "../webmidi";
@@ -88,6 +89,7 @@ export default function PracticeScreen() {
   // the detected key, but fully selectable across the modal range for learning.
   const [tonic, setTonic] = useState("C");
   const [keyMode, setKeyMode] = useState("major");
+  const [showCircle, setShowCircle] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // Seamless/pitch-preserved section-loop engine (Web Audio + SoundTouch).
@@ -642,18 +644,20 @@ export default function PracticeScreen() {
       {score && notation !== "chord" && (
         <div className="keymode-row">
           <span className="keymode-label">Numbers vs</span>
-          <select value={tonic} onChange={(e) => setTonic(e.target.value)}>
-            {ALL_ROOTS.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-          <select value={keyMode} onChange={(e) => setKeyMode(e.target.value)}>
-            {MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-          </select>
+          <button className="keymode-pick" onClick={() => setShowCircle(true)}
+            title="Pick the key on the circle of fifths">
+            ◷ {tonic} {(MODES.find((m) => m.id === keyMode) || MODES[0]).label.split(" ")[0]}
+          </button>
           <button
             className="keymode-reset"
             onClick={() => { setTonic(ALL_ROOTS[rootPc(score.key)]); setKeyMode(scaleToModeId(score.scale)); }}
             title="Reset to the detected key"
           >↺</button>
         </div>
+      )}
+      {showCircle && (
+        <CircleOfFifths tonic={tonic} mode={keyMode}
+          onTonic={setTonic} onMode={setKeyMode} onClose={() => setShowCircle(false)} />
       )}
 
       {err && <div className="practice-err">{err}</div>}

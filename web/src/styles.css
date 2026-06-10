@@ -542,6 +542,44 @@ audio { width: 100%; margin: 8px 0 12px; }
   border: 1px solid rgba(255,255,255,0.12); background: var(--bg-2); color: var(--accent-2);
   border-radius: 8px; width: 30px; height: 30px; cursor: pointer; font-size: 15px;
 }
+.keymode-pick {
+  padding: 7px 12px; border-radius: 8px; background: var(--bg-2); color: var(--text);
+  border: 1px solid rgba(255,255,255,0.12); font-size: 13px; cursor: pointer; font-weight: 600;
+}
+.keymode-pick:hover { border-color: var(--accent); }
+
+/* ── Circle of fifths key picker ─────────────────────────────────────────── */
+.cof-backdrop {
+  position: fixed; inset: 0; z-index: 1100; background: rgba(6, 9, 18, 0.66);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.cof-popup {
+  width: min(340px, 92vw); background: var(--card); border: 1px solid var(--border);
+  border-radius: 16px; padding: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.cof-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.cof-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); flex: 0 0 auto; }
+.cof-head select {
+  flex: 1; padding: 6px 8px; border-radius: 8px; background: var(--bg-2); color: var(--text);
+  border: 1px solid rgba(255,255,255,0.12); font-size: 13px;
+}
+.cof-close {
+  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-2); color: var(--text); cursor: pointer; font-size: 14px;
+}
+.cof-svg { width: 100%; display: block; }
+.cof-ring { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 1; }
+.cof-key { cursor: pointer; }
+.cof-key circle { fill: #16203a; stroke: rgba(120,170,255,0.25); stroke-width: 1; transition: fill 0.1s, stroke 0.1s; }
+.cof-key text { fill: rgba(238,242,251,0.72); font-size: 11px; font-weight: 600; pointer-events: none; }
+.cof-key:hover circle { fill: #1d2c4d; }
+.cof-key.parent circle { fill: #2b3d63; stroke: rgba(120,170,255,0.6); }
+.cof-key.tonic circle { fill: #2b6df6; stroke: #6da2ff; }
+.cof-key.tonic text { fill: #fff; }
+.cof-c-key { fill: var(--text); font-size: 20px; font-weight: 700; }
+.cof-c-mode { fill: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; }
+.cof-c-sig { fill: var(--accent-2); font-size: 11px; font-weight: 600; }
+.cof-hint { margin-top: 8px; text-align: center; font-size: 11px; color: var(--muted); }
 
 /* Practice: pinned head + independently-scrolling chart */
 .practice-head { display: flex; flex-direction: column; gap: 12px; }
