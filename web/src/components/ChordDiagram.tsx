@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { RollNote } from "./NotationRoll";
+import type { TabNote } from "../guitarTab";
 
 // Two modes:
 //  • "chord" (practice): guitar chord SHAPE/fingering + chord tones on a
@@ -109,12 +110,16 @@ const INLAYS = new Set([3, 5, 7, 9, 12, 15]);
 function octaveFloor(p: number) { return Math.floor(p / 12) * 12; }
 
 function NeckDiagrams({
-  notes, audioRef, range, chordTones,
+  notes, audioRef, range, chordTones, tabNotes,
 }: {
   notes: RollNote[];
   audioRef?: React.RefObject<HTMLAudioElement | null>;
   range?: [number, number];
   chordTones: Set<number>;
+  // When a guitar part is selected we know the EXACT string/fret it's playing
+  // (from the tab). Light just those positions on the neck instead of every
+  // place the pitch could be fretted.
+  tabNotes?: TabNote[];
 }) {
   const [lo, hi] = useMemo(() => {
     let a = range ? range[0] : 48, b = range ? range[1] : 83;
@@ -123,12 +128,22 @@ function NeckDiagrams({
     return [Math.max(21, a), Math.min(108, b)];
   }, [range]);
 
-  // Element refs keyed by pitch (a pitch can have several positions on the neck).
-  const elsByPitch = useRef<Map<number, Element[]>>(new Map());
-  const put = (p: number, el: Element | null) => {
+  // Piano keys are keyed by pitch (one key per pitch). Neck dots are kept in
+  // two indexes: by pitch (default lighting) and by "string:fret" position
+  // (tab lighting — the single dot the guitar actually plays).
+  const pianoByPitch = useRef<Map<number, Element[]>>(new Map());
+  const neckByPitch = useRef<Map<number, Element[]>>(new Map());
+  const neckByPos = useRef<Map<string, Element>>(new Map());
+  const putPiano = (p: number, el: Element | null) => {
     if (!el) return;
-    const a = elsByPitch.current.get(p) || [];
-    a.push(el); elsByPitch.current.set(p, a);
+    const a = pianoByPitch.current.get(p) || [];
+    a.push(el); pianoByPitch.current.set(p, a);
+  };
+  const putNeck = (p: number, s: number, f: number, el: Element | null) => {
+    if (!el) return;
+    const a = neckByPitch.current.get(p) || [];
+    a.push(el); neckByPitch.current.set(p, a);
+    neckByPos.current.set(`${s}:${f}`, el);
   };
 
   // ---- static piano ----
@@ -139,7 +154,7 @@ function NeckDiagrams({
   const pianoW = Math.max(1, whites.length * wk);
   const pianoEls: React.ReactNode[] = [];
   whites.forEach((p, i) => {
-    pianoEls.push(<rect key={`w${p}`} ref={(el) => put(p, el)} className="pk w" x={i * wk} y={0}
+    pianoEls.push(<rect key={`w${p}`} ref={(el) => putPiano(p, el)} className="pk w" x={i * wk} y={0}
       width={wk - 1} height={wh} rx={2} fill="#fbfdff" stroke="#1e293b" strokeWidth={0.6} />);
     if (pc(p) === 0) pianoEls.push(<text key={`l${p}`} x={i * wk + wk / 2} y={wh - 4} fontSize={7}
       fill="#64748b" textAnchor="middle">C{Math.floor(p / 12) - 1}</text>);
@@ -147,7 +162,7 @@ function NeckDiagrams({
   for (let p = lo; p <= hi; p++) {
     if (isWhite(p)) continue;
     const below = idx.get(p - 1); if (below == null) continue;
-    pianoEls.push(<rect key={`b${p}`} ref={(el) => put(p, el)} className="pk b"
+    pianoEls.push(<rect key={`b${p}`} ref={(el) => putPiano(p, el)} className="pk b"
       x={below * wk + wk - bk / 2} y={0} width={bk} height={bh} rx={1.5} fill="#16202e" stroke="#0b1118" strokeWidth={0.6} />);
   }
 
@@ -167,38 +182,69 @@ function NeckDiagrams({
     for (let f = 0; f <= FRETS; f++) {
       const p = STRING_MIDI[s] + f;
       const cx = f === 0 ? nl - 9 : nl + (f - 0.5) * fw;
-      neckEls.push(<circle key={`d${s}-${f}`} ref={(el) => put(p, el)} className="nd" cx={cx} cy={yOf(s)} r={f === 0 ? 5 : 6} />);
+      neckEls.push(<circle key={`d${s}-${f}`} ref={(el) => putNeck(p, s, f, el)} className="nd" cx={cx} cy={yOf(s)} r={f === 0 ? 5 : 6} />);
     }
   }
 
   // ---- highlight driver ----
   useEffect(() => {
-    const map = elsByPitch.current;
-    const setP = (p: number, on: boolean) => map.get(p)?.forEach((el) => el.classList.toggle("lit", on));
-    map.forEach((arr) => arr.forEach((el) => el.classList.remove("lit")));
+    const pianoMap = pianoByPitch.current, neckMap = neckByPitch.current, posMap = neckByPos.current;
+    const litPiano = (p: number, on: boolean) => pianoMap.get(p)?.forEach((el) => el.classList.toggle("lit", on));
+    const litNeckPitch = (p: number, on: boolean) => neckMap.get(p)?.forEach((el) => el.classList.toggle("lit", on));
+    const litNeckPos = (key: string, on: boolean) => posMap.get(key)?.classList.toggle("lit", on);
+    const clearAll = () => {
+      pianoMap.forEach((a) => a.forEach((el) => el.classList.remove("lit")));
+      neckMap.forEach((a) => a.forEach((el) => el.classList.remove("lit")));
+    };
+    clearAll();
 
     if (!notes.length) {
       // No note data → light the chord's tones in every position (static).
-      map.forEach((arr, p) => { if (chordTones.has(pc(p))) arr.forEach((el) => el.classList.add("lit")); });
+      pianoMap.forEach((a, p) => { if (chordTones.has(pc(p))) a.forEach((el) => el.classList.add("lit")); });
+      neckMap.forEach((a, p) => { if (chordTones.has(pc(p))) a.forEach((el) => el.classList.add("lit")); });
       return;
     }
+
     let raf = 0;
+    if (tabNotes && tabNotes.length) {
+      // Guitar part selected: light only the exact fret position being played
+      // on the neck (one dot per note), and its key on the piano.
+      const onPos = new Set<string>(), onPitch = new Set<number>();
+      const tick = () => {
+        const t = audioRef?.current?.currentTime ?? 0;
+        const sndPos = new Set<string>(), sndPitch = new Set<number>();
+        for (const n of tabNotes) if (t >= n.start && t < n.start + n.dur) {
+          sndPos.add(`${n.string}:${n.fret}`); sndPitch.add(n.pitch);
+        }
+        for (const k of onPos) if (!sndPos.has(k)) { litNeckPos(k, false); onPos.delete(k); }
+        for (const k of sndPos) if (!onPos.has(k)) { litNeckPos(k, true); onPos.add(k); }
+        for (const p of onPitch) if (!sndPitch.has(p)) { litPiano(p, false); onPitch.delete(p); }
+        for (const p of sndPitch) if (!onPitch.has(p)) { litPiano(p, true); onPitch.add(p); }
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+      return () => cancelAnimationFrame(raf);
+    }
+
+    // Default live: light the sounding pitch everywhere it appears.
     const on = new Set<number>();
     const tick = () => {
       const t = audioRef?.current?.currentTime ?? 0;
       const snd = new Set<number>();
       for (const n of notes) if (t >= n.start && t < n.start + n.dur) snd.add(n.pitch);
-      for (const p of on) if (!snd.has(p)) { setP(p, false); on.delete(p); }
-      for (const p of snd) if (!on.has(p)) { setP(p, true); on.add(p); }
+      for (const p of on) if (!snd.has(p)) { litPiano(p, false); litNeckPitch(p, false); on.delete(p); }
+      for (const p of snd) if (!on.has(p)) { litPiano(p, true); litNeckPitch(p, true); on.add(p); }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
     // Rebuilt elements (new refs) whenever the key range changes.
-  }, [notes, audioRef, chordTones, lo, hi]);
+  }, [notes, audioRef, chordTones, lo, hi, tabNotes]);
 
-  // Reset the ref map each render so stale element refs don't accumulate.
-  elsByPitch.current = new Map();
+  // Reset the ref maps each render so stale element refs don't accumulate.
+  pianoByPitch.current = new Map();
+  neckByPitch.current = new Map();
+  neckByPos.current = new Map();
 
   return (
     <div className="diagrams diagrams-wide">
@@ -216,7 +262,7 @@ function NeckDiagrams({
 
 // ===========================================================================
 export default function ChordDiagram({
-  root, quality, notes, audioRef, range, neck = false,
+  root, quality, notes, audioRef, range, neck = false, tabNotes,
 }: {
   root: string;
   quality: string;
@@ -224,6 +270,7 @@ export default function ChordDiagram({
   audioRef?: React.RefObject<HTMLAudioElement | null>;
   range?: [number, number];
   neck?: boolean;
+  tabNotes?: TabNote[];
 }) {
   const tones = useMemo(() => {
     const offs = TEMPLATES[quality] || TEMPLATES.maj;
@@ -244,5 +291,5 @@ export default function ChordDiagram({
       </div>
     );
   }
-  return <NeckDiagrams notes={notes || []} audioRef={audioRef} range={range} chordTones={tones} />;
+  return <NeckDiagrams notes={notes || []} audioRef={audioRef} range={range} chordTones={tones} tabNotes={tabNotes} />;
 }

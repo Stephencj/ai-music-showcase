@@ -7,7 +7,7 @@ import TapeView from "./TapeView";
 import NotationRoll, { type RollNote } from "./NotationRoll";
 import SheetMusic from "./SheetMusic";
 import TabView from "./TabView";
-import { isFrettedTrack, tuningFor, stringLabelsFor, assignFrets } from "../guitarTab";
+import { isFrettedTrack, isBassTrack, tuningFor, stringLabelsFor, assignFrets } from "../guitarTab";
 import { LoopPlayer } from "../loopPlayer";
 import type { BlockNotes } from "../api";
 import { MODES, ALL_ROOTS, scaleToModeId, rootPc, romanFor, nashvilleFor } from "../chordLabels";
@@ -679,6 +679,14 @@ export default function PracticeScreen() {
                 audioRef={playhead}
                 range={partRange}
                 neck={neckMode}
+                // A guitar part is selected → the full-neck diagram lights only
+                // the exact fret being played (the tab), not every position of
+                // the pitch. (Bass excluded: the diagram is a 6-string neck.)
+                tabNotes={
+                  selectedTrack && !selectedTrack.is_drum
+                  && isFrettedTrack(selectedTrack.track) && !isBassTrack(selectedTrack.track)
+                  && tabData ? tabData.tabNotes : undefined
+                }
               />
             </div>
           )}
