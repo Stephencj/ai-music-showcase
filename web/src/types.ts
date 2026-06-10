@@ -90,7 +90,8 @@ export interface BlockSpec {
   seed?: number;
   swing?: number | null;
   instruments?: string[];
-  sections?: { start_bar: number; end_bar: number; label: string; role: string }[];
+  section_presets?: Record<string, string>;
+  sections?: { start_bar: number; end_bar: number; label: string; role: string; preset_id?: string }[];
   section?: { start_bar: number; end_bar: number } | null;
   inferred?: boolean;
 }
@@ -140,6 +141,7 @@ export interface GenerateBody {
   swing?: number | null;
   instruments: string[];
   sections: string[];
+  section_presets?: Record<string, string>;   // role → preset id (multi-preset songs)
   with_pdf: boolean;
   with_stems: boolean;
   master_preset: string;

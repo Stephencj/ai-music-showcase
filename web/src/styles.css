@@ -920,6 +920,12 @@ audio { width: 100%; margin: 8px 0 12px; }
 .inst-ic { display: inline-block; vertical-align: -2px; flex: 0 0 auto; color: var(--accent-2); }
 /* Part/instrument pickers in tight header rows: cap width → name ellipsizes. */
 .part-pick { max-width: 190px; min-width: 0; font-size: 13px; padding: 7px 10px; }
+/* Per-section preset rows (multi-preset songs) on the Generate tab. */
+.section-rows { display: flex; flex-direction: column; gap: 8px; }
+.section-row { display: flex; align-items: center; gap: 10px; }
+.section-row > .chip { flex: 0 0 116px; text-align: left; }
+.section-row.off { opacity: 0.6; }
+.section-preset { flex: 1 1 auto; min-width: 0; max-width: 300px; }
 .pf-opt-ic { flex: 0 0 auto; display: inline-flex; color: var(--accent-2); }
 .pf-icon .inst-ic { color: inherit; }
 /* Clickable ensemble member in the live diagram → tabs that instrument. */

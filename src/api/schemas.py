@@ -24,6 +24,10 @@ class GenerateRequest(BaseModel):
     bars: Optional[int] = None
     instruments: list[str] = Field(default_factory=list)   # instrument ids
     sections: list[str] = Field(default_factory=list)      # roles to include
+    # Multi-preset songs: role → preset id, e.g. {"chorus": "hip_hop"}. Each
+    # mapped section renders in that preset's feel (progression/pacing/
+    # techniques/reharm); key/scale/tempo stay global. Unmapped roles use genre.
+    section_presets: dict[str, str] = Field(default_factory=dict)
     with_stems: bool = False
     with_pdf: bool = True
     master_preset: Optional[str] = "default"

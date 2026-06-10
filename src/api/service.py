@@ -80,8 +80,9 @@ def run_generation(req, progress, job_id: str) -> dict:
     ts = (int(preset.time_signature[0]), int(preset.time_signature[1]))
 
     # Always a concrete section list so split-into-blocks uses the exact
-    # boundaries compose_song laid the song down with.
-    secs = build_sections(genre, req.sections)
+    # boundaries compose_song laid the song down with. Per-role preset overrides
+    # (multi-preset songs) are attached here as section["preset_id"].
+    secs = build_sections(genre, req.sections, getattr(req, "section_presets", None))
 
     job_dir = API_OUT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -143,9 +144,11 @@ def run_generation(req, progress, job_id: str) -> dict:
         "seed": seed,
         "swing": float(req.swing) if req.swing is not None else None,
         "instruments": list(req.instruments),
+        "section_presets": dict(getattr(req, "section_presets", None) or {}),
         "sections": [
             {"start_bar": s["start_bar"], "end_bar": s["end_bar"],
-             "label": s["label"], "role": s["role"]}
+             "label": s["label"], "role": s["role"],
+             **({"preset_id": s["preset_id"]} if s.get("preset_id") else {})}
             for s in secs
         ],
         "progression": out.get("progression") or [],

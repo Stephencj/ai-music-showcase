@@ -37,10 +37,16 @@ def available_sections(genre: str) -> list[dict]:
     return [{"role": r, "native": r in native} for r in SECTION_ORDER]
 
 
-def build_sections(genre: str, roles: list[str]) -> list[dict]:
+def build_sections(genre: str, roles: list[str],
+                   section_presets: dict[str, str] | None = None) -> list[dict]:
     """Contiguous ``{start_bar, end_bar, label, role}`` for the chosen roles
     in canonical order. Empty ``roles`` → the genre's full default
-    arrangement. Bar-lengths/labels come from the template when present."""
+    arrangement. Bar-lengths/labels come from the template when present.
+
+    ``section_presets`` (optional) maps a role → preset id, attaching a
+    ``preset_id`` to every section of that role so ``compose_song`` renders it
+    in that preset's feel (multi-preset songs). Roles absent from the map use
+    the song genre."""
     wanted = [r for r in SECTION_ORDER if r in set(roles)]
     template = _template_for(genre)
     template_roles = {s.get("role") for s in template}
@@ -53,18 +59,33 @@ def build_sections(genre: str, roles: list[str]) -> list[dict]:
     # the vocal line/lyric of phrases. A strict subset still builds a reduced
     # custom arrangement below.
     if template and (not wanted or set(wanted) == template_roles):
-        return [dict(s) for s in template]
-    if not wanted:
+        secs = [dict(s) for s in template]
+    elif not wanted:
         # No template (unknown genre) and nothing chosen → generic sketch.
-        return _from_roles(list(SECTION_ORDER), {})
+        secs = _from_roles(list(SECTION_ORDER), {})
+    else:
+        by_role: dict[str, tuple[int, str]] = {}
+        for s in template:
+            r = s.get("role")
+            if r and r not in by_role:
+                bars = int(s["end_bar"]) - int(s["start_bar"]) + 1
+                by_role[r] = (bars, s.get("label") or r.capitalize())
+        secs = _from_roles(wanted, by_role)
 
-    by_role: dict[str, tuple[int, str]] = {}
-    for s in template:
-        r = s.get("role")
-        if r and r not in by_role:
-            bars = int(s["end_bar"]) - int(s["start_bar"]) + 1
-            by_role[r] = (bars, s.get("label") or r.capitalize())
-    return _from_roles(wanted, by_role)
+    return _attach_presets(secs, genre, section_presets)
+
+
+def _attach_presets(secs: list[dict], genre: str,
+                    section_presets: dict[str, str] | None) -> list[dict]:
+    """Tag each section with a ``preset_id`` from the role→preset map. A value
+    equal to the song genre (or empty/unknown) is dropped so the section just
+    inherits the global preset."""
+    sp = section_presets or {}
+    for s in secs:
+        pid = (sp.get(s.get("role")) or "").strip()
+        if pid and pid != genre:
+            s["preset_id"] = pid
+    return secs
 
 
 def _from_roles(roles: list[str], by_role: dict[str, tuple[int, str]]) -> list[dict]:

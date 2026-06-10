@@ -423,16 +423,39 @@ def compose_song(
         # preset.pacing_options. Presets that didn't opt in always get
         # uniform_1 so the legacy 1-bar-per-chord behavior is
         # preserved for unmodified presets and tests.
+        # Per-section preset (multi-preset songs): a section may declare its
+        # own ``preset_id`` and we recompute its FEEL from that preset —
+        # progression, pacing pools, technique-tag bias, reharmonization and
+        # knobs — while key / scale / tempo / meter stay global (one exporter,
+        # one tonal centre; section progressions are Roman-numeral so they
+        # realize in the song key). Sections without one use the song genre.
+        sec_genre = section.get("preset_id") or genre
+        if sec_genre != genre and sec_genre not in STYLES:
+            sec_genre = genre
+        sec_preset = STYLES.get(sec_genre, preset)
+        sec_knobs = resolve_knobs(sec_genre, knobs) if sec_genre != genre else eff_knobs
+        sec_tags = (_GENRE_TAG_MAP.get(sec_genre, ()) if sec_genre != genre
+                    else preferred_tags)
+        # Progression source: explicit per-section override > the section
+        # preset's own progression (only when it differs from the song) >
+        # the song progression.
+        if section.get("progression"):
+            sec_progression = list(section["progression"])
+        elif sec_genre != genre:
+            sec_progression = list(sec_preset.progression)
+        else:
+            sec_progression = progression
+
         pacing_rng = np.random.default_rng(
             _sub_seed(seed, label, "pacing"),
         )
-        _hprof = harmony_profile(genre)
-        pacing = pick_pacing(pacing_rng, preset, role,
+        _hprof = harmony_profile(sec_genre)
+        pacing = pick_pacing(pacing_rng, sec_preset, role,
                              reharm=_hprof.reharm,
-                             reharm_prob=eff_knobs["reharm_prob"])
+                             reharm_prob=sec_knobs["reharm_prob"])
         pacing_picks[label] = pacing
         paced_progression = apply_pacing(
-            progression, pacing, eff_key, eff_scale,
+            sec_progression, pacing, eff_key, eff_scale,
         )
         section_prog = _slice_progression(
             paced_progression, eff_bars, s, e,
@@ -488,7 +511,7 @@ def compose_song(
                 # instrument-tagged techniques win), then fall back to
                 # the role bucket for the 193 existing role-tagged
                 # techniques.
-                tags_for_pick = preferred_tags
+                tags_for_pick = sec_tags
                 technique = BANK.pick(
                     instrument_token, role, rng,
                     preferred_tags=tags_for_pick,
@@ -510,7 +533,7 @@ def compose_song(
                 section_role=role, section_label=label,
                 instrument=instrument_token,
                 key=eff_key, scale=eff_scale,
-                tempo=eff_tempo, genre=genre,
+                tempo=eff_tempo, genre=sec_genre,
                 time_signature=preset.time_signature,
                 progression=section_prog,
                 swing=eff_swing,
@@ -519,9 +542,9 @@ def compose_song(
                 )),
                 instrument_obj=inst_obj,
                 voicing_role=voicing_assignments.get(instrument_token),
-                voicing_variety=eff_knobs["voicing_variety"],
-                bass_inversion=eff_knobs["bass_inversion"],
-                drum_fill=eff_knobs["drum_fill"],
+                voicing_variety=sec_knobs["voicing_variety"],
+                bass_inversion=sec_knobs["bass_inversion"],
+                drum_fill=sec_knobs["drum_fill"],
                 lead_fill=(is_lead and lead_is_fill),
             )
             try:

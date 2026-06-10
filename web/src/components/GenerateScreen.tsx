@@ -32,6 +32,7 @@ export default function GenerateScreen({
   const [seed, setSeed] = useState("");
   const [swing, setSwing] = useState<number | null>(null);
   const [sections, setSections] = useState<Set<string>>(new Set());
+  const [sectionPresets, setSectionPresets] = useState<Record<string, string>>({});  // role → preset id
   const [instruments, setInstruments] = useState<Set<string>>(new Set());
   const [openFams, setOpenFams] = useState<Set<string>>(new Set());
   const [master, setMaster] = useState("default");
@@ -127,6 +128,10 @@ export default function GenerateScreen({
       setOpenFams(new Set(fams.filter((f) => f.instruments.some((i) => ids.has(i.id))).map((f) => f.family)));
     }
     if (spec.sections?.length) setSections(new Set(spec.sections.map((s) => s.role)));
+    // Restore per-section presets (from the map, or recovered off the sections).
+    const sp: Record<string, string> = { ...(spec.section_presets || {}) };
+    for (const s of spec.sections || []) if (s.preset_id) sp[s.role] = s.preset_id;
+    setSectionPresets(sp);
   }
 
   function toggle(set: Set<string>, v: string, setter: (s: Set<string>) => void) {
@@ -146,6 +151,7 @@ export default function GenerateScreen({
         seed: seed.trim() ? Number(seed) : null,
         swing,
         instruments: [...instruments], sections: [...sections],
+        section_presets: sectionPresets,
         with_pdf: withPdf, with_stems: withStems, master_preset: master,
       };
       const { job_id } = await api.generate(body);
@@ -241,15 +247,35 @@ export default function GenerateScreen({
 
       <div className="card">
         <h2>Sections to generate</h2>
-        <div className="chips">
-          {(preset?.sections || []).map((s) => (
-            <button key={s.role}
-              className={"chip" + (sections.has(s.role) ? " on" : "")}
-              onClick={() => toggle(sections, s.role, setSections)}>
-              {SECTION_LABELS[s.role] || s.role}
-              {!s.native && <span className="dot">+</span>}
-            </button>
-          ))}
+        <div className="meta" style={{ marginBottom: 10 }}>
+          Each section can use its own preset — mix genres in one song (e.g. a funk verse, a hip-hop chorus).
+        </div>
+        <div className="section-rows">
+          {(preset?.sections || []).map((s) => {
+            const on = sections.has(s.role);
+            const cur = sectionPresets[s.role] || "";
+            return (
+              <div key={s.role} className={"section-row" + (on ? "" : " off")}>
+                <button
+                  className={"chip" + (on ? " on" : "")}
+                  onClick={() => toggle(sections, s.role, setSections)}>
+                  {SECTION_LABELS[s.role] || s.role}
+                  {!s.native && <span className="dot">+</span>}
+                </button>
+                {on && (
+                  <PickerField value={cur} label={`${SECTION_LABELS[s.role] || s.role} preset`}
+                    icon="🎚" fullWidth={false} className="section-preset" searchable
+                    options={[{ id: "", label: `Song default (${preset?.name || "—"})` },
+                      ...presets.map((p) => ({ id: p.id, label: p.name }))]}
+                    onChange={(id) => setSectionPresets((prev) => {
+                      const n = { ...prev };
+                      if (id) n[s.role] = id; else delete n[s.role];
+                      return n;
+                    })} />
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
