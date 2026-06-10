@@ -44,9 +44,9 @@ _ROCK = HarmonyProfile(
 )
 # Jazz / funk / soul / blues — extended colour + adventurous reharm.
 _JAZZ = HarmonyProfile(
-    voicing_variety=0.60, voicing_family="jazz",
+    voicing_variety=0.55, voicing_family="jazz",
     reharm=(("with_secondary_doms", 2), ("with_tritone_sub", 1),
-            ("with_borrowed_chords", 1)), reharm_prob=0.38, bass_inversion=0.28,
+            ("with_borrowed_chords", 1)), reharm_prob=0.30, bass_inversion=0.28,
 )
 # Classical / cinematic — triadic + suspensions, occasional secondary dom.
 _CLASSICAL = HarmonyProfile(

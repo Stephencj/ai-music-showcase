@@ -508,7 +508,9 @@ def _fr_outro_riff_pass(midi, ctx: TechniqueContext) -> None:
         bars=max(1, ctx.bar_count - half),
         bar_offset=ctx.start_bar + half,
         seed=_seed(ctx),
-        track_name="Lead", program=26,
+        # Merge into the Lead Guitar stem rather than spawning a stray
+        # "Lead" track separate from the lead engine's output.
+        track_name="Lead Guitar", program=29,
     ) if hasattr(midi, "add_lead_line") else None
 
 
@@ -979,9 +981,9 @@ def _add_drum_tech(name, *, pattern, roles, label, description,
             role = ctx.section_role
             kwargs["fill_last_bar"] = True
             kwargs["fill_prob"] = {
-                "verse": 0.4, "chorus": 0.55, "bridge": 0.6,
-                "outro": 0.5, "intro": 0.0,
-            }.get(role, 0.4)
+                "verse": 0.35, "chorus": 0.5, "bridge": 0.55,
+                "outro": 0.45, "intro": 0.0,
+            }.get(role, 0.35)
         # add_drum_pattern self-heals a meter-incompatible pattern by
         # falling back to a meter-appropriate default.
         midi.add_drum_pattern(**kwargs)
