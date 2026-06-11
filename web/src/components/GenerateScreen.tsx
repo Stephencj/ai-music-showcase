@@ -403,6 +403,47 @@ export default function GenerateScreen({
       </div>
 
       <div className="card">
+        <h2>Output</h2>
+        <label className="field"><span>Master preset</span>
+          <PickerField value={master} label="Master preset" icon="🎚"
+            options={masters.map((m) => ({ id: m, label: m }))} onChange={setMaster} />
+        </label>
+        <div className="chips">
+          <button type="button" className={"chip" + (withPdf ? " on" : "")} onClick={() => setWithPdf(!withPdf)}>PDF score</button>
+          <button type="button" className={"chip" + (withStems ? " on" : "")} onClick={() => setWithStems(!withStems)}>Stems</button>
+        </div>
+      </div>
+      </div>
+
+      <div className="gen-row">
+      <div className="card">
+        <h2>Song</h2>
+        <div className="row">
+          <label className="field"><span>Key / scale</span>
+            <button type="button" className="keypick" onClick={() => setShowKey(true)}
+              title="Pick the key on the circle of fifths">
+              ◷ {key} {scale.replace(/_/g, " ")}
+            </button>
+          </label>
+        </div>
+        {showKey && (
+          <CircleOfFifths tonic={key} mode={scale} sharps
+            options={SCALES.map((s) => ({ id: s, label: s.replace(/_/g, " ") }))}
+            onTonic={setKey} onMode={setScale} onClose={() => setShowKey(false)} />
+        )}
+        <div className="row">
+          <label className="field"><span>Tempo (BPM)</span>
+            <input type="number" min={40} max={240} value={tempo}
+              onChange={(e) => setTempo(Number(e.target.value))} />
+          </label>
+          <label className="field"><span>Seed (blank = random)</span>
+            <input type="text" inputMode="numeric" placeholder="random" value={seed}
+              onChange={(e) => setSeed(e.target.value)} />
+          </label>
+        </div>
+      </div>
+
+      <div className="card">
         <h2>Genre</h2>
         <button type="button" className="genre-pick" onClick={() => setShowGenre(true)}
           title="Pick a genre on the wheel">
@@ -440,47 +481,6 @@ export default function GenerateScreen({
             )}
           </div>
         )}
-      </div>
-      </div>
-
-      <div className="gen-row">
-      <div className="card">
-        <h2>Song</h2>
-        <div className="row">
-          <label className="field"><span>Key / scale</span>
-            <button type="button" className="keypick" onClick={() => setShowKey(true)}
-              title="Pick the key on the circle of fifths">
-              ◷ {key} {scale.replace(/_/g, " ")}
-            </button>
-          </label>
-        </div>
-        {showKey && (
-          <CircleOfFifths tonic={key} mode={scale} sharps
-            options={SCALES.map((s) => ({ id: s, label: s.replace(/_/g, " ") }))}
-            onTonic={setKey} onMode={setScale} onClose={() => setShowKey(false)} />
-        )}
-        <div className="row">
-          <label className="field"><span>Tempo (BPM)</span>
-            <input type="number" min={40} max={240} value={tempo}
-              onChange={(e) => setTempo(Number(e.target.value))} />
-          </label>
-          <label className="field"><span>Seed (blank = random)</span>
-            <input type="text" inputMode="numeric" placeholder="random" value={seed}
-              onChange={(e) => setSeed(e.target.value)} />
-          </label>
-        </div>
-      </div>
-
-      <div className="card">
-        <h2>Output</h2>
-        <label className="field"><span>Master preset</span>
-          <PickerField value={master} label="Master preset" icon="🎚"
-            options={masters.map((m) => ({ id: m, label: m }))} onChange={setMaster} />
-        </label>
-        <div className="chips">
-          <button type="button" className={"chip" + (withPdf ? " on" : "")} onClick={() => setWithPdf(!withPdf)}>PDF score</button>
-          <button type="button" className={"chip" + (withStems ? " on" : "")} onClick={() => setWithStems(!withStems)}>Stems</button>
-        </div>
       </div>
       </div>
 
