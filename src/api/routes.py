@@ -28,6 +28,7 @@ from .jobs import registry
 from .schemas import (
     AiAnswerRequest,
     EditBlockRequest,
+    MixPreviewRequest,
     ProduceBlockRequest,
     GenerateRequest,
     GeneratePartRequest,
@@ -374,6 +375,22 @@ def edit_block(name: str, req: EditBlockRequest) -> dict:
         raise HTTPException(404, str(exc))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+
+
+@router.post("/blocks/{name}/mix-preview")
+def block_mix_preview(name: str, req: MixPreviewRequest) -> dict:
+    """Render a block with a per-track mix + master to a throwaway preview (for
+    A/B'ing a mix without saving). Returns the preview audio URL."""
+    try:
+        key = service.mix_preview(name, track_mix=req.track_mix, master_preset=req.master_preset)
+        return {"url": f"/api/mix-previews/{key}"}
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.get("/mix-previews/{key}")
+def serve_mix_preview(key: str) -> FileResponse:
+    return _serve(service.mix_preview_path(key), "audio/mpeg")
 
 
 @router.post("/blocks/{name}/produce")

@@ -3,6 +3,7 @@ import * as api from "../api";
 import type { Block, ExplainData } from "../types";
 import type { RollNote } from "./NotationRoll";
 import PlayAlong from "./PlayAlong";
+import MixingDesk, { type MixState, type TrackSettings, cleanMix } from "./MixingDesk";
 
 // The band-career shell: name a band, write songs (the generator), then play
 // gigs (the scored play-along) to earn fans and climb venues. Songcraft — the
@@ -56,6 +57,7 @@ export default function BandScreen({ isActive, onWriteSong }: {
   const [nameDraft, setNameDraft] = useState("");
   const [gig, setGig] = useState<string | null>(null);     // block name being played
   const [produce, setProduce] = useState<string | null>(null);  // block being produced
+  const [train, setTrain] = useState<string | null>(null);      // ear-training on a block
 
   useEffect(() => { if (band) localStorage.setItem(KEY, JSON.stringify(band)); }, [band]);
   useEffect(() => { if (isActive) api.getBlocks().then(setBlocks).catch(() => {}); }, [isActive]);
@@ -116,6 +118,8 @@ export default function BandScreen({ isActive, onWriteSong }: {
                   <span className="band-song-name">{b.name}</span>
                   <button className="btn ghost sm" style={{ width: "auto" }}
                     onClick={() => setProduce(b.name)}>🎛 Produce</button>
+                  <button className="btn ghost sm" style={{ width: "auto" }}
+                    onClick={() => setTrain(b.name)}>🎧 Ear training</button>
                   <button className="btn secondary sm" style={{ width: "auto" }}
                     onClick={() => setGig(b.name)}>🎤 Play gig</button>
                 </div>
@@ -135,17 +139,20 @@ export default function BandScreen({ isActive, onWriteSong }: {
           onProduced={(n, prod) => setBand((b) => b ? { ...b, produced: { ...(b.produced || {}), [n]: prod } } : b)}
           onClose={() => setProduce(null)} />
       )}
+      {train && (
+        <EarTraining blockName={train}
+          onReward={(fans) => setBand((b) => b ? { ...b, fans: b.fans + fans } : b)}
+          onClose={() => setTrain(null)} />
+      )}
     </>
   );
 }
 
-// ── The producer role: a mixing desk — fader/mute/EQ/comp/FX per track ───────
-interface TrackSettings {
-  mute?: boolean; gain_db?: number;
-  eq?: { low_db?: number; mid_db?: number; high_db?: number };
-  comp?: { ratio?: number };
-  fx?: { reverb?: number; delay?: number; chorus?: number; distortion?: number };
-}
+// ── The producer role: the mixing desk + master → boost the song's appeal ────
+const MASTER_DESC: Record<string, string> = {
+  default: "balanced, broadcast-ready", loud: "hot & competitive (streaming)",
+  cinematic: "wide, spacious, reverby", transparent: "minimal — keeps it natural",
+};
 
 function Produce({ blockName, tierMult, onDone, onProduced, onClose }: {
   blockName: string; tierMult: number;
@@ -154,8 +161,7 @@ function Produce({ blockName, tierMult, onDone, onProduced, onClose }: {
   onClose: () => void;
 }) {
   const [tracks, setTracks] = useState<string[]>([]);
-  const [mix, setMix] = useState<Record<string, TrackSettings>>({});
-  const [open, setOpen] = useState<string | null>(null);
+  const [mix, setMix] = useState<MixState>({});
   const [masters, setMasters] = useState<string[]>([]);
   const [master, setMaster] = useState("default");
   const [busy, setBusy] = useState(false);
@@ -167,24 +173,10 @@ function Produce({ blockName, tierMult, onDone, onProduced, onClose }: {
     api.getMasterPresets().then(setMasters).catch(() => {});
   }, [blockName]);
 
-  const set = (t: string, patch: (s: TrackSettings) => TrackSettings) =>
-    setMix((m) => ({ ...m, [t]: patch(m[t] || {}) }));
-
   const run = async () => {
     setBusy(true);
     try {
-      // strip empty/default settings so the payload stays lean
-      const track_mix: Record<string, TrackSettings> = {};
-      for (const [t, s] of Object.entries(mix)) {
-        const clean: TrackSettings = {};
-        if (s.mute) clean.mute = true;
-        if (s.gain_db) clean.gain_db = s.gain_db;
-        if (s.eq && (s.eq.low_db || s.eq.mid_db || s.eq.high_db)) clean.eq = s.eq;
-        if (s.comp && (s.comp.ratio ?? 1) > 1) clean.comp = s.comp;
-        if (s.fx && (s.fx.reverb || s.fx.delay || s.fx.chorus || s.fx.distortion)) clean.fx = s.fx;
-        if (Object.keys(clean).length) track_mix[t] = clean;
-      }
-      const r = await api.produceBlock(blockName, { master_preset: master, track_mix });
+      const r = await api.produceBlock(blockName, { master_preset: master, track_mix: cleanMix(mix) });
       const fans = Math.round(12 * r.production * tierMult);
       const money = Math.round(fans * 1.3);
       setResult({ production: r.production, fans, money });
@@ -194,21 +186,6 @@ function Produce({ blockName, tierMult, onDone, onProduced, onClose }: {
     } finally { setBusy(false); }
   };
 
-  const MASTER_DESC: Record<string, string> = {
-    default: "balanced, broadcast-ready", loud: "hot & competitive (streaming)",
-    cinematic: "wide, spacious, reverby", transparent: "minimal — keeps it natural",
-  };
-  const Knob = ({ label, min, max, step, val, def, onCh }: {
-    label: string; min: number; max: number; step: number; val: number; def: number; onCh: (v: number) => void;
-  }) => (
-    <label className="mx-knob">
-      <span>{label}</span>
-      <input type="range" min={min} max={max} step={step} value={val}
-        onChange={(e) => onCh(Number(e.target.value))} />
-      <i>{val === def ? "—" : (val > 0 && (max > 1 || label === "Vol") ? "+" : "") + (max <= 1 ? Math.round(val * 100) + "%" : val)}</i>
-    </label>
-  );
-
   return (
     <div className="cof-backdrop" onClick={onClose}>
       <div className="gig-modal" onClick={(e) => e.stopPropagation()}>
@@ -216,49 +193,7 @@ function Produce({ blockName, tierMult, onDone, onProduced, onClose }: {
           <span className="cof-title">🎛 Mixing desk · {blockName}</span>
           <button className="cof-close" onClick={onClose}>✕</button>
         </div>
-
-        <div className="mx-tracks">
-          {tracks.map((t) => {
-            const s = mix[t] || {};
-            return (
-              <div key={t} className={"mx-strip" + (s.mute ? " muted" : "")}>
-                <div className="mx-row">
-                  <button className={"mx-mute" + (s.mute ? " on" : "")}
-                    onClick={() => set(t, (x) => ({ ...x, mute: !x.mute }))}>{s.mute ? "🔇" : "🔊"}</button>
-                  <span className="mx-name">{t}</span>
-                  <input className="mx-fader" type="range" min={-24} max={6} step={1}
-                    value={s.gain_db ?? 0} onChange={(e) => set(t, (x) => ({ ...x, gain_db: Number(e.target.value) }))} />
-                  <span className="mx-db">{(s.gain_db ?? 0) > 0 ? "+" : ""}{s.gain_db ?? 0} dB</span>
-                  <button className={"mx-fx-btn" + (open === t ? " on" : "")}
-                    onClick={() => setOpen(open === t ? null : t)}>EQ · FX</button>
-                </div>
-                {open === t && (
-                  <div className="mx-panel">
-                    <div className="mx-group"><b>EQ</b>
-                      <Knob label="Low" min={-12} max={12} step={1} def={0} val={s.eq?.low_db ?? 0}
-                        onCh={(v) => set(t, (x) => ({ ...x, eq: { ...x.eq, low_db: v } }))} />
-                      <Knob label="Mid" min={-12} max={12} step={1} def={0} val={s.eq?.mid_db ?? 0}
-                        onCh={(v) => set(t, (x) => ({ ...x, eq: { ...x.eq, mid_db: v } }))} />
-                      <Knob label="High" min={-12} max={12} step={1} def={0} val={s.eq?.high_db ?? 0}
-                        onCh={(v) => set(t, (x) => ({ ...x, eq: { ...x.eq, high_db: v } }))} />
-                    </div>
-                    <div className="mx-group"><b>Comp</b>
-                      <Knob label="Ratio" min={1} max={8} step={0.5} def={1} val={s.comp?.ratio ?? 1}
-                        onCh={(v) => set(t, (x) => ({ ...x, comp: { ...x.comp, ratio: v } }))} />
-                    </div>
-                    <div className="mx-group"><b>FX</b>
-                      {(["reverb", "delay", "chorus", "distortion"] as const).map((f) => (
-                        <Knob key={f} label={f[0].toUpperCase() + f.slice(1, 4)} min={0} max={1} step={0.05} def={0}
-                          val={s.fx?.[f] ?? 0} onCh={(v) => set(t, (x) => ({ ...x, fx: { ...x.fx, [f]: v } }))} />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
+        <MixingDesk tracks={tracks} mix={mix} onChange={setMix} />
         <div className="prod-section" style={{ marginTop: 10 }}>
           <h4>Master</h4>
           <div className="prod-masters">
@@ -269,7 +204,6 @@ function Produce({ blockName, tierMult, onDone, onProduced, onClose }: {
             ))}
           </div>
         </div>
-
         <audio key={audioBust} src={api.blockAudioUrl(blockName) + (audioBust ? `?v=${audioBust}` : "")}
           controls style={{ width: "100%" }} />
         <button className="btn" style={{ marginTop: 10 }} disabled={busy} onClick={run}>
@@ -279,6 +213,120 @@ function Produce({ blockName, tierMult, onDone, onProduced, onClose }: {
           <div className="gig-payout">
             Production <b>×{result.production.toFixed(2)}</b> → streams roll in:
             <b> +{result.fans.toLocaleString()} fans</b>, +${result.money.toLocaleString()}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Ear training: a target mix is generated; match it on the desk by ear ──────
+interface Move { track: string; ctrl: string; value: number; label: string; }
+
+function makeTarget(tracks: string[]): { mix: MixState; moves: Move[] } {
+  // 2 obvious, audible moves on distinct tracks (pseudo-random off the catalog).
+  const pool = (t: string): Move[] => [
+    { track: t, ctrl: "gain", value: 6, label: `Boost ${t} +6 dB` },
+    { track: t, ctrl: "gain", value: -8, label: `Pull ${t} down 8 dB` },
+    { track: t, ctrl: "reverb", value: 0.6, label: `Reverb on ${t}` },
+    { track: t, ctrl: "high", value: 6, label: `Brighten ${t} (high +6)` },
+    { track: t, ctrl: "low", value: 6, label: `Warm up ${t} (low +6)` },
+    { track: t, ctrl: "distortion", value: 0.45, label: `Add grit to ${t}` },
+  ];
+  const ts = [...tracks].sort(() => Math.random() - 0.5).slice(0, 2);
+  const moves = ts.map((t) => { const o = pool(t); return o[Math.floor(Math.random() * o.length)]; });
+  const mix: MixState = {};
+  for (const m of moves) {
+    const s: TrackSettings = mix[m.track] || {};
+    if (m.ctrl === "gain") s.gain_db = m.value;
+    else if (m.ctrl === "reverb") s.fx = { ...s.fx, reverb: m.value };
+    else if (m.ctrl === "distortion") s.fx = { ...s.fx, distortion: m.value };
+    else if (m.ctrl === "high") s.eq = { ...s.eq, high_db: m.value };
+    else if (m.ctrl === "low") s.eq = { ...s.eq, low_db: m.value };
+    mix[m.track] = s;
+  }
+  return { mix, moves };
+}
+
+function scoreMix(target: Move[], mine: MixState): number {
+  const getter: Record<string, (s: TrackSettings) => number> = {
+    gain: (s) => s.gain_db ?? 0, reverb: (s) => s.fx?.reverb ?? 0,
+    distortion: (s) => s.fx?.distortion ?? 0, high: (s) => s.eq?.high_db ?? 0,
+    low: (s) => s.eq?.low_db ?? 0,
+  };
+  const tol: Record<string, number> = { gain: 3, reverb: 0.18, distortion: 0.18, high: 3, low: 3 };
+  let got = 0;
+  for (const m of target) {
+    const v = getter[m.ctrl](mine[m.track] || {});
+    const sameDir = Math.sign(v) === Math.sign(m.value) || m.value === 0;
+    const err = Math.abs(v - m.value);
+    if (sameDir && err <= tol[m.ctrl]) got += 1;            // bang on
+    else if (sameDir && err <= tol[m.ctrl] * 2.2) got += 0.5; // right idea, off amount
+  }
+  return Math.round((got / target.length) * 100);
+}
+
+function EarTraining({ blockName, onReward, onClose }: {
+  blockName: string; onReward: (fans: number) => void; onClose: () => void;
+}) {
+  const [tracks, setTracks] = useState<string[]>([]);
+  const [target, setTarget] = useState<{ mix: MixState; moves: Move[] } | null>(null);
+  const [refUrl, setRefUrl] = useState<string | null>(null);
+  const [mineUrl, setMineUrl] = useState<string | null>(null);
+  const [mix, setMix] = useState<MixState>({});
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ score: number; fans: number } | null>(null);
+
+  useEffect(() => {
+    api.getBlockNotes(blockName).then(async (d) => {
+      const names = d.tracks.filter((t) => t.notes.length).map((t) => t.track);
+      setTracks(names);
+      const tg = makeTarget(names.length ? names : d.tracks.map((t) => t.track));
+      setTarget(tg);
+      const r = await api.mixPreview(blockName, { track_mix: cleanMix(tg.mix) });
+      setRefUrl(api.mediaUrl(r.url));
+    }).catch(() => {});
+  }, [blockName]);
+
+  const hearMine = async () => {
+    setBusy(true);
+    try { const r = await api.mixPreview(blockName, { track_mix: cleanMix(mix) }); setMineUrl(api.mediaUrl(r.url) + `?v=${Date.now()}`); }
+    finally { setBusy(false); }
+  };
+  const check = () => {
+    if (!target) return;
+    const score = scoreMix(target.moves, mix);
+    const fans = Math.round(score / 100 * 30);
+    setResult({ score, fans });
+    onReward(fans);
+  };
+
+  return (
+    <div className="cof-backdrop" onClick={onClose}>
+      <div className="gig-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="cof-head">
+          <span className="cof-title">🎧 Ear training · {blockName}</span>
+          <button className="cof-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="meta" style={{ marginBottom: 8 }}>
+          Listen to the <b>reference</b>, then re-create it on the desk by ear — two moves were made to it.
+        </div>
+        <div className="et-refs">
+          <div><div className="et-lbl">Reference 🎯</div>
+            {refUrl ? <audio src={refUrl} controls style={{ width: "100%" }} /> : <div className="practice-hint">Preparing…</div>}</div>
+          <div><div className="et-lbl">Your mix</div>
+            {mineUrl ? <audio src={mineUrl} controls style={{ width: "100%" }} />
+              : <button className="btn ghost sm" style={{ width: "auto" }} disabled={busy} onClick={hearMine}>{busy ? "…" : "▶ Hear mine"}</button>}</div>
+        </div>
+        <MixingDesk tracks={tracks} mix={mix} onChange={(m) => { setMix(m); setMineUrl(null); }} />
+        <div className="et-actions">
+          <button className="btn ghost" style={{ width: "auto" }} disabled={busy} onClick={hearMine}>{busy ? "Rendering…" : "▶ Hear mine"}</button>
+          <button className="btn" style={{ width: "auto" }} onClick={check}>Check my ears</button>
+        </div>
+        {result && target && (
+          <div className="gig-payout">
+            <b>{result.score}%</b> match → +{result.fans} fans.
+            <div className="meta" style={{ marginTop: 6 }}>The target was: {target.moves.map((m) => m.label).join(" · ")}</div>
           </div>
         )}
       </div>

@@ -429,6 +429,51 @@ def produce_block(name: str, *, mute=None, regenerate=None,
     return {"name": target, "production": score, "master_preset": master_preset, "tracks": names}
 
 
+_MIX_PREVIEW_DIR = API_OUT / "_mix_previews"
+
+
+def mix_preview(name: str, track_mix=None, master_preset: str = "default") -> str:
+    """Render a block's MIDI through a per-track ``track_mix`` + master WITHOUT
+    touching the saved block — for A/B'ing a mix (ear-training, iterative
+    mixing). Cached by a hash of (block, midi mtime, settings); returns the
+    preview id (served at /api/mix-previews/{id})."""
+    import hashlib
+    import json
+    import shutil
+    import tempfile
+    from src.daw_integration.generic import blocks as block_store
+    from src.audio_processing.render.pipeline import render_to_audio
+
+    midi = block_store._midi_path(name)
+    if not midi.exists():
+        raise FileNotFoundError(f"no MIDI for block {name!r}")
+    sig = json.dumps([name, midi.stat().st_mtime, track_mix or {}, master_preset],
+                     sort_keys=True, default=str)
+    key = hashlib.blake2b(sig.encode(), digest_size=9).hexdigest()
+    _MIX_PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
+    mp3 = _MIX_PREVIEW_DIR / f"{key}.mp3"
+    if mp3.exists():
+        mp3.touch()
+        return key
+    with tempfile.TemporaryDirectory() as td:
+        r = render_to_audio(midi=midi, output_dir=Path(td) / "r", with_stems=False,
+                            master_preset=master_preset, track_mix=track_mix or None)
+        if not block_store.write_preview_mp3(Path(r.mix_path), mp3):
+            shutil.copy(str(r.mix_path), str(mp3))
+    # Keep only the most-recent ~60 previews so the cache doesn't grow forever.
+    try:
+        previews = sorted(_MIX_PREVIEW_DIR.glob("*.mp3"), key=lambda p: p.stat().st_mtime)
+        for old in previews[:-60]:
+            old.unlink(missing_ok=True)
+    except OSError:
+        pass
+    return key
+
+
+def mix_preview_path(key: str) -> Path:
+    return _MIX_PREVIEW_DIR / f"{Path(key).name}.mp3"
+
+
 def _unique_block_name(block_store, base: str) -> str:
     existing = {b.get("name") for b in block_store.list_blocks()}
     name, n = base, 1

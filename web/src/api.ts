@@ -166,6 +166,9 @@ export const produceBlock = (name: string, body: {
   track_mix?: Record<string, unknown>; save_as?: string | null;
 }) => jpost<{ name: string; production: number; master_preset: string; tracks: string[] }>(
   `/api/blocks/${encodeURIComponent(name)}/produce`, body);
+export const mixPreview = (name: string, body: {
+  track_mix?: Record<string, unknown>; master_preset?: string;
+}) => jpost<{ url: string }>(`/api/blocks/${encodeURIComponent(name)}/mix-preview`, body);
 
 // Per-track notes [pitch, startBeat, durBeat] (beats = quarter notes) for the
 // notation roll + real-time piano/guitar. Same data the workstation loads.

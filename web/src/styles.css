@@ -1022,6 +1022,13 @@ audio { width: 100%; margin: 8px 0 12px; }
 .mx-knob input { width: 50px; accent-color: var(--violet); }
 .mx-knob i { font-size: 10px; color: var(--text); font-variant-numeric: tabular-nums; font-style: normal; }
 
+/* Ear-training challenge: reference vs. your-mix players + action row. */
+.et-refs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.et-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--accent-2); margin-bottom: 4px; }
+.et-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+@media (max-width: 560px) { .et-refs { grid-template-columns: 1fr; } }
+
 /* Scored play-along (rhythm drill / game core). */
 .playalong { display: flex; flex-direction: column; gap: 10px; }
 .pa-hud { display: flex; align-items: baseline; gap: 16px; }

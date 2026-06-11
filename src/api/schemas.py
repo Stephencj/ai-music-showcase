@@ -125,6 +125,13 @@ class ProduceBlockRequest(BaseModel):
     save_as: Optional[str] = None
 
 
+class MixPreviewRequest(BaseModel):
+    """Render a block with a per-track mix + master to a throwaway preview
+    (A/B mixing, ear-training) — does not modify the saved block."""
+    track_mix: dict[str, Any] = Field(default_factory=dict)
+    master_preset: str = "default"
+
+
 class LyricsDraftRequest(BaseModel):
     theme: Optional[str] = None
 
