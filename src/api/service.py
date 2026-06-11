@@ -128,6 +128,7 @@ def run_generation(req, progress, job_id: str) -> dict:
                 midi_path, job_dir / "score.zip",
                 key=eff_key, scale=eff_scale, tempo=eff_tempo,
                 title=f"{preset.name} ({seed})", bars=total_bars,
+                sections=block_spec.get("sections"),
             )
         except Exception as exc:  # noqa: BLE001 — LilyPond optional
             logger.warning("PDF export failed for job %s: %s", job_id, exc)
@@ -591,6 +592,7 @@ def block_musicxml(name: str) -> str:
         scale=spec.get("scale") or meta.get("scale") or "major",
         tempo=float(spec.get("tempo") or meta.get("tempo") or 120.0),
         title=name,
+        sections=spec.get("sections"),     # per-section key/mode → key-sig changes
     )
     score.write("musicxml", fp=str(cache))
     return str(cache)

@@ -327,6 +327,46 @@ def _normalize_key(key: str, mode: str) -> str:
     return _ENHARM_MAJOR.get(key, key) if mode == "major" else key
 
 
+# music21 understands these mode names directly and gives the CORRECT key
+# signature for each (C dorian = 2 flats, not C minor's 3) — so a modal or
+# modulating section is spelled right.
+_M21_MODES = {"major", "minor", "dorian", "phrygian", "lydian",
+              "mixolydian", "locrian", "ionian", "aeolian"}
+
+
+def _m21_mode(scale: str) -> str:
+    s = (scale or "major").lower()
+    if s in _M21_MODES:
+        return s
+    if s in ("harmonic_minor", "melodic_minor", "pentatonic_minor", "blues",
+             "natural_minor"):
+        return "minor"
+    if s == "pentatonic_major":
+        return "major"
+    return "major" if s.startswith("maj") else "minor"
+
+
+def _key_changes(key: str, scale: str, sections) -> list[tuple[int, str, str]]:
+    """Build ``[(measure_number, key, m21_mode), …]`` — one entry per place the
+    key signature changes. The first is the song key at measure 1; each section
+    whose key/mode differs adds a change at its first measure (1-indexed)."""
+    base_mode = _m21_mode(scale)
+    changes: list[tuple[int, str, str]] = [(1, key, base_mode)]
+    prev = (key, base_mode)
+    for sec in sorted(sections or [], key=lambda s: int(s.get("start_bar", 0) or 0)):
+        sb = int(sec.get("start_bar", 0) or 0)
+        sk = sec.get("key") or key
+        sm = _m21_mode(sec.get("scale") or scale)
+        if sb <= 0:                       # a key on the opening section
+            changes[0] = (1, sk, sm)
+            prev = (sk, sm)
+            continue
+        if (sk, sm) != prev:
+            changes.append((sb + 1, sk, sm))
+            prev = (sk, sm)
+    return changes
+
+
 def _instrument_info(name: str):
     """(written_transpose_semitones, clef_name) for a track name; (0, None) if
     it's a concert-treble instrument."""
@@ -340,32 +380,46 @@ def _instrument_info(name: str):
     return 0, None
 
 
-def _apply_concert_conventions(score, key: str, mode: str):
-    """Per non-drum part: insert the (written-transposed) key signature,
+def _apply_concert_conventions(score, key: str, mode: str, key_changes=None):
+    """Per non-drum part: insert the (written-transposed) key signature(s),
     transpose the written instruments to their read key, and set the clef —
-    so each part is notated per standard convention. Display-only: notes are
-    written-pitch (the Sheet cursor follows our concert audio by time)."""
+    so each part is notated per standard convention. ``key_changes`` is an
+    optional ``[(measure_number, key, m21_mode), …]`` list (per-section
+    modulations); without it a single key signature is used. Display-only:
+    notes are written-pitch (the Sheet cursor follows our concert audio)."""
     import music21
 
     def _is_drum(part) -> bool:
         nm = str(getattr(part, "partName", "") or "")
         return "drum" in nm.lower() or "perc" in nm.lower()
 
-    key = _normalize_key(key, mode)   # A# major → Bb major, etc.
+    if not key_changes:
+        key_changes = [(1, key, mode)]
+    # Normalize each key's spelling for its own mode (A# major → Bb major, etc.)
+    norm_changes = [
+        (mn, _normalize_key(k, "major" if m == "major" else "minor"), m)
+        for (mn, k, m) in key_changes
+    ]
 
     for part in score.parts:
         if _is_drum(part):
             continue
         semis, clef_name = _instrument_info(str(getattr(part, "partName", "") or ""))
-        # key signature, transposed to the written key
-        try:
-            ks = music21.key.Key(key, mode)
-            if semis:
-                iv = _WRITTEN_INTERVAL.get(semis)
-                ks = ks.transpose(music21.interval.Interval(iv) if iv else semis)
-            part.insert(0, ks)
-        except Exception:
-            logger.warning("could not insert key sig on %r", getattr(part, "partName", "?"))
+        measures = {m.number: m for m in part.recurse().getElementsByClass(music21.stream.Measure)}
+        for (meas_no, k, m) in norm_changes:
+            try:
+                ks = music21.key.Key(k, m)
+                if semis:                 # transpose the key sig to the written key
+                    iv = _WRITTEN_INTERVAL.get(semis)
+                    ks = ks.transpose(music21.interval.Interval(iv) if iv else semis)
+                target = measures.get(meas_no)
+                if target is not None:
+                    target.insert(0, ks)
+                elif meas_no <= 1:
+                    part.insert(0, ks)    # no measures parsed → part-level
+            except Exception:
+                logger.warning("could not insert key sig (m%s) on %r",
+                               meas_no, getattr(part, "partName", "?"))
         # transpose the notes to the written key (not the key sig — already done)
         if semis:
             try:
@@ -395,6 +449,7 @@ def midi_to_score(
     tempo: Optional[float] = None,
     title: Optional[str] = None,
     swing: float = 0.0,
+    sections: Optional[list] = None,
 ):
     """Load MIDI → music21 Score, patch in the key signature, quantize.
 
@@ -456,9 +511,12 @@ def midi_to_score(
                 getattr(part, "partName", "?"),
             )
 
-    # Per-instrument notation: written-key transposition + clef + key sig.
+    # Per-instrument notation: written-key transposition + clef + key sig(s).
+    # Per-section key/mode changes (modulations) become key-signature changes
+    # at each section's first measure.
     try:
-        _apply_concert_conventions(score, key, mode)
+        changes = _key_changes(key, scale, sections)
+        _apply_concert_conventions(score, key, mode, key_changes=changes)
     except Exception:
         logger.exception("could not apply concert conventions — engraving concert pitch")
 
@@ -918,6 +976,7 @@ def export_zip(
     bars: Optional[int] = None,
     swing: float = 0.0,
     lead_lyrics: Optional[str] = None,
+    sections: Optional[list] = None,
 ) -> Path:
     """End-to-end: MIDI → engraved PDFs → single ZIP file.
 
@@ -949,7 +1008,7 @@ def export_zip(
 
     score = midi_to_score(
         midi_path, key=key, scale=scale, tempo=tempo, title=title,
-        swing=swing,
+        swing=swing, sections=sections,
     )
 
     if lead_lyrics:

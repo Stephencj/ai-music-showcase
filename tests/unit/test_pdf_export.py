@@ -117,6 +117,34 @@ class MidiToScoreTests(unittest.TestCase):
             self.assertIsNotNone(ks)
             self.assertEqual(ks.mode, "minor")
 
+    def test_m21_mode_keeps_modes_distinct(self):
+        # A mode must NOT collapse to plain minor — C dorian's key signature
+        # (2 flats) differs from C minor's (3).
+        self.assertEqual(pdf_export._m21_mode("dorian"), "dorian")
+        self.assertEqual(pdf_export._m21_mode("mixolydian"), "mixolydian")
+        self.assertEqual(pdf_export._m21_mode("harmonic_minor"), "minor")
+        self.assertEqual(pdf_export._m21_mode("major"), "major")
+
+    def test_key_changes_per_section(self):
+        secs = [
+            {"start_bar": 0, "end_bar": 7, "role": "verse"},
+            {"start_bar": 8, "end_bar": 15, "role": "chorus", "scale": "dorian"},
+            {"start_bar": 16, "end_bar": 23, "role": "bridge", "key": "Eb", "scale": "minor"},
+            {"start_bar": 24, "end_bar": 31, "role": "outro"},
+        ]
+        ch = pdf_export._key_changes("C", "major", secs)
+        # measure numbers are 1-indexed; only changes are emitted
+        self.assertEqual(ch, [
+            (1, "C", "major"),
+            (9, "C", "dorian"),
+            (17, "Eb", "minor"),
+            (25, "C", "major"),
+        ])
+
+    def test_key_changes_uniform_song_single_entry(self):
+        self.assertEqual(pdf_export._key_changes("G", "major", None),
+                         [(1, "G", "major")])
+
     def test_quantization_snaps_fractional_starts(self):
         with tempfile.TemporaryDirectory() as td:
             mid = _triplet_midi(Path(td) / "trip.mid")
