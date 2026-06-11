@@ -952,6 +952,48 @@ audio { width: 100%; margin: 8px 0 12px; }
 /* ── Guitar tab lane (Practice → Tab) ────────────────────────────── */
 .tab-card { margin-top: 10px; }
 
+.diagram-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.diagram-title-row .diagram-title { flex: 1 1 auto; min-width: 0; }
+
+/* Scored play-along (rhythm drill / game core). */
+.playalong { display: flex; flex-direction: column; gap: 10px; }
+.pa-hud { display: flex; align-items: baseline; gap: 16px; }
+.pa-score { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pa-combo { font-size: 14px; font-weight: 700; color: var(--accent-2); flex: 1 1 auto; }
+.pa-acc { font-size: 15px; font-weight: 700; }
+.pa-grade { font-size: 18px; font-weight: 900; margin-left: 4px; }
+.pa-grade.gS { color: #fde047; } .pa-grade.gA { color: #4ade80; }
+.pa-grade.gB { color: #38bdf8; } .pa-grade.gC { color: #f59e0b; }
+.pa-grade.gD, .pa-grade.gF { color: #f87171; }
+.pa-stage { position: relative; overflow: hidden; border-radius: 12px;
+  background: linear-gradient(180deg, #0d1424 0%, #0a0f1c 100%);
+  border: 1px solid rgba(255,255,255,0.08); }
+.pa-lane { position: absolute; left: 0; right: 0; height: 46px;
+  border-bottom: 1px solid rgba(255,255,255,0.05); }
+.pa-key { position: absolute; left: 6px; top: 14px; font-size: 12px; font-weight: 800; opacity: 0.5; }
+.pa-now { position: absolute; top: 0; bottom: 0; width: 3px; background: rgba(255,255,255,0.7);
+  box-shadow: 0 0 12px rgba(255,255,255,0.5); z-index: 3; }
+.pa-scroll { position: absolute; top: 0; left: 0; height: 100%; will-change: transform; }
+.pa-note { position: absolute; width: 30px; height: 32px; border-radius: 7px; opacity: 0.92;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4); transition: opacity 0.1s, transform 0.1s; }
+.pa-note.hit { opacity: 0.25; transform: scale(0.7); }
+.pa-note.hit.perfect { box-shadow: 0 0 14px #fde047; }
+.pa-note.missed { opacity: 0.15; filter: grayscale(1); }
+.pa-pop { position: absolute; transform: translate(-50%, -50%); font-size: 14px; font-weight: 900;
+  text-transform: uppercase; letter-spacing: 0.04em; z-index: 4; pointer-events: none;
+  animation: paPop 0.45s ease-out forwards; }
+.pa-pop.perfect { color: #fde047; } .pa-pop.great { color: #4ade80; }
+.pa-pop.good { color: #38bdf8; } .pa-pop.miss { color: #f87171; }
+@keyframes paPop { 0% { opacity: 0; transform: translate(-50%,-30%) scale(0.7); }
+  30% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%,-90%) scale(1.1); } }
+.pa-tap { display: none; gap: 8px; }
+.pa-tapbtn { flex: 1; padding: 16px 0; border-radius: 10px; background: var(--bg-2);
+  border: 2px solid; color: var(--text); font-size: 16px; font-weight: 800; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; user-select: none; }
+.pa-tapbtn:active { filter: brightness(1.5); }
+.pa-foot { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+@media (hover: none) and (pointer: coarse) { .pa-tap { display: flex; } }
+
 /* "Explain this song" — teaching breakdown. */
 .explain { display: flex; flex-direction: column; gap: 12px; }
 .explain-head { background: var(--card); border: 1px solid rgba(255,255,255,0.06);

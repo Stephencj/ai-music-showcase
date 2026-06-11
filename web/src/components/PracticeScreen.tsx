@@ -5,6 +5,7 @@ import type { Block, Preset } from "../types";
 import ChordDiagram, { LiveDiagram } from "./ChordDiagram";
 import TapeView from "./TapeView";
 import ExplainPanel from "./ExplainPanel";
+import PlayAlong from "./PlayAlong";
 import NotationRoll, { type RollNote } from "./NotationRoll";
 import SheetMusic from "./SheetMusic";
 import TabView from "./TabView";
@@ -24,7 +25,7 @@ import type { BlockNotes } from "../api";
 import { MODES, ALL_ROOTS, scaleToModeId, rootPc, romanFor, nashvilleFor } from "../chordLabels";
 
 type Notation = "chord" | "nashville" | "roman";
-type ChartView = "grid" | "tape" | "sheet" | "tab" | "explain";
+type ChartView = "grid" | "tape" | "sheet" | "tab" | "explain" | "play";
 type Mode = "block" | "upload" | "scan";
 
 const NOTATION_LABEL: Record<Notation, string> = {
@@ -943,6 +944,9 @@ export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
               {!sourceIsSong && blockName && (
                 <button className={view === "explain" ? "on" : ""} onClick={() => setView("explain")}>Explain 💡</button>
               )}
+              {chartRollNotes.length > 0 && (
+                <button className={view === "play" ? "on" : ""} onClick={() => setView("play")}>Play 🎮</button>
+              )}
             </div>
             {/* The score section (Sheet / Tab / notation roll) picks its part. */}
             {!sourceIsSong && partOptions.length > 0 && (view === "sheet" || view === "tab") && (
@@ -1040,6 +1044,20 @@ export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
             blockName
               ? <ExplainPanel blockName={blockName} />
               : <div className="practice-hint">The breakdown is available for generated blocks.</div>
+          ) : view === "play" ? (
+            <div className="tab-card">
+              <div className="diagram-title-row">
+                <div className="diagram-title">{chartTrack?.track} — play along</div>
+                {!sourceIsSong && partOptions.length > 0 && (
+                  <PickerField value={String(chartIdx)} label="Part to play" placeholder="Pick a part"
+                    fullWidth={false} className="part-pick"
+                    options={partOptions.map((p) => ({ id: String(p.idx), label: p.name,
+                      icon: <InstrumentIcon name={p.name} size={15} /> }))}
+                    onChange={(id) => { setChartIdx(Number(id)); setSolo(false); }} />
+                )}
+              </div>
+              <PlayAlong notes={chartRollNotes} audioRef={playhead} />
+            </div>
           ) : (
             <div className="chart" ref={chartRef}>
               {score.sections.length > 0
