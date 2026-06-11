@@ -133,6 +133,30 @@ def _section_identity(label: str) -> str:
     return role_for_label(label)
 
 
+# Semitones from a mode's tonic to its PARENT MAJOR (the major key whose
+# signature it shares). Lets a section in a different mode land on the global
+# key's matching scale DEGREE — so it stays inside the global key signature.
+_PARENT_OFFSET = {
+    "major": 0, "ionian": 0, "dorian": 2, "phrygian": 4, "lydian": 5,
+    "mixolydian": 7, "minor": 9, "aeolian": 9, "natural_minor": 9, "locrian": 11,
+    "harmonic_minor": 9, "melodic_minor": 9, "pentatonic_minor": 9, "blues": 9,
+    "pentatonic_major": 0,
+}
+
+
+def _relative_degree_key(global_key: str, global_scale: str, sec_scale: str) -> str:
+    """The tonic that places ``sec_scale`` on the global key's matching scale
+    degree, sharing its key signature: C major + minor → A (the vi); C major +
+    dorian → D (the ii); A minor + major → C (the relative major)."""
+    try:
+        gp = NOTE_NAMES.index(FLAT_TO_SHARP.get(global_key, global_key)) % 12
+    except ValueError:
+        return global_key
+    parent = (gp - _PARENT_OFFSET.get((global_scale or "major").lower(), 0)) % 12
+    tonic = (parent + _PARENT_OFFSET.get((sec_scale or "major").lower(), 0)) % 12
+    return NOTE_NAMES[tonic]
+
+
 def _canonical_role(section: dict) -> str:
     """The canonical technique role (one of SECTION_ROLES) for a section —
     its own ``role`` if already canonical, else mapped from its label. A
@@ -502,15 +526,20 @@ def compose_song(
         else:
             sec_progression = progression
 
-        # Per-section KEY and MODE. Explicit section overrides win; otherwise
-        # the MODE follows the section's preset (modal interchange) and the KEY
-        # stays the song key. Realizing a section's progression, melody and
-        # voicings in its OWN key+mode is what keeps them in tune with each
-        # other (a minor-mode section over a major tonic clashes ♮3 vs ♭3).
-        sec_key = section.get("key") or eff_key
+        # Per-section KEY and MODE. An explicit override wins. Otherwise the
+        # MODE follows the section's preset, and the KEY lands on the DEGREE of
+        # the global key whose mode matches — so the section shares the global
+        # key signature and fits diatonically (a minor section of a C-major
+        # song → A minor, the vi; a dorian section → D dorian, the ii).
         sec_scale = (section.get("scale")
                      or (sec_preset.scale if (sec_genre != genre and sec_preset.scale) else None)
                      or eff_scale)
+        if section.get("key"):
+            sec_key = section["key"]
+        elif (sec_genre != genre or section.get("scale")) and sec_scale != eff_scale:
+            sec_key = _relative_degree_key(eff_key, eff_scale, sec_scale)
+        else:
+            sec_key = eff_key
         try:
             sec_tonic_pc = NOTE_NAMES.index(FLAT_TO_SHARP.get(sec_key, sec_key)) % 12
         except ValueError:

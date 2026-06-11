@@ -54,9 +54,11 @@ class ModalColorTests(unittest.TestCase):
 
 
 class PerSectionModeTests(unittest.TestCase):
-    def test_aeolian_chorus_has_no_major_third(self):
-        # A hip-hop (minor) chorus inside a pop (major) song must realize in
-        # aeolian — no major-3rd (E natural over a C tonic) cross-relation.
+    def test_minor_chorus_lands_on_relative_degree(self):
+        # A hip-hop (minor) chorus inside a pop song in C major realizes on the
+        # relative degree (A minor, the vi) so it stays diatonic to C major —
+        # no out-of-key clash. The OLD behaviour (parallel C minor, with Eb/Ab)
+        # introduced accidentals; the relative key keeps everything in one key.
         secs = build_sections("pop", ["intro", "verse", "chorus", "bridge", "outro"],
                               {"chorus": "hip_hop_full"})
         out = compose_song(genre="pop", sections=secs, seed=3, key="C",
@@ -67,10 +69,14 @@ class PerSectionModeTests(unittest.TestCase):
         ch = next(s for s in secs if s["role"] == "chorus")
         barlen = 4 * 60.0 / 120.0
         t0, t1 = ch["start_bar"] * barlen, (ch["end_bar"] + 1) * barlen
-        pcs = {n.pitch % 12 for i in pm.instruments if not i.is_drum
-               for n in i.notes if t0 <= n.start < t1}
-        self.assertIn(3, pcs)         # Eb (minor 3rd) present
-        self.assertNotIn(4, pcs)      # E natural (major 3rd) absent
+        cmaj = {0, 2, 4, 5, 7, 9, 11}
+        notes = [n for i in pm.instruments if not i.is_drum
+                 for n in i.notes if t0 <= n.start < t1]
+        off = sum(1 for n in notes if n.pitch % 12 not in cmaj)
+        self.assertTrue(notes)
+        # The chorus is diatonic to C major (its own A-minor key shares the
+        # signature) — only incidental chromatic colour, no Eb/Ab clash.
+        self.assertLess(off / len(notes), 0.10, "chorus drifts out of the C-major key")
 
 
 if __name__ == "__main__":

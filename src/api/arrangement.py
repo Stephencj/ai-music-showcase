@@ -80,6 +80,21 @@ def build_sections(genre: str, roles: list[str],
 
     _attach_presets(secs, genre, section_presets)
     _attach_overrides(secs, section_overrides)
+    _relayout_bars(secs)
+    return secs
+
+
+def _relayout_bars(secs: list[dict]) -> list[dict]:
+    """Apply per-section bar-length overrides and re-flow the bar boundaries so
+    the song stays contiguous (resizing one section shifts everything after)."""
+    if not any(s.get("bars_override") for s in secs):
+        return secs
+    cursor = 0
+    for s in secs:
+        length = s.pop("bars_override", None) or (int(s["end_bar"]) - int(s["start_bar"]) + 1)
+        s["start_bar"] = cursor
+        s["end_bar"] = cursor + int(length) - 1
+        cursor += int(length)
     return secs
 
 
@@ -123,6 +138,11 @@ def _attach_overrides(secs: list[dict],
         if o.get("tempo") is not None:
             try:
                 s["tempo"] = max(40.0, min(260.0, float(o["tempo"])))
+            except (TypeError, ValueError):
+                pass
+        if o.get("bars") is not None:
+            try:
+                s["bars_override"] = max(1, min(64, int(o["bars"])))
             except (TypeError, ValueError):
                 pass
     return secs

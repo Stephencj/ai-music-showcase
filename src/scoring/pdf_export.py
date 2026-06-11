@@ -346,24 +346,42 @@ def _m21_mode(scale: str) -> str:
     return "major" if s.startswith("maj") else "minor"
 
 
+_KS_PARENT = {"major": 0, "ionian": 0, "dorian": 2, "phrygian": 4, "lydian": 5,
+              "mixolydian": 7, "minor": 9, "aeolian": 9, "locrian": 11}
+
+
+def _key_signature(key: str, mode: str):
+    """The pitch class of the parent major — two keys share a key SIGNATURE iff
+    this matches (A minor and C major both → C). Used to avoid printing a
+    redundant key change when a section only modulates to a relative key."""
+    from src.daw_integration.generic.midi_export import NOTE_NAMES, FLAT_TO_SHARP
+    try:
+        pc = NOTE_NAMES.index(FLAT_TO_SHARP.get(key, key)) % 12
+    except ValueError:
+        return key
+    return (pc - _KS_PARENT.get(mode, 0)) % 12
+
+
 def _key_changes(key: str, scale: str, sections) -> list[tuple[int, str, str]]:
     """Build ``[(measure_number, key, m21_mode), …]`` — one entry per place the
-    key signature changes. The first is the song key at measure 1; each section
-    whose key/mode differs adds a change at its first measure (1-indexed)."""
+    key SIGNATURE changes. The first is the song key at measure 1; a section
+    only adds a change if its signature differs (so a relative-key section,
+    which shares the signature, prints no redundant change)."""
     base_mode = _m21_mode(scale)
     changes: list[tuple[int, str, str]] = [(1, key, base_mode)]
-    prev = (key, base_mode)
+    prev_sig = _key_signature(key, base_mode)
     for sec in sorted(sections or [], key=lambda s: int(s.get("start_bar", 0) or 0)):
         sb = int(sec.get("start_bar", 0) or 0)
         sk = sec.get("key") or key
         sm = _m21_mode(sec.get("scale") or scale)
+        sig = _key_signature(sk, sm)
         if sb <= 0:                       # a key on the opening section
             changes[0] = (1, sk, sm)
-            prev = (sk, sm)
+            prev_sig = sig
             continue
-        if (sk, sm) != prev:
+        if sig != prev_sig:
             changes.append((sb + 1, sk, sm))
-            prev = (sk, sm)
+            prev_sig = sig
     return changes
 
 

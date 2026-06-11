@@ -169,6 +169,7 @@ export interface SectionOverride {
   key?: string;
   scale?: string;
   tempo?: number;
+  bars?: number;
 }
 
 export interface GenerateBody {

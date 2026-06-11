@@ -20,6 +20,7 @@ function overrideBadges(o: import("../types").SectionOverride | undefined): stri
   if (!o) return [];
   const tags: string[] = [];
   if (o.key) tags.push(`♪ ${o.key} ${(o.scale || "major").replace(/_/g, " ")}`);
+  if (o.bars != null) tags.push(`${o.bars} bars`);
   if (o.tempo != null) tags.push(`${Math.round(o.tempo)} BPM`);
   if (o.feature_lead) tags.push("🎸 solo");
   if (o.energy != null) tags.push(o.energy < 0.85 ? "↓ sparse" : "↑ big");
@@ -447,6 +448,12 @@ export default function GenerateScreen({
                       {(sectionOverrides[s.role]?.scale || scale).replace(/_/g, " ")}
                       {sectionOverrides[s.role]?.key ? "" : " · song"}
                     </button>
+                    <label className="sec-adv-tempo">Bars
+                      <input type="number" min={1} max={64} placeholder="auto"
+                        value={sectionOverrides[s.role]?.bars ?? ""}
+                        onChange={(e) => setSecOv(s.role,
+                          { bars: e.target.value ? Number(e.target.value) : null })} />
+                    </label>
                     <label className="sec-adv-tempo">Tempo
                       <input type="number" min={40} max={240}
                         placeholder={`${Math.round(tempo)}`}
@@ -454,9 +461,10 @@ export default function GenerateScreen({
                         onChange={(e) => setSecOv(s.role,
                           { tempo: e.target.value ? Number(e.target.value) : null })} />
                     </label>
-                    {(sectionOverrides[s.role]?.key || sectionOverrides[s.role]?.tempo != null) && (
+                    {(sectionOverrides[s.role]?.key || sectionOverrides[s.role]?.tempo != null
+                      || sectionOverrides[s.role]?.bars != null) && (
                       <button className="btn ghost sm" style={{ width: "auto" }}
-                        onClick={() => setSecOv(s.role, { key: null, scale: null, tempo: null })}>
+                        onClick={() => setSecOv(s.role, { key: null, scale: null, tempo: null, bars: null })}>
                         Clear</button>
                     )}
                   </div>
