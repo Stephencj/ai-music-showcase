@@ -4,6 +4,7 @@ import type { ScoreData, ChordSpan } from "../api";
 import type { Block, Preset } from "../types";
 import ChordDiagram, { LiveDiagram } from "./ChordDiagram";
 import TapeView from "./TapeView";
+import ExplainPanel from "./ExplainPanel";
 import NotationRoll, { type RollNote } from "./NotationRoll";
 import SheetMusic from "./SheetMusic";
 import TabView from "./TabView";
@@ -23,7 +24,7 @@ import type { BlockNotes } from "../api";
 import { MODES, ALL_ROOTS, scaleToModeId, rootPc, romanFor, nashvilleFor } from "../chordLabels";
 
 type Notation = "chord" | "nashville" | "roman";
-type ChartView = "grid" | "tape" | "sheet" | "tab";
+type ChartView = "grid" | "tape" | "sheet" | "tab" | "explain";
 type Mode = "block" | "upload" | "scan";
 
 const NOTATION_LABEL: Record<Notation, string> = {
@@ -939,6 +940,9 @@ export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
               {!sourceIsSong && (
                 <button className={view === "tab" ? "on" : ""} onClick={() => setView("tab")}>Tab 🎸</button>
               )}
+              {!sourceIsSong && blockName && (
+                <button className={view === "explain" ? "on" : ""} onClick={() => setView("explain")}>Explain 💡</button>
+              )}
             </div>
             {/* The score section (Sheet / Tab / notation roll) picks its part. */}
             {!sourceIsSong && partOptions.length > 0 && (view === "sheet" || view === "tab") && (
@@ -1032,6 +1036,10 @@ export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
               : <div className="practice-hint">Sheet view is available for blocks (songs show the chart).</div>
           ) : view === "tape" ? (
             <TapeView score={score} labelParts={labelParts} audioRef={playhead} onSeek={seekTo} />
+          ) : view === "explain" ? (
+            blockName
+              ? <ExplainPanel blockName={blockName} />
+              : <div className="practice-hint">The breakdown is available for generated blocks.</div>
           ) : (
             <div className="chart" ref={chartRef}>
               {score.sections.length > 0

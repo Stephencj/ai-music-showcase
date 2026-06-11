@@ -159,6 +159,8 @@ export interface ScoreData {
 }
 export const getScoreData = (name: string) =>
   jget<ScoreData>(`/api/blocks/${encodeURIComponent(name)}/score-data`);
+export const getExplain = (name: string) =>
+  jget<import("./types").ExplainData>(`/api/blocks/${encodeURIComponent(name)}/explain`);
 
 // Per-track notes [pitch, startBeat, durBeat] (beats = quarter notes) for the
 // notation roll + real-time piano/guitar. Same data the workstation loads.

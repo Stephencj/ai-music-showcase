@@ -470,6 +470,18 @@ def block_vocal_guide_audio(name: str) -> FileResponse:
         raise HTTPException(404, f"No vocal guide audio: {exc}")
 
 
+@router.get("/blocks/{name}/explain")
+def block_explain(name: str) -> dict:
+    """'Show under the hood': a teaching breakdown of a block — key/mode and how
+    each section relates to it, the chords with their harmonic function, named
+    progressions/devices, and why the arrangement does what it does."""
+    from src.composition.explain import explain_block
+    try:
+        return explain_block(name)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, f"Can't explain {name!r}: {exc}")
+
+
 @router.get("/blocks/{name}/score-data")
 def block_score_data(name: str) -> dict:
     """Per-bar chords (symbol / Roman / Nashville) + bar timings for the

@@ -951,6 +951,35 @@ audio { width: 100%; margin: 8px 0 12px; }
 
 /* ── Guitar tab lane (Practice → Tab) ────────────────────────────── */
 .tab-card { margin-top: 10px; }
+
+/* "Explain this song" — teaching breakdown. */
+.explain { display: flex; flex-direction: column; gap: 12px; }
+.explain-head { background: var(--card); border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px; padding: 12px 14px; }
+.explain-head h3 { margin: 0 0 6px; font-size: 17px; }
+.explain-meta { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--text); }
+.explain-meta b { color: var(--muted); font-weight: 600; }
+.explain-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px;
+  font-size: 11px; color: var(--muted); }
+.explain-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.explain-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.explain-sec { background: var(--card); border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px; padding: 12px 14px; }
+.explain-sec-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.explain-sec-label { font-size: 15px; font-weight: 700; }
+.explain-sec-feel { font-size: 12px; font-weight: 600; color: var(--accent-2);
+  background: rgba(89,231,194,0.12); border-radius: 999px; padding: 2px 9px; }
+.explain-sec-bars { font-size: 11px; color: var(--muted); }
+.explain-key { margin-top: 6px; font-size: 13px; color: var(--text); line-height: 1.45; }
+.explain-chords { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.explain-chord { display: inline-flex; flex-direction: column; align-items: center;
+  background: var(--bg-2); border: 1px solid rgba(255,255,255,0.1); border-radius: 9px;
+  padding: 5px 10px; min-width: 48px; }
+.ec-roman { font-size: 15px; font-weight: 800; font-family: ui-monospace, Menlo, monospace; }
+.ec-name { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.explain-prog { margin-top: 10px; font-size: 13px; color: var(--text); font-weight: 600; }
+.explain-device { margin-top: 6px; font-size: 12.5px; color: #c4b5fd; line-height: 1.4; }
+.explain-arr { margin-top: 6px; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
 /* Wind-tab header: title + member picker (left), live embouchure (right). */
 .wtab-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .wtab-title { flex: 1 1 auto; min-width: 120px; font-size: 13px; font-weight: 700; color: var(--accent-2); }

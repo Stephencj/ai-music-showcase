@@ -29,6 +29,23 @@ export interface GenreFamily {
   genres: GenreItem[];
 }
 
+// "Explain this song" — the teaching breakdown.
+export interface ExplainChord {
+  name: string; roman: string; nashville: string; function: string;
+}
+export interface ExplainSection {
+  label: string; role: string | null; bars: number; feel: string;
+  key_relation: string; tempo: number | null;
+  chords: ExplainChord[];
+  progression_name: string | null;
+  devices: string[];
+  arrangement: string;
+}
+export interface ExplainData {
+  key: string; tempo: number | null; genre: string;
+  form: string[]; sections: ExplainSection[];
+}
+
 export interface Instrument {
   id: string;
   label: string;
