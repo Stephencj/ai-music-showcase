@@ -15,6 +15,28 @@ const SECTION_LABELS: Record<string, string> = {
   solo: "Solo", outro: "Outro",
 };
 
+// Mirror of the backend's relative-degree key resolution so the form can SHOW
+// the key/mode a section will actually compose in (a funk section of a C-major
+// song reads as D dorian — the ii — not C major).
+const _NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const _FLAT_TO_SHARP: Record<string, string> = {
+  Db: "C#", Eb: "D#", Gb: "F#", Ab: "G#", Bb: "A#",
+};
+const _PARENT_OFFSET: Record<string, number> = {
+  major: 0, ionian: 0, dorian: 2, phrygian: 4, lydian: 5, mixolydian: 7,
+  minor: 9, aeolian: 9, natural_minor: 9, locrian: 11, harmonic_minor: 9,
+  melodic_minor: 9, pentatonic_minor: 9, blues: 9, pentatonic_major: 0,
+};
+function _pc(k: string): number {
+  const i = _NOTES.indexOf(_FLAT_TO_SHARP[k] || k);
+  return i < 0 ? 0 : i;
+}
+function relativeDegreeKey(gKey: string, gScale: string, secScale: string): string {
+  const parent = ((_pc(gKey) - (_PARENT_OFFSET[(gScale || "major").toLowerCase()] ?? 0)) % 12 + 12) % 12;
+  const t = ((parent + (_PARENT_OFFSET[(secScale || "major").toLowerCase()] ?? 0)) % 12 + 12) % 12;
+  return _NOTES[t];
+}
+
 // Short playing-style tags for a section's override (shown on the section row).
 function overrideBadges(o: import("../types").SectionOverride | undefined): string[] {
   if (!o) return [];
@@ -194,6 +216,22 @@ export default function GenerateScreen({
     const n = new Set(set);
     n.has(v) ? n.delete(v) : n.add(v);
     setter(n);
+  }
+
+  // The key/mode a section will actually compose in: an explicit override, or
+  // (for a section preset in a different mode) the relative degree of the song
+  // key, or the song key itself.
+  function secKeyInfo(role: string): { key: string; scale: string; src: "set" | "genre" | "song" } {
+    const ov = sectionOverrides[role];
+    if (ov?.key) return { key: ov.key, scale: ov.scale || "major", src: "set" };
+    const pid = sectionPresets[role];
+    if (pid) {
+      const p = presets.find((x) => x.id === pid);
+      if (p?.scale && p.scale !== scale) {
+        return { key: relativeDegreeKey(key, scale, p.scale), scale: p.scale, src: "genre" };
+      }
+    }
+    return { key, scale, src: "song" };
   }
 
   // Patch one section's override; null-valued keys are removed, and an empty
@@ -436,6 +474,11 @@ export default function GenerateScreen({
                 {on && overrideBadges(sectionOverrides[s.role]).map((b) => (
                   <span key={b} className="section-badge">{b}</span>
                 ))}
+                {on && (() => { const ki = secKeyInfo(s.role); return ki.src === "genre" ? (
+                  <span className="section-badge key" title="Key the section's genre lands on, relative to the song key">
+                    ♪ {ki.key} {ki.scale.replace(/_/g, " ")}
+                  </span>
+                ) : null; })()}
                 {on && (
                   <button className={"sec-adv-btn" + (advRole === s.role ? " on" : "")}
                     title="Key / mode / tempo for this section"
@@ -443,11 +486,13 @@ export default function GenerateScreen({
                 )}
                 {on && advRole === s.role && (
                   <div className="section-adv">
-                    <button type="button" className="keypick sm" onClick={() => setSecKeyRole(s.role)}>
-                      ◷ {sectionOverrides[s.role]?.key || key}{" "}
-                      {(sectionOverrides[s.role]?.scale || scale).replace(/_/g, " ")}
-                      {sectionOverrides[s.role]?.key ? "" : " · song"}
-                    </button>
+                    {(() => { const ki = secKeyInfo(s.role); return (
+                      <button type="button" className="keypick sm" onClick={() => setSecKeyRole(s.role)}
+                        title={ki.src === "genre" ? "Auto-set from the section's genre — relative to the song key. Click to override." : "Section key"}>
+                        ◷ {ki.key} {ki.scale.replace(/_/g, " ")}
+                        {ki.src === "song" ? " · song" : ki.src === "genre" ? " · from genre" : ""}
+                      </button>
+                    ); })()}
                     <label className="sec-adv-tempo">Bars
                       <input type="number" min={1} max={64} placeholder="auto"
                         value={sectionOverrides[s.role]?.bars ?? ""}
@@ -469,14 +514,13 @@ export default function GenerateScreen({
                     )}
                   </div>
                 )}
-                {secKeyRole === s.role && (
-                  <CircleOfFifths tonic={sectionOverrides[s.role]?.key || key}
-                    mode={sectionOverrides[s.role]?.scale || scale} sharps
+                {secKeyRole === s.role && (() => { const ki = secKeyInfo(s.role); return (
+                  <CircleOfFifths tonic={ki.key} mode={ki.scale} sharps
                     options={SCALES.map((sc) => ({ id: sc, label: sc.replace(/_/g, " ") }))}
-                    onTonic={(t) => setSecOv(s.role, { key: t, scale: sectionOverrides[s.role]?.scale || scale })}
-                    onMode={(mo) => setSecOv(s.role, { key: sectionOverrides[s.role]?.key || key, scale: mo })}
+                    onTonic={(t) => setSecOv(s.role, { key: t, scale: ki.scale })}
+                    onMode={(mo) => setSecOv(s.role, { key: ki.key, scale: mo })}
                     onClose={() => setSecKeyRole(null)} />
-                )}
+                ); })()}
               </div>
             );
           })}

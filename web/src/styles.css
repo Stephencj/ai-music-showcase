@@ -1017,6 +1017,9 @@ audio { width: 100%; margin: 8px 0 12px; }
   background: rgba(139,92,246,0.16); border: 1px solid rgba(139,92,246,0.4);
   color: #c4b5fd;
 }
+.section-badge.key {
+  background: rgba(120,170,255,0.14); border-color: rgba(120,170,255,0.4); color: #a8c7ff;
+}
 
 /* "Describe your song" natural-language box on the Generate tab. */
 .describe-card { border: 1px solid rgba(139, 92, 246, 0.35); }
