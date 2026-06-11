@@ -2,9 +2,10 @@ import { useState } from "react";
 import GenerateScreen from "./components/GenerateScreen";
 import ComposeScreen from "./components/ComposeScreen";
 import PracticeScreen from "./components/PracticeScreen";
+import BandScreen from "./components/BandScreen";
 import type { BlockSpec } from "./types";
 
-type Tab = "generate" | "compose" | "practice";
+type Tab = "generate" | "compose" | "practice" | "band";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("generate");
@@ -34,6 +35,9 @@ export default function App() {
       <div className={"tab-pane" + (tab === "practice" ? "" : " hidden")}>
         <PracticeScreen isActive={tab === "practice"} />
       </div>
+      <div className={"tab-pane" + (tab === "band" ? "" : " hidden")}>
+        <BandScreen isActive={tab === "band"} onWriteSong={() => setTab("generate")} />
+      </div>
 
       <nav className="tabbar">
         <button className={tab === "generate" ? "on" : ""} onClick={() => setTab("generate")}>
@@ -44,6 +48,9 @@ export default function App() {
         </button>
         <button className={tab === "practice" ? "on" : ""} onClick={() => setTab("practice")}>
           <span className="ico">🎹</span>Practice
+        </button>
+        <button className={tab === "band" ? "on" : ""} onClick={() => setTab("band")}>
+          <span className="ico">🎸</span>Band
         </button>
       </nav>
     </div>

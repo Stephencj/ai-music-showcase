@@ -26,9 +26,10 @@ type Mode = "lanes" | "midi" | "mic";
 type Judge = "perfect" | "great" | "good" | "miss";
 interface PNote { i: number; pitch: number; lane: number; start: number; }
 
-export default function PlayAlong({ notes, audioRef }: {
+export default function PlayAlong({ notes, audioRef, onResult }: {
   notes: RollNote[];
   audioRef: React.RefObject<HTMLAudioElement | null>;
+  onResult?: (r: { accuracy: number; grade: string; maxCombo: number; score: number }) => void;
 }) {
   const [mode, setMode] = useState<Mode>("lanes");
   const [inputErr, setInputErr] = useState<string | null>(null);
@@ -196,6 +197,16 @@ export default function PlayAlong({ notes, audioRef }: {
   const acc = judged_n ? Math.round((stats.perfect + stats.great * 0.6 + stats.good * 0.3) / judged_n * 100) : 100;
   const done = pnotes.length > 0 && judged_n >= pnotes.length;
   const grade = acc >= 95 ? "S" : acc >= 90 ? "A" : acc >= 80 ? "B" : acc >= 70 ? "C" : acc >= 50 ? "D" : "F";
+
+  const fired = useRef(false);
+  useEffect(() => { fired.current = false; }, [pnotes, mode]);
+  useEffect(() => {
+    if (done && !fired.current && onResult) {
+      fired.current = true;
+      onResult({ accuracy: acc, grade, maxCombo: stats.maxCombo, score: stats.score });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [done]);
 
   if (!pnotes.length) return <div className="practice-hint">This part has no notes to play along to — pick a melodic part above.</div>;
 

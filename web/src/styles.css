@@ -955,6 +955,33 @@ audio { width: 100%; margin: 8px 0 12px; }
 .diagram-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .diagram-title-row .diagram-title { flex: 1 1 auto; min-width: 0; }
 
+/* Band career shell. */
+.band-dash { background: linear-gradient(135deg, rgba(124,58,237,0.18), rgba(56,189,248,0.12)); }
+.band-name { font-size: 22px; font-weight: 800; }
+.band-stats { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; font-size: 14px; }
+.band-stats b { font-size: 16px; }
+.band-tier { margin-left: auto; font-weight: 700; color: var(--accent-2); }
+.band-progress { position: relative; height: 22px; margin-top: 12px; border-radius: 11px;
+  background: var(--bg-2); overflow: hidden; border: 1px solid rgba(255,255,255,0.08); }
+.band-progress > div { position: absolute; inset: 0 auto 0 0; border-radius: 11px;
+  background: linear-gradient(90deg, var(--violet), var(--blue)); transition: width 0.4s; }
+.band-progress > span { position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; font-size: 11px; font-weight: 600; color: #fff; }
+.band-songs { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.band-song { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px;
+  background: var(--bg-2); border: 1px solid rgba(255,255,255,0.06); }
+.band-song-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-weight: 600; }
+.gig-modal { width: min(560px, 96vw); max-height: 92vh; overflow-y: auto; background: var(--card);
+  border: 1px solid var(--border); border-radius: 16px; padding: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+.gig-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px;
+  font-size: 13px; color: var(--muted); }
+.gig-meta select { padding: 6px 8px; border-radius: 8px; background: var(--bg-2); color: var(--text);
+  border: 1px solid rgba(255,255,255,0.12); font-size: 13px; margin-left: auto; }
+.gig-payout { margin-top: 12px; padding: 12px; border-radius: 10px; text-align: center; font-size: 15px;
+  background: rgba(89,231,194,0.1); border: 1px solid rgba(89,231,194,0.35); }
+.gig-payout b { margin: 0 2px; }
+
 /* Scored play-along (rhythm drill / game core). */
 .playalong { display: flex; flex-direction: column; gap: 10px; }
 .pa-hud { display: flex; align-items: baseline; gap: 16px; }
