@@ -77,6 +77,38 @@ class TestPreChorus(unittest.TestCase):
         labels = [s["label"] for s in secs if s["role"] == "prechorus"]
         self.assertEqual(labels, ["Pre-chorus"])
 
+    def test_special_identities_map_to_canonical_roles(self):
+        # Every special section type must resolve to a real technique role so
+        # it never renders empty.
+        from src.composition.song_composer import _canonical_role
+        from src.composition.roles import SECTION_ROLES
+        cases = {
+            "Solo": "bridge", "Buildup 1": "intro", "Drop 2": "chorus",
+            "Breakdown": "bridge", "Pre-chorus": "verse", "Bridge / Solo": "bridge",
+        }
+        for label, expect in cases.items():
+            cr = _canonical_role({"label": label})
+            self.assertIn(cr, SECTION_ROLES)
+            self.assertEqual(cr, expect, f"{label} → {cr}")
+
+    def test_all_full_song_sections_compose(self):
+        # No section of any full-song template renders empty with real
+        # instruments (the UI always supplies at least a default trio).
+        from src.api.arrangement import build_sections
+        trio = ("drum_kit", "electric_bass", "piano")
+        for g, p in STYLES.items():
+            if not p.rhythm_variants:
+                continue
+            secs = build_sections(g, [])
+            out = compose_song(genre=g, sections=secs, seed=3, skip_audio=True,
+                               enabled_instruments=tuple(p.default_instruments) or trio)
+            pm = pretty_midi.PrettyMIDI(out["midi_path"])
+            bar = 60.0 / p.tempo * 4
+            for s in secs:
+                lo, hi = s["start_bar"] * bar, (s["end_bar"] + 1) * bar - 0.05
+                n = sum(1 for inst in pm.instruments for nt in inst.notes if lo <= nt.start < hi)
+                self.assertGreater(n, 0, f"{g}/{s['label']} ({s['role']}) rendered empty")
+
     def test_prechorus_section_is_not_empty(self):
         # A pre-chorus maps to a canonical role for technique selection, so it
         # must compose actual notes (never render empty).

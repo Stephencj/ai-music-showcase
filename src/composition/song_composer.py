@@ -107,15 +107,39 @@ _GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
 # Section spec helpers
 # ---------------------------------------------------------------------------
 
+# Distinct section TYPES the song templates actually produce, beyond the five
+# canonical roles. Each keeps its own identity (selectable + independently
+# controllable + its own energy/behaviour) but maps to a canonical technique
+# role (its closest catalogue) so the technique bank always finds a fit.
+SPECIAL_IDENTITIES: tuple[str, ...] = ("prechorus", "buildup", "drop",
+                                       "breakdown", "solo")
+
+
 def _section_identity(label: str) -> str:
-    """A section's identity for arrangement/UI/controls. Finer-grained than the
-    canonical technique role: a "Pre-chorus" keeps its own ``prechorus``
-    identity (so it's selectable + independently controllable) while technique
-    selection still maps it to a canonical role via ``role_for_label``."""
+    """A section's identity for arrangement / UI / per-section controls — finer
+    than the canonical technique role. Order matters (solo before bridge so
+    "Bridge / Solo" reads as a solo)."""
     lo = (label or "").lower()
     if "prechorus" in lo or "pre-chorus" in lo or "pre chorus" in lo:
         return "prechorus"
+    if "solo" in lo:
+        return "solo"
+    if "buildup" in lo or "build up" in lo or "build-up" in lo or "build" in lo:
+        return "buildup"
+    if "breakdown" in lo or "break" in lo:
+        return "breakdown"
+    if "drop" in lo:
+        return "drop"
     return role_for_label(label)
+
+
+def _canonical_role(section: dict) -> str:
+    """The canonical technique role (one of SECTION_ROLES) for a section —
+    its own ``role`` if already canonical, else mapped from its label. A
+    pre-chorus → verse, a solo/breakdown → bridge, a drop → chorus, a buildup
+    → intro."""
+    r = section.get("role") or role_for_label(section.get("label", ""))
+    return r if r in SECTION_ROLES else role_for_label(section.get("label", ""))
 
 
 def _default_sections_for(genre: str) -> list[dict]:
@@ -209,7 +233,9 @@ def _lead_guitar_section_plan(sections: list[dict], seed: int,
     # outro riffs per their own knobs, also scaled by lead_amount so
     # lead_amount=0 means no lead anywhere.
     for i, r, label in roled:
-        if r == "bridge" and _hit(0.85 if "solo" in label else 0.55):
+        if r == "solo" and _hit(0.95):           # a dedicated solo section
+            play.add(i)
+        elif r == "bridge" and _hit(0.85 if "solo" in label else 0.55):
             play.add(i)
         elif r == "intro" and rng.random() < min(1.0, p_intro * amt):
             play.add(i)
@@ -415,6 +441,9 @@ def compose_song(
     _lead_sections = _lead_guitar_section_plan(sections, seed, eff_knobs)
     # Sections explicitly asked to feature the lead (a "guitar solo here")
     # always get it, on top of the stochastic plan.
+    # Explicit "feature the lead here" directives always win; template "Solo"
+    # sections are featured via the plan above (so lead_amount=0 still silences
+    # them).
     _lead_sections |= {i for i, s in enumerate(sections) if s.get("feature_lead")}
     _lead_fill_secs = _lead_fill_sections(sections, seed, eff_knobs, _lead_sections)
 
@@ -436,7 +465,7 @@ def compose_song(
         # energy and the chart, but technique/pacing selection needs one of the
         # five canonical roles the bank is keyed on — a pre-chorus picks like a
         # verse (its closest catalogue) and gets its lift from the energy pass.
-        pick_role = role if role in SECTION_ROLES else role_for_label(label)
+        pick_role = _canonical_role(section)
 
         # Per-section harmonic-rhythm variation. Bridge sections sample
         # from preset.bridge_pacing_options when set (bias toward
@@ -534,7 +563,7 @@ def compose_song(
             # Arrangement: drop non-essential layers in some sections so the
             # band breathes (backing vox/percussion enter on the chorus;
             # drums hold off in the intro).
-            if not _plays_in_section(inst_obj, role, _has_harmonic):
+            if not _plays_in_section(inst_obj, pick_role, _has_harmonic):
                 continue
             # Lead guitar is featured, not constant: it plays its featured
             # sections (some verses, bridge solo, final chorus, opt. intro/
@@ -634,18 +663,32 @@ def compose_song(
     # sitting at one level. Chorus = 1.0 reference; drums keep most of their
     # punch so the backbeat doesn't go limp in quiet sections.
     _SECTION_ENERGY = {
-        "intro": 0.72, "verse": 0.82, "prechorus": 0.92, "chorus": 1.0,
-        "bridge": 0.90, "outro": 0.74,
+        "intro": 0.72, "buildup": 0.80, "verse": 0.82, "prechorus": 0.92,
+        "chorus": 1.0, "drop": 1.06, "bridge": 0.90, "breakdown": 0.78,
+        "solo": 0.96, "outro": 0.74,
     }
     for section in sections:
         s, e = int(section["start_bar"]), int(section["end_bar"])
         label = (section.get("label") or "")
-        role = section.get("role") or role_for_label(label)
+        role = section.get("role") or _section_identity(label)
         lo = label.lower()
-        if section.get("energy") is not None:
+        sec_dyn = (section.get("knobs") or {}).get("dynamics", eff_knobs["dynamics"])
+        explicit = section.get("energy")
+        # A buildup CRESCENDOS: ramp the section from quiet up to full so it
+        # actually feels like it's building into what follows (an explicit
+        # per-section energy overrides the ramp).
+        if role == "buildup" and explicit is None and e >= s:
+            for b in range(s, e + 1):
+                prog = (b - s) / max(1, e - s)         # 0 → 1 across the section
+                f = 0.60 + prog * 0.50                 # 0.60 → 1.10
+                f = 1.0 + (f - 1.0) * sec_dyn
+                if abs(f - 1.0) > 1e-6:
+                    midi.scale_region_velocity(b, b + 1, f, drum_factor=1.0 - (1.0 - f) * 0.5)
+            continue
+        if explicit is not None:
             # Explicit per-section level (a "sparse intro" / "big chorus"
             # directive) — used directly, not scaled by the contrast knob.
-            energy = float(section["energy"])
+            energy = float(explicit)
         else:
             energy = _SECTION_ENERGY.get(role, 0.85)
             if "solo" in lo or section.get("feature_lead"):
@@ -654,7 +697,6 @@ def compose_song(
                 energy = 0.92                 # lift into the chorus
             # Scale the deviation-from-full by the dynamics knob: 1.0 = normal
             # contrast, 0 = flat (everything at chorus level), up to 2 = extreme.
-            sec_dyn = (section.get("knobs") or {}).get("dynamics", eff_knobs["dynamics"])
             energy = 1.0 + (energy - 1.0) * sec_dyn
         if abs(energy - 1.0) > 1e-6:
             drum_f = 1.0 - (1.0 - energy) * 0.5

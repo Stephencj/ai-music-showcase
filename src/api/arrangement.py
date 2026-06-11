@@ -16,9 +16,11 @@ logger = logging.getLogger("ai_music_studio.api.arrangement")
 # Canonical musical order + sensible fallback bar-lengths for genres whose
 # template doesn't define a given role.
 SECTION_ORDER: tuple[str, ...] = (
-    "intro", "verse", "prechorus", "chorus", "bridge", "outro")
+    "intro", "buildup", "verse", "prechorus", "chorus", "drop",
+    "bridge", "breakdown", "solo", "outro")
 _FALLBACK_BARS: dict[str, int] = {
-    "intro": 4, "verse": 16, "prechorus": 4, "chorus": 8, "bridge": 8, "outro": 4,
+    "intro": 4, "buildup": 4, "verse": 16, "prechorus": 4, "chorus": 8,
+    "drop": 8, "bridge": 8, "breakdown": 8, "solo": 8, "outro": 4,
 }
 # Display labels where the capitalised role isn't right.
 _ROLE_LABELS: dict[str, str] = {"prechorus": "Pre-chorus"}
