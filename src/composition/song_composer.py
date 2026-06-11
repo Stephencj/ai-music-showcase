@@ -23,6 +23,7 @@ import numpy as np
 import soundfile as sf
 
 from src.composition import BANK, role_for_label
+from src.composition.roles import SECTION_ROLES
 from src.composition.harmony import harmony_profile
 from src.composition.knobs import resolve_knobs
 from src.composition.pacing import apply_pacing, pick_pacing, modal_color
@@ -420,6 +421,11 @@ def compose_song(
         s, e = int(section["start_bar"]), int(section["end_bar"])
         label = section.get("label", f"Section {sec_idx + 1}")
         role = section.get("role") or role_for_label(label)
+        # The section keeps its own identity (e.g. "prechorus") for arrangement,
+        # energy and the chart, but technique/pacing selection needs one of the
+        # five canonical roles the bank is keyed on — a pre-chorus picks like a
+        # verse (its closest catalogue) and gets its lift from the energy pass.
+        pick_role = role if role in SECTION_ROLES else role_for_label(label)
 
         # Per-section harmonic-rhythm variation. Bridge sections sample
         # from preset.bridge_pacing_options when set (bias toward
@@ -474,7 +480,7 @@ def compose_song(
             _sub_seed(seed, label, "pacing"),
         )
         _hprof = harmony_profile(sec_genre)
-        pacing = pick_pacing(pacing_rng, sec_preset, role,
+        pacing = pick_pacing(pacing_rng, sec_preset, pick_role,
                              reharm=_hprof.reharm,
                              reharm_prob=sec_knobs["reharm_prob"])
         pacing_picks[label] = pacing
@@ -544,12 +550,12 @@ def compose_song(
                 # techniques.
                 tags_for_pick = sec_tags
                 technique = BANK.pick(
-                    instrument_token, role, rng,
+                    instrument_token, pick_role, rng,
                     preferred_tags=tags_for_pick,
                 )
                 if technique is None and instrument_token != inst_role:
                     technique = BANK.pick(
-                        inst_role, role, rng,
+                        inst_role, pick_role, rng,
                         preferred_tags=tags_for_pick,
                     )
             if technique is None:
@@ -561,7 +567,7 @@ def compose_song(
 
             ctx = TechniqueContext(
                 start_bar=s, end_bar=e,
-                section_role=role, section_label=label,
+                section_role=pick_role, section_label=label,
                 instrument=instrument_token,
                 key=sec_key, scale=sec_scale,
                 tempo=eff_tempo, genre=sec_genre,
@@ -617,7 +623,7 @@ def compose_song(
     # sitting at one level. Chorus = 1.0 reference; drums keep most of their
     # punch so the backbeat doesn't go limp in quiet sections.
     _SECTION_ENERGY = {
-        "intro": 0.72, "verse": 0.82, "chorus": 1.0,
+        "intro": 0.72, "verse": 0.82, "prechorus": 0.92, "chorus": 1.0,
         "bridge": 0.90, "outro": 0.74,
     }
     for section in sections:

@@ -9,7 +9,8 @@ const SCALES = [
   "harmonic_minor", "melodic_minor", "pentatonic_major", "pentatonic_minor", "blues",
 ];
 const SECTION_LABELS: Record<string, string> = {
-  intro: "Intro", verse: "Verse", chorus: "Chorus", bridge: "Bridge", outro: "Outro",
+  intro: "Intro", verse: "Verse", prechorus: "Pre-chorus", chorus: "Chorus",
+  bridge: "Bridge", outro: "Outro",
 };
 
 // Short playing-style tags for a section's override (shown on the section row).

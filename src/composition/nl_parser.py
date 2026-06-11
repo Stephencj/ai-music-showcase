@@ -72,7 +72,7 @@ _GENRE_LEXICON: list[tuple[str, str]] = [
 
 # section keyword → canonical role (intro/verse/chorus/bridge/outro).
 _SECTION_LEXICON: list[tuple[str, str]] = [
-    (r"pre[\s-]?chorus", "chorus"),          # no prechorus role → fold to chorus
+    (r"pre[\s-]?chorus", "prechorus"),       # its own role now
     (r"chorus(es)?|\bhook\b|\bdrop\b|\brefrain\b", "chorus"),
     (r"verse(s)?", "verse"),
     (r"\bintro(duction)?\b|build[\s-]?up|\briser\b", "intro"),

@@ -57,5 +57,30 @@ class TestArrangementIntegration(unittest.TestCase):
         self.assertGreater(drum_hits(verse), 0, "verse should have drums")
 
 
+class TestPreChorus(unittest.TestCase):
+    def test_prechorus_is_a_selectable_role(self):
+        from src.api.arrangement import available_sections
+        roles = [s["role"] for s in available_sections("pop")]
+        self.assertIn("prechorus", roles)
+        # ordered between verse and chorus
+        self.assertLess(roles.index("verse"), roles.index("prechorus"))
+        self.assertLess(roles.index("prechorus"), roles.index("chorus"))
+
+    def test_prechorus_section_is_not_empty(self):
+        # A pre-chorus maps to a canonical role for technique selection, so it
+        # must compose actual notes (never render empty).
+        from src.api.arrangement import build_sections
+        secs = build_sections("pop", ["verse", "prechorus", "chorus"])
+        pc = next(s for s in secs if s["role"] == "prechorus")
+        self.assertEqual(pc["label"], "Pre-chorus")
+        out = compose_song(genre="pop", sections=secs, seed=5, skip_audio=True,
+                           enabled_instruments=("drum_kit", "electric_bass", "piano"))
+        pm = pretty_midi.PrettyMIDI(out["midi_path"])
+        bar = 60.0 / STYLES["pop"].tempo * 4
+        lo, hi = pc["start_bar"] * bar, (pc["end_bar"] + 1) * bar - 0.05
+        n = sum(1 for inst in pm.instruments for nt in inst.notes if lo <= nt.start < hi)
+        self.assertGreater(n, 0, "pre-chorus rendered empty")
+
+
 if __name__ == "__main__":
     unittest.main()
