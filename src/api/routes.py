@@ -28,6 +28,7 @@ from .jobs import registry
 from .schemas import (
     AiAnswerRequest,
     EditBlockRequest,
+    ProduceBlockRequest,
     GenerateRequest,
     GeneratePartRequest,
     LyricsDraftRequest,
@@ -369,6 +370,20 @@ def edit_block(name: str, req: EditBlockRequest) -> dict:
             name, mute=req.mute, regenerate=req.regenerate, save_as=req.save_as,
         )
         return {"name": new_name}
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@router.post("/blocks/{name}/produce")
+def produce_block(name: str, req: ProduceBlockRequest) -> dict:
+    """Producer move: arrange (mute/regenerate) + re-master a block, re-render
+    its preview, and return a production score."""
+    try:
+        return service.produce_block(
+            name, mute=req.mute, regenerate=req.regenerate,
+            master_preset=req.master_preset, save_as=req.save_as)
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc))
     except ValueError as exc:

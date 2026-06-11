@@ -51,7 +51,8 @@ export default function BandScreen({ isActive, onWriteSong }: {
   const [band, setBand] = useState<Band | null>(loadBand);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [nameDraft, setNameDraft] = useState("");
-  const [gig, setGig] = useState<string | null>(null);   // block name being played
+  const [gig, setGig] = useState<string | null>(null);     // block name being played
+  const [produce, setProduce] = useState<string | null>(null);  // block being produced
 
   useEffect(() => { if (band) localStorage.setItem(KEY, JSON.stringify(band)); }, [band]);
   useEffect(() => { if (isActive) api.getBlocks().then(setBlocks).catch(() => {}); }, [isActive]);
@@ -110,6 +111,8 @@ export default function BandScreen({ isActive, onWriteSong }: {
               {blocks.map((b) => (
                 <div key={b.name} className="band-song">
                   <span className="band-song-name">{b.name}</span>
+                  <button className="btn ghost sm" style={{ width: "auto" }}
+                    onClick={() => setProduce(b.name)}>🎛 Produce</button>
                   <button className="btn secondary sm" style={{ width: "auto" }}
                     onClick={() => setGig(b.name)}>🎤 Play gig</button>
                 </div>
@@ -123,7 +126,92 @@ export default function BandScreen({ isActive, onWriteSong }: {
           onDone={(g) => { award(g); }}
           onClose={() => setGig(null)} />
       )}
+      {produce && (
+        <Produce blockName={produce} tierMult={tier.mult}
+          onDone={(g) => { award(g); }}
+          onClose={() => setProduce(null)} />
+      )}
     </>
+  );
+}
+
+// ── The producer role: arrange + master a song to boost its appeal ───────────
+function Produce({ blockName, tierMult, onDone, onClose }: {
+  blockName: string; tierMult: number;
+  onDone: (g: { fans: number; money: number }) => void;
+  onClose: () => void;
+}) {
+  const [tracks, setTracks] = useState<string[]>([]);
+  const [muted, setMuted] = useState<Set<string>>(new Set());
+  const [masters, setMasters] = useState<string[]>([]);
+  const [master, setMaster] = useState("default");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ production: number; fans: number; money: number } | null>(null);
+  const [audioBust, setAudioBust] = useState(0);
+
+  useEffect(() => {
+    api.getBlockNotes(blockName).then((d) => setTracks(d.tracks.map((t) => t.track))).catch(() => {});
+    api.getMasterPresets().then(setMasters).catch(() => {});
+  }, [blockName]);
+
+  const run = async () => {
+    setBusy(true);
+    try {
+      const r = await api.produceBlock(blockName, { mute: [...muted], master_preset: master });
+      const fans = Math.round(12 * r.production * tierMult);
+      const money = Math.round(fans * 1.3);
+      setResult({ production: r.production, fans, money });
+      setAudioBust((n) => n + 1);   // refetch the re-mastered preview
+      onDone({ fans, money });
+    } finally { setBusy(false); }
+  };
+
+  const MASTER_DESC: Record<string, string> = {
+    default: "balanced, broadcast-ready", loud: "hot & competitive (streaming)",
+    cinematic: "wide, spacious, reverby", transparent: "minimal — keeps it natural",
+  };
+
+  return (
+    <div className="cof-backdrop" onClick={onClose}>
+      <div className="gig-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="cof-head">
+          <span className="cof-title">🎛 Produce · {blockName}</span>
+          <button className="cof-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="prod-section">
+          <h4>Arrangement <span className="meta">— mute tracks to shape the mix</span></h4>
+          <div className="prod-tracks">
+            {tracks.map((t) => (
+              <button key={t} className={"prod-track" + (muted.has(t) ? " muted" : "")}
+                onClick={() => setMuted((s) => { const n = new Set(s); n.has(t) ? n.delete(t) : n.add(t); return n; })}>
+                {muted.has(t) ? "🔇" : "🔊"} {t}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="prod-section">
+          <h4>Master</h4>
+          <div className="prod-masters">
+            {masters.map((m) => (
+              <button key={m} className={"prod-master" + (master === m ? " on" : "")} onClick={() => setMaster(m)}>
+                <b>{m}</b><span>{MASTER_DESC[m] || ""}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <audio key={audioBust} src={api.blockAudioUrl(blockName) + (audioBust ? `?v=${audioBust}` : "")}
+          controls style={{ width: "100%" }} />
+        <button className="btn" style={{ marginTop: 10 }} disabled={busy} onClick={run}>
+          {busy ? "Mixing…" : result ? "Re-produce" : "🎚 Produce it"}
+        </button>
+        {result && (
+          <div className="gig-payout">
+            Production <b>×{result.production.toFixed(2)}</b> → streams roll in:
+            <b> +{result.fans.toLocaleString()} fans</b>, +${result.money.toLocaleString()}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

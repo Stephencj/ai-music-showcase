@@ -113,6 +113,14 @@ class EditBlockRequest(BaseModel):
     save_as: Optional[str] = None                          # None → overwrite in place
 
 
+class ProduceBlockRequest(BaseModel):
+    """Producer-role move: arrange (mute/regenerate) + re-master a block."""
+    mute: list[str] = Field(default_factory=list)
+    regenerate: list[str] = Field(default_factory=list)
+    master_preset: str = "default"                         # default|loud|cinematic|transparent
+    save_as: Optional[str] = None
+
+
 class LyricsDraftRequest(BaseModel):
     theme: Optional[str] = None
 

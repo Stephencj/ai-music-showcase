@@ -981,6 +981,21 @@ audio { width: 100%; margin: 8px 0 12px; }
 .gig-payout { margin-top: 12px; padding: 12px; border-radius: 10px; text-align: center; font-size: 15px;
   background: rgba(89,231,194,0.1); border: 1px solid rgba(89,231,194,0.35); }
 .gig-payout b { margin: 0 2px; }
+.prod-section { margin-bottom: 12px; }
+.prod-section h4 { margin: 0 0 8px; font-size: 14px; }
+.prod-section h4 .meta { font-weight: 400; }
+.prod-tracks { display: flex; flex-wrap: wrap; gap: 6px; }
+.prod-track { padding: 6px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  background: var(--bg-2); color: var(--text); border: 1px solid rgba(255,255,255,0.14); cursor: pointer; }
+.prod-track.muted { opacity: 0.5; text-decoration: line-through; border-color: rgba(255,255,255,0.06); }
+.prod-masters { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.prod-master { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 9px 11px;
+  border-radius: 10px; background: var(--bg-2); color: var(--text);
+  border: 1px solid rgba(255,255,255,0.12); cursor: pointer; }
+.prod-master:hover { border-color: var(--accent); }
+.prod-master.on { border-color: var(--accent); background: rgba(124,58,237,0.18); }
+.prod-master b { font-size: 13px; text-transform: capitalize; }
+.prod-master span { font-size: 11px; color: var(--muted); }
 
 /* Scored play-along (rhythm drill / game core). */
 .playalong { display: flex; flex-direction: column; gap: 10px; }

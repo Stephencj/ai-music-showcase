@@ -161,6 +161,10 @@ export const getScoreData = (name: string) =>
   jget<ScoreData>(`/api/blocks/${encodeURIComponent(name)}/score-data`);
 export const getExplain = (name: string) =>
   jget<import("./types").ExplainData>(`/api/blocks/${encodeURIComponent(name)}/explain`);
+export const produceBlock = (name: string, body: {
+  mute?: string[]; regenerate?: string[]; master_preset?: string; save_as?: string | null;
+}) => jpost<{ name: string; production: number; master_preset: string; tracks: string[] }>(
+  `/api/blocks/${encodeURIComponent(name)}/produce`, body);
 
 // Per-track notes [pitch, startBeat, durBeat] (beats = quarter notes) for the
 // notation roll + real-time piano/guitar. Same data the workstation loads.
