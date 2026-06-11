@@ -38,6 +38,12 @@ export default defineConfig({
     host: true,          // bind 0.0.0.0 so the LAN / Tailscale phone can reach it
     port: 5174,
     strictPort: true,
+    // Reached only through authenticated tunnels (cloudflared app.botanicmanics.com)
+    // and the Tailscale tailnet, so accept any Host header. Without this, newer
+    // Vite returns 403 "host not allowed" to the public hostname — which silently
+    // froze the installed PWA on its cached bundle (every fresh fetch 403'd, so
+    // no deploy ever reached the client). Do NOT remove.
+    allowedHosts: true,
     proxy: {
       "/api": {
         target: process.env.AI_MUSIC_BACKEND || "http://localhost:7860",
