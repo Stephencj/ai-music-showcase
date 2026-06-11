@@ -42,11 +42,21 @@ _ROCK = HarmonyProfile(
     voicing_variety=0.30, voicing_family="rock",
     reharm=(), reharm_prob=0.0, bass_inversion=0.0,
 )
-# Jazz / funk / soul / blues — extended colour + adventurous reharm.
+# Jazz — extended colour + the adventurous reharm (incl. tritone subs). Tritone
+# subs are a jazz idiom; they read as "out of tune" in soul/funk/disco where
+# the melody stays diatonic, so those genres get the milder _SOULFUL below.
 _JAZZ = HarmonyProfile(
     voicing_variety=0.55, voicing_family="jazz",
     reharm=(("with_secondary_doms", 2), ("with_tritone_sub", 1),
             ("with_borrowed_chords", 1)), reharm_prob=0.30, bass_inversion=0.28,
+)
+# Funk / soul / Motown / disco / R&B — rich jazzy voicings, but harmonically
+# grounded: secondary dominants + modal-interchange borrowing, NO tritone subs
+# (those don't resolve diatonically and clash with the diatonic melody).
+_SOULFUL = HarmonyProfile(
+    voicing_variety=0.50, voicing_family="jazz",
+    reharm=(("with_secondary_doms", 2), ("with_borrowed_chords", 1)),
+    reharm_prob=0.18, bass_inversion=0.26,
 )
 # Classical / cinematic — triadic + suspensions, occasional secondary dom.
 _CLASSICAL = HarmonyProfile(
@@ -65,9 +75,11 @@ def harmony_profile(genre: str | None) -> HarmonyProfile:
     g = (genre or "").lower()
     if "blues" in g:                       # rigid form — checked before jazz
         return _BLUES
-    if any(k in g for k in ("jazz", "funk", "soul", "rnb",
-                            "gospel", "afrobeat", "saloon", "disco")):
+    if "jazz" in g:                        # jazz keeps the tritone subs
         return _JAZZ
+    if any(k in g for k in ("funk", "soul", "motown", "rnb", "gospel",
+                            "afrobeat", "saloon", "disco")):
+        return _SOULFUL
     if any(k in g for k in ("rock", "metal", "punk", "grunge")):
         return _ROCK
     if any(k in g for k in ("classical", "cinematic", "baroque", "waltz",
