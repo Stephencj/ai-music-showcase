@@ -4,6 +4,7 @@ import type { Block, ExplainData } from "../types";
 import type { RollNote } from "./NotationRoll";
 import PlayAlong from "./PlayAlong";
 import MixingDesk, { type MixState, type TrackSettings, cleanMix } from "./MixingDesk";
+import LiveMixer from "./LiveMixer";
 
 // The band-career shell: name a band, write songs (the generator), then play
 // gigs (the scored play-along) to earn fans and climb venues. Songcraft — the
@@ -58,6 +59,7 @@ export default function BandScreen({ isActive, onWriteSong }: {
   const [gig, setGig] = useState<string | null>(null);     // block name being played
   const [produce, setProduce] = useState<string | null>(null);  // block being produced
   const [train, setTrain] = useState<string | null>(null);      // ear-training on a block
+  const [live, setLive] = useState<string | null>(null);        // live-mixing a block
 
   useEffect(() => { if (band) localStorage.setItem(KEY, JSON.stringify(band)); }, [band]);
   useEffect(() => { if (isActive) api.getBlocks().then(setBlocks).catch(() => {}); }, [isActive]);
@@ -119,6 +121,8 @@ export default function BandScreen({ isActive, onWriteSong }: {
                   <button className="btn ghost sm" style={{ width: "auto" }}
                     onClick={() => setProduce(b.name)}>🎛 Produce</button>
                   <button className="btn ghost sm" style={{ width: "auto" }}
+                    onClick={() => setLive(b.name)}>🎚 Live mix</button>
+                  <button className="btn ghost sm" style={{ width: "auto" }}
                     onClick={() => setTrain(b.name)}>🎧 Ear training</button>
                   <button className="btn secondary sm" style={{ width: "auto" }}
                     onClick={() => setGig(b.name)}>🎤 Play gig</button>
@@ -143,6 +147,11 @@ export default function BandScreen({ isActive, onWriteSong }: {
         <EarTraining blockName={train}
           onReward={(fans) => setBand((b) => b ? { ...b, fans: b.fans + fans } : b)}
           onClose={() => setTrain(null)} />
+      )}
+      {live && (
+        <LiveMixer blockName={live}
+          onBounced={(n, prod) => setBand((b) => b ? { ...b, produced: { ...(b.produced || {}), [n]: prod } } : b)}
+          onClose={() => setLive(null)} />
       )}
     </>
   );

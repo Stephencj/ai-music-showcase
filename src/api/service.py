@@ -474,6 +474,61 @@ def mix_preview_path(key: str) -> Path:
     return _MIX_PREVIEW_DIR / f"{Path(key).name}.mp3"
 
 
+_LIVE_STEMS_DIR = API_OUT / "_live_stems"
+
+
+def live_stems(name: str) -> dict:
+    """Render a block's per-track stems at the engine's family baseline (no
+    per-track mix, no master) and cache them as individual WAVs so the browser
+    can load each one into Web Audio and mix it LIVE — faders, EQ, compression
+    and FX applied in real time on top of these baseline stems (the same
+    relative semantics as ``track_mix``). Cached by (block, midi mtime);
+    returns ``{key, duration, tracks:[{name, file}]}``."""
+    import hashlib
+    import json
+    from src.daw_integration.generic import blocks as block_store
+    from src.audio_processing.render.pipeline import render_to_audio
+
+    midi = block_store._midi_path(name)
+    if not midi.exists():
+        raise FileNotFoundError(f"no MIDI for block {name!r}")
+    sig = json.dumps([name, midi.stat().st_mtime], sort_keys=True, default=str)
+    key = hashlib.blake2b(sig.encode(), digest_size=9).hexdigest()
+    out = _LIVE_STEMS_DIR / key
+    manifest = out / "stems.json"
+    if manifest.exists():
+        manifest.touch()
+        return json.loads(manifest.read_text())
+
+    out.mkdir(parents=True, exist_ok=True)
+    r = render_to_audio(midi=midi, output_dir=out, with_stems=True,
+                        master_preset="default", track_mix=None)
+    tracks = [{"name": n, "file": p.relative_to(out).as_posix()}
+              for n, p in (r.stem_paths or {}).items()]
+    data = {"key": key, "duration": r.duration_seconds, "tracks": tracks}
+    manifest.write_text(json.dumps(data))
+    # Cap the cache: keep the ~12 most-recently-used stem sets.
+    try:
+        sets = sorted((p for p in _LIVE_STEMS_DIR.iterdir() if p.is_dir()),
+                      key=lambda p: (p / "stems.json").stat().st_mtime
+                      if (p / "stems.json").exists() else 0)
+        import shutil
+        for old in sets[:-12]:
+            shutil.rmtree(old, ignore_errors=True)
+    except OSError:
+        pass
+    return data
+
+
+def live_stem_path(key: str, track_file: str) -> Path:
+    """Resolve a served live-stem WAV, guarding against path escape."""
+    base = (_LIVE_STEMS_DIR / Path(key).name).resolve()
+    p = (base / track_file).resolve()
+    if base not in p.parents and p != base:
+        raise FileNotFoundError("invalid stem path")
+    return p
+
+
 def _unique_block_name(block_store, base: str) -> str:
     existing = {b.get("name") for b in block_store.list_blocks()}
     name, n = base, 1

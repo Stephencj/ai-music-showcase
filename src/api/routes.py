@@ -393,6 +393,30 @@ def serve_mix_preview(key: str) -> FileResponse:
     return _serve(service.mix_preview_path(key), "audio/mpeg")
 
 
+@router.get("/blocks/{name}/live-stems")
+def block_live_stems(name: str) -> dict:
+    """Per-track baseline stems for browser Web Audio live mixing. Returns
+    ``{key, duration, tracks:[{name, url}]}`` — each url serves a WAV stem."""
+    try:
+        d = service.live_stems(name)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc))
+    return {
+        "key": d["key"], "duration": d["duration"],
+        "tracks": [{"name": t["name"],
+                    "url": f"/api/live-stems/{d['key']}/{t['file']}"}
+                   for t in d["tracks"]],
+    }
+
+
+@router.get("/live-stems/{key}/{track_file:path}")
+def serve_live_stem(key: str, track_file: str) -> FileResponse:
+    try:
+        return _serve(service.live_stem_path(key, track_file), "audio/wav")
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc))
+
+
 @router.post("/blocks/{name}/produce")
 def produce_block(name: str, req: ProduceBlockRequest) -> dict:
     """Producer move: arrange (mute/regenerate) + re-master a block, re-render

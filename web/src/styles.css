@@ -1029,6 +1029,13 @@ audio { width: 100%; margin: 8px 0 12px; }
 .et-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
 @media (max-width: 560px) { .et-refs { grid-template-columns: 1fr; } }
 
+/* Live mixer transport (Web Audio real-time mixing). */
+.lm-transport { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.lm-time { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lm-bar { flex: 1 1 auto; height: 6px; border-radius: 3px; background: var(--bg-2);
+  overflow: hidden; }
+.lm-bar i { display: block; height: 100%; background: var(--accent-2); transition: width 0.08s linear; }
+
 /* Scored play-along (rhythm drill / game core). */
 .playalong { display: flex; flex-direction: column; gap: 10px; }
 .pa-hud { display: flex; align-items: baseline; gap: 16px; }

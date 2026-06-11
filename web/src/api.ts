@@ -170,6 +170,13 @@ export const mixPreview = (name: string, body: {
   track_mix?: Record<string, unknown>; master_preset?: string;
 }) => jpost<{ url: string }>(`/api/blocks/${encodeURIComponent(name)}/mix-preview`, body);
 
+// Per-track baseline stems (WAV) for browser Web Audio live mixing.
+export interface LiveStems {
+  key: string; duration: number; tracks: { name: string; url: string }[];
+}
+export const liveStems = (name: string) =>
+  jget<LiveStems>(`/api/blocks/${encodeURIComponent(name)}/live-stems`);
+
 // Per-track notes [pitch, startBeat, durBeat] (beats = quarter notes) for the
 // notation roll + real-time piano/guitar. Same data the workstation loads.
 export interface NoteTrack {
