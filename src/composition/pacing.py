@@ -322,18 +322,21 @@ _register(PacingStrategy(
 
 # ---- with_borrowed_chords -------------------------------------------------
 def _with_borrowed_chords(prog, key, scale):
-    """Modal interchange: in a major key colour the subdominant with the
-    borrowed minor iv (and submediant with bVI); in a minor key borrow the
-    brighter major IV. Tasteful, idiomatic — a no-op when those degrees
-    aren't present."""
+    """Modal interchange — the TASTEFUL, idiomatic kind: in a major key colour
+    the subdominant with the borrowed minor iv (the bittersweet 'IV→iv' move
+    loved across pop/soul/rock); in a minor key brighten with the major IV
+    (Dorian colour). A no-op when those degrees aren't present.
+
+    Deliberately does NOT swap vi → ♭VI: that chromatic-mediant substitution
+    re-colours the whole section toward the parallel minor and reads as 'out of
+    tune' against an otherwise-major song (the jazz profile gets its adventure
+    from secondary dominants / tritone subs instead)."""
     minor = bool(scale) and scale.lower().startswith("min")
     out = []
     for s, _ in _normalize_progression(prog):
         stem = _strip_suffix(s)
         if not minor and stem == "IV":
-            out.append(("iv", 1.0))       # borrowed minor iv
-        elif not minor and stem == "vi":
-            out.append(("bVI", 1.0))      # borrowed flat-VI
+            out.append(("iv", 1.0))       # borrowed minor iv (the safe one)
         elif minor and stem == "iv":
             out.append(("IV", 1.0))       # borrowed major IV (Dorian colour)
         else:
@@ -344,7 +347,7 @@ def _with_borrowed_chords(prog, key, scale):
 _register(PacingStrategy(
     name="with_borrowed_chords",
     label="Borrowed chords (modal interchange)",
-    description="Colour with borrowed chords — minor iv / bVI in major, major IV in minor.",
+    description="Colour with the borrowed minor iv in major (major IV in minor).",
     apply=_with_borrowed_chords,
     tags=("reharm", "modal_interchange"),
 ))
