@@ -170,8 +170,44 @@ _KEY_QUAL_RE = re.compile(
     r"\b(" + _NOTE + r")\s*(major|minor|dorian|phrygian|lydian|mixolydian|"
     r"locrian|harmonic\s+minor|melodic\s+minor)\b", re.I)
 _KEY_M_RE = re.compile(r"\b([A-G](?:#|b)?)m\b")  # "Gm", "Bbm" shorthand
+# "key of C" / "in the key of C" (a quality-less key needs the explicit "key
+# of" lead-in; a bare "in C" is too easily a false hit on words like "in funk").
+_KEY_OF_RE = re.compile(
+    r"\b(?:in\s+(?:the\s+)?)?key\s+of\s+(" + _NOTE + r")"
+    r"\s*(major|minor|maj|min|m|dorian|phrygian|lydian|mixolydian|locrian)?\b", re.I)
 _BPM_RE = re.compile(r"\b(\d{2,3})\s*(?:bpm|beats\s*per\s*minute)\b", re.I)
 _AT_BPM_RE = re.compile(r"\bat\s+(\d{2,3})\b", re.I)
+_HALF_DOUBLE_RE = re.compile(r"\b(half|double)[\s-]?time\b", re.I)
+
+
+def _scale_from_qual(qual: str) -> str:
+    q = (qual or "").lower().strip()
+    if q in ("m", "min", "minor"):
+        return "minor"
+    return _SCALE_WORDS.get(q) or "major"
+
+
+def _find_key_matches(raw: str) -> list[tuple[int, int, str, str]]:
+    """Every key mention as (start, end, key, scale). Uses note+quality and the
+    explicit "key of" form (which can be quality-less); de-duplicates overlaps."""
+    out: list[tuple[int, int, str, str]] = []
+    claimed: list[tuple[int, int]] = []
+
+    def add(s, e, note, qual):
+        if any(not (e <= os or s >= oe) for os, oe in claimed):
+            return
+        claimed.append((s, e))
+        out.append((s, e, _norm_note(note), _scale_from_qual(qual)))
+
+    for m in _KEY_QUAL_RE.finditer(raw):
+        add(m.start(), m.end(), m.group(1), m.group(2) or "")
+    for m in _KEY_OF_RE.finditer(raw):
+        add(m.start(1), m.end(), m.group(1), m.group(2) or "")
+    for m in _KEY_M_RE.finditer(raw):
+        add(m.start(), m.end(), m.group(1), "minor")
+    out.sort()
+    return out
+
 
 DEFAULT_GENRE = "pop_full_song"
 
@@ -266,26 +302,48 @@ def parse_prompt(text: str) -> dict:
         if role in section_presets:
             understood.append(f"{role.capitalize()} → {label(section_presets[role])}")
 
-    # ── key / scale ──────────────────────────────────────────────────────────
+    # Per-section overrides accumulate here (key/scale/tempo + playing style).
+    section_overrides: dict[str, dict] = {}
+
+    def _merge_override(role: str, eff: dict) -> None:
+        cur = section_overrides.setdefault(role, {})
+        for k, v in eff.items():
+            if k == "knobs":
+                cur.setdefault("knobs", {}).update(v)
+            else:
+                cur[k] = v
+
+    _clause_seps = [i for i, c in enumerate(raw) if c in ",;"]
+
+    def _bind_section(hs: int, he: int):
+        """Bind a span to the nearest section IN THE SAME comma/semicolon
+        clause — so "verse in A minor, chorus in C" ties each key to its own
+        clause's section rather than leaking across the comma."""
+        cs = max([s + 1 for s in _clause_seps if s < hs], default=0)
+        ce = min([s for s in _clause_seps if s >= he], default=len(raw))
+        best, best_d = None, 10 ** 9
+        for (ss, se, r) in section_hits:
+            if ss < cs or se > ce:
+                continue
+            d = ss - he if ss >= he else hs - se
+            if d < best_d:
+                best, best_d = r, d
+        return best
+
+    # ── key / scale (per-section modulations + the song key) ─────────────────
     key: Optional[str] = None
     scale: Optional[str] = None
-    m = _KEY_QUAL_RE.search(raw) or _KEY_CTX_RE.search(raw)
-    if m:
-        key = _norm_note(m.group(1))
-        qual = (m.group(2) or "").lower().strip()
-        scale = _SCALE_WORDS.get(qual, "major" if qual in ("", "maj", "major") else
-                                 _SCALE_WORDS.get(qual, None))
-        if qual in ("m", "min", "minor"):
-            scale = "minor"
-        scale = scale or "major"
-    if key is None:
-        mm = _KEY_M_RE.search(raw)
-        if mm:
-            key, scale = _norm_note(mm.group(1)), "minor"
+    for (ks, ke, kk, ksc) in _find_key_matches(raw):
+        role = _bind_section(ks, ke)
+        if role:
+            _merge_override(role, {"key": kk, "scale": ksc})
+            understood.append(f"{role.capitalize()} key: {kk} {ksc.replace('_', ' ')}")
+        elif key is None:
+            key, scale = kk, ksc
     if key:
         understood.append(f"Key: {key} {(scale or 'major').replace('_', ' ')}")
 
-    # ── tempo ────────────────────────────────────────────────────────────────
+    # ── tempo (song tempo + per-section half/double-time) ────────────────────
     tempo: Optional[float] = None
     bm = _BPM_RE.search(low) or _AT_BPM_RE.search(low)
     if bm:
@@ -296,6 +354,19 @@ def parse_prompt(text: str) -> dict:
             tempo = float(int(wt[2]))
     if tempo:
         understood.append(f"Tempo: {int(tempo)} BPM")
+    for m in _HALF_DOUBLE_RE.finditer(raw):
+        factor = 0.5 if m.group(1).lower() == "half" else 2.0
+        role = _bind_section(m.start(), m.end())
+        bt = round((tempo or 120.0) * factor)
+        if role:
+            _merge_override(role, {"tempo": float(bt)})
+            understood.append(
+                f"{role.capitalize()} tempo: {bt} BPM "
+                f"({'half' if factor < 1 else 'double'}-time)")
+        else:
+            notes.append(
+                f"Noticed {m.group(1).lower()}-time but couldn't tie it to a "
+                "section — name one (e.g. “half-time bridge”).")
 
     # ── swing ────────────────────────────────────────────────────────────────
     swing: Optional[float] = None
@@ -320,31 +391,13 @@ def parse_prompt(text: str) -> dict:
     # Bind each hint to the nearest section (same adjacency rule as genres);
     # an unbound "solo" defaults to the bridge (the classic spot). Bound hints
     # become section_overrides; anything we can't place becomes a note.
-    section_overrides: dict[str, dict] = {}
-
-    def _merge_override(role: str, eff: dict) -> None:
-        cur = section_overrides.setdefault(role, {})
-        for k, v in eff.items():
-            if k == "knobs":
-                cur.setdefault("knobs", {}).update(v)
-            else:
-                cur[k] = v
-
     hint_hits = _all_matches(raw, _STYLE_HINTS)
     unplaced: list[str] = []
     applied: set[tuple[str, str]] = set()   # (role, kind) already recorded
     for (hs, he, kind) in hint_hits:
-        # A style word modifies the section it precedes ("big chorus", "solo …
-        # in the bridge"), so prefer the nearest section to the RIGHT; fall
-        # back to the nearest on the left only if none is in range.
-        fwd = bwd = None
-        best_fwd = best_bwd = BIND_WINDOW + 1
-        for (ss, se, r) in section_hits:
-            if ss >= he and ss - he < best_fwd:
-                best_fwd, fwd = ss - he, r
-            elif hs >= se and hs - se < best_bwd:
-                best_bwd, bwd = hs - se, r
-        role = fwd if fwd is not None else bwd
+        # A style word modifies the section in its clause ("big chorus", "solo
+        # in the bridge").
+        role = _bind_section(hs, he)
         if role is None and kind == "solo":
             role = "bridge"             # default solo location
         eff = _HINT_EFFECT.get(kind)

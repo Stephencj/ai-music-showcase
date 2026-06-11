@@ -152,6 +152,9 @@ export interface SectionOverride {
   knobs?: Record<string, number>;
   energy?: number;
   feature_lead?: boolean;
+  key?: string;
+  scale?: string;
+  tempo?: number;
 }
 
 export interface GenerateBody {

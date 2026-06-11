@@ -118,6 +118,27 @@ class NlParserTests(unittest.TestCase):
         self.assertTrue(p["notes"])
         self.assertEqual(p["section_overrides"], {})
 
+    def test_per_section_key_clause_aware(self):
+        p = parse_prompt("verse in A minor, chorus in C major")
+        self.assertEqual(p["section_overrides"]["verse"]["key"], "A")
+        self.assertEqual(p["section_overrides"]["verse"]["scale"], "minor")
+        self.assertEqual(p["section_overrides"]["chorus"]["key"], "C")
+        self.assertEqual(p["section_overrides"]["chorus"]["scale"], "major")
+        self.assertIsNone(p["key"])   # both keys were section-bound
+
+    def test_per_section_half_time(self):
+        p = parse_prompt("a pop song at 120 bpm, half-time bridge")
+        self.assertEqual(p["section_overrides"]["bridge"]["tempo"], 60.0)
+
+    def test_per_section_double_time(self):
+        p = parse_prompt("funk at 100 bpm, double-time outro")
+        self.assertEqual(p["section_overrides"]["outro"]["tempo"], 200.0)
+
+    def test_modulation_for_bridge(self):
+        p = parse_prompt("modulate to Eb minor for the bridge")
+        self.assertEqual(p["section_overrides"]["bridge"]["key"], "Eb")
+        self.assertEqual(p["section_overrides"]["bridge"]["scale"], "minor")
+
     def test_understood_always_has_genre(self):
         p = parse_prompt("anything")
         self.assertTrue(any(u.startswith("Genre:") for u in p["understood"]))

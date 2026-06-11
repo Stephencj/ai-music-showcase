@@ -16,6 +16,8 @@ const SECTION_LABELS: Record<string, string> = {
 function overrideBadges(o: import("../types").SectionOverride | undefined): string[] {
   if (!o) return [];
   const tags: string[] = [];
+  if (o.key) tags.push(`♪ ${o.key} ${(o.scale || "major").replace(/_/g, " ")}`);
+  if (o.tempo != null) tags.push(`${Math.round(o.tempo)} BPM`);
   if (o.feature_lead) tags.push("🎸 solo");
   if (o.energy != null) tags.push(o.energy < 0.85 ? "↓ sparse" : "↑ big");
   if (o.knobs?.drum_fill && o.knobs.drum_fill > 1) tags.push("fills");
@@ -45,6 +47,8 @@ export default function GenerateScreen({
   const [sectionPresets, setSectionPresets] = useState<Record<string, string>>({});  // role → preset id
   const [sectionOverrides, setSectionOverrides] =
     useState<Record<string, import("../types").SectionOverride>>({});  // role → playing-style
+  const [advRole, setAdvRole] = useState<string | null>(null);     // section whose key/tempo editor is open
+  const [secKeyRole, setSecKeyRole] = useState<string | null>(null); // section whose circle-of-fifths is open
   const [instruments, setInstruments] = useState<Set<string>>(new Set());
   const [openFams, setOpenFams] = useState<Set<string>>(new Set());
   const [master, setMaster] = useState("default");
@@ -159,6 +163,19 @@ export default function GenerateScreen({
     const n = new Set(set);
     n.has(v) ? n.delete(v) : n.add(v);
     setter(n);
+  }
+
+  // Patch one section's override; null-valued keys are removed, and an empty
+  // override drops the section entry entirely.
+  function setSecOv(role: string, patch: Record<string, unknown>) {
+    setSectionOverrides((prev) => {
+      const cur: Record<string, unknown> = { ...(prev[role] || {}), ...patch };
+      for (const k of Object.keys(patch)) if (patch[k] == null) delete cur[k];
+      const n = { ...prev };
+      if (Object.keys(cur).length) n[role] = cur as import("../types").SectionOverride;
+      else delete n[role];
+      return n;
+    });
   }
 
   // Apply a parsed SongPlan onto the form: seed the preset's defaults, then
@@ -378,9 +395,42 @@ export default function GenerateScreen({
                     })} />
                 )}
                 {on && overrideBadges(sectionOverrides[s.role]).map((b) => (
-                  <span key={b} className="section-badge"
-                    title="From your description — clear by removing it from the prompt">{b}</span>
+                  <span key={b} className="section-badge">{b}</span>
                 ))}
+                {on && (
+                  <button className={"sec-adv-btn" + (advRole === s.role ? " on" : "")}
+                    title="Key / mode / tempo for this section"
+                    onClick={() => setAdvRole(advRole === s.role ? null : s.role)}>⋯</button>
+                )}
+                {on && advRole === s.role && (
+                  <div className="section-adv">
+                    <button type="button" className="keypick sm" onClick={() => setSecKeyRole(s.role)}>
+                      ◷ {sectionOverrides[s.role]?.key || key}{" "}
+                      {(sectionOverrides[s.role]?.scale || scale).replace(/_/g, " ")}
+                      {sectionOverrides[s.role]?.key ? "" : " · song"}
+                    </button>
+                    <label className="sec-adv-tempo">Tempo
+                      <input type="number" min={40} max={240}
+                        placeholder={`${Math.round(tempo)}`}
+                        value={sectionOverrides[s.role]?.tempo ?? ""}
+                        onChange={(e) => setSecOv(s.role,
+                          { tempo: e.target.value ? Number(e.target.value) : null })} />
+                    </label>
+                    {(sectionOverrides[s.role]?.key || sectionOverrides[s.role]?.tempo != null) && (
+                      <button className="btn ghost sm" style={{ width: "auto" }}
+                        onClick={() => setSecOv(s.role, { key: null, scale: null, tempo: null })}>
+                        Clear</button>
+                    )}
+                  </div>
+                )}
+                {secKeyRole === s.role && (
+                  <CircleOfFifths tonic={sectionOverrides[s.role]?.key || key}
+                    mode={sectionOverrides[s.role]?.scale || scale} sharps
+                    options={SCALES.map((sc) => ({ id: sc, label: sc.replace(/_/g, " ") }))}
+                    onTonic={(t) => setSecOv(s.role, { key: t, scale: sectionOverrides[s.role]?.scale || scale })}
+                    onMode={(mo) => setSecOv(s.role, { key: sectionOverrides[s.role]?.key || key, scale: mo })}
+                    onClose={() => setSecKeyRole(null)} />
+                )}
               </div>
             );
           })}
