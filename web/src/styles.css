@@ -633,6 +633,40 @@ audio { width: 100%; margin: 8px 0 12px; }
 .cof-c-sig { fill: var(--accent-2); font-size: 11px; font-weight: 600; }
 .cof-hint { margin-top: 8px; text-align: center; font-size: 11px; color: var(--muted); }
 
+/* ── Genre wheel ─────────────────────────────────────────────────────────── */
+.genre-pick {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 11px 14px; border-radius: 10px; background: var(--bg-2); color: var(--text);
+  border: 1px solid rgba(255,255,255,0.12); font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.genre-pick:hover { border-color: var(--accent); }
+.genre-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; }
+.genre-name { flex: 0 0 auto; }
+.genre-fam { flex: 1 1 auto; font-size: 12px; font-weight: 500; color: var(--muted); }
+.genre-pick .pf-caret { flex: 0 0 auto; }
+
+.gw-popup {
+  width: min(360px, 94vw); background: var(--card); border: 1px solid var(--border);
+  border-radius: 16px; padding: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.gw-svg { width: 100%; display: block; max-width: 300px; margin: 0 auto; }
+.gw-wedge { cursor: pointer; }
+.gw-wedge path { transition: fill-opacity 0.12s; }
+.gw-wedge:hover path { fill-opacity: 0.8; }
+.gw-wlabel { fill: #fff; font-size: 9px; font-weight: 700; pointer-events: none;
+  paint-order: stroke; stroke: rgba(0,0,0,0.35); stroke-width: 2px; }
+.gw-hub { fill: var(--bg-2); stroke: rgba(255,255,255,0.12); }
+.gw-cur { fill: var(--text); font-size: 13px; font-weight: 700; }
+.gw-cur-fam { fill: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+.gw-fam-name { text-align: center; font-size: 13px; font-weight: 700; margin: 4px 0 8px; }
+.gw-genres { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.gw-genre {
+  padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer;
+  background: var(--bg-2); color: var(--text); border: 1px solid rgba(255,255,255,0.18);
+}
+.gw-genre:hover { filter: brightness(1.15); }
+.gw-genre.sel { color: #0a0f1c; }
+
 /* ── PickerField: button trigger + searchable list popup ─────────────────────
    Shares the .cof-backdrop dimmer; .pf-popup is a taller variant of .cof-popup.
    The trigger matches .keypick so list-pickers and the key wheel look alike. */

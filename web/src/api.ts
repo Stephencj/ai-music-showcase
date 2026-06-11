@@ -36,6 +36,8 @@ async function jpost<T>(p: string, body?: unknown): Promise<T> {
 }
 
 export const getPresets = () => jget<Preset[]>("/api/presets");
+export const getGenres = () =>
+  jget<{ families: import("./types").GenreFamily[] }>("/api/genres");
 export const getInstruments = () => jget<Family[]>("/api/instruments");
 export const getMasterPresets = () => jget<string[]>("/api/master-presets");
 

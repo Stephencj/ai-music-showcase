@@ -70,6 +70,22 @@ def list_presets() -> list[dict]:
     return out
 
 
+@router.get("/genres")
+def list_genres() -> dict:
+    """Consolidated, de-duplicated genre catalog for the genre wheel: families
+    (with colour + angle) each holding genres that resolve to a song preset +
+    a per-section feel preset. Each genre also carries its section availability
+    (so the form can seed the section chips)."""
+    from src.composition.genres import genre_catalog
+    cat = genre_catalog()
+    # Attach the per-genre section roster (native arrangement) so the form can
+    # seed chips without a second round-trip.
+    for fam in cat:
+        for g in fam["genres"]:
+            g["sections"] = arrangement.available_sections(g["id"])
+    return {"families": cat}
+
+
 @router.get("/instruments")
 def list_instruments() -> list[dict]:
     fams = []

@@ -15,6 +15,20 @@ export interface Preset {
   sections: SectionAvail[];
 }
 
+// Consolidated genre catalog for the radial genre wheel.
+export interface GenreItem {
+  id: string;          // song preset id (what /generate's `genre` receives)
+  name: string;        // display name
+  section: string;     // per-section "feel" preset id
+  sections: SectionAvail[];
+}
+export interface GenreFamily {
+  family: string;
+  color: string;
+  angle: number;       // wheel position, 12 o'clock = 0
+  genres: GenreItem[];
+}
+
 export interface Instrument {
   id: string;
   label: string;

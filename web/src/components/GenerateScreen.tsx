@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../api";
-import type { BlockSpec, Family, GenerateBody, Job, JobResult, Preset } from "../types";
+import type { BlockSpec, Family, GenerateBody, GenreFamily, Job, JobResult, Preset } from "../types";
 import CircleOfFifths from "./CircleOfFifths";
 import PickerField from "./PickerField";
+import GenreWheel from "./GenreWheel";
 
 const SCALES = [
   "major", "minor", "dorian", "phrygian", "lydian", "mixolydian", "locrian",
@@ -34,6 +35,8 @@ export default function GenerateScreen({
   onSpecConsumed?: () => void;
 }) {
   const [presets, setPresets] = useState<Preset[]>([]);
+  const [genreFamilies, setGenreFamilies] = useState<GenreFamily[]>([]);   // genre wheel catalog
+  const [showGenre, setShowGenre] = useState(false);
   const [families, setFamilies] = useState<Family[]>([]);
   const [masters, setMasters] = useState<string[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -79,19 +82,44 @@ export default function GenerateScreen({
   const preset = useMemo(() => presets.find((p) => p.id === presetId), [presets, presetId]);
   const specApplied = useRef(false);
 
+  // The current genre's display name + family colour (for the wheel trigger).
+  const curGenre = useMemo(() => {
+    for (const f of genreFamilies) {
+      for (const g of f.genres) {
+        if (g.id === presetId) return { name: g.name, color: f.color, family: f.family };
+      }
+    }
+    return { name: preset?.name || presetId || "—", color: "#7c8aa5", family: "" };
+  }, [genreFamilies, presetId, preset]);
+
+  // Per-section "feel" options (the lighter section presets), grouped by family
+  // and de-duplicated — used by the per-section preset picker.
+  const sectionFeels = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: { id: string; label: string; group: string }[] = [];
+    for (const f of genreFamilies) {
+      for (const g of f.genres) {
+        if (seen.has(g.section)) continue;
+        seen.add(g.section);
+        opts.push({ id: g.section, label: g.name, group: f.family });
+      }
+    }
+    return opts;
+  }, [genreFamilies]);
+
   // Load presets/instruments/masters. If a block was opened via "Edit in
   // Generate", apply its exact spec here — synchronously, with the freshly
   // loaded presets/families — so the default-preset load can't clobber it.
   useEffect(() => {
     (async () => {
       try {
-        const [p, fRaw, m] = await Promise.all([
-          api.getPresets(), api.getInstruments(), api.getMasterPresets(),
+        const [p, fRaw, m, gen] = await Promise.all([
+          api.getPresets(), api.getInstruments(), api.getMasterPresets(), api.getGenres(),
         ]);
         // Generation is instrumental — vocals are added later in Compose
         // (write lyrics → compose melody), so hide the vocal family here.
         const f = fRaw.filter((fam) => fam.family !== "vocal");
-        setPresets(p); setFamilies(f); setMasters(m);
+        setPresets(p); setFamilies(f); setMasters(m); setGenreFamilies(gen.families);
         if (initialSpec && !specApplied.current) {
           specApplied.current = true;
           applySpec(initialSpec, p, f);
@@ -335,10 +363,19 @@ export default function GenerateScreen({
       </div>
 
       <div className="card">
-        <h2>Preset</h2>
-        <PickerField value={presetId} label="Preset" placeholder="Pick a preset" icon="🎛" searchable
-          options={presets.map((p) => ({ id: p.id, label: p.name }))}
-          onChange={(id) => { const p = presets.find((x) => x.id === id); if (p) applyPreset(p); }} />
+        <h2>Genre</h2>
+        <button type="button" className="genre-pick" onClick={() => setShowGenre(true)}
+          title="Pick a genre on the wheel">
+          <span className="genre-dot" style={{ background: curGenre.color }} />
+          <span className="genre-name">{curGenre.name}</span>
+          {curGenre.family && <span className="genre-fam">{curGenre.family}</span>}
+          <span className="pf-caret">▾</span>
+        </button>
+        {showGenre && genreFamilies.length > 0 && (
+          <GenreWheel families={genreFamilies} value={presetId}
+            onChange={(id) => { const p = presets.find((x) => x.id === id); if (p) applyPreset(p); }}
+            onClose={() => setShowGenre(false)} />
+        )}
       </div>
 
       <div className="card">
@@ -386,10 +423,9 @@ export default function GenerateScreen({
                   {!s.native && <span className="dot">+</span>}
                 </button>
                 {on && (
-                  <PickerField value={cur} label={`${SECTION_LABELS[s.role] || s.role} preset`}
+                  <PickerField value={cur} label={`${SECTION_LABELS[s.role] || s.role} feel`}
                     icon="🎚" fullWidth={false} className="section-preset" searchable
-                    options={[{ id: "", label: `Song default (${preset?.name || "—"})` },
-                      ...presets.map((p) => ({ id: p.id, label: p.name }))]}
+                    options={[{ id: "", label: `Song default (${curGenre.name})` }, ...sectionFeels]}
                     onChange={(id) => setSectionPresets((prev) => {
                       const n = { ...prev };
                       if (id) n[s.role] = id; else delete n[s.role];
