@@ -383,7 +383,7 @@ def produce_block(name: str, req: ProduceBlockRequest) -> dict:
     try:
         return service.produce_block(
             name, mute=req.mute, regenerate=req.regenerate,
-            master_preset=req.master_preset, save_as=req.save_as)
+            master_preset=req.master_preset, track_mix=req.track_mix, save_as=req.save_as)
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc))
     except ValueError as exc:

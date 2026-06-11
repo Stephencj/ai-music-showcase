@@ -114,10 +114,14 @@ class EditBlockRequest(BaseModel):
 
 
 class ProduceBlockRequest(BaseModel):
-    """Producer-role move: arrange (mute/regenerate) + re-master a block."""
+    """Producer-role move: arrange (mute/regenerate) + mix + master a block.
+    ``track_mix`` is ``{track_name: {mute, gain_db, pan, eq:{low_db,mid_db,
+    high_db}, comp:{threshold_db,ratio}, fx:{reverb,delay,chorus,distortion}}}``,
+    each setting relative to the family baseline."""
     mute: list[str] = Field(default_factory=list)
     regenerate: list[str] = Field(default_factory=list)
     master_preset: str = "default"                         # default|loud|cinematic|transparent
+    track_mix: dict[str, Any] = Field(default_factory=dict)
     save_as: Optional[str] = None
 
 

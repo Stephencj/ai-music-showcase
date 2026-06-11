@@ -14,6 +14,8 @@ from typing import Optional
 
 import numpy as np
 
+import pedalboard as pdb
+
 from .effects import (
     EffectChainLibrary,
     apply_chain,
@@ -22,6 +24,36 @@ from .effects import (
 from .synth import RenderedStems, TrackStem
 
 logger = logging.getLogger(__name__)
+
+
+def _track_board(s: dict) -> "pdb.Pedalboard":
+    """Build a per-track adjustment chain (EQ → compressor → FX) from a settings
+    dict. Everything is RELATIVE to the family baseline: zeros/off = no change,
+    so a producer just dials in adjustments. Signal order is conventional
+    (tone/dynamics before the time-based effects)."""
+    fx: list = []
+    eq = s.get("eq") or {}
+    if eq.get("low_db"):
+        fx.append(pdb.LowShelfFilter(cutoff_frequency_hz=120.0, gain_db=float(eq["low_db"])))
+    if eq.get("mid_db"):
+        fx.append(pdb.PeakFilter(cutoff_frequency_hz=1000.0, gain_db=float(eq["mid_db"]), q=0.8))
+    if eq.get("high_db"):
+        fx.append(pdb.HighShelfFilter(cutoff_frequency_hz=4500.0, gain_db=float(eq["high_db"])))
+    comp = s.get("comp") or {}
+    if float(comp.get("ratio", 1) or 1) > 1.0:
+        fx.append(pdb.Compressor(threshold_db=float(comp.get("threshold_db", -18.0)),
+                                 ratio=float(comp["ratio"]), attack_ms=12.0, release_ms=140.0))
+    fxs = s.get("fx") or {}
+    if fxs.get("distortion"):
+        fx.append(pdb.Distortion(drive_db=float(fxs["distortion"]) * 26.0))
+    if fxs.get("chorus"):
+        fx.append(pdb.Chorus(rate_hz=0.8, depth=0.25, feedback=0.0, mix=float(fxs["chorus"]) * 0.5))
+    if fxs.get("delay"):
+        fx.append(pdb.Delay(delay_seconds=0.25, feedback=0.28, mix=float(fxs["delay"]) * 0.45))
+    if fxs.get("reverb"):
+        wet = float(fxs["reverb"]) * 0.42
+        fx.append(pdb.Reverb(room_size=0.55, damping=0.5, wet_level=wet, dry_level=1.0 - wet))
+    return pdb.Pedalboard(fx)
 
 
 # Per-family mix defaults. ``pan`` ∈ [-1, 1] (-1=L, +1=R). ``gain_db`` is
@@ -80,12 +112,16 @@ class Mixer:
         *,
         family_mix: Optional[dict[str, MixDefaults]] = None,
         sidechain_kick_into: tuple[str, ...] = (),
+        track_mix: Optional[dict[str, dict]] = None,
     ):
         self.library = library or EffectChainLibrary()
         self.family_mix = family_mix or _FAMILY_MIX
         # Families ducked by the kick's envelope before they reach the
         # master bus. Empty tuple = no ducking. Driven by MixProfile.
         self.sidechain_kick_into = tuple(sidechain_kick_into)
+        # Per-TRACK producer adjustments (mute / fader / pan / EQ / comp / FX),
+        # keyed by track name, layered on top of the family baseline.
+        self.track_mix = track_mix or {}
 
     # -- single-stem path --------------------------------------------------
 
@@ -108,6 +144,24 @@ class Mixer:
         widen = getattr(defaults, "stereo_widen", 0.0)
         if widen > 0:
             stereo = _apply_haas_widen(stereo, stem.sample_rate, widen)
+
+        # Per-track producer adjustments, layered on the family baseline.
+        ts = self.track_mix.get(stem.name)
+        if ts:
+            if ts.get("mute"):
+                stereo = np.zeros_like(stereo)
+            else:
+                board = _track_board(ts)
+                if len(board):
+                    stereo = apply_chain(board, stereo, stem.sample_rate)
+                    if stereo.ndim == 1:
+                        stereo = _mono_to_stereo(stereo)
+                    elif stereo.shape[0] != 2 and stereo.shape[-1] == 2:
+                        stereo = stereo.T
+                if ts.get("gain_db"):
+                    stereo = _apply_gain_db(stereo, float(ts["gain_db"]))
+                if ts.get("pan") is not None:
+                    stereo = _apply_pan(stereo, float(ts["pan"]))
 
         return ProcessedStem(
             name=stem.name,

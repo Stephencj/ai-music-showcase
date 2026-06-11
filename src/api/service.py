@@ -381,20 +381,21 @@ def edit_block(name: str, *, mute=None, regenerate=None, save_as=None) -> str:
 
 
 def produce_block(name: str, *, mute=None, regenerate=None,
-                  master_preset: str = "default", save_as=None) -> dict:
-    """The 'producer' move: ARRANGE a block (mute / regenerate tracks) and
-    RE-MASTER it with a mastering chain (default/loud/cinematic/transparent),
-    then re-render its preview so the change is audible. Returns the resulting
-    block name + a production score (rewards a balanced arrangement and an
-    intentional master). Reuses edit_block for the arrange step."""
+                  master_preset: str = "default", track_mix=None, save_as=None) -> dict:
+    """The 'producer' move: ARRANGE a block (regenerate tracks), MIX it with
+    per-track controls (``track_mix``: mute / fader / pan / EQ / comp / FX) and
+    RE-MASTER it (default/loud/cinematic/transparent), then re-render its preview
+    so the change is audible. Returns the resulting block name + a production
+    score (rewards a balanced arrangement, intentional master, and using the
+    mixing tools). Reuses edit_block + render_to_audio's per-track mix layer."""
     from src.daw_integration.generic import blocks as block_store
 
-    # Arrange (mute/regenerate) — overwrites in place unless save_as given.
+    # Arrange (hard mute / regenerate) — overwrites in place unless save_as.
     target = edit_block(name, mute=mute, regenerate=regenerate, save_as=save_as)
 
-    # Re-master: re-render the (edited) MIDI with the chosen mastering chain and
-    # overwrite the block's preview audio.
-    if master_preset and master_preset != "default":
+    # Mix + master: re-render the (edited) MIDI through the per-track mix layer
+    # and the chosen mastering chain, overwriting the block's preview audio.
+    if (master_preset and master_preset != "default") or track_mix:
         try:
             import shutil
             import tempfile
@@ -402,12 +403,13 @@ def produce_block(name: str, *, mute=None, regenerate=None,
             midi = block_store._midi_path(target)
             with tempfile.TemporaryDirectory() as td:
                 r = render_to_audio(midi=midi, output_dir=Path(td) / "r",
-                                    with_stems=False, master_preset=master_preset)
+                                    with_stems=False, master_preset=master_preset,
+                                    track_mix=track_mix or None)
                 wav = block_store._wav_path(target)
                 shutil.move(str(r.mix_path), str(wav))
                 block_store.write_preview_mp3(wav, block_store._preview_path(target))
-        except Exception as exc:  # noqa: BLE001 — fall back to the default master
-            logger.warning("re-master (%s) failed for %s: %s", master_preset, target, exc)
+        except Exception as exc:  # noqa: BLE001 — fall back to the saved render
+            logger.warning("mix/master failed for %s: %s", target, exc)
 
     # Production score: balance + intentionality (a teaching-flavoured heuristic).
     pm, _meta = block_store.load_block(target)
@@ -416,12 +418,14 @@ def produce_block(name: str, *, mute=None, regenerate=None,
     tracks = len(names)
     score = 1.0
     if master_preset and master_preset != "default":
-        score += 0.15                                   # chose a master, didn't leave it raw
+        score += 0.12                                   # chose a master, didn't leave it raw
+    if track_mix:
+        score += 0.13                                   # actually mixed it
     if has("drum", "perc") and has("bass") and tracks >= 3:
         score += 0.15                                   # a balanced arrangement
     if not has("drum", "perc") or not has("bass") or tracks < 2:
         score -= 0.35                                   # gutted the mix
-    score = max(0.6, min(1.6, round(score, 2)))
+    score = max(0.6, min(1.7, round(score, 2)))
     return {"name": target, "production": score, "master_preset": master_preset, "tracks": names}
 
 

@@ -162,7 +162,8 @@ export const getScoreData = (name: string) =>
 export const getExplain = (name: string) =>
   jget<import("./types").ExplainData>(`/api/blocks/${encodeURIComponent(name)}/explain`);
 export const produceBlock = (name: string, body: {
-  mute?: string[]; regenerate?: string[]; master_preset?: string; save_as?: string | null;
+  mute?: string[]; regenerate?: string[]; master_preset?: string;
+  track_mix?: Record<string, unknown>; save_as?: string | null;
 }) => jpost<{ name: string; production: number; master_preset: string; tracks: string[] }>(
   `/api/blocks/${encodeURIComponent(name)}/produce`, body);
 

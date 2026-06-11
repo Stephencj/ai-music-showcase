@@ -116,6 +116,7 @@ def render_to_audio(
     mix_filename: str = "mix.wav",
     mix_profile: Optional[str] = None,
     style_name: Optional[str] = None,
+    track_mix: Optional[dict] = None,
 ) -> RenderResult:
     """Render MIDI to a finished mixed WAV (and optional per-track stems).
 
@@ -160,6 +161,7 @@ def render_to_audio(
         library=library,
         family_mix=family_mix,
         sidechain_kick_into=profile.sidechain_kick_into,
+        track_mix=track_mix,
     )
     mix, processed = mixer.mix(rendered, master_preset=eff_master)
 
