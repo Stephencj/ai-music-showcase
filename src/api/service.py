@@ -153,7 +153,10 @@ def run_generation(req, progress, job_id: str) -> dict:
              **({"preset_id": s["preset_id"]} if s.get("preset_id") else {}),
              **({"knobs": s["knobs"]} if s.get("knobs") else {}),
              **({"energy": s["energy"]} if s.get("energy") is not None else {}),
-             **({"feature_lead": True} if s.get("feature_lead") else {})}
+             **({"feature_lead": True} if s.get("feature_lead") else {}),
+             **({"key": s["key"]} if s.get("key") else {}),
+             **({"scale": s["scale"]} if s.get("scale") else {}),
+             **({"tempo": s["tempo"]} if s.get("tempo") is not None else {})}
             for s in secs
         ],
         "progression": out.get("progression") or [],

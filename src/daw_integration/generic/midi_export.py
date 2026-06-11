@@ -4553,6 +4553,12 @@ class MidiExporter:
         print(f"MIDI saved: {path}")
         return path
 
+    @property
+    def quarters_per_bar(self) -> float:
+        """Bar length in quarter notes (tempo-independent) — 4 for 4/4, 3 for
+        6/8. Lets callers convert a bar index to a quarter-note position."""
+        return self.bar_duration / self.beat_duration
+
     def synthesize(self, sample_rate: int = 44100) -> tuple[np.ndarray, int]:
         """Render MIDI to audio using pretty_midi's built-in FluidSynth.
 
@@ -4598,3 +4604,53 @@ class MidiExporter:
         if not self.tracks:
             return 0.0
         return max(n.end for t in self.tracks for n in t.notes) if any(t.notes for t in self.tracks) else 0.0
+
+
+def inject_tempo_changes(path: "str | Path", changes: list[tuple[float, float]]) -> None:
+    """Write a TEMPO MAP into an existing MIDI file (in place).
+
+    ``changes`` is ``[(quarter_position, bpm), ...]`` — a tempo of ``bpm``
+    starting at ``quarter_position`` quarter-notes from the song start. Because
+    a uniform-tempo render places every bar at a fixed tick, inserting tempo
+    events here re-times each section WITHOUT moving any notes, and every
+    consumer that honours the MIDI tempo map (FluidSynth render, music21 score,
+    a DAW) plays the per-section tempos correctly. No-op for <2 distinct tempos.
+    """
+    import mido
+
+    if len({round(b, 4) for _, b in changes}) < 2:
+        return
+    mid = mido.MidiFile(str(path))
+    tpq = mid.ticks_per_beat
+    track = mid.tracks[0]
+
+    abs_events: list[tuple[int, object]] = []
+    end_tick = 0
+    t = 0
+    for msg in track:
+        t += msg.time
+        if msg.is_meta and msg.type == "end_of_track":
+            end_tick = max(end_tick, t)
+            continue
+        if msg.type == "set_tempo":
+            continue                     # drop the uniform tempo; we re-author it
+        abs_events.append((t, msg))
+        end_tick = max(end_tick, t)
+    for qpos, bpm in changes:
+        tick = int(round(float(qpos) * tpq))
+        abs_events.append((tick, mido.MetaMessage("set_tempo", tempo=mido.bpm2tempo(float(bpm)))))
+        end_tick = max(end_tick, tick)
+
+    # Stable sort by tick; a set_tempo sorts before other events at the same
+    # tick so the new section's tempo is in force from its first note.
+    abs_events.sort(key=lambda x: (x[0], 0 if x[1].type == "set_tempo" else 1))
+
+    out = mido.MidiTrack()
+    prev = 0
+    for tick, msg in abs_events:
+        msg.time = max(0, tick - prev)
+        prev = tick
+        out.append(msg)
+    out.append(mido.MetaMessage("end_of_track", time=max(0, end_tick - prev)))
+    mid.tracks[0] = out
+    mid.save(str(path))

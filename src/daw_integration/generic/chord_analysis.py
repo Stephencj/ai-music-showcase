@@ -145,16 +145,50 @@ def _detect_chord(
     return best
 
 
-def _chords_from_progression(stored: list, bars: int, bar_seconds: float,
-                             tonic_pc: int) -> list[dict]:
+def _bar_time_fn(spec: dict, base_tempo: float, bar_in_quarters: float,
+                 bars: int):
+    """A ``bar → start-second`` map that honours a PER-SECTION tempo map
+    (a half-time bridge, a double-time outro). Returns ``(bar_time, has_map)``;
+    ``has_map`` is True when sections carry differing tempos. Single-tempo
+    blocks get the usual uniform mapping."""
+    n = max(int(bars), 1)
+    tempos = [float(base_tempo)] * n
+    has_map = False
+    for s in (spec.get("sections") or []):
+        st = s.get("tempo")
+        if not st:
+            continue
+        for b in range(int(s.get("start_bar") or 0), int(s.get("end_bar") or 0) + 1):
+            if 0 <= b < n and abs(float(st) - base_tempo) > 1e-6:
+                tempos[b] = float(st)
+                has_map = True
+    starts = [0.0] * (n + 1)
+    for b in range(n):
+        starts[b + 1] = starts[b] + bar_in_quarters * (60.0 / tempos[b])
+
+    def bar_time(bar: float) -> float:
+        b = int(bar)
+        frac = float(bar) - b
+        if b < 0:
+            return 0.0
+        if b >= n:
+            tail = bar_in_quarters * (60.0 / tempos[-1])
+            return starts[n] + (b - n + frac) * tail
+        within = bar_in_quarters * (60.0 / tempos[b])
+        return starts[b] + frac * within
+
+    return bar_time, has_map
+
+
+def _chords_from_progression(stored: list, bars: int, bar_time, tonic_pc: int) -> list[dict]:
     """Build per-bar chord entries from the composer's stored realized
     progression. Each bar shows the chord active at its downbeat (sub-bar
     changes collapse to one chord per bar, like the detection path)."""
     per_bar: list[dict] = []
     for bar in range(bars):
-        t0 = bar * bar_seconds
+        t0 = bar_time(bar)
         entry = {"bar": bar, "start_time": round(t0, 4),
-                 "end_time": round(t0 + bar_seconds, 4)}
+                 "end_time": round(bar_time(bar + 1), 4)}
         chord = None
         for c in stored:
             if float(c["start_bar"]) <= bar + 1e-6 < float(c["end_bar"]):
@@ -193,6 +227,10 @@ def extract_score_data(pm, meta: dict) -> dict:
     mi = meter_info((ts[0], ts[1]))
     quarter = 60.0 / tempo
     bar_seconds = mi["bar_in_quarters"] * quarter
+    # Per-section tempo map (full-flexibility songs): bar→time follows each
+    # section's own tempo so the chart cursor stays locked to the audio.
+    bar_time, _has_tempo_map = _bar_time_fn(
+        spec, tempo, mi["bar_in_quarters"], int(bars) or 1)
 
     # Identify the lead/melody so we don't fold it into harmony detection.
     try:
@@ -209,7 +247,7 @@ def extract_score_data(pm, meta: dict) -> dict:
     if not harmony_insts:
         harmony_insts = [inst for inst in pm.instruments if not inst.is_drum]
 
-    if bar_seconds > 0:
+    if bar_seconds > 0 and not _has_tempo_map:
         end = max((n.end for inst in pm.instruments for n in inst.notes),
                   default=0.0)
         content_bars = round(end / bar_seconds)
@@ -227,12 +265,12 @@ def extract_score_data(pm, meta: dict) -> dict:
     # as [{root_pc, quality, start_bar, end_bar}, …] covering the song's bars.
     stored = spec.get("progression")
     if stored:
-        per_bar = _chords_from_progression(stored, bars, bar_seconds, tonic)
+        per_bar = _chords_from_progression(stored, bars, bar_time, tonic)
     else:
         per_bar = []
         for bar in range(bars):
-            t0 = bar * bar_seconds
-            t1 = t0 + bar_seconds
+            t0 = bar_time(bar)
+            t1 = bar_time(bar + 1)
             chroma = [0.0] * 12
             lowest_pitch = None
             lowest_w = 0.0
@@ -278,8 +316,8 @@ def extract_score_data(pm, meta: dict) -> dict:
             "label": s.get("label") or s.get("role") or "Section",
             "role": s.get("role") or "verse",
             "start_bar": sb, "end_bar": eb,
-            "start_time": round(sb * bar_seconds, 4),
-            "end_time": round((eb + 1) * bar_seconds, 4),
+            "start_time": round(bar_time(sb), 4),
+            "end_time": round(bar_time(eb + 1), 4),
         })
 
     return {

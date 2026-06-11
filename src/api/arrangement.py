@@ -110,6 +110,16 @@ def _attach_overrides(secs: list[dict],
                 pass
         if o.get("feature_lead"):
             s["feature_lead"] = True
+        # Per-section key / mode / tempo (full flexibility).
+        if o.get("key"):
+            s["key"] = str(o["key"])
+        if o.get("scale"):
+            s["scale"] = str(o["scale"])
+        if o.get("tempo") is not None:
+            try:
+                s["tempo"] = max(40.0, min(260.0, float(o["tempo"])))
+            except (TypeError, ValueError):
+                pass
     return secs
 
 

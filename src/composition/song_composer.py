@@ -32,6 +32,7 @@ from src.composition.voicing_layer import (
 )
 from src.daw_integration.generic.midi_export import (
     MidiExporter, roman_to_semitone_offset, NOTE_NAMES, FLAT_TO_SHARP,
+    inject_tempo_changes,
 )
 from src.daw_integration.generic.styles import STYLES
 
@@ -455,13 +456,19 @@ def compose_song(
         else:
             sec_progression = progression
 
-        # MODE follows the section's preset (modal interchange over the shared
-        # tonic): a funk verse plays in dorian, a hip-hop chorus in aeolian,
-        # even inside a major-key pop song. Realizing a section's progression,
-        # melody and voicings in its OWN mode is what keeps them in tune with
-        # each other — otherwise a minor-mode chorus's chords land on ♮6/♮7 and
-        # the melody's ♮3 clashes with the chord's ♭3.
-        sec_scale = sec_preset.scale if (sec_genre != genre and sec_preset.scale) else eff_scale
+        # Per-section KEY and MODE. Explicit section overrides win; otherwise
+        # the MODE follows the section's preset (modal interchange) and the KEY
+        # stays the song key. Realizing a section's progression, melody and
+        # voicings in its OWN key+mode is what keeps them in tune with each
+        # other (a minor-mode section over a major tonic clashes ♮3 vs ♭3).
+        sec_key = section.get("key") or eff_key
+        sec_scale = (section.get("scale")
+                     or (sec_preset.scale if (sec_genre != genre and sec_preset.scale) else None)
+                     or eff_scale)
+        try:
+            sec_tonic_pc = NOTE_NAMES.index(FLAT_TO_SHARP.get(sec_key, sec_key)) % 12
+        except ValueError:
+            sec_tonic_pc = _tonic_pc
 
         pacing_rng = np.random.default_rng(
             _sub_seed(seed, label, "pacing"),
@@ -472,7 +479,7 @@ def compose_song(
                              reharm_prob=sec_knobs["reharm_prob"])
         pacing_picks[label] = pacing
         paced_progression = apply_pacing(
-            sec_progression, pacing, eff_key, sec_scale,
+            sec_progression, pacing, sec_key, sec_scale,
         )
         section_prog = _slice_progression(
             paced_progression, eff_bars, s, e,
@@ -491,7 +498,7 @@ def compose_song(
         for _sym, _dur in section_prog:
             _off, _qual = roman_to_semitone_offset(_sym, sec_scale)
             realized_progression.append({
-                "root_pc": (_tonic_pc + _off) % 12,
+                "root_pc": (sec_tonic_pc + _off) % 12,
                 "quality": _qual,
                 "symbol": _sym,
                 "start_bar": round(s + _cur, 4),
@@ -556,7 +563,7 @@ def compose_song(
                 start_bar=s, end_bar=e,
                 section_role=role, section_label=label,
                 instrument=instrument_token,
-                key=eff_key, scale=sec_scale,
+                key=sec_key, scale=sec_scale,
                 tempo=eff_tempo, genre=sec_genre,
                 time_signature=preset.time_signature,
                 progression=section_prog,
@@ -642,6 +649,27 @@ def compose_song(
     midi_path = output_dir / output_midi
     midi.save(midi_path)
 
+    # Per-section TEMPO map: a section can run at its own tempo (a half-time
+    # bridge, a double-time outro). The render placed every bar at a fixed
+    # tick, so we author a tempo map over the file — no notes move, and the
+    # FluidSynth render + the score both honour it. Uniform-tempo songs are
+    # untouched (the injector is a no-op for <2 distinct tempos).
+    qpb = midi.quarters_per_bar
+    section_tempos: list[dict] = []
+    tempo_changes: list[tuple[float, float]] = []
+    prev_t = None
+    for sec in sorted(sections, key=lambda x: int(x["start_bar"])):
+        st = float(sec.get("tempo") or eff_tempo)
+        section_tempos.append({"start_bar": int(sec["start_bar"]),
+                               "end_bar": int(sec["end_bar"]), "tempo": st})
+        if prev_t is None or abs(st - prev_t) > 1e-6:
+            tempo_changes.append((int(sec["start_bar"]) * qpb, st))
+            prev_t = st
+    try:
+        inject_tempo_changes(midi_path, tempo_changes)
+    except Exception:  # noqa: BLE001 — tempo map is an enhancement, not critical
+        logger.exception("compose_song: tempo-map injection failed")
+
     wav_path: Optional[Path] = output_dir / output_wav
     if not skip_audio:
         try:
@@ -692,4 +720,5 @@ def compose_song(
         "seed": int(seed),
         "bars": eff_bars,
         "progression": realized_progression,
+        "section_tempos": section_tempos,
     }
