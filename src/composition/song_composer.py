@@ -25,7 +25,7 @@ import soundfile as sf
 from src.composition import BANK, role_for_label
 from src.composition.harmony import harmony_profile
 from src.composition.knobs import resolve_knobs
-from src.composition.pacing import apply_pacing, pick_pacing
+from src.composition.pacing import apply_pacing, pick_pacing, modal_color
 from src.composition.techniques import TechniqueContext, apply_technique
 from src.composition.voicing_layer import (
     assign_layered_voicings, effective_voicing,
@@ -455,6 +455,14 @@ def compose_song(
         else:
             sec_progression = progression
 
+        # MODE follows the section's preset (modal interchange over the shared
+        # tonic): a funk verse plays in dorian, a hip-hop chorus in aeolian,
+        # even inside a major-key pop song. Realizing a section's progression,
+        # melody and voicings in its OWN mode is what keeps them in tune with
+        # each other — otherwise a minor-mode chorus's chords land on ♮6/♮7 and
+        # the melody's ♮3 clashes with the chord's ♭3.
+        sec_scale = sec_preset.scale if (sec_genre != genre and sec_preset.scale) else eff_scale
+
         pacing_rng = np.random.default_rng(
             _sub_seed(seed, label, "pacing"),
         )
@@ -464,17 +472,24 @@ def compose_song(
                              reharm_prob=sec_knobs["reharm_prob"])
         pacing_picks[label] = pacing
         paced_progression = apply_pacing(
-            sec_progression, pacing, eff_key, eff_scale,
+            sec_progression, pacing, eff_key, sec_scale,
         )
         section_prog = _slice_progression(
             paced_progression, eff_bars, s, e,
         )
+        # Lean the progression into its mode (modal colour chord + soften the
+        # functional dominant toward the modal v). No-op for major/blues forms.
+        if "blues" not in sec_genre:
+            section_prog = modal_color(
+                section_prog, sec_scale,
+                np.random.default_rng(_sub_seed(seed, label, "modal")),
+            )
 
         # Resolve this section's realized chords to absolute (root_pc, quality)
         # with absolute bar spans (same symbol→chord map the renderer uses).
         _cur = 0.0
         for _sym, _dur in section_prog:
-            _off, _qual = roman_to_semitone_offset(_sym, eff_scale)
+            _off, _qual = roman_to_semitone_offset(_sym, sec_scale)
             realized_progression.append({
                 "root_pc": (_tonic_pc + _off) % 12,
                 "quality": _qual,
@@ -541,7 +556,7 @@ def compose_song(
                 start_bar=s, end_bar=e,
                 section_role=role, section_label=label,
                 instrument=instrument_token,
-                key=eff_key, scale=eff_scale,
+                key=eff_key, scale=sec_scale,
                 tempo=eff_tempo, genre=sec_genre,
                 time_signature=preset.time_signature,
                 progression=section_prog,

@@ -351,6 +351,70 @@ _register(PacingStrategy(
 
 
 # ---------------------------------------------------------------------------
+# Modal colour — lean a progression into its MODE
+# ---------------------------------------------------------------------------
+# Each mode's signature ("colour") chord, expressed as the uppercase Roman on
+# the characteristic scale degree. Romans realize against the mode's OWN scale
+# (roman_to_semitone_offset), so "VII" in mixolydian already means the bVII
+# major, "II" in phrygian the bII, "II" in lydian the #4-derived major II, etc.
+# ``soften`` = this mode has a minor 5th, so a functional dominant (V) is
+# de-emphasised toward the modal minor v (no leading-tone cadence).
+_MODAL_SIGNATURE: dict[str, dict] = {
+    "dorian":     {"colour": "IV",  "soften": True},   # bright major IV
+    "mixolydian": {"colour": "VII", "soften": True},   # bVII
+    "phrygian":   {"colour": "II",  "soften": True},   # bII (Neapolitan colour)
+    "lydian":     {"colour": "II",  "soften": False},  # major II (raised 4)
+    "locrian":    {"colour": "II",  "soften": True},   # bII
+    "aeolian":    {"colour": "VI",  "soften": True},   # bVI
+}
+
+
+def _mode_key(scale: str | None) -> str | None:
+    s = (scale or "").lower()
+    if s in _MODAL_SIGNATURE:
+        return s
+    if s in ("minor", "natural_minor", "aeolian"):
+        return "aeolian"
+    return None
+
+
+def modal_color(prog: list, scale: str, rng, strength: float = 0.6) -> list:
+    """Lean a progression into its mode: surface the mode's signature colour
+    chord and (for modes with a minor 5th) soften a functional V toward the
+    modal v, so a modal section doesn't fall back on the generic major-key
+    dominant cadence. Tasteful and deterministic per ``rng``; a no-op for
+    major / harmonic-minor (non-modal) scales and when ``strength <= 0``.
+    """
+    mode = _mode_key(scale)
+    if mode is None or strength <= 0:
+        return list(prog)
+    sig = _MODAL_SIGNATURE[mode]
+    colour, soften = sig["colour"], sig["soften"]
+    items = _normalize_progression(prog)
+    out: list[tuple[str, float]] = []
+    has_colour = any(_strip_suffix(s) == colour for s, _ in items)
+
+    for s, dur in items:
+        stem = _strip_suffix(s)
+        # Soften a functional dominant into the modal minor v (keep any 7th).
+        if soften and stem == "V" and rng.random() < strength:
+            seventh = any(c in s[len(stem):] for c in ("7", "9"))
+            out.append(("v7" if seventh else "v", dur))
+        else:
+            out.append((s, dur))
+
+    # Guarantee the colour chord lands somewhere: if absent, recolour a later
+    # non-tonic chord (so the mode is actually heard, not just implied).
+    if not has_colour and rng.random() < strength:
+        cands = [i for i, (s, _) in enumerate(out)
+                 if i > 0 and not _is_tonic(s)]
+        if cands:
+            j = cands[int(rng.integers(0, len(cands)))]
+            out[j] = (colour, out[j][1])
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Public helpers
 # ---------------------------------------------------------------------------
 
