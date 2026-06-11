@@ -959,7 +959,12 @@ audio { width: 100%; margin: 8px 0 12px; }
 .playalong { display: flex; flex-direction: column; gap: 10px; }
 .pa-hud { display: flex; align-items: baseline; gap: 16px; }
 .pa-score { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.pa-combo { font-size: 14px; font-weight: 700; color: var(--accent-2); flex: 1 1 auto; }
+.pa-combo { font-size: 14px; font-weight: 700; color: var(--accent-2); }
+.pa-modes { flex: 1 1 auto; justify-content: center; max-width: 220px; }
+.pa-modes button { font-size: 12px; padding: 5px 10px; }
+.pa-marker { position: absolute; width: 14px; height: 10px; border-radius: 3px; z-index: 3;
+  background: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.8); transition: top 0.06s linear; }
+.pa-err { color: var(--danger); }
 .pa-acc { font-size: 15px; font-weight: 700; }
 .pa-grade { font-size: 18px; font-weight: 900; margin-left: 4px; }
 .pa-grade.gS { color: #fde047; } .pa-grade.gA { color: #4ade80; }

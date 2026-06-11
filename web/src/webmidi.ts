@@ -6,8 +6,10 @@ export interface MidiOut { id: string; name: string }
 
 // Minimal shapes (Web MIDI types aren't in every TS lib target).
 type RawOutput = { id: string; name: string | null; send: (data: number[]) => void };
+type RawInput = { id: string; name: string | null; onmidimessage: ((e: { data: Uint8Array }) => void) | null };
 type Access = {
   outputs: Map<string, RawOutput>;
+  inputs: Map<string, RawInput>;
   onstatechange: ((e: unknown) => void) | null;
 };
 
@@ -32,6 +34,24 @@ export async function initMidi(): Promise<MidiOut[]> {
 export function listOutputs(): MidiOut[] {
   if (!access) return [];
   return Array.from(access.outputs.values()).map((o) => ({ id: o.id, name: o.name || o.id }));
+}
+
+export function listInputs(): MidiOut[] {
+  if (!access) return [];
+  return Array.from(access.inputs.values()).map((i) => ({ id: i.id, name: i.name || i.id }));
+}
+
+// Subscribe to note-on events (velocity > 0) from ALL connected inputs. Returns
+// an unsubscribe fn. Used by the play-along to accept a real instrument.
+export function onMidiNoteOn(cb: (pitch: number, velocity: number) => void): () => void {
+  if (!access) return () => {};
+  const handler = (e: { data: Uint8Array }) => {
+    const [status, pitch, vel] = e.data;
+    if ((status & 0xf0) === 0x90 && vel > 0) cb(pitch, vel);
+  };
+  const inputs = Array.from(access.inputs.values());
+  for (const inp of inputs) inp.onmidimessage = handler;
+  return () => { for (const inp of inputs) inp.onmidimessage = null; };
 }
 
 export function onStateChange(cb: () => void) {
