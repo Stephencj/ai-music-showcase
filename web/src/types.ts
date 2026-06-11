@@ -13,6 +13,7 @@ export interface Preset {
   default_bars: number;
   default_instruments: string[];
   sections: SectionAvail[];
+  progression?: string[];   // genre's chord loop as roman numerals (core unit)
 }
 
 // Consolidated genre catalog for the radial genre wheel.

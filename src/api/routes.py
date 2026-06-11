@@ -53,6 +53,19 @@ router = APIRouter(prefix="/api")
 # --------------------------------------------------------------------------
 # Catalog
 # --------------------------------------------------------------------------
+def _core_progression(prog, cap: int = 16) -> list[str]:
+    """The genre's chord loop as roman-numeral strings, compressed to its
+    smallest repeating unit (presets store the loop tiled across all bars)."""
+    romans = [c[0] if isinstance(c, (list, tuple)) else c for c in (prog or [])]
+    n = len(romans)
+    if not n:
+        return []
+    for period in range(1, min(cap, n) + 1):
+        if n % period == 0 and all(romans[i] == romans[i % period] for i in range(n)):
+            return romans[:period]
+    return romans[:cap]
+
+
 @router.get("/presets")
 def list_presets() -> list[dict]:
     out = []
@@ -67,6 +80,7 @@ def list_presets() -> list[dict]:
             "default_bars": getattr(p, "default_bars", None),
             "default_instruments": list(getattr(p, "default_instruments", []) or []),
             "sections": arrangement.available_sections(key),
+            "progression": _core_progression(getattr(p, "progression", None)),
         })
     out.sort(key=lambda d: d["name"].lower())
     return out

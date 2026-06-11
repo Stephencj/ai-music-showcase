@@ -1129,10 +1129,14 @@ audio { width: 100%; margin: 8px 0 12px; }
   cursor: pointer; font-size: 16px; line-height: 1;
 }
 .sec-adv-btn:hover, .sec-adv-btn.on { border-color: var(--accent); color: var(--text); }
+.sec-adv-wrap { position: relative; flex: 0 0 auto; display: inline-flex; }
 .section-adv {
-  flex: 1 1 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  margin: 2px 0 4px 126px; padding: 8px 10px; border-radius: 8px;
-  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  width: max-content; max-width: 320px;
+  padding: 10px; border-radius: 10px;
+  background: var(--card); border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.5);
 }
 .keypick.sm { padding: 6px 10px; font-size: 12px; width: auto; }
 .sec-adv-tempo { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
@@ -1147,6 +1151,27 @@ audio { width: 100%; margin: 8px 0 12px; }
 }
 .section-badge.key {
   background: rgba(120,170,255,0.14); border-color: rgba(120,170,255,0.4); color: #a8c7ff;
+}
+
+/* Generate-form two-up rows: paired cards sit side by side on desktop and
+   stack on mobile. Cards lose their own vertical margin inside a row (the
+   grid gap spaces them). */
+.gen-row { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; }
+.gen-row > .card { margin: 0; }
+
+/* Genre card: the picked preset's parts + chord loop, shown once loaded. */
+.gen-genre-detail { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.gen-detail-block { display: flex; flex-direction: column; gap: 5px; }
+.gen-detail-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.gen-parts, .gen-prog { display: flex; flex-wrap: wrap; gap: 6px; }
+.gen-part {
+  font-size: 12px; padding: 3px 9px; border-radius: 999px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); color: var(--text);
+}
+.gen-chord {
+  font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 7px;
+  background: rgba(139,92,246,0.16); border: 1px solid rgba(139,92,246,0.4); color: #c4b5fd;
+  font-variant-numeric: tabular-nums;
 }
 
 /* "Describe your song" natural-language box on the Generate tab. */
@@ -1212,6 +1237,9 @@ audio { width: 100%; margin: 8px 0 12px; }
 @media (min-width: 900px) {
   .app { max-width: 1080px; padding: 0 24px calc(104px); }
   .action-bar .inner { max-width: 1080px; }
+
+  /* Generate form: paired cards go side by side. */
+  .gen-row { grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
   .topbar { padding: 16px 6px 14px; }
   .topbar .title { font-size: 20px; }
 

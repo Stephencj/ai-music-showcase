@@ -374,6 +374,7 @@ export default function GenerateScreen({
 
   return (
     <>
+      <div className="gen-row">
       <div className="card describe-card">
         <h2>✍️ Describe your song</h2>
         <div className="meta" style={{ marginBottom: 8 }}>
@@ -415,8 +416,34 @@ export default function GenerateScreen({
             onChange={(id) => { const p = presets.find((x) => x.id === id); if (p) applyPreset(p); }}
             onClose={() => setShowGenre(false)} />
         )}
+        {preset && (
+          <div className="gen-genre-detail">
+            {(preset.sections?.length ?? 0) > 0 && (
+              <div className="gen-detail-block">
+                <div className="gen-detail-label">Parts</div>
+                <div className="gen-parts">
+                  {preset.sections.map((s) => (
+                    <span key={s.role} className="gen-part">{SECTION_LABELS[s.role] || s.role}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(preset.progression?.length ?? 0) > 0 && (
+              <div className="gen-detail-block">
+                <div className="gen-detail-label">Chord progression</div>
+                <div className="gen-prog">
+                  {preset.progression!.map((r, i) => (
+                    <span key={i} className="gen-chord">{r}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       </div>
 
+      <div className="gen-row">
       <div className="card">
         <h2>Song</h2>
         <div className="row">
@@ -445,6 +472,20 @@ export default function GenerateScreen({
       </div>
 
       <div className="card">
+        <h2>Output</h2>
+        <label className="field"><span>Master preset</span>
+          <PickerField value={master} label="Master preset" icon="🎚"
+            options={masters.map((m) => ({ id: m, label: m }))} onChange={setMaster} />
+        </label>
+        <div className="chips">
+          <button type="button" className={"chip" + (withPdf ? " on" : "")} onClick={() => setWithPdf(!withPdf)}>PDF score</button>
+          <button type="button" className={"chip" + (withStems ? " on" : "")} onClick={() => setWithStems(!withStems)}>Stems</button>
+        </div>
+      </div>
+      </div>
+
+      <div className="gen-row">
+      <div className="card">
         <h2>Sections to generate</h2>
         <div className="meta" style={{ marginBottom: 10 }}>
           Each section can use its own preset — mix genres in one song (e.g. a funk verse, a hip-hop chorus).
@@ -455,7 +496,7 @@ export default function GenerateScreen({
             const cur = sectionPresets[s.role] || "";
             return (
               <div key={s.role} className={"section-row" + (on ? "" : " off")}>
-                <button
+                <button type="button"
                   className={"chip" + (on ? " on" : "")}
                   onClick={() => toggle(sections, s.role, setSections)}>
                   {SECTION_LABELS[s.role] || s.role}
@@ -480,11 +521,11 @@ export default function GenerateScreen({
                   </span>
                 ) : null; })()}
                 {on && (
-                  <button className={"sec-adv-btn" + (advRole === s.role ? " on" : "")}
+                  <span className="sec-adv-wrap">
+                  <button type="button" className={"sec-adv-btn" + (advRole === s.role ? " on" : "")}
                     title="Key / mode / tempo for this section"
                     onClick={() => setAdvRole(advRole === s.role ? null : s.role)}>⋯</button>
-                )}
-                {on && advRole === s.role && (
+                  {advRole === s.role && (
                   <div className="section-adv">
                     {(() => { const ki = secKeyInfo(s.role); return (
                       <button type="button" className="keypick sm" onClick={() => setSecKeyRole(s.role)}
@@ -508,11 +549,13 @@ export default function GenerateScreen({
                     </label>
                     {(sectionOverrides[s.role]?.key || sectionOverrides[s.role]?.tempo != null
                       || sectionOverrides[s.role]?.bars != null) && (
-                      <button className="btn ghost sm" style={{ width: "auto" }}
+                      <button type="button" className="btn ghost sm" style={{ width: "auto" }}
                         onClick={() => setSecOv(s.role, { key: null, scale: null, tempo: null, bars: null })}>
                         Clear</button>
                     )}
                   </div>
+                  )}
+                  </span>
                 )}
                 {secKeyRole === s.role && (() => { const ki = secKeyInfo(s.role); return (
                   <CircleOfFifths tonic={ki.key} mode={ki.scale} sharps
@@ -555,17 +598,6 @@ export default function GenerateScreen({
           );
         })}
       </div>
-
-      <div className="card">
-        <h2>Output</h2>
-        <label className="field"><span>Master preset</span>
-          <PickerField value={master} label="Master preset" icon="🎚"
-            options={masters.map((m) => ({ id: m, label: m }))} onChange={setMaster} />
-        </label>
-        <div className="chips">
-          <button className={"chip" + (withPdf ? " on" : "")} onClick={() => setWithPdf(!withPdf)}>PDF score</button>
-          <button className={"chip" + (withStems ? " on" : "")} onClick={() => setWithStems(!withStems)}>Stems</button>
-        </div>
       </div>
 
       {(busy || result || err) && (
