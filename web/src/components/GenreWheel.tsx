@@ -47,13 +47,16 @@ export default function GenreWheel({ families, value, onChange, onClose }: {
         <svg viewBox="0 0 220 220" className="gw-svg" role="img" aria-label="genre wheel">
           {families.map((f, i) => {
             const p = labelPos(i);
-            const sel = i === active;
-            const hasCur = i === curFamIdx;
+            const sel = i === active;             // the wedge you're browsing
+            const hasCur = i === curFamIdx;       // the family of the current pick
             return (
               <g key={f.family} className={"gw-wedge" + (sel ? " active" : "")}
                 onClick={() => setActive(i)} role="button" tabIndex={0}>
-                <path d={wedge(i)} fill={f.color} fillOpacity={sel ? 0.96 : 0.45}
-                  stroke={hasCur ? "#fff" : "rgba(0,0,0,0.35)"} strokeWidth={hasCur ? 2 : 1} />
+                <path d={wedge(i)} fill={f.color} fillOpacity={sel ? 0.96 : 0.4}
+                  stroke={sel ? "#fff" : "rgba(0,0,0,0.35)"} strokeWidth={sel ? 2.5 : 1} />
+                {hasCur && !sel && (
+                  <circle cx={p.x} cy={p.y - 9} r={2} fill="#fff" />
+                )}
                 <text x={p.x} y={p.y + 3} textAnchor="middle" className="gw-wlabel">
                   {SHORT[f.family] || f.family}</text>
               </g>

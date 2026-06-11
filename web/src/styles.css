@@ -659,7 +659,12 @@ audio { width: 100%; margin: 8px 0 12px; }
 .gw-cur { fill: var(--text); font-size: 13px; font-weight: 700; }
 .gw-cur-fam { fill: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em; }
 .gw-fam-name { text-align: center; font-size: 13px; font-weight: 700; margin: 4px 0 8px; }
-.gw-genres { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+/* Fixed-height so the popup doesn't jump as you browse families with
+   different genre counts; scrolls for the big ones (Latin & World). */
+.gw-genres {
+  display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+  align-content: flex-start; height: 124px; overflow-y: auto; padding: 2px;
+}
 .gw-genre {
   padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer;
   background: var(--bg-2); color: var(--text); border: 1px solid rgba(255,255,255,0.18);
