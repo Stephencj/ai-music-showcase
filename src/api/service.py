@@ -492,7 +492,7 @@ def live_stems(name: str) -> dict:
     midi = block_store._midi_path(name)
     if not midi.exists():
         raise FileNotFoundError(f"no MIDI for block {name!r}")
-    sig = json.dumps([name, midi.stat().st_mtime], sort_keys=True, default=str)
+    sig = json.dumps(["v2-mp3", name, midi.stat().st_mtime], sort_keys=True, default=str)
     key = hashlib.blake2b(sig.encode(), digest_size=9).hexdigest()
     out = _LIVE_STEMS_DIR / key
     manifest = out / "stems.json"
@@ -503,8 +503,18 @@ def live_stems(name: str) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     r = render_to_audio(midi=midi, output_dir=out, with_stems=True,
                         master_preset="default", track_mix=None)
-    tracks = [{"name": n, "file": p.relative_to(out).as_posix()}
-              for n, p in (r.stem_paths or {}).items()]
+    # Transcode each stem WAV → MP3 (~10× smaller for browser load; LAME's
+    # constant encoder delay is identical across stems so they stay aligned
+    # relative to each other). Fall back to the WAV if transcode fails.
+    from src.daw_integration.generic.blocks import write_preview_mp3
+    tracks = []
+    for n, wav in (r.stem_paths or {}).items():
+        mp3 = wav.with_suffix(".mp3")
+        if write_preview_mp3(wav, mp3):
+            wav.unlink(missing_ok=True)
+            tracks.append({"name": n, "file": mp3.relative_to(out).as_posix()})
+        else:
+            tracks.append({"name": n, "file": wav.relative_to(out).as_posix()})
     data = {"key": key, "duration": r.duration_seconds, "tracks": tracks}
     manifest.write_text(json.dumps(data))
     # Cap the cache: keep the ~12 most-recently-used stem sets.

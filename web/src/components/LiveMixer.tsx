@@ -18,6 +18,7 @@ interface Chan {
   src: AudioBufferSourceNode | null;
   low: BiquadFilterNode; mid: BiquadFilterNode; high: BiquadFilterNode;
   shaper: WaveShaperNode;
+  chorusWet: GainNode;    // modulated-delay chorus, mixed in parallel with dry
   comp: DynamicsCompressorNode;
   fader: GainNode;        // gain + mute
   revSend: GainNode; dlySend: GainNode;
@@ -99,10 +100,20 @@ export default function LiveMixer({ blockName, onClose, onBounced }: {
           const fader = ctx.createGain();
           const revSend = ctx.createGain(); revSend.gain.value = 0; revSend.connect(conv);
           const dlySend = ctx.createGain(); dlySend.gain.value = 0; dlySend.connect(delay);
-          // Chain: low → mid → high → shaper → comp → fader → master (+ sends post-fader)
-          low.connect(mid); mid.connect(high); high.connect(shaper); shaper.connect(comp); comp.connect(fader);
+          // Chorus: a short delay (~27 ms) whose time is swept by an LFO; the
+          // pitch-wobbled copy is mixed back in parallel with the dry signal.
+          const chDelay = ctx.createDelay(0.1); chDelay.delayTime.value = 0.027;
+          const lfo = ctx.createOscillator(); lfo.type = "sine"; lfo.frequency.value = 0.8;
+          const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.004;   // ±4 ms depth
+          lfo.connect(lfoGain); lfoGain.connect(chDelay.delayTime); lfo.start();
+          const chorusWet = ctx.createGain(); chorusWet.gain.value = 0;
+          // Chain: low → mid → high → shaper → [dry → comp] + [chDelay → wet → comp]
+          low.connect(mid); mid.connect(high); high.connect(shaper);
+          shaper.connect(comp);
+          shaper.connect(chDelay); chDelay.connect(chorusWet); chorusWet.connect(comp);
+          comp.connect(fader);
           fader.connect(master); fader.connect(revSend); fader.connect(dlySend);
-          return { name: t.name, buffer, src: null, low, mid, high, shaper, comp, fader, revSend, dlySend } as Chan;
+          return { name: t.name, buffer, src: null, low, mid, high, shaper, chorusWet, comp, fader, revSend, dlySend } as Chan;
         }));
         if (dead) { ctx.close(); return; }
         chansRef.current = loaded;
@@ -134,6 +145,7 @@ export default function LiveMixer({ blockName, onClose, onBounced }: {
       c.comp.ratio.value = ratio;
       c.comp.threshold.value = ratio > 1 ? -20 : 0;
       c.fader.gain.value = s.mute ? 0 : dbToGain(s.gain_db ?? 0);
+      c.chorusWet.gain.value = (s.fx?.chorus ?? 0) * 0.7;
       c.revSend.gain.value = s.fx?.reverb ?? 0;
       c.dlySend.gain.value = (s.fx?.delay ?? 0) * 0.6;
     }
@@ -202,7 +214,7 @@ export default function LiveMixer({ blockName, onClose, onBounced }: {
                 <div className="lm-bar"><i style={{ width: dur ? `${(pos / dur) * 100}%` : 0 }} /></div>
               </div>
               <div className="meta" style={{ margin: "2px 0 8px" }}>
-                Move any control while it plays — you'll hear it instantly. Chorus &amp; mastering are applied on Bounce.
+                Move any control while it plays — you'll hear it instantly. The master chain is applied on Bounce.
               </div>
               <MixingDesk tracks={tracks} mix={mix} onChange={setMix} />
               <div className="et-actions">

@@ -412,9 +412,11 @@ def block_live_stems(name: str) -> dict:
 @router.get("/live-stems/{key}/{track_file:path}")
 def serve_live_stem(key: str, track_file: str) -> FileResponse:
     try:
-        return _serve(service.live_stem_path(key, track_file), "audio/wav")
+        path = service.live_stem_path(key, track_file)
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc))
+    mt = "audio/mpeg" if path.suffix == ".mp3" else "audio/wav"
+    return _serve(path, mt)
 
 
 @router.post("/blocks/{name}/produce")
