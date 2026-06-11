@@ -107,6 +107,17 @@ _GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
 # Section spec helpers
 # ---------------------------------------------------------------------------
 
+def _section_identity(label: str) -> str:
+    """A section's identity for arrangement/UI/controls. Finer-grained than the
+    canonical technique role: a "Pre-chorus" keeps its own ``prechorus``
+    identity (so it's selectable + independently controllable) while technique
+    selection still maps it to a canonical role via ``role_for_label``."""
+    lo = (label or "").lower()
+    if "prechorus" in lo or "pre-chorus" in lo or "pre chorus" in lo:
+        return "prechorus"
+    return role_for_label(label)
+
+
 def _default_sections_for(genre: str) -> list[dict]:
     """Pull section list from the genre's "Full song" rhythm_variant.
 
@@ -124,7 +135,7 @@ def _default_sections_for(genre: str) -> list[dict]:
             label = row.get("label", "") or f"Section {len(out) + 1}"
             out.append({
                 "start_bar": s, "end_bar": e,
-                "label": label, "role": role_for_label(label),
+                "label": label, "role": _section_identity(label),
             })
         return out
     # Generic fallback — 32-bar four-section sketch.

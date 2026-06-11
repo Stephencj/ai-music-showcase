@@ -66,6 +66,17 @@ class TestPreChorus(unittest.TestCase):
         self.assertLess(roles.index("verse"), roles.index("prechorus"))
         self.assertLess(roles.index("prechorus"), roles.index("chorus"))
 
+    def test_pop_full_song_prechorus_is_native_and_tagged(self):
+        # pop_full_song's template defines a "Pre-chorus" — it must surface as a
+        # native, distinctly-tagged (role=prechorus) section so it's both
+        # selectable and independently controllable, not collapsed to a verse.
+        from src.api.arrangement import available_sections, build_sections
+        native = {s["role"] for s in available_sections("pop_full_song") if s["native"]}
+        self.assertIn("prechorus", native)
+        secs = build_sections("pop_full_song", [])   # full default arrangement
+        labels = [s["label"] for s in secs if s["role"] == "prechorus"]
+        self.assertEqual(labels, ["Pre-chorus"])
+
     def test_prechorus_section_is_not_empty(self):
         # A pre-chorus maps to a canonical role for technique selection, so it
         # must compose actual notes (never render empty).
