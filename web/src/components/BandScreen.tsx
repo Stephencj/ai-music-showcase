@@ -5,17 +5,31 @@ import type { RollNote } from "./NotationRoll";
 import PlayAlong from "./PlayAlong";
 import MixingDesk, { type MixState, type TrackSettings, cleanMix } from "./MixingDesk";
 import LiveMixer from "./LiveMixer";
+import StylistStudio from "./StylistStudio";
+import { type Member, imageBreakdown } from "./stylist";
 
-// The band-career shell: name a band, write songs (the generator), then play
-// gigs (the scored play-along) to earn fans and climb venues. Songcraft — the
-// musical richness the engine + Explain expose — multiplies your gig payoff, so
-// better songwriting literally pays off. Career state lives in localStorage.
+// The band-career shell: name a band, then progress along whichever ROLE you
+// pick — Musician (play gigs, game or real), Producer (mix & master), or
+// Stylist (lineup & wardrobe). The three are independent: none is required to
+// advance another, you choose where you fit in. Songcraft × production × image
+// × venue all multiply a gig's payoff. Career state lives in localStorage.
+
+type Role = "musician" | "producer" | "stylist";
 
 interface Band {
   name: string; fans: number; money: number; gigs: number;
-  produced?: Record<string, number>;   // block name → production multiplier
+  produced?: Record<string, number>;   // block name → production multiplier (Producer)
+  members?: Member[];                   // the lineup (Stylist)
+  image?: number;                       // styling → image multiplier (Stylist)
+  role?: Role;                          // last-picked track focus
 }
 const KEY = "aimusic.band";
+
+const ROLES: { id: Role; icon: string; name: string; blurb: string }[] = [
+  { id: "musician", icon: "🎤", name: "Musician", blurb: "Play your songs at gigs — tap the rhythm game, or play for real on MIDI/mic. Casual jams open in Practice." },
+  { id: "producer", icon: "🎛", name: "Producer", blurb: "Mix & master your songs on the desk, A/B live, and train your ears. A better mix earns more fans." },
+  { id: "stylist", icon: "🎨", name: "Stylist", blurb: "Choose the band's members and dress them. A fuller, on-brand look is an image multiplier on every gig." },
+];
 
 const TIERS = [
   { name: "Garage", at: 0, mult: 1 },
@@ -50,21 +64,25 @@ function loadBand(): Band | null {
   try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch { return null; }
 }
 
-export default function BandScreen({ isActive, onWriteSong }: {
-  isActive: boolean; onWriteSong: () => void;
+export default function BandScreen({ isActive, onWriteSong, onOpenPractice }: {
+  isActive: boolean; onWriteSong: () => void; onOpenPractice?: (block: string) => void;
 }) {
   const [band, setBand] = useState<Band | null>(loadBand);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [nameDraft, setNameDraft] = useState("");
+  const [role, setRole] = useState<Role>(loadBand()?.role || "musician");
   const [gig, setGig] = useState<string | null>(null);     // block name being played
   const [produce, setProduce] = useState<string | null>(null);  // block being produced
   const [train, setTrain] = useState<string | null>(null);      // ear-training on a block
   const [live, setLive] = useState<string | null>(null);        // live-mixing a block
+  const [stylist, setStylist] = useState(false);                // stylist studio open
 
   useEffect(() => { if (band) localStorage.setItem(KEY, JSON.stringify(band)); }, [band]);
   useEffect(() => { if (isActive) api.getBlocks().then(setBlocks).catch(() => {}); }, [isActive]);
 
   const { tier, next } = tierFor(band?.fans ?? 0);
+  const image = band?.image ?? 1;
+  const pickRole = (r: Role) => { setRole(r); setBand((b) => b ? { ...b, role: r } : b); };
 
   const award = (gained: { fans: number; money: number }) => {
     setBand((b) => b ? { ...b, fans: b.fans + gained.fans, money: b.money + gained.money, gigs: b.gigs + 1 } : b);
@@ -75,7 +93,7 @@ export default function BandScreen({ isActive, onWriteSong }: {
       <div className="card band-start">
         <h2>🎸 Start your band</h2>
         <div className="meta" style={{ marginBottom: 10 }}>
-          Form a band, write songs, and play gigs to earn fans. The richer your songwriting, the bigger the payoff.
+          Form a band, then pick your role — play the music, produce it, or style the band. Each path earns fans on its own.
         </div>
         <div className="row">
           <input type="text" value={nameDraft} placeholder="Band name"
@@ -90,6 +108,8 @@ export default function BandScreen({ isActive, onWriteSong }: {
     );
   }
 
+  const songsEmpty = blocks.length === 0;
+
   return (
     <>
       <div className="card band-dash">
@@ -98,6 +118,7 @@ export default function BandScreen({ isActive, onWriteSong }: {
           <span><b>{band.fans.toLocaleString()}</b> fans</span>
           <span><b>${band.money.toLocaleString()}</b></span>
           <span><b>{band.gigs}</b> gigs</span>
+          {image > 1 && <span className="band-tier">🎨 image ×{image.toFixed(2)}</span>}
           <span className="band-tier">🎪 {tier.name} (×{tier.mult})</span>
         </div>
         {next && (
@@ -109,31 +130,75 @@ export default function BandScreen({ isActive, onWriteSong }: {
         <button className="btn" style={{ marginTop: 12 }} onClick={onWriteSong}>✍️ Write a new song</button>
       </div>
 
-      <div className="card">
-        <h2>Your songs</h2>
-        {blocks.length === 0
-          ? <div className="meta">No songs yet — write one in Generate, save it as a block, and it'll appear here.</div>
-          : (
-            <div className="band-songs">
-              {blocks.map((b) => (
-                <div key={b.name} className="band-song">
-                  <span className="band-song-name">{b.name}</span>
-                  <button className="btn ghost sm" style={{ width: "auto" }}
-                    onClick={() => setProduce(b.name)}>🎛 Produce</button>
-                  <button className="btn ghost sm" style={{ width: "auto" }}
-                    onClick={() => setLive(b.name)}>🎚 Live mix</button>
-                  <button className="btn ghost sm" style={{ width: "auto" }}
-                    onClick={() => setTrain(b.name)}>🎧 Ear training</button>
-                  <button className="btn secondary sm" style={{ width: "auto" }}
-                    onClick={() => setGig(b.name)}>🎤 Play gig</button>
-                </div>
-              ))}
-            </div>
-          )}
+      {/* Role picker — choose where you fit; none requires another to advance. */}
+      <div className="role-picker">
+        {ROLES.map((r) => (
+          <button key={r.id} type="button"
+            className={"role-card" + (role === r.id ? " on" : "")} onClick={() => pickRole(r.id)}>
+            <span className="role-icon">{r.icon}</span>
+            <span className="role-name">{r.name}</span>
+            <span className="role-blurb">{r.blurb}</span>
+          </button>
+        ))}
       </div>
 
+      {/* Stylist track lives on its own (not per-song). */}
+      {role === "stylist" ? (
+        <div className="card">
+          <h2>Stylist · the look</h2>
+          <div className="meta" style={{ marginBottom: 10 }}>
+            Build your lineup and dress them. A fuller, on-brand band is an <b>image ×{image.toFixed(2)}</b> multiplier on every gig.
+          </div>
+          <div className="band-stylist-row">
+            <div className="band-roster-mini">
+              {(band.members || []).length === 0
+                ? <span className="meta">No members yet.</span>
+                : (band.members || []).map((m) => (
+                  <span key={m.id} className="roster-mini-chip">{m.name} · {m.part}</span>
+                ))}
+            </div>
+            <button className="btn secondary" style={{ width: "auto" }} onClick={() => setStylist(true)}>
+              🎨 Open stylist
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* Musician + Producer act on songs. */
+        <div className="card">
+          <h2>Your songs</h2>
+          {songsEmpty
+            ? <div className="meta">No songs yet — write one in Generate, save it as a block, and it'll appear here.</div>
+            : (
+              <div className="band-songs">
+                {blocks.map((b) => (
+                  <div key={b.name} className="band-song">
+                    <span className="band-song-name">{b.name}</span>
+                    {role === "producer" ? (
+                      <>
+                        <button className="btn ghost sm" style={{ width: "auto" }}
+                          onClick={() => setProduce(b.name)}>🎛 Produce</button>
+                        <button className="btn ghost sm" style={{ width: "auto" }}
+                          onClick={() => setLive(b.name)}>🎚 Live mix</button>
+                        <button className="btn ghost sm" style={{ width: "auto" }}
+                          onClick={() => setTrain(b.name)}>🎧 Ear training</button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="btn ghost sm" style={{ width: "auto" }}
+                          onClick={() => onOpenPractice?.(b.name)}>🎶 Casual (Practice)</button>
+                        <button className="btn secondary sm" style={{ width: "auto" }}
+                          onClick={() => setGig(b.name)}>🎤 Play gig</button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+        </div>
+      )}
+
       {gig && (
-        <Gig blockName={gig} tierMult={tier.mult} production={(band.produced || {})[gig] || 1}
+        <Gig blockName={gig} tierMult={tier.mult} production={(band.produced || {})[gig] || 1} image={image}
           onDone={(g) => { award(g); }}
           onClose={() => setGig(null)} />
       )}
@@ -152,6 +217,11 @@ export default function BandScreen({ isActive, onWriteSong }: {
         <LiveMixer blockName={live}
           onBounced={(n, prod) => setBand((b) => b ? { ...b, produced: { ...(b.produced || {}), [n]: prod } } : b)}
           onClose={() => setLive(null)} />
+      )}
+      {stylist && (
+        <StylistStudio members={band.members || []}
+          onChange={(members) => setBand((b) => b ? { ...b, members, image: imageBreakdown(members).image } : b)}
+          onClose={() => setStylist(false)} />
       )}
     </>
   );
@@ -344,8 +414,8 @@ function EarTraining({ blockName, onReward, onClose }: {
 }
 
 // ── A gig: load the song's audio + a part's notes, play along, pay out ───────
-function Gig({ blockName, tierMult, production, onDone, onClose }: {
-  blockName: string; tierMult: number; production: number;
+function Gig({ blockName, tierMult, production, image = 1, onDone, onClose }: {
+  blockName: string; tierMult: number; production: number; image?: number;
   onDone: (g: { fans: number; money: number }) => void;
   onClose: () => void;
 }) {
@@ -380,7 +450,7 @@ function Gig({ blockName, tierMult, production, onDone, onClose }: {
   const finish = (r: { accuracy: number; grade: string }) => {
     const base = 18;
     const gradeBonus = r.grade === "S" ? 1.6 : r.grade === "A" ? 1.3 : r.grade === "B" ? 1.1 : r.grade === "C" ? 1 : 0.6;
-    const fans = Math.max(1, Math.round(base * (r.accuracy / 100) * craft * production * tierMult * gradeBonus));
+    const fans = Math.max(1, Math.round(base * (r.accuracy / 100) * craft * production * image * tierMult * gradeBonus));
     const money = Math.round(fans * 1.5);
     setPayout({ fans, money, acc: r.accuracy, grade: r.grade });
     onDone({ fans, money });
@@ -394,7 +464,7 @@ function Gig({ blockName, tierMult, production, onDone, onClose }: {
           <button className="cof-close" onClick={onClose}>✕</button>
         </div>
         <div className="gig-meta">
-          Songcraft <b>×{craft.toFixed(2)}</b>{production > 1 && <> · production <b>×{production.toFixed(2)}</b></>} · venue <b>×{tierMult}</b>
+          Songcraft <b>×{craft.toFixed(2)}</b>{production > 1 && <> · production <b>×{production.toFixed(2)}</b></>}{image > 1 && <> · image <b>×{image.toFixed(2)}</b></>} · venue <b>×{tierMult}</b>
           {partOptions.length > 1 && (
             <select value={partIdx} onChange={(e) => setPartIdx(Number(e.target.value))}>
               {partOptions.map((p) => <option key={p.i} value={p.i}>{p.name}</option>)}

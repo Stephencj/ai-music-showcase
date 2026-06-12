@@ -972,6 +972,75 @@ audio { width: 100%; margin: 8px 0 12px; }
   background: var(--bg-2); border: 1px solid rgba(255,255,255,0.06); }
 .band-song-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; font-weight: 600; }
+/* Role picker — pick your track (Musician / Producer / Stylist). */
+.role-picker { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 12px 0; }
+.role-card {
+  display: flex; flex-direction: column; gap: 4px; text-align: left; cursor: pointer;
+  padding: 12px 14px; border-radius: 14px; background: var(--card);
+  border: 1px solid rgba(255,255,255,0.08); color: var(--text); transition: border-color .15s, background .15s;
+}
+.role-card:hover { border-color: rgba(255,255,255,0.18); }
+.role-card.on { border-color: var(--accent); background: linear-gradient(135deg, rgba(124,58,237,0.18), rgba(56,189,248,0.10)); }
+.role-icon { font-size: 22px; }
+.role-name { font-weight: 700; font-size: 15px; }
+.role-blurb { font-size: 12px; color: var(--muted); line-height: 1.35; }
+@media (min-width: 760px) { .role-picker { grid-template-columns: repeat(3, 1fr); } }
+
+/* Stylist dashboard row + mini roster. */
+.band-stylist-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.band-roster-mini { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.roster-mini-chip { font-size: 12px; padding: 3px 9px; border-radius: 999px;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10); }
+
+/* Stylist studio modal. */
+.st-modal { width: min(760px, 96vw); }
+.st-image { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+  padding: 10px 12px; border-radius: 12px;
+  background: linear-gradient(135deg, rgba(232,91,156,0.14), rgba(124,58,237,0.10)); border: 1px solid rgba(232,91,156,0.3); }
+.st-image-mult { font-size: 15px; } .st-image-mult b { font-size: 18px; color: #f0a6c8; }
+.st-image-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.st-chip { font-size: 11px; padding: 3px 8px; border-radius: 999px;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10); color: var(--muted); }
+.st-empty { padding: 6px 0 4px; }
+.st-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.st-roster { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 12px; }
+.st-member {
+  flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer;
+  padding: 6px; border-radius: 12px; background: var(--bg-2); border: 1px solid rgba(255,255,255,0.08); color: var(--text);
+  width: 84px;
+}
+.st-member.on { border-color: var(--accent); }
+.st-member-name { font-size: 11px; font-weight: 600; max-width: 74px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-member-part { font-size: 10px; color: var(--muted); }
+.st-member-theme { font-size: 9px; padding: 1px 6px; border-radius: 999px; background: rgba(139,92,246,0.18); color: #c4b5fd; }
+.st-add { flex: 0 0 auto; width: 84px; border-radius: 12px; border: 1px dashed rgba(255,255,255,0.18);
+  background: transparent; color: var(--muted); cursor: pointer; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px; font-size: 20px; }
+.st-add span { font-size: 11px; }
+
+.st-dresser { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.st-preview { display: flex; flex-direction: column; align-items: center;
+  background: var(--bg-2); border-radius: 12px; padding: 10px; }
+.band-avatar { display: block; }
+.st-controls { display: flex; flex-direction: column; gap: 8px; }
+.st-namepart { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.st-name { flex: 1 1 140px; padding: 8px 10px; border-radius: 8px; background: var(--bg-2);
+  color: var(--text); border: 1px solid rgba(255,255,255,0.12); }
+.st-parts { display: flex; gap: 4px; }
+.st-part { width: 34px; height: 34px; border-radius: 8px; font-size: 16px; cursor: pointer;
+  background: var(--bg-2); border: 1px solid rgba(255,255,255,0.12); }
+.st-part.on { border-color: var(--accent); background: rgba(124,58,237,0.18); }
+.st-slot { display: flex; align-items: center; gap: 8px; }
+.st-slot-label { flex: 0 0 78px; font-size: 12px; color: var(--muted); }
+.st-slot-opts { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 5px; }
+.st-opt { padding: 4px 8px; border-radius: 7px; font-size: 11px; cursor: pointer;
+  background: var(--bg-2); color: var(--text); border: 1px solid rgba(255,255,255,0.12); }
+.st-opt.on { border-color: var(--accent); color: #fff; }
+.st-opt.swatch { width: 24px; height: 24px; padding: 0; border-radius: 6px; }
+.st-opt.swatch.on { box-shadow: 0 0 0 2px var(--accent); }
+@media (min-width: 640px) { .st-dresser { grid-template-columns: 180px 1fr; } }
+
 .gig-modal { width: min(560px, 96vw); max-height: 92vh; overflow-y: auto; background: var(--card);
   border: 1px solid var(--border); border-radius: 16px; padding: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
 .gig-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px;

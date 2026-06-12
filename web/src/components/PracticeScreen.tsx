@@ -43,7 +43,9 @@ function autoCapo(keyPc: number): number {
   return 0;
 }
 
-export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
+export default function PracticeScreen({ isActive, requestBlock, onBlockConsumed }: {
+  isActive?: boolean; requestBlock?: string | null; onBlockConsumed?: () => void;
+}) {
   const [mode, setMode] = useState<Mode>("block");
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [songs, setSongs] = useState<string[]>([]);
@@ -139,6 +141,15 @@ export default function PracticeScreen({ isActive }: { isActive?: boolean }) {
     api.getBlocks().then((bs) => setBlocks(bs.filter((b) => b.has_preview))).catch(() => {});
     api.listSongs().then((r) => setSongs(r.songs || [])).catch(() => {});
   }, [isActive]);
+
+  // External request (e.g. Band → casual jam): focus this block in block mode.
+  useEffect(() => {
+    if (!requestBlock) return;
+    setMode("block");
+    setSelected(`block:${requestBlock}`);
+    onBlockConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestBlock]);
 
   useEffect(() => {
     try { localStorage.setItem("practice.panels", JSON.stringify(panels)); } catch { /* ignore */ }

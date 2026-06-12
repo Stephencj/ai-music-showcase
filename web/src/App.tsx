@@ -10,6 +10,7 @@ type Tab = "generate" | "compose" | "practice" | "band";
 export default function App() {
   const [tab, setTab] = useState<Tab>("generate");
   const [editSpec, setEditSpec] = useState<BlockSpec | null>(null);
+  const [practiceBlock, setPracticeBlock] = useState<string | null>(null);
 
   return (
     <div className="app">
@@ -33,10 +34,12 @@ export default function App() {
         />
       </div>
       <div className={"tab-pane" + (tab === "practice" ? "" : " hidden")}>
-        <PracticeScreen isActive={tab === "practice"} />
+        <PracticeScreen isActive={tab === "practice"} requestBlock={practiceBlock}
+          onBlockConsumed={() => setPracticeBlock(null)} />
       </div>
       <div className={"tab-pane" + (tab === "band" ? "" : " hidden")}>
-        <BandScreen isActive={tab === "band"} onWriteSong={() => setTab("generate")} />
+        <BandScreen isActive={tab === "band"} onWriteSong={() => setTab("generate")}
+          onOpenPractice={(block) => { setPracticeBlock(block); setTab("practice"); }} />
       </div>
 
       <nav className="tabbar">
