@@ -1,0 +1,293 @@
+name: 15_The_Spins
+tempo: 96.0
+time_signature:
+- 4
+- 4
+bars: 40
+duration_seconds: 100.0
+created: '2026-06-10T01:15:53'
+instruments:
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 132
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 543
+- name: Sub Bass
+  program: 38
+  is_drum: false
+  n_notes: 40
+- name: 808 Bass
+  program: 39
+  is_drum: false
+  n_notes: 40
+- name: Electric Guitar (dirty)
+  program: 29
+  is_drum: false
+  n_notes: 500
+- name: Acoustic Guitar
+  program: 25
+  is_drum: false
+  n_notes: 500
+- name: Organ (Church)
+  program: 19
+  is_drum: false
+  n_notes: 543
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 573
+- name: Hip-hop percussion
+  program: 0
+  is_drum: true
+  n_notes: 416
+- name: Lead Guitar
+  program: 29
+  is_drum: false
+  n_notes: 12
+n_notes: 3299
+spec:
+  genre: nu_metal
+  key: A
+  scale: minor
+  tempo: 96.0
+  time_signature:
+  - 4
+  - 4
+  seed: 299767
+  swing: null
+  instruments:
+  - drum_kit
+  - electric_bass
+  - piano
+  - hiphop_perc
+  - sub_bass
+  - bass_808
+  - electric_guitar_dirty
+  - acoustic_guitar
+  - organ_church
+  sections:
+  - start_bar: 0
+    end_bar: 3
+    label: Intro
+    role: intro
+  - start_bar: 4
+    end_bar: 19
+    label: Verse
+    role: verse
+  - start_bar: 20
+    end_bar: 27
+    label: Chorus
+    role: chorus
+  - start_bar: 28
+    end_bar: 35
+    label: Bridge
+    role: bridge
+  - start_bar: 36
+    end_bar: 39
+    label: Outro
+    role: outro
+  progression:
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 0.0
+    end_bar: 1.0
+  - root_pc: 4
+    quality: maj
+    symbol: bVI
+    start_bar: 1.0
+    end_bar: 2.0
+  - root_pc: 7
+    quality: maj
+    symbol: VII
+    start_bar: 2.0
+    end_bar: 3.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 3.0
+    end_bar: 4.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 4.0
+    end_bar: 5.0
+  - root_pc: 4
+    quality: maj
+    symbol: bVI
+    start_bar: 5.0
+    end_bar: 6.0
+  - root_pc: 7
+    quality: maj
+    symbol: VII
+    start_bar: 6.0
+    end_bar: 7.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 7.0
+    end_bar: 8.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 8.0
+    end_bar: 9.0
+  - root_pc: 4
+    quality: maj
+    symbol: bVI
+    start_bar: 9.0
+    end_bar: 10.0
+  - root_pc: 7
+    quality: maj
+    symbol: VII
+    start_bar: 10.0
+    end_bar: 11.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 11.0
+    end_bar: 12.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 12.0
+    end_bar: 13.0
+  - root_pc: 4
+    quality: maj
+    symbol: bVI
+    start_bar: 13.0
+    end_bar: 14.0
+  - root_pc: 7
+    quality: maj
+    symbol: VII
+    start_bar: 14.0
+    end_bar: 15.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 15.0
+    end_bar: 16.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 16.0
+    end_bar: 17.0
+  - root_pc: 4
+    quality: maj
+    symbol: bVI
+    start_bar: 17.0
+    end_bar: 18.0
+  - root_pc: 7
+    quality: maj
+    symbol: VII
+    start_bar: 18.0
+    end_bar: 19.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 19.0
+    end_bar: 20.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 20.0
+    end_bar: 21.0
+  - root_pc: 4
+    quality: maj
+    symbol: bVI
+    start_bar: 21.0
+    end_bar: 22.0
+  - root_pc: 7
+    quality: maj
+    symbol: VII
+    start_bar: 22.0
+    end_bar: 23.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 23.0
+    end_bar: 24.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 24.0
+    end_bar: 25.0
+  - root_pc: 4
+    quality: maj
+    symbol: bVI
+    start_bar: 25.0
+    end_bar: 26.0
+  - root_pc: 7
+    quality: maj
+    symbol: VII
+    start_bar: 26.0
+    end_bar: 27.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 27.0
+    end_bar: 28.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 28.0
+    end_bar: 29.0
+  - root_pc: 4
+    quality: maj
+    symbol: bVI
+    start_bar: 29.0
+    end_bar: 30.0
+  - root_pc: 7
+    quality: maj
+    symbol: VII
+    start_bar: 30.0
+    end_bar: 31.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 31.0
+    end_bar: 32.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 32.0
+    end_bar: 33.0
+  - root_pc: 4
+    quality: maj
+    symbol: bVI
+    start_bar: 33.0
+    end_bar: 34.0
+  - root_pc: 7
+    quality: maj
+    symbol: VII
+    start_bar: 34.0
+    end_bar: 35.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 35.0
+    end_bar: 36.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 36.0
+    end_bar: 37.0
+  - root_pc: 4
+    quality: maj
+    symbol: bVI
+    start_bar: 37.0
+    end_bar: 38.0
+  - root_pc: 7
+    quality: maj
+    symbol: VII
+    start_bar: 38.0
+    end_bar: 39.0
+  - root_pc: 9
+    quality: min
+    symbol: i
+    start_bar: 39.0
+    end_bar: 40.0
+  section: null

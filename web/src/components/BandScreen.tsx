@@ -5,8 +5,8 @@ import type { RollNote } from "./NotationRoll";
 import PlayAlong from "./PlayAlong";
 import MixingDesk, { type MixState, type TrackSettings, cleanMix } from "./MixingDesk";
 import LiveMixer from "./LiveMixer";
-import StylistStudio from "./StylistStudio";
-import { type Member, imageBreakdown } from "./stylist";
+import DressUp from "../dressup/DressUp";
+import { type Member, imageBreakdown, normalizeMember } from "../dressup/wardrobe";
 
 // The band-career shell: name a band, then progress along whichever ROLE you
 // pick — Musician (play gigs, game or real), Producer (mix & master), or
@@ -61,7 +61,11 @@ function songcraft(e: ExplainData): number {
 }
 
 function loadBand(): Band | null {
-  try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch { return null; }
+  try {
+    const b = JSON.parse(localStorage.getItem(KEY) || "null");
+    if (b && Array.isArray(b.members)) b.members = b.members.map(normalizeMember);
+    return b;
+  } catch { return null; }
 }
 
 export default function BandScreen({ isActive, onWriteSong, onOpenPractice }: {
@@ -219,7 +223,7 @@ export default function BandScreen({ isActive, onWriteSong, onOpenPractice }: {
           onClose={() => setLive(null)} />
       )}
       {stylist && (
-        <StylistStudio members={band.members || []}
+        <DressUp members={band.members || []}
           onChange={(members) => setBand((b) => b ? { ...b, members, image: imageBreakdown(members).image } : b)}
           onClose={() => setStylist(false)} />
       )}

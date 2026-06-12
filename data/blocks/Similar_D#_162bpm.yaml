@@ -1,0 +1,30 @@
+name: Similar_D#_162bpm
+tempo: 162.0
+time_signature:
+- 4
+- 4
+bars: 32
+duration_seconds: 47.370323000000006
+created: '2026-06-09T00:16:56'
+instruments:
+- name: Chords
+  program: 27
+  is_drum: false
+  n_notes: 352
+- name: Bass
+  program: 33
+  is_drum: false
+  n_notes: 116
+- name: Drums
+  program: 0
+  is_drum: true
+  n_notes: 369
+- name: Melody
+  program: 0
+  is_drum: false
+  n_notes: 159
+- name: Lead
+  program: 26
+  is_drum: false
+  n_notes: 12
+n_notes: 1008

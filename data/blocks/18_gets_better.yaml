@@ -1,0 +1,512 @@
+name: 18_gets_better
+tempo: 98.0
+time_signature:
+- 4
+- 4
+bars: 80
+duration_seconds: 195.91808
+created: '2026-06-10T21:09:39'
+instruments:
+- name: Electric Piano
+  program: 4
+  is_drum: false
+  n_notes: 1119
+- name: Synth Bass
+  program: 38
+  is_drum: false
+  n_notes: 436
+- name: Sub Bass
+  program: 38
+  is_drum: false
+  n_notes: 136
+- name: 808 Bass
+  program: 39
+  is_drum: false
+  n_notes: 80
+- name: Electric Guitar (clean)
+  program: 27
+  is_drum: false
+  n_notes: 1480
+- name: Acoustic Guitar
+  program: 25
+  is_drum: false
+  n_notes: 934
+- name: Electric Guitar (dirty)
+  program: 29
+  is_drum: false
+  n_notes: 1767
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 1428
+- name: Hip-hop percussion
+  program: 0
+  is_drum: true
+  n_notes: 1040
+- name: Lead Guitar
+  program: 29
+  is_drum: false
+  n_notes: 12
+n_notes: 8432
+spec:
+  genre: soul_motown_full
+  key: G#
+  scale: major
+  tempo: 98.0
+  time_signature:
+  - 4
+  - 4
+  seed: 590280
+  swing: null
+  instruments:
+  - drum_kit
+  - electric_piano
+  - hiphop_perc
+  - synth_bass
+  - sub_bass
+  - bass_808
+  - electric_guitar_clean
+  - acoustic_guitar
+  - electric_guitar_dirty
+  section_presets:
+    bridge: funk_dynamic
+    intro: rock
+    verse: hip_hop_90s
+    outro: bollywood
+  section_overrides: {}
+  sections:
+  - start_bar: 0
+    end_bar: 3
+    label: Intro
+    role: intro
+    preset_id: rock
+  - start_bar: 4
+    end_bar: 19
+    label: Verse 1
+    role: verse
+    preset_id: hip_hop_90s
+  - start_bar: 20
+    end_bar: 35
+    label: Chorus 1
+    role: chorus
+  - start_bar: 36
+    end_bar: 51
+    label: Verse 2
+    role: verse
+    preset_id: hip_hop_90s
+  - start_bar: 52
+    end_bar: 59
+    label: Bridge
+    role: bridge
+    preset_id: funk_dynamic
+  - start_bar: 60
+    end_bar: 75
+    label: Chorus 2
+    role: chorus
+  - start_bar: 76
+    end_bar: 79
+    label: Outro
+    role: outro
+    preset_id: bollywood
+  progression:
+  - root_pc: 8
+    quality: min
+    symbol: i
+    start_bar: 0.0
+    end_bar: 1.0
+  - root_pc: 7
+    quality: maj
+    symbol: VII
+    start_bar: 1.0
+    end_bar: 2.0
+  - root_pc: 5
+    quality: maj
+    symbol: VI
+    start_bar: 2.0
+    end_bar: 3.0
+  - root_pc: 7
+    quality: maj
+    symbol: VII
+    start_bar: 3.0
+    end_bar: 4.0
+  - root_pc: 8
+    quality: min7
+    symbol: i7
+    start_bar: 4.0
+    end_bar: 5.0
+  - root_pc: 1
+    quality: min7
+    symbol: iv7
+    start_bar: 5.0
+    end_bar: 6.0
+  - root_pc: 5
+    quality: '7'
+    symbol: VI7
+    start_bar: 6.0
+    end_bar: 7.0
+  - root_pc: 3
+    quality: min7
+    symbol: v7
+    start_bar: 7.0
+    end_bar: 8.0
+  - root_pc: 8
+    quality: min7
+    symbol: i7
+    start_bar: 8.0
+    end_bar: 9.0
+  - root_pc: 1
+    quality: min7
+    symbol: iv7
+    start_bar: 9.0
+    end_bar: 10.0
+  - root_pc: 5
+    quality: '7'
+    symbol: VI7
+    start_bar: 10.0
+    end_bar: 11.0
+  - root_pc: 3
+    quality: min7
+    symbol: v7
+    start_bar: 11.0
+    end_bar: 12.0
+  - root_pc: 8
+    quality: min7
+    symbol: i7
+    start_bar: 12.0
+    end_bar: 13.0
+  - root_pc: 1
+    quality: min7
+    symbol: iv7
+    start_bar: 13.0
+    end_bar: 14.0
+  - root_pc: 5
+    quality: '7'
+    symbol: VI7
+    start_bar: 14.0
+    end_bar: 15.0
+  - root_pc: 3
+    quality: min7
+    symbol: v7
+    start_bar: 15.0
+    end_bar: 16.0
+  - root_pc: 8
+    quality: min7
+    symbol: i7
+    start_bar: 16.0
+    end_bar: 17.0
+  - root_pc: 1
+    quality: min7
+    symbol: iv7
+    start_bar: 17.0
+    end_bar: 18.0
+  - root_pc: 5
+    quality: '7'
+    symbol: VI7
+    start_bar: 18.0
+    end_bar: 19.0
+  - root_pc: 3
+    quality: min7
+    symbol: v7
+    start_bar: 19.0
+    end_bar: 20.0
+  - root_pc: 8
+    quality: maj
+    symbol: I
+    start_bar: 20.0
+    end_bar: 21.0
+  - root_pc: 5
+    quality: min
+    symbol: vi
+    start_bar: 21.0
+    end_bar: 22.0
+  - root_pc: 1
+    quality: maj
+    symbol: IV
+    start_bar: 22.0
+    end_bar: 23.0
+  - root_pc: 3
+    quality: maj
+    symbol: V
+    start_bar: 23.0
+    end_bar: 24.0
+  - root_pc: 8
+    quality: maj
+    symbol: I
+    start_bar: 24.0
+    end_bar: 25.0
+  - root_pc: 5
+    quality: min
+    symbol: vi
+    start_bar: 25.0
+    end_bar: 26.0
+  - root_pc: 1
+    quality: maj
+    symbol: IV
+    start_bar: 26.0
+    end_bar: 27.0
+  - root_pc: 3
+    quality: maj
+    symbol: V
+    start_bar: 27.0
+    end_bar: 28.0
+  - root_pc: 8
+    quality: maj
+    symbol: I
+    start_bar: 28.0
+    end_bar: 29.0
+  - root_pc: 5
+    quality: min
+    symbol: vi
+    start_bar: 29.0
+    end_bar: 30.0
+  - root_pc: 1
+    quality: maj
+    symbol: IV
+    start_bar: 30.0
+    end_bar: 31.0
+  - root_pc: 3
+    quality: maj
+    symbol: V
+    start_bar: 31.0
+    end_bar: 32.0
+  - root_pc: 8
+    quality: maj
+    symbol: I
+    start_bar: 32.0
+    end_bar: 33.0
+  - root_pc: 5
+    quality: min
+    symbol: vi
+    start_bar: 33.0
+    end_bar: 34.0
+  - root_pc: 1
+    quality: maj
+    symbol: IV
+    start_bar: 34.0
+    end_bar: 35.0
+  - root_pc: 3
+    quality: maj
+    symbol: V
+    start_bar: 35.0
+    end_bar: 36.0
+  - root_pc: 8
+    quality: min7
+    symbol: i7
+    start_bar: 36.0
+    end_bar: 37.0
+  - root_pc: 8
+    quality: min7
+    symbol: i7
+    start_bar: 37.0
+    end_bar: 38.0
+  - root_pc: 1
+    quality: min7
+    symbol: iv7
+    start_bar: 38.0
+    end_bar: 39.0
+  - root_pc: 1
+    quality: min7
+    symbol: iv7
+    start_bar: 39.0
+    end_bar: 40.0
+  - root_pc: 5
+    quality: '7'
+    symbol: VI7
+    start_bar: 40.0
+    end_bar: 41.0
+  - root_pc: 5
+    quality: '7'
+    symbol: VI7
+    start_bar: 41.0
+    end_bar: 42.0
+  - root_pc: 3
+    quality: min7
+    symbol: v7
+    start_bar: 42.0
+    end_bar: 43.0
+  - root_pc: 3
+    quality: min7
+    symbol: v7
+    start_bar: 43.0
+    end_bar: 44.0
+  - root_pc: 8
+    quality: min7
+    symbol: i7
+    start_bar: 44.0
+    end_bar: 45.0
+  - root_pc: 8
+    quality: min7
+    symbol: i7
+    start_bar: 45.0
+    end_bar: 46.0
+  - root_pc: 1
+    quality: min7
+    symbol: iv7
+    start_bar: 46.0
+    end_bar: 47.0
+  - root_pc: 1
+    quality: min7
+    symbol: iv7
+    start_bar: 47.0
+    end_bar: 48.0
+  - root_pc: 5
+    quality: '7'
+    symbol: VI7
+    start_bar: 48.0
+    end_bar: 49.0
+  - root_pc: 5
+    quality: '7'
+    symbol: VI7
+    start_bar: 49.0
+    end_bar: 50.0
+  - root_pc: 3
+    quality: min7
+    symbol: v7
+    start_bar: 50.0
+    end_bar: 51.0
+  - root_pc: 3
+    quality: min7
+    symbol: v7
+    start_bar: 51.0
+    end_bar: 52.0
+  - root_pc: 8
+    quality: min7
+    symbol: i7
+    start_bar: 52.0
+    end_bar: 53.0
+  - root_pc: 8
+    quality: '7'
+    symbol: I7
+    start_bar: 53.0
+    end_bar: 54.0
+  - root_pc: 1
+    quality: '7'
+    symbol: IV7
+    start_bar: 54.0
+    end_bar: 55.0
+  - root_pc: 1
+    quality: '7'
+    symbol: IV7
+    start_bar: 55.0
+    end_bar: 56.0
+  - root_pc: 8
+    quality: min7
+    symbol: i7
+    start_bar: 56.0
+    end_bar: 57.0
+  - root_pc: 10
+    quality: '7'
+    symbol: II7
+    start_bar: 57.0
+    end_bar: 58.0
+  - root_pc: 3
+    quality: '7'
+    symbol: V7
+    start_bar: 58.0
+    end_bar: 59.0
+  - root_pc: 3
+    quality: '7'
+    symbol: V7
+    start_bar: 59.0
+    end_bar: 60.0
+  - root_pc: 8
+    quality: maj
+    symbol: I
+    start_bar: 60.0
+    end_bar: 61.0
+  - root_pc: 0
+    quality: '7'
+    symbol: III7
+    start_bar: 61.0
+    end_bar: 62.0
+  - root_pc: 5
+    quality: min
+    symbol: vi
+    start_bar: 62.0
+    end_bar: 63.0
+  - root_pc: 8
+    quality: '7'
+    symbol: I7
+    start_bar: 63.0
+    end_bar: 64.0
+  - root_pc: 1
+    quality: maj
+    symbol: IV
+    start_bar: 64.0
+    end_bar: 65.0
+  - root_pc: 10
+    quality: '7'
+    symbol: II7
+    start_bar: 65.0
+    end_bar: 66.0
+  - root_pc: 3
+    quality: maj
+    symbol: V
+    start_bar: 66.0
+    end_bar: 67.0
+  - root_pc: 3
+    quality: maj
+    symbol: V
+    start_bar: 67.0
+    end_bar: 68.0
+  - root_pc: 8
+    quality: maj
+    symbol: I
+    start_bar: 68.0
+    end_bar: 69.0
+  - root_pc: 0
+    quality: '7'
+    symbol: III7
+    start_bar: 69.0
+    end_bar: 70.0
+  - root_pc: 5
+    quality: min
+    symbol: vi
+    start_bar: 70.0
+    end_bar: 71.0
+  - root_pc: 8
+    quality: '7'
+    symbol: I7
+    start_bar: 71.0
+    end_bar: 72.0
+  - root_pc: 1
+    quality: maj
+    symbol: IV
+    start_bar: 72.0
+    end_bar: 73.0
+  - root_pc: 10
+    quality: '7'
+    symbol: II7
+    start_bar: 73.0
+    end_bar: 74.0
+  - root_pc: 3
+    quality: maj
+    symbol: V
+    start_bar: 74.0
+    end_bar: 75.0
+  - root_pc: 3
+    quality: maj
+    symbol: V
+    start_bar: 75.0
+    end_bar: 76.0
+  - root_pc: 8
+    quality: maj
+    symbol: I
+    start_bar: 76.0
+    end_bar: 77.0
+  - root_pc: 1
+    quality: maj
+    symbol: IV
+    start_bar: 77.0
+    end_bar: 78.0
+  - root_pc: 3
+    quality: maj
+    symbol: V
+    start_bar: 78.0
+    end_bar: 79.0
+  - root_pc: 1
+    quality: maj
+    symbol: IV
+    start_bar: 79.0
+    end_bar: 80.0
+  section: null

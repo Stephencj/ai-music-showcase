@@ -1,0 +1,84 @@
+name: 5_angels_poop
+tempo: 104.0
+time_signature:
+- 4
+- 4
+bars: 32
+duration_seconds: 73.846144
+created: '2026-06-09T22:14:12'
+instruments:
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 516
+- name: Sub Bass
+  program: 38
+  is_drum: false
+  n_notes: 32
+- name: Synth Bass
+  program: 38
+  is_drum: false
+  n_notes: 124
+- name: 808 Bass
+  program: 39
+  is_drum: false
+  n_notes: 32
+- name: Acoustic Guitar
+  program: 25
+  is_drum: false
+  n_notes: 314
+- name: Synth Pad
+  program: 89
+  is_drum: false
+  n_notes: 619
+- name: Brass Section
+  program: 61
+  is_drum: false
+  n_notes: 440
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 302
+- name: Latin percussion
+  program: 0
+  is_drum: true
+  n_notes: 200
+n_notes: 2579
+spec:
+  genre: boy_band
+  key: A
+  scale: major
+  tempo: 104.0
+  time_signature:
+  - 4
+  - 4
+  seed: 107080
+  swing: null
+  instruments:
+  - drum_kit
+  - piano
+  - latin_perc
+  - sub_bass
+  - synth_bass
+  - bass_808
+  - acoustic_guitar
+  - synth_pad
+  - brass_section
+  sections:
+  - start_bar: 0
+    end_bar: 3
+    label: Intro
+    role: intro
+  - start_bar: 4
+    end_bar: 19
+    label: Verse
+    role: verse
+  - start_bar: 20
+    end_bar: 27
+    label: Chorus
+    role: chorus
+  - start_bar: 28
+    end_bar: 31
+    label: Outro
+    role: outro
+  section: null

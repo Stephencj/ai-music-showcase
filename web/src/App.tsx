@@ -4,10 +4,14 @@ import ComposeScreen from "./components/ComposeScreen";
 import PracticeScreen from "./components/PracticeScreen";
 import BandScreen from "./components/BandScreen";
 import type { BlockSpec } from "./types";
+import DressUpGallery from "./dressup/DressUpGallery";
 
 type Tab = "generate" | "compose" | "practice" | "band";
 
 export default function App() {
+  if (typeof location !== "undefined" && new URLSearchParams(location.search).has("dressupgallery")) {
+    return <DressUpGallery />;
+  }
   const [tab, setTab] = useState<Tab>("generate");
   const [editSpec, setEditSpec] = useState<BlockSpec | null>(null);
   const [practiceBlock, setPracticeBlock] = useState<string | null>(null);
