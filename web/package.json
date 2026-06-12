@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:dressup": "vite build --config vite.dressup.config.ts && mv dist-dressup/dressup.html dist-dressup/index.html",
     "preview": "vite preview"
   },
   "dependencies": {

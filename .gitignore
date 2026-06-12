@@ -166,3 +166,5 @@ data/ai_requests/
 
 # Generated Xcode project — regenerate with: cd ios && xcodegen
 ios/AiMusic.xcodeproj/
+web/dist-dressup/
+android/app/src/main/assets/dressup/

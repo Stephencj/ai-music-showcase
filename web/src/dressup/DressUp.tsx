@@ -39,11 +39,12 @@ const loadTried = (): Set<string> => {
 };
 const LEVELS = ["New Stylist", "Style Star", "Fashionista", "Glam Guru", "Style Legend"];
 
-export default function DressUp({ members, onChange, onClose, onPerform }: {
+export default function DressUp({ members, onChange, onClose, onPerform, hideClose }: {
   members: Member[];
   onChange: (m: Member[]) => void;
   onClose: () => void;
   onPerform?: () => void;
+  hideClose?: boolean;   // standalone app: no "close" (it's the whole app)
 }) {
   const [sel, setSel] = useState(0);
   const [cat, setCat] = useState("top");
@@ -111,7 +112,7 @@ export default function DressUp({ members, onChange, onClose, onPerform }: {
     return (
       <div className="dressup-screen">
         <div className="du-top"><span className="du-title">🎨 Dress Up</span>
-          <button className="du-x" onClick={onClose}>✕</button></div>
+          {!hideClose && <button className="du-x" onClick={onClose}>✕</button>}</div>
         <div className="du-empty">
           <p>Make your band, then dress them up!</p>
           <button className="du-big-btn" onClick={addMember}>➕ Add a band member</button>
@@ -125,7 +126,7 @@ export default function DressUp({ members, onChange, onClose, onPerform }: {
       <div className="du-top">
         <span className="du-title">🎨 Dress Up</span>
         <span className={"du-stars" + (pop ? " pop" : "")}>⭐ {stars} · {level}</span>
-        <button className="du-x" onClick={onClose}>✕</button>
+        {!hideClose && <button className="du-x" onClick={onClose}>✕</button>}
       </div>
 
       <div className="du-main">

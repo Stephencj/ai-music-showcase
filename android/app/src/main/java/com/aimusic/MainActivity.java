@@ -117,7 +117,13 @@ public class MainActivity extends Activity {
         });
 
         setContentView(web);
-        beginStartup();
+        if (BuildConfig.STANDALONE) {
+            // Offline "Dress Up Band": load the web assets bundled in the APK —
+            // no Mac, no network, no discovery.
+            web.loadUrl(APP_ORIGIN + "/assets/dressup/index.html");
+        } else {
+            beginStartup();
+        }
     }
 
     /** Find the Mac automatically via its Bonjour/mDNS service so the app

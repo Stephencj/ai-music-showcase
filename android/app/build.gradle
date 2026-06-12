@@ -12,6 +12,30 @@ android {
         targetSdk 34
         versionCode 12
         versionName '1.11'
+        manifestPlaceholders = [appLabel: 'Music Producer']
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    // Two apps from one project: `producer` (the live-from-Mac Music Producer)
+    // and `dressup` (a standalone OFFLINE "Dress Up Band" that loads bundled
+    // web assets — no Mac, no network). Build with assembleProducerDebug /
+    // assembleDressupDebug (or *Release).
+    flavorDimensions += 'mode'
+    productFlavors {
+        producer {
+            dimension 'mode'
+            buildConfigField 'boolean', 'STANDALONE', 'false'
+        }
+        dressup {
+            dimension 'mode'
+            applicationIdSuffix '.dressup'
+            versionNameSuffix '-dressup'
+            buildConfigField 'boolean', 'STANDALONE', 'true'
+            manifestPlaceholders = [appLabel: 'Dress Up Band']
+        }
     }
 
     buildTypes {
