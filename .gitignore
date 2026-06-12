@@ -168,3 +168,5 @@ data/ai_requests/
 ios/AiMusic.xcodeproj/
 web/dist-dressup/
 android/app/src/main/assets/dressup/
+android/keystore.properties
+android/*.keystore

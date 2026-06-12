@@ -2,6 +2,12 @@ plugins {
     id 'com.android.application' version '8.7.2'
 }
 
+// Release signing config from a gitignored keystore.properties (KEEP SAFE —
+// losing the keystore means you can't update the published app).
+def ksProps = new Properties()
+def ksFile = rootProject.file('keystore.properties')
+if (ksFile.exists()) ksProps.load(new FileInputStream(ksFile))
+
 android {
     namespace 'com.aimusic'
     compileSdk 34
@@ -38,9 +44,21 @@ android {
         }
     }
 
+    signingConfigs {
+        release {
+            if (ksFile.exists()) {
+                storeFile rootProject.file(ksProps['storeFile'])
+                storePassword ksProps['storePassword']
+                keyAlias ksProps['keyAlias']
+                keyPassword ksProps['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
+            if (ksFile.exists()) signingConfig signingConfigs.release
         }
     }
 

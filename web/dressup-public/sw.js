@@ -1,7 +1,7 @@
 /* Dress Up Band — offline-first service worker. The whole app is static
  * (no backend), so cache everything and serve from cache, updating in the
  * background. Bump CACHE to force a refresh of cached assets. */
-const CACHE = "dressup-v1";
+const CACHE = "dressup-v2";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(["./", "./index.html"])).then(() => self.skipWaiting()));
@@ -15,9 +15,17 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
-  // Navigations: cache-first on the shell so it opens instantly offline.
+  // Navigations: network-first so a new build's shell loads, refreshing the
+  // cache; fall back to cache when actually offline (never serve a stale shell
+  // that points at deleted hashed assets).
   if (req.mode === "navigate") {
-    e.respondWith(caches.match("./index.html").then((m) => m || fetch(req)));
+    e.respondWith(
+      fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put("./index.html", copy));
+        return res;
+      }).catch(() => caches.match("./index.html").then((m) => m || caches.match("./")))
+    );
     return;
   }
   e.respondWith(
