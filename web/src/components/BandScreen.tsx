@@ -6,6 +6,7 @@ import PlayAlong from "./PlayAlong";
 import MixingDesk, { type MixState, type TrackSettings, cleanMix } from "./MixingDesk";
 import LiveMixer from "./LiveMixer";
 import DressUp from "../dressup/DressUp";
+import Performance from "../dressup/Performance";
 import { type Member, imageBreakdown, normalizeMember } from "../dressup/wardrobe";
 
 // The band-career shell: name a band, then progress along whichever ROLE you
@@ -80,6 +81,7 @@ export default function BandScreen({ isActive, onWriteSong, onOpenPractice }: {
   const [train, setTrain] = useState<string | null>(null);      // ear-training on a block
   const [live, setLive] = useState<string | null>(null);        // live-mixing a block
   const [stylist, setStylist] = useState(false);                // stylist studio open
+  const [show, setShow] = useState(false);                      // watch the band perform
 
   useEffect(() => { if (band) localStorage.setItem(KEY, JSON.stringify(band)); }, [band]);
   useEffect(() => { if (isActive) api.getBlocks().then(setBlocks).catch(() => {}); }, [isActive]);
@@ -225,7 +227,13 @@ export default function BandScreen({ isActive, onWriteSong, onOpenPractice }: {
       {stylist && (
         <DressUp members={band.members || []}
           onChange={(members) => setBand((b) => b ? { ...b, members, image: imageBreakdown(members).image } : b)}
+          onPerform={() => setShow(true)}
           onClose={() => setStylist(false)} />
+      )}
+      {show && (
+        <Performance members={band.members || []}
+          onComplete={() => award({ fans: Math.round(20 * image * tier.mult), money: 0 })}
+          onClose={() => setShow(false)} />
       )}
     </>
   );

@@ -1043,6 +1043,59 @@ audio { width: 100%; margin: 8px 0 12px; }
   .du-board { border-radius: 22px 0 0 0; }
 }
 
+/* ── The show / performance stage ─────────────────────────────────────────── */
+.show-screen {
+  position: fixed; inset: 0; z-index: 1100; display: flex; flex-direction: column;
+  overflow: hidden; color: #fff;
+  background:
+    radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--mood, #7c3aed) 55%, #000) 0%, #0b0a14 70%);
+}
+.show-x { position: absolute; top: 12px; right: 12px; z-index: 5; }
+.show-lights { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.show-lights i {
+  position: absolute; top: -10%; width: 50vw; height: 50vw; border-radius: 50%; filter: blur(60px);
+  opacity: 0.5; mix-blend-mode: screen; animation: showlight 6s ease-in-out infinite;
+}
+.show-lights i:nth-child(1) { left: -10%; background: var(--mood, #7c3aed); }
+.show-lights i:nth-child(2) { right: -10%; background: #f472b6; animation-delay: -2s; }
+.show-lights i:nth-child(3) { left: 30%; background: #38bdf8; animation-delay: -4s; }
+@keyframes showlight { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(8vw,6vh) scale(1.25); } }
+
+.show-stage { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: flex-end;
+  align-items: center; min-height: 0; padding-bottom: 4px; }
+.show-band { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; justify-content: center;
+  padding: 0 12px; }
+.show-member { position: relative; transition: transform 0.12s ease-out; }
+.show-member.live { animation: showsway 1.4s ease-in-out infinite; }
+@keyframes showsway { 0%,100% { rotate: -2deg; } 50% { rotate: 2deg; } }
+.show-member .duf { max-height: 40vh; width: auto; filter: drop-shadow(0 12px 14px rgba(0,0,0,0.5)); }
+.show-part { position: absolute; top: -6px; left: 50%; transform: translateX(-50%); font-size: 18px; }
+.show-floor {
+  width: min(680px, 92vw); height: 26px; margin-top: -6px; border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--mood,#7c3aed) 70%, #fff) 0%, transparent 100%);
+  opacity: 0.6; transition: transform 0.1s ease-out; }
+.show-floor.pulse { transform: scale(1.06); opacity: 0.85; }
+
+.show-controls { flex: 0 0 auto; padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+  background: rgba(0,0,0,0.35); display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.show-songs { display: flex; gap: 8px; overflow-x: auto; max-width: 100%; }
+.show-song { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer;
+  font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 12px; color: #fff;
+  background: rgba(255,255,255,0.12); border: 2px solid transparent; }
+.show-song span { font-size: 20px; }
+.show-song.on { border-color: #fde047; background: rgba(255,255,255,0.22); }
+.show-play { font-size: 17px; font-weight: 800; padding: 12px 24px; border-radius: 16px; border: none; cursor: pointer;
+  background: linear-gradient(120deg, #f472b6, #fb7185); color: #fff; box-shadow: 0 8px 20px rgba(244,114,182,0.4); }
+
+.show-complete { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px; text-align: center;
+  background: rgba(8,6,18,0.7); backdrop-filter: blur(3px); animation: fadein 0.3s; }
+.show-complete h2 { margin: 4px; font-size: 28px; }
+.show-burst { font-size: 40px; animation: pop 0.5s ease-out; }
+.show-complete-actions { display: flex; gap: 10px; margin-top: 8px; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop { 0% { transform: scale(0.3); opacity: 0; } 70% { transform: scale(1.2); } 100% { transform: scale(1); opacity: 1; } }
+
 /* Role picker — pick your track (Musician / Producer / Stylist). */
 .role-picker { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 12px 0; }
 .role-card {
