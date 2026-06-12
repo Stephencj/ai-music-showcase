@@ -1099,7 +1099,7 @@ audio { width: 100%; margin: 8px 0 12px; }
 @keyframes pop { 0% { transform: scale(0.3); opacity: 0; } 70% { transform: scale(1.2); } 100% { transform: scale(1); opacity: 1; } }
 
 /* Role picker — pick your track (Musician / Producer / Stylist). */
-.role-picker { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 12px 0; }
+.role-picker { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 12px 0; }
 .role-card {
   display: flex; flex-direction: column; gap: 4px; text-align: left; cursor: pointer;
   padding: 12px 14px; border-radius: 14px; background: var(--card);
@@ -1110,7 +1110,7 @@ audio { width: 100%; margin: 8px 0 12px; }
 .role-icon { font-size: 22px; }
 .role-name { font-weight: 700; font-size: 15px; }
 .role-blurb { font-size: 12px; color: var(--muted); line-height: 1.35; }
-@media (min-width: 760px) { .role-picker { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 760px) { .role-picker { grid-template-columns: repeat(4, 1fr); } }
 
 /* Stylist dashboard row + mini roster. */
 .band-stylist-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

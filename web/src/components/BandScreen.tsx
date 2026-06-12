@@ -15,7 +15,7 @@ import { type Member, imageBreakdown, normalizeMember } from "../dressup/wardrob
 // advance another, you choose where you fit in. Songcraft × production × image
 // × venue all multiply a gig's payoff. Career state lives in localStorage.
 
-type Role = "musician" | "producer" | "stylist";
+type Role = "songwriter" | "bandmembers" | "producer" | "stylist";
 
 interface Band {
   name: string; fans: number; money: number; gigs: number;
@@ -27,7 +27,8 @@ interface Band {
 const KEY = "aimusic.band";
 
 const ROLES: { id: Role; icon: string; name: string; blurb: string }[] = [
-  { id: "musician", icon: "🎤", name: "Musician", blurb: "Play your songs at gigs — tap the rhythm game, or play for real on MIDI/mic. Casual jams open in Practice." },
+  { id: "songwriter", icon: "✍️", name: "Song Writer", blurb: "Write the songs — open the generator to compose new tracks for your band to play, produce, and perform." },
+  { id: "bandmembers", icon: "🎤", name: "Band Members", blurb: "Play your songs at gigs (rhythm game or for real on MIDI/mic), jam casually in Practice, and watch the band perform." },
   { id: "producer", icon: "🎛", name: "Producer", blurb: "Mix & master your songs on the desk, A/B live, and train your ears. A better mix earns more fans." },
   { id: "stylist", icon: "🎨", name: "Stylist", blurb: "Choose the band's members and dress them. A fuller, on-brand look is an image multiplier on every gig." },
 ];
@@ -65,6 +66,7 @@ function loadBand(): Band | null {
   try {
     const b = JSON.parse(localStorage.getItem(KEY) || "null");
     if (b && Array.isArray(b.members)) b.members = b.members.map(normalizeMember);
+    if (b && b.role === "musician") b.role = "bandmembers";   // renamed track
     return b;
   } catch { return null; }
 }
@@ -75,7 +77,7 @@ export default function BandScreen({ isActive, onWriteSong, onOpenPractice }: {
   const [band, setBand] = useState<Band | null>(loadBand);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [nameDraft, setNameDraft] = useState("");
-  const [role, setRole] = useState<Role>(loadBand()?.role || "musician");
+  const [role, setRole] = useState<Role>(loadBand()?.role || "bandmembers");
   const [gig, setGig] = useState<string | null>(null);     // block name being played
   const [produce, setProduce] = useState<string | null>(null);  // block being produced
   const [train, setTrain] = useState<string | null>(null);      // ear-training on a block
@@ -148,8 +150,24 @@ export default function BandScreen({ isActive, onWriteSong, onOpenPractice }: {
         ))}
       </div>
 
-      {/* Stylist track lives on its own (not per-song). */}
-      {role === "stylist" ? (
+      {/* Song Writer — write the songs (the generator). */}
+      {role === "songwriter" && (
+        <div className="card">
+          <h2>Song Writer</h2>
+          <div className="meta" style={{ marginBottom: 10 }}>
+            Write the songs your band plays. Open the generator to compose a new track, then save it as a block.
+          </div>
+          <button className="btn secondary" style={{ width: "auto" }} onClick={onWriteSong}>✍️ Write a song</button>
+          {!songsEmpty && (
+            <div className="band-roster-mini" style={{ marginTop: 12 }}>
+              {blocks.map((b) => <span key={b.name} className="roster-mini-chip">{b.name}</span>)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Stylist — choose & dress the members (not per-song). */}
+      {role === "stylist" && (
         <div className="card">
           <h2>Stylist · the look</h2>
           <div className="meta" style={{ marginBottom: 10 }}>
@@ -168,12 +186,19 @@ export default function BandScreen({ isActive, onWriteSong, onOpenPractice }: {
             </button>
           </div>
         </div>
-      ) : (
-        /* Musician + Producer act on songs. */
+      )}
+
+      {/* Band Members + Producer act on songs. */}
+      {(role === "bandmembers" || role === "producer") && (
         <div className="card">
           <h2>Your songs</h2>
+          {role === "bandmembers" && (
+            <button className="btn" style={{ marginBottom: 10 }} onClick={() => setShow(true)}>
+              🎬 Watch the band perform
+            </button>
+          )}
           {songsEmpty
-            ? <div className="meta">No songs yet — write one in Generate, save it as a block, and it'll appear here.</div>
+            ? <div className="meta">No songs yet — switch to Song Writer (or Generate) to make one.</div>
             : (
               <div className="band-songs">
                 {blocks.map((b) => (
