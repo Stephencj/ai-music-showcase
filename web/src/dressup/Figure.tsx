@@ -206,6 +206,38 @@ function Shoes({ id, color }: { id: string; color: string }) {
   }
 }
 
+// Boy-only facial hair, coloured to match the hair. Drawn over the lower face.
+function FacialHair({ id, color }: { id: string; color: string }) {
+  switch (id) {
+    case "stubble":
+      return <path d="M64 84 C66 108 82 122 100 122 C118 122 134 108 136 84 C132 100 120 108 100 108 C80 108 68 100 64 84 Z" fill={color} opacity="0.28" />;
+    case "mustache":
+      return <path d="M86 92 Q100 88 114 92 Q108 99 100 96 Q92 99 86 92 Z" fill={color} />;
+    case "goatee":
+      return <g fill={color}><path d="M88 92 Q100 89 112 92 Q106 98 100 96 Q94 98 88 92 Z" /><path d="M93 104 Q100 120 107 104 Q100 110 93 104 Z" /></g>;
+    case "beard":
+      return <g fill={color}><path d="M63 80 C63 112 82 126 100 126 C118 126 137 112 137 80 C133 100 120 109 100 109 C80 109 67 100 63 80 Z" /><path d="M86 91 Q100 87 114 91 Q108 98 100 95 Q92 98 86 91 Z" /></g>;
+    default: return null;
+  }
+}
+
+// Makeup — lips and/or eyeshadow. Drawn over the base face features.
+function Makeup({ id }: { id: string }) {
+  const lips = <path d="M90 96 Q100 105 110 96 Q100 101 90 96 Z" fill="#e11d48" />;
+  const shadow = (
+    <g fill="#a855f7" opacity="0.55">
+      <path d="M80 76 Q86 72 92 75 Q86 74 80 76 Z" />
+      <path d="M120 76 Q114 72 108 75 Q114 74 120 76 Z" />
+    </g>
+  );
+  switch (id) {
+    case "lips": return lips;
+    case "eyeshadow": return shadow;
+    case "glam": return <g>{shadow}{lips}<circle cx="80" cy="92" r="6" fill="#fb7185" opacity="0.4" /><circle cx="120" cy="92" r="6" fill="#fb7185" opacity="0.4" /></g>;
+    default: return null;
+  }
+}
+
 function AccessoryBack({ id, color }: { id: string; color: string }) {
   switch (id) {
     case "wings":
@@ -290,6 +322,8 @@ export default function Figure({ member, size = 200 }: { member: Member; size?: 
         <circle cx="80" cy="92" r="5" fill="#fb7185" opacity="0.45" />
         <circle cx="120" cy="92" r="5" fill="#fb7185" opacity="0.45" />
         <path d="M90 96 Q100 104 110 96" stroke="#b9525a" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+        <Makeup id={member.makeup} />
+        {member.body === "boy" && <FacialHair id={member.facialHair} color={hcol} />}
       </g>
 
       <AccessoryFront id={member.accessory} color={colorHex(member.accessoryColor)} />

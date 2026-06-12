@@ -10,7 +10,7 @@ import CropModal from "./CropModal";
 import {
   type Member, type BodyType, type Part, type Swatch, type Shape,
   PARTS, PART_ICON, SKINS, COLORS, HAIR_COLORS,
-  HAIR, HATS, GLASSES, TOPS, BOTTOMS, SHOES, ACCESSORIES, defaultMember,
+  HAIR, HATS, GLASSES, TOPS, BOTTOMS, SHOES, ACCESSORIES, FACIAL_HAIR, MAKEUP, defaultMember,
 } from "./wardrobe";
 
 interface Cat {
@@ -23,6 +23,8 @@ const CATS: Cat[] = [
   { id: "hair", label: "Hair", icon: "💇", shapes: HAIR, shapeKey: "hair", colors: HAIR_COLORS, colorKey: "hairColor" },
   { id: "hat", label: "Hat", icon: "🎩", shapes: HATS, shapeKey: "hat", colors: COLORS, colorKey: "hatColor" },
   { id: "glasses", label: "Glasses", icon: "👓", shapes: GLASSES, shapeKey: "glasses" },
+  { id: "makeup", label: "Makeup", icon: "💄", shapes: MAKEUP, shapeKey: "makeup" },
+  { id: "beard", label: "Beard", icon: "🧔", shapes: FACIAL_HAIR, shapeKey: "facialHair", colors: HAIR_COLORS, colorKey: "hairColor" },
   { id: "top", label: "Top", icon: "👕", shapes: TOPS, shapeKey: "top", colors: COLORS, colorKey: "topColor", photo: true },
   { id: "bottom", label: "Bottom", icon: "👖", shapes: BOTTOMS, shapeKey: "bottom", colors: COLORS, colorKey: "bottomColor" },
   { id: "shoes", label: "Shoes", icon: "👟", shapes: SHOES, shapeKey: "shoes", colors: COLORS, colorKey: "shoesColor" },
@@ -80,7 +82,13 @@ export default function DressUp({ members, onChange, onClose, onPerform }: {
     if (key === "bottom" && id !== "none" && cur && (cur.top === "dress" || cur.top === "gown")) p.top = "tee";
     patch(p, `${cat}:${id}`);
   };
-  const setBody = (body: BodyType) => patch({ body });
+  // Switching to a girl clears facial hair (girls never have it) and bumps off
+  // the Beard tab if it was open.
+  const setBody = (body: BodyType) => {
+    patch(body === "girl" ? { body, facialHair: "none" } : { body });
+    if (body === "girl" && cat === "beard") setCat("top");
+  };
+  const visibleCats = CATS.filter((c) => c.id !== "beard" || cur?.body === "boy");
 
   const addMember = () => {
     const used = new Set(members.map((m) => m.part));
@@ -148,7 +156,7 @@ export default function DressUp({ members, onChange, onClose, onPerform }: {
         <div className="du-board">
           {/* category tabs */}
           <div className="du-cats">
-            {CATS.map((c) => (
+            {visibleCats.map((c) => (
               <button key={c.id} className={"du-cat" + (cat === c.id ? " on" : "")} onClick={() => setCat(c.id)}>
                 <span className="du-cat-ic">{c.icon}</span><span className="du-cat-lb">{c.label}</span>
               </button>

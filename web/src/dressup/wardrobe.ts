@@ -128,6 +128,24 @@ export const SHOES: Shape[] = [
   { id: "barefoot", name: "Barefoot", emoji: "🦶" },
 ];
 
+// Boy-only (girls never get facial hair). Coloured with the hair colour.
+export const FACIAL_HAIR: Shape[] = [
+  { id: "none", name: "None", emoji: "🚫" },
+  { id: "stubble", name: "Stubble", theme: "rock" },
+  { id: "mustache", name: "Mustache", theme: "rock" },
+  { id: "goatee", name: "Goatee", theme: "rock" },
+  { id: "beard", name: "Beard", theme: "cozy" },
+];
+
+// Reads feminine but available to all (it's a band) — except it pairs with the
+// girl body by default.
+export const MAKEUP: Shape[] = [
+  { id: "none", name: "None", emoji: "🚫" },
+  { id: "lips", name: "Lipstick", theme: "fancy" },
+  { id: "eyeshadow", name: "Eyeshadow", theme: "sparkle" },
+  { id: "glam", name: "Full glam", theme: "sparkle" },
+];
+
 export const ACCESSORIES: Shape[] = [
   { id: "none", name: "None", emoji: "🚫" },
   { id: "necklace", name: "Necklace", emoji: "📿", theme: "fancy" },
@@ -158,6 +176,8 @@ export interface Member {
   bottom: string; bottomColor: string;
   shoes: string; shoesColor: string;
   accessory: string; accessoryColor: string;
+  facialHair: string;    // boy-only; "none" for girls
+  makeup: string;
   shirtPhoto?: string;   // data URL printed on the shirt
 }
 
@@ -175,6 +195,7 @@ export function defaultMember(part: Part, name: string, body: BodyType = "girl")
     bottom: "pants", bottomColor: "indigo",
     shoes: "sneakers", shoesColor: "red",
     accessory: "none", accessoryColor: "pink",
+    facialHair: "none", makeup: "none",
   };
 }
 
@@ -197,6 +218,8 @@ export function normalizeMember(m: Record<string, unknown> | null | undefined): 
     bottom: ok(BOTTOMS, o.bottom, d.bottom), bottomColor: ok(COLORS, o.bottomColor, d.bottomColor),
     shoes: ok(SHOES, o.shoes, d.shoes), shoesColor: ok(COLORS, o.shoesColor, d.shoesColor),
     accessory: ok(ACCESSORIES, o.accessory, d.accessory), accessoryColor: ok(COLORS, o.accessoryColor, d.accessoryColor),
+    facialHair: o.body === "boy" ? ok(FACIAL_HAIR, o.facialHair, "none") : "none",
+    makeup: ok(MAKEUP, o.makeup, "none"),
     shirtPhoto: typeof o.shirtPhoto === "string" ? o.shirtPhoto : undefined,
   };
 }
@@ -213,7 +236,7 @@ export const themeOf = (arr: Shape[], id: string) => shape(arr, id)?.theme;
 export function isStyled(m: Member): boolean {
   const d = defaultMember(m.part, m.name);
   return (["hair", "hat", "glasses", "top", "bottom", "shoes", "accessory",
-    "hairColor", "topColor", "bottomColor", "shoesColor"] as (keyof Member)[])
+    "hairColor", "topColor", "bottomColor", "shoesColor", "facialHair", "makeup"] as (keyof Member)[])
     .some((k) => m[k] !== d[k]) || !!m.shirtPhoto;
 }
 
