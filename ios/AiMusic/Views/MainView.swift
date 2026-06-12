@@ -212,6 +212,7 @@ struct StudioWebView: UIViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator   // grants web camera/mic (Dress Up photo)
         webView.allowsBackForwardNavigationGestures = true
         webView.scrollView.refreshControl = makeRefreshControl(webView: webView,
                                                                coordinator: context.coordinator)
@@ -244,12 +245,26 @@ struct StudioWebView: UIViewRepresentable {
         return rc
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         var token: String
         var lastLoadedToken: UUID = UUID()
         weak var refreshControl: UIRefreshControl?
 
         init(token: String) { self.token = token }
+
+        // Grant the web app camera/microphone (e.g. the Dress Up "photo on a
+        // shirt" feature). WKWebView denies media capture to web content by
+        // default even when Info.plist carries the usage strings — the app
+        // must opt in here. iOS still shows the system permission prompt the
+        // first time, backed by NSCameraUsageDescription.
+        @available(iOS 15.0, *)
+        func webView(_ webView: WKWebView,
+                     requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                     initiatedByFrame frame: WKFrameInfo,
+                     type: WKMediaCaptureType,
+                     decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+            decisionHandler(.grant)
+        }
 
         func webView(_ webView: WKWebView,
                      decidePolicyFor navigationAction: WKNavigationAction,
