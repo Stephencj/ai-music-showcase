@@ -1084,6 +1084,8 @@ audio { width: 100%; margin: 8px 0 12px; }
   background: rgba(255,255,255,0.12); border: 2px solid transparent; }
 .show-song span { font-size: 20px; }
 .show-song.on { border-color: #fde047; background: rgba(255,255,255,0.22); }
+.show-song-div { flex: 0 0 auto; align-self: center; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.06em; color: rgba(255,255,255,0.6); padding: 0 4px; border-left: 1px solid rgba(255,255,255,0.2); }
 .show-play { font-size: 17px; font-weight: 800; padding: 12px 24px; border-radius: 16px; border: none; cursor: pointer;
   background: linear-gradient(120deg, #f472b6, #fb7185); color: #fff; box-shadow: 0 8px 20px rgba(244,114,182,0.4); }
 

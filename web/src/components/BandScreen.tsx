@@ -232,6 +232,9 @@ export default function BandScreen({ isActive, onWriteSong, onOpenPractice }: {
       )}
       {show && (
         <Performance members={band.members || []}
+          realSongs={blocks.filter((b) => b.has_preview).map((b) => ({
+            id: b.name, name: b.name, url: api.blockAudioUrl(b.name), bpm: b.tempo || 120,
+          }))}
           onComplete={() => award({ fans: Math.round(20 * image * tier.mult), money: 0 })}
           onClose={() => setShow(false)} />
       )}

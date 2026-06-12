@@ -1,52 +1,85 @@
 // The show — your dressed band performs on a lit stage, bobbing and playing in
-// time to a song. Music is synthesized live (offline, SynthBand). Watching a
-// song through completes the show and earns a star. Self-contained: no backend.
+// time. Two song sources: built-in SYNTH tunes (offline, no files) and, when
+// provided (band app, online), your real generated songs played from audio +
+// their tempo. Watching a song through completes the show (a star / fans).
 import { useEffect, useRef, useState } from "react";
 import Figure from "./Figure";
 import { type Member, PART_ICON } from "./wardrobe";
 import { SynthBand, SONGS, type Song } from "./music";
 
-const SHOW_BEATS = 32;   // ~one full song before the "show complete" payoff
+const SHOW_BEATS = 32;   // ~one full synth song before the payoff
 
-export default function Performance({ members, onComplete, onClose }: {
+export interface RealSong { id: string; name: string; url: string; bpm: number; }
+type Track = { kind: "synth"; song: Song } | { kind: "audio"; song: RealSong };
+
+export default function Performance({ members, realSongs, onComplete, onClose }: {
   members: Member[];
+  realSongs?: RealSong[];
   onComplete?: () => void;
   onClose: () => void;
 }) {
-  const [song, setSong] = useState<Song>(SONGS[0]);
+  const synthTracks: Track[] = SONGS.map((s) => ({ kind: "synth", song: s }));
+  const audioTracks: Track[] = (realSongs || []).map((s) => ({ kind: "audio", song: s }));
+
+  const [track, setTrack] = useState<Track>(synthTracks[0]);
   const [playing, setPlaying] = useState(false);
   const [beat, setBeat] = useState(-1);
   const [done, setDone] = useState(false);
   const bandRef = useRef<SynthBand | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const rafRef = useRef(0);
   const completedRef = useRef(false);
 
+  const complete = () => {
+    if (completedRef.current) return;
+    completedRef.current = true; setDone(true); onComplete?.();
+  };
+
   useEffect(() => {
-    const band = new SynthBand((b) => {
+    bandRef.current = new SynthBand((b) => {
       setBeat(b);
-      if (b >= SHOW_BEATS && !completedRef.current) {
-        completedRef.current = true;
-        setDone(true);
-        onComplete?.();
-      }
+      if (b >= SHOW_BEATS) complete();
     });
-    bandRef.current = band;
-    return () => band.dispose();
+    return () => { bandRef.current?.dispose(); cancelAnimationFrame(rafRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const start = async (s: Song) => {
-    setSong(s); setDone(false); completedRef.current = false; setBeat(-1);
-    await bandRef.current!.play(s);
+  const stop = () => {
+    bandRef.current?.stop();
+    cancelAnimationFrame(rafRef.current);
+    const a = audioRef.current; if (a) { a.pause(); }
+    setPlaying(false);
+  };
+
+  const audioTick = (bpm: number) => {
+    const a = audioRef.current; if (!a) return;
+    setBeat(Math.floor(a.currentTime * (bpm / 60)));
+    rafRef.current = requestAnimationFrame(() => audioTick(bpm));
+  };
+
+  const start = async (t: Track) => {
+    stop();
+    setTrack(t); setDone(false); completedRef.current = false; setBeat(-1);
+    if (t.kind === "synth") {
+      await bandRef.current!.play(t.song);
+    } else {
+      const a = audioRef.current!;
+      a.src = t.song.url; a.currentTime = 0;
+      try { await a.play(); } catch { /* autoplay blocked → user taps again */ }
+      cancelAnimationFrame(rafRef.current);
+      audioTick(t.song.bpm);
+    }
     setPlaying(true);
   };
-  const stop = () => { bandRef.current!.stop(); setPlaying(false); };
 
   const downbeat = beat >= 0 && beat % 2 === 0;
+  const mood = track.kind === "synth" ? track.song.color : "#7c3aed";
   const lineup = members.length ? members : [];
 
   return (
-    <div className="show-screen" style={{ ["--mood" as string]: song.color }}>
+    <div className="show-screen" style={{ ["--mood" as string]: mood }}>
       <button className="du-x show-x" onClick={() => { stop(); onClose(); }}>✕</button>
+      <audio ref={audioRef} onEnded={complete} style={{ display: "none" }} />
 
       <div className="show-lights"><i /><i /><i /></div>
 
@@ -72,7 +105,7 @@ export default function Performance({ members, onComplete, onClose }: {
           <h2>Amazing show!</h2>
           <p>You earned a ⭐</p>
           <div className="show-complete-actions">
-            <button className="du-big-btn" onClick={() => start(song)}>▶ Again</button>
+            <button className="du-big-btn" onClick={() => start(track)}>▶ Again</button>
             <button className="btn ghost" style={{ width: "auto" }} onClick={onClose}>Done</button>
           </div>
         </div>
@@ -80,13 +113,17 @@ export default function Performance({ members, onComplete, onClose }: {
 
       <div className="show-controls">
         <div className="show-songs">
-          {SONGS.map((s) => (
-            <button key={s.id} className={"show-song" + (song.id === s.id ? " on" : "")} onClick={() => start(s)}>
-              <span>{s.emoji}</span>{s.name}
-            </button>
+          {synthTracks.map((t) => t.kind === "synth" && (
+            <button key={t.song.id} className={"show-song" + (track.kind === "synth" && track.song.id === t.song.id ? " on" : "")}
+              onClick={() => start(t)}><span>{t.song.emoji}</span>{t.song.name}</button>
+          ))}
+          {audioTracks.length > 0 && <div className="show-song-div">Your songs</div>}
+          {audioTracks.map((t) => t.kind === "audio" && (
+            <button key={t.song.id} className={"show-song" + (track.kind === "audio" && track.song.id === t.song.id ? " on" : "")}
+              onClick={() => start(t)}><span>🎵</span>{t.song.name}</button>
           ))}
         </div>
-        <button className="show-play" onClick={() => (playing ? stop() : start(song))}>
+        <button className="show-play" onClick={() => (playing ? stop() : start(track))}>
           {playing ? "⏸ Stop" : "▶ Play the show"}
         </button>
       </div>
