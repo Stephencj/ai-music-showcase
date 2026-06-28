@@ -68,13 +68,13 @@ _ROCK = MixProfile(
     name="rock",
     label="Rock (drums + guitars forward)",
     family_overrides={
-        "drums":      {"gain_db": -1.0},      # drums loud
-        "bass":       {"gain_db": -3.0},
-        "chords":     {"gain_db": -7.0},      # guitars +2
-        "lead":       {"gain_db": 0.5},       # lead guitar way out front
-        "lead_vocal": {"gain_db": -2.5},
-        "bvocal":     {"gain_db": -9.0},
-        "strings":    {"gain_db": -14.0},     # strings way back
+        "drums":      {"gain_db": -1.5},
+        "bass":       {"gain_db": -3.5},
+        "chords":     {"gain_db": -4.0},      # rhythm guitars present
+        "lead":       {"gain_db": -3.0},      # lead guitar forward, not blaring
+        "lead_vocal": {"gain_db": -9.0},      # instrumental melody sits with chords
+        "bvocal":     {"gain_db": -10.0},
+        "strings":    {"gain_db": -12.0},
         "brass":      {"gain_db": -9.0},
     },
     master_preset="loud",
@@ -86,10 +86,10 @@ _JAZZ = MixProfile(
     label="Jazz (transparent, wide)",
     family_overrides={
         "drums":      {"gain_db": -4.0},      # drums softer, more acoustic
-        "bass":       {"gain_db": -3.0},
-        "chords":     {"gain_db": -7.0},      # piano forward
-        "lead":       {"gain_db": -0.5},      # lead/solo guitar way forward (blues)
-        "lead_vocal": {"gain_db": -2.5},
+        "bass":       {"gain_db": -3.5},
+        "chords":     {"gain_db": -4.0},      # piano present (jazz comp)
+        "lead":       {"gain_db": -4.0},      # solo forward but not dominating
+        "lead_vocal": {"gain_db": -9.0},      # instrumental melody sits with piano
         "brass":      {"gain_db": -5.0},      # horns up
         "woodwind":   {"gain_db": -7.0},
         "strings":    {"gain_db": -8.0},
@@ -103,11 +103,11 @@ _BALLAD = MixProfile(
     label="Ballad (vocal + strings forward)",
     family_overrides={
         "drums":      {"gain_db": -5.0},      # drums very soft
-        "bass":       {"gain_db": -4.5},
-        "chords":     {"gain_db": -8.0},
-        "lead_vocal": {"gain_db": -2.0},      # vocal louder still
-        "bvocal":     {"gain_db": -7.0},
-        "strings":    {"gain_db": -7.0},      # strings forward, wide
+        "bass":       {"gain_db": -5.0},
+        "chords":     {"gain_db": -5.0},
+        "lead_vocal": {"gain_db": -8.0},      # melody slightly forward (ballad), still balanced
+        "bvocal":     {"gain_db": -9.0},
+        "strings":    {"gain_db": -6.0},      # strings forward, wide
         "woodwind":   {"gain_db": -8.0},
     },
     master_preset="transparent",
@@ -118,13 +118,13 @@ _EDM = MixProfile(
     name="edm",
     label="EDM (kick forward, sidechain pumping)",
     family_overrides={
-        "drums":      {"gain_db": -0.5},      # kick max
+        "drums":      {"gain_db": -0.5},      # kick max (EDM character)
         "bass":       {"gain_db": -2.0},
-        "chords":     {"gain_db": -8.0},
-        "pad":        {"gain_db": -8.0},
-        "lead_vocal": {"gain_db": -3.5},
+        "chords":     {"gain_db": -5.0},
+        "pad":        {"gain_db": -6.0},
+        "lead_vocal": {"gain_db": -9.0},      # instrumental melody balanced
         "bvocal":     {"gain_db": -10.0},
-        "lead":       {"gain_db": -4.0},      # synth lead forward
+        "lead":       {"gain_db": -6.0},      # synth lead present, not piercing
     },
     master_preset="loud",
     sidechain_kick_into=("bass", "pad", "chords"),
@@ -134,13 +134,13 @@ _CINEMATIC = MixProfile(
     name="cinematic",
     label="Cinematic (strings + brass swell)",
     family_overrides={
-        "drums":      {"gain_db": -3.0},
-        "bass":       {"gain_db": -4.0},
-        "strings":    {"gain_db": -6.0, "stereo_widen": 0.5},
+        "drums":      {"gain_db": -3.5},
+        "bass":       {"gain_db": -4.5},
+        "strings":    {"gain_db": -5.0, "stereo_widen": 0.5},  # strings lead (cinematic)
         "brass":      {"gain_db": -5.0},
         "woodwind":   {"gain_db": -7.0},
-        "lead_vocal": {"gain_db": -3.0},
-        "chords":     {"gain_db": -10.0},
+        "lead_vocal": {"gain_db": -9.0},      # instrumental melody balanced
+        "chords":     {"gain_db": -6.0},
     },
     master_preset="cinematic",
     sidechain_kick_into=(),
