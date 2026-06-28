@@ -1015,7 +1015,7 @@ def _auto_expression(genre: Optional[str]) -> str:
     if any(k in g for k in ("classical", "cinematic", "baroque", "waltz",
                             "romantic", "orchestr", "holiday", "gamelan")):
         return "legato"
-    return "light"
+    return "full"
 
 
 def _add_melody_tech(name, *, roles, label, description,
@@ -1045,13 +1045,13 @@ def _add_melody_tech(name, *, roles, label, description,
     """
     def _apply(midi, ctx):
         eff_program, eff_track = _route_kwargs(ctx, program, track_name)
-        # Resolve expression from the routed instrument: never bend a sung
-        # vocal; default instrumental melodies to a light articulation.
+        # Resolve expression from the routed instrument. In the full-song MIDI
+        # render even vocal_lead is an instrument (FluidSynth patch, not sung
+        # synthesis), so it gets genre-appropriate articulation too — otherwise
+        # the lead plays flat/repetitive with no vibrato/scoop/fall.
         inst = getattr(ctx, "instrument_obj", None)
         fam = getattr(inst, "family", None) if inst is not None else None
-        if fam == "vocal":
-            eff_expr = None
-        elif expression == "auto":
+        if expression == "auto":
             eff_expr = _auto_expression(ctx.genre) if fam is not None else None
         else:
             eff_expr = expression

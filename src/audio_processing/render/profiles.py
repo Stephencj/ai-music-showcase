@@ -50,14 +50,15 @@ _POP = MixProfile(
     name="pop",
     label="Pop (vocal forward)",
     family_overrides={
-        # Vocal up a touch above industry default.
-        "lead_vocal": {"gain_db": -2.0},
+        # Balanced front-to-back for INSTRUMENTAL full songs (stem-RMS verified):
+        # drums/bass anchor the groove; chords + lead sit ~2-3 dB under them so
+        # the harmony is present and nothing track dominates.
+        "drums":      {"gain_db": -2.0},
+        "bass":       {"gain_db": -4.5},
+        "chords":     {"gain_db": -4.0},
+        "lead_vocal": {"gain_db": -9.5},
         "bvocal":     {"gain_db": -7.5},
-        # Drums tight; guitars cut for vocal room.
-        "drums":      {"gain_db": -2.5},
-        "chords":     {"gain_db": -10.0},
-        # Strings sit back behind vocal.
-        "strings":    {"gain_db": -12.0},
+        "strings":    {"gain_db": -8.0},
     },
     master_preset="default",
     sidechain_kick_into=("pad",),   # light pad duck only

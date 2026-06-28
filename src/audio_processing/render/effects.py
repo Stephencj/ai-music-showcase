@@ -147,7 +147,7 @@ def _chords_chain() -> list[pdb.Plugin]:
         pdb.PeakFilter(cutoff_frequency_hz=250.0, gain_db=-2.0, q=0.9),
         # Reciprocal carve at 3-4 kHz — leaves room for the vocal's
         # presence boost so they don't mask each other.
-        pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=-1.5, q=0.7),
+        pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=-0.5, q=0.7),
         pdb.Compressor(threshold_db=-18.0, ratio=2.0,
                        attack_ms=15.0, release_ms=160.0),
         pdb.Chorus(rate_hz=0.6, depth=0.18, feedback=0.0, mix=0.15),
@@ -159,7 +159,7 @@ def _pad_chain() -> list[pdb.Plugin]:
     return [
         pdb.HighpassFilter(cutoff_frequency_hz=150.0),
         pdb.PeakFilter(cutoff_frequency_hz=250.0, gain_db=-2.0, q=0.9),
-        pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=-2.0, q=0.7),
+        pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=-1.0, q=0.7),
         pdb.Compressor(threshold_db=-22.0, ratio=2.0,
                        attack_ms=25.0, release_ms=240.0),
         pdb.Chorus(rate_hz=0.4, depth=0.25, feedback=0.0, mix=0.25),
@@ -172,9 +172,9 @@ def _melody_chain() -> list[pdb.Plugin]:
         pdb.HighpassFilter(cutoff_frequency_hz=130.0),
         pdb.Compressor(threshold_db=-20.0, ratio=2.5,
                        attack_ms=12.0, release_ms=140.0),
-        pdb.PeakFilter(cutoff_frequency_hz=4500.0, gain_db=1.5, q=0.8),
+        pdb.PeakFilter(cutoff_frequency_hz=4500.0, gain_db=0.5, q=0.8),
         pdb.Delay(delay_seconds=0.18, feedback=0.12, mix=0.07),
-        pdb.Reverb(room_size=0.40, damping=0.5, wet_level=0.18, dry_level=0.82),
+        pdb.Reverb(room_size=0.45, damping=0.55, wet_level=0.36, dry_level=0.64),
     ]
 
 
@@ -183,9 +183,9 @@ def _lead_chain() -> list[pdb.Plugin]:
         pdb.HighpassFilter(cutoff_frequency_hz=130.0),
         pdb.Compressor(threshold_db=-18.0, ratio=3.0,
                        attack_ms=8.0, release_ms=120.0),
-        pdb.PeakFilter(cutoff_frequency_hz=3000.0, gain_db=2.0, q=0.7),
+        pdb.PeakFilter(cutoff_frequency_hz=3000.0, gain_db=0.5, q=0.7),
         pdb.Delay(delay_seconds=0.22, feedback=0.18, mix=0.10),
-        pdb.Reverb(room_size=0.35, damping=0.5, wet_level=0.20, dry_level=0.80),
+        pdb.Reverb(room_size=0.45, damping=0.5, wet_level=0.40, dry_level=0.60),
     ]
 
 
@@ -195,7 +195,7 @@ def _brass_chain() -> list[pdb.Plugin]:
         pdb.HighpassFilter(cutoff_frequency_hz=120.0),
         pdb.PeakFilter(cutoff_frequency_hz=250.0, gain_db=-2.0, q=0.9),
         # Reciprocal carve for vocal presence.
-        pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=-1.5, q=0.7),
+        pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=-0.5, q=0.7),
         pdb.Compressor(threshold_db=-16.0, ratio=4.0,
                        attack_ms=3.0, release_ms=120.0),  # tame transients
         pdb.PeakFilter(cutoff_frequency_hz=5000.0, gain_db=1.5, q=0.8),  # bite
@@ -208,7 +208,7 @@ def _woodwind_chain() -> list[pdb.Plugin]:
     return [
         pdb.HighpassFilter(cutoff_frequency_hz=150.0),
         pdb.PeakFilter(cutoff_frequency_hz=300.0, gain_db=-1.5, q=0.8),
-        pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=-1.5, q=0.7),
+        pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=-0.5, q=0.7),
         pdb.Compressor(threshold_db=-20.0, ratio=2.5,
                        attack_ms=15.0, release_ms=160.0),
         pdb.PeakFilter(cutoff_frequency_hz=8000.0, gain_db=1.0, q=0.8),  # air
@@ -221,7 +221,7 @@ def _strings_chain() -> list[pdb.Plugin]:
     return [
         pdb.HighpassFilter(cutoff_frequency_hz=120.0),
         pdb.PeakFilter(cutoff_frequency_hz=300.0, gain_db=-2.0, q=0.9),
-        pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=-1.5, q=0.7),
+        pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=-0.5, q=0.7),
         pdb.Compressor(threshold_db=-20.0, ratio=2.0,
                        attack_ms=30.0, release_ms=300.0),
         pdb.Reverb(room_size=0.70, damping=0.40, wet_level=0.38, dry_level=0.62),
@@ -237,14 +237,18 @@ def _lead_vocal_chain() -> list[pdb.Plugin]:
         # Presence — this is the vocal's signature boost. The chord /
         # brass / strings chains cut the SAME band so the vocal cuts
         # through.
-        pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=2.5, q=0.7),
+        # Slight cut (not a boost) so the melody sits back instead of cutting through.
+        pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=-1.0, q=0.7),
         # De-essing equivalent — cut sibilance band.
         pdb.PeakFilter(cutoff_frequency_hz=6500.0, gain_db=-3.0, q=2.5),
-        # Air shelf via high peak.
-        pdb.PeakFilter(cutoff_frequency_hz=12000.0, gain_db=1.5, q=0.6),
-        pdb.Compressor(threshold_db=-18.0, ratio=3.0,
-                       attack_ms=5.0, release_ms=100.0),
-        pdb.Reverb(room_size=0.30, damping=0.5, wet_level=0.15, dry_level=0.85),
+        # No air boost — keep it from grabbing attention.
+        pdb.PeakFilter(cutoff_frequency_hz=12000.0, gain_db=0.0, q=0.6),
+        # Light, high-threshold comp so the melody keeps its dynamics and
+        # doesn't suck the air out of the mix.
+        pdb.Compressor(threshold_db=-14.0, ratio=1.7,
+                       attack_ms=15.0, release_ms=140.0),
+        # Wetter, bigger plate so it blends into the bed.
+        pdb.Reverb(room_size=0.45, damping=0.5, wet_level=0.35, dry_level=0.65),
     ]
 
 
@@ -253,7 +257,7 @@ def _bvocal_chain() -> list[pdb.Plugin]:
     return [
         pdb.HighpassFilter(cutoff_frequency_hz=130.0),
         pdb.PeakFilter(cutoff_frequency_hz=250.0, gain_db=-2.0, q=0.9),
-        pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=-1.5, q=0.7),  # duck vocal band
+        pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=-0.5, q=0.7),  # duck vocal band
         pdb.Compressor(threshold_db=-18.0, ratio=4.0,
                        attack_ms=8.0, release_ms=120.0),
         pdb.Chorus(rate_hz=0.5, depth=0.20, feedback=0.0, mix=0.20),
@@ -301,12 +305,15 @@ def _master_default() -> list[pdb.Plugin]:
     """
     return [
         pdb.PeakFilter(cutoff_frequency_hz=80.0, gain_db=1.0, q=0.8),
-        pdb.PeakFilter(cutoff_frequency_hz=10000.0, gain_db=1.5, q=0.6),
-        # Bus-glue compression — 1.8:1 with a slow release for
-        # transparent gain reduction. Sits above the limiter to even
-        # out section dynamics before final ceiling.
-        pdb.Compressor(threshold_db=-14.0, ratio=1.8,
-                       attack_ms=30.0, release_ms=200.0),
+        # Gentle wide dip through the harsh upper-mid "presence" band so a
+        # forward lead/synth stops blaring; tames the whole mix's edge.
+        pdb.PeakFilter(cutoff_frequency_hz=3000.0, gain_db=-4.0, q=0.9),
+        # Roll off the top end so highs/hiss aren't exaggerated (de-harsh).
+        pdb.HighShelfFilter(cutoff_frequency_hz=8000.0, gain_db=-2.0),
+        # Bus-glue compression — a touch firmer (2.2:1) to even sections and
+        # let quieter backing parts come through under the loud peaks.
+        pdb.Compressor(threshold_db=-16.0, ratio=2.2,
+                       attack_ms=20.0, release_ms=180.0),
         pdb.Limiter(threshold_db=-1.0, release_ms=120.0),
     ]
 

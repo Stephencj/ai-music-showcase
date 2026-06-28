@@ -145,7 +145,7 @@ _add(Instrument("electric_guitar_clean", "Electric Guitar (clean)", "chord_lead"
 _add(Instrument("electric_guitar_dirty", "Electric Guitar (dirty)", "chord_lead", "chords", 29, default_octave=3))
 _add(Instrument("lead_guitar",           "Lead Guitar",          "chord_lead", "melody", 30, default_octave=4))
 _add(Instrument("synth_pad",             "Synth Pad",            "chord_lead", "chords", 89, default_octave=3, voicing_role="pad"))
-_add(Instrument("synth_lead",            "Synth Lead",           "chord_lead", "melody", 81, default_octave=5))
+_add(Instrument("synth_lead",            "Synth Lead",           "chord_lead", "melody", 82, default_octave=4))
 
 # Brass — section composite + individual instruments. Trumpet / alto sit
 # in the soprano register; trombone / tenor are tenor-voice; baritone
@@ -185,8 +185,8 @@ _add(Instrument("contrabass", "Contrabass", "strings", "bass",   43, default_oct
 # Vocals — lead is GM 53 Voice Oohs; backing is GM 52 Choir Aahs pinned
 # to the "pad" voicing slot so backing layers behind whatever else is
 # in the chord stack.
-_add(Instrument("vocal_lead",    "Lead Vocal",     "vocal", "melody", 53,
-                default_octave=5))
+_add(Instrument("vocal_lead",    "Lead Vocal",     "vocal", "melody", 4,
+                default_octave=3))
 _add(Instrument("vocal_harmony", "Backing Vocals", "vocal", "chords", 52,
                 default_octave=5, voicing_role="pad"))
 

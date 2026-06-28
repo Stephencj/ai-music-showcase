@@ -76,20 +76,20 @@ _FAMILY_MIX: dict[str, MixDefaults] = {
     "bass":       MixDefaults(pan=0.0,  gain_db=-3.5),
     # Comp instruments sit ~9 dB under the vocal, slightly off-center to
     # leave the center for the lead vocal.
-    "chords":     MixDefaults(pan=-0.15, gain_db=-9.0),
+    "chords":     MixDefaults(pan=-0.15, gain_db=-5.0),
     "brass":      MixDefaults(pan=0.25, gain_db=-7.0),
     "woodwind":   MixDefaults(pan=-0.20, gain_db=-9.0),
     "strings":    MixDefaults(pan=0.0,  gain_db=-10.0, stereo_widen=0.35),
     # Lead vocal sits forward, mono center — the anchor of the mix.
-    "lead_vocal": MixDefaults(pan=0.0,  gain_db=-3.0),
+    "lead_vocal": MixDefaults(pan=0.0,  gain_db=-9.0),
     # Backing vocals: widened pair, ~5 dB below the lead.
     "bvocal":     MixDefaults(pan=0.0,  gain_db=-8.0, stereo_widen=0.40),
     # Legacy lead / melody families (used when nothing more specific
     # classifies). Kept for back-compat with cells that fall back to
     # the role-token names.
-    "melody":     MixDefaults(pan=0.15, gain_db=-6.0),
-    "lead":       MixDefaults(pan=-0.15, gain_db=-6.0),
-    "pad":        MixDefaults(pan=0.10, gain_db=-11.0),
+    "melody":     MixDefaults(pan=0.15, gain_db=-12.0),
+    "lead":       MixDefaults(pan=-0.15, gain_db=-16.0),
+    "pad":        MixDefaults(pan=0.10, gain_db=-7.0),
     "extra":      MixDefaults(pan=0.0,  gain_db=-7.0),
 }
 
