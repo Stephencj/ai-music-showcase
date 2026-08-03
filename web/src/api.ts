@@ -95,6 +95,100 @@ export const mediaUrl = (path: string) => url(path);
 export const blockFileUrl = (name: string, kind: "midi" | "wav" | "pdf" | "stems") =>
   url(`/api/blocks/${encodeURIComponent(name)}/${kind}`);
 
+/** Inline, viewable full-score PDF (application/pdf) — opens in the native
+ *  PDFKit viewer inside the iOS app, or the browser's PDF view on desktop.
+ *  Distinct from blockFileUrl(name,"pdf"), which is the zip of score + parts. */
+export const blockPdfFullUrl = (name: string) =>
+  url(`/api/blocks/${encodeURIComponent(name)}/pdf/full`);
+
+// Score views for a block: the full score + one per instrument part. Each
+// carries the inline-PDF url to open (full score, or that part's sheet music).
+// Engraved on first request and cached, so fetch lazily (on demand per block).
+export interface ScorePart { id: string; name: string; url: string }
+export const getParts = (name: string) =>
+  jget<{ parts: ScorePart[] }>(`/api/blocks/${encodeURIComponent(name)}/parts`).then((r) => r.parts);
+
+// --- Sheet-music library (saved pieces; backend is source of truth) ---
+export interface LibraryEntry {
+  id: string;
+  block_name: string;
+  title: string;
+  favorite: boolean;
+  collection: string;
+  note: string;
+  added: string;
+  // Asset URLs the Library screen consumes (resolve to the block's endpoints).
+  pdf_url: string;
+  pdf_zip_url: string;
+  audio_url: string;
+  notes_url: string;
+  musicxml_url: string;
+  score_data_url: string;
+}
+export const getLibrary = () =>
+  jget<{ library: LibraryEntry[] }>("/api/library").then((r) => r.library);
+export const addToLibrary = (
+  block_name: string,
+  opts: { title?: string; collection?: string; note?: string } = {}
+) => jpost<{ saved: string; entry: LibraryEntry }>("/api/library", { block_name, ...opts });
+export const setLibraryFavorite = (id: string, favorite: boolean) =>
+  jpost<{ entry: LibraryEntry }>(
+    `/api/library/${encodeURIComponent(id)}/favorite?favorite=${favorite}`);
+export async function removeFromLibrary(id: string): Promise<void> {
+  const r = await fetch(url(`/api/library/${encodeURIComponent(id)}`), { method: "DELETE" });
+  if (!r.ok) throw new Error((await r.text()) || r.statusText);
+}
+
+// --- Block version control (catalog generations/edits, restore any one) ---
+export interface BlockVersion {
+  id: string;
+  created: string;
+  label: string;
+  source: string;              // manual | pre-edit | pre-restore
+  note: string;
+  has_preview: boolean;
+  active?: boolean;
+  summary?: { n_notes?: number; bars?: number; tempo?: number; instruments?: string[] };
+}
+export const getVersions = (name: string) =>
+  jget<{ versions: BlockVersion[]; active: string | null }>(
+    `/api/blocks/${encodeURIComponent(name)}/versions`);
+export const snapshotVersion = (name: string, body: { label?: string; note?: string } = {}) =>
+  jpost<{ version: BlockVersion }>(`/api/blocks/${encodeURIComponent(name)}/versions`, body);
+export const restoreVersion = (name: string, id: string) =>
+  jpost<{ restored: string; snapshot_of_previous?: string }>(
+    `/api/blocks/${encodeURIComponent(name)}/versions/${encodeURIComponent(id)}/restore`);
+export async function deleteVersion(name: string, id: string): Promise<void> {
+  const r = await fetch(
+    url(`/api/blocks/${encodeURIComponent(name)}/versions/${encodeURIComponent(id)}`),
+    { method: "DELETE" });
+  if (!r.ok) throw new Error((await r.text()) || r.statusText);
+}
+export const versionPreviewUrl = (name: string, id: string) =>
+  url(`/api/blocks/${encodeURIComponent(name)}/versions/${encodeURIComponent(id)}/preview`);
+
+// Unified block timeline: versions + sung vocal takes, newest first.
+export interface HistoryVersion extends BlockVersion { kind: "version" }
+export interface HistoryVocal {
+  kind: "vocal";
+  id: string;
+  created: string;
+  label: string;
+  engine?: string;
+  voice?: string;
+  harmonies?: boolean;
+  lyrics?: string;
+  files: Record<string, string>;   // role ("mix"|"vocal"|"score") -> filename
+}
+export type HistoryItem = HistoryVersion | HistoryVocal;
+export const getHistory = (name: string) =>
+  jget<{ history: HistoryItem[]; active: string | null; preview_take: string | null }>(
+    `/api/blocks/${encodeURIComponent(name)}/history`);
+// Choose which audio the block plays: a vocal take's mix, or null = instrumental.
+export const setPreviewTake = (name: string, takeId: string | null) =>
+  jpost<{ ok: boolean; preview_take: string | null }>(
+    `/api/blocks/${encodeURIComponent(name)}/preview-take`, { take_id: takeId });
+
 // --- Saved vocal takes (persisted sung renders per block) ---
 export interface VocalTake {
   id: string;

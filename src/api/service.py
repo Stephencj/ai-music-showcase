@@ -372,6 +372,13 @@ def edit_block(name: str, *, mute=None, regenerate=None, save_as=None) -> str:
         target = _unique_block_name(block_store, save_as.strip())
     else:
         target = name
+        # Version control: preserve the pre-edit generation so it can be
+        # restored later. Never let a snapshot failure block the edit.
+        try:
+            from src.daw_integration.generic import block_versions
+            block_versions.snapshot_version(name, source="pre-edit", make_active=False)
+        except Exception:  # noqa: BLE001
+            logger.warning("could not snapshot pre-edit version of %s", name, exc_info=True)
     block_store.save_block(
         target, out, tempo=float(meta.get("tempo") or 120.0),
         time_signature=(int(ts[0]), int(ts[1])), bars=int(meta.get("bars") or 0),

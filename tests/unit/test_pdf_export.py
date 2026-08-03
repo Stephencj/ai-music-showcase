@@ -388,3 +388,46 @@ class IntermediateFilenameRegressionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class BarSymbolChordsTests(unittest.TestCase):
+    """Absolute per-bar chord symbols → LilyPond chordmode (for the PDF)."""
+
+    def test_absolute_symbols_to_chordmode(self):
+        cm = pdf_export.chordmode_from_bar_symbols(["Bm7", "E7", "N.C.", "C"])
+        # N.C. becomes an s1 spacer so bars stay aligned with the staff.
+        self.assertEqual(cm.split(), ["b1:m7", "e1:7", "s1", "c1"])
+
+    def test_no_real_chords_returns_none(self):
+        self.assertIsNone(pdf_export.chordmode_from_bar_symbols(["N.C.", "", None]))
+        self.assertIsNone(pdf_export.chordmode_from_bar_symbols([]))
+        self.assertIsNone(pdf_export.chordmode_from_bar_symbols(None))
+
+
+class PartLayoutTests(unittest.TestCase):
+    """Post-processor knobs for readable single-instrument parts."""
+
+    def _ly(self, **kw):
+        src = ('\\version "2.24.0"\n\\score {\n<<\n'
+               '\\new Staff = one { \\clef bass c1 }\n>>\n}\n\\paper { }\n')
+        return pdf_export._postprocess_ly(src, chordmode=None, **kw)
+
+    def test_parts_are_portrait(self):
+        out = self._ly(landscape=False)
+        self.assertIn("paper-width = 8.5\\in", out)
+        self.assertIn("paper-height = 11\\in", out)
+
+    def test_full_score_is_landscape(self):
+        self.assertIn("paper-width = 11\\in", self._ly(landscape=True))
+
+    def test_staff_size_injected_at_top_level(self):
+        self.assertIn("set-global-staff-size 24", self._ly(staff_size=24))
+
+    def test_no_repeated_instrument_name_when_unlabeled(self):
+        # A single-instrument part: no per-staff name → no repeat on each line.
+        out = self._ly(instrument_names=None)
+        self.assertNotIn("instrumentName", out)
+        self.assertIn("indent = 0", out)   # and no indent reserved for a name
+
+    def test_instrument_name_present_when_labeled(self):
+        self.assertIn("instrumentName", self._ly(instrument_names=["Bass"]))

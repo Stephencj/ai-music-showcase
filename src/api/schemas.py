@@ -95,6 +95,27 @@ class SongRenderRequest(BaseModel):
     with_pdf: bool = True
 
 
+class BlockVersionRequest(BaseModel):
+    """Snapshot the block's current state as a named version."""
+    label: str = ""
+    note: str = ""
+
+
+class PreviewTakeRequest(BaseModel):
+    """Point the block's play/preview at a vocal take's mix, or clear it
+    (``take_id: null``) to revert to the instrumental preview."""
+    take_id: Optional[str] = None
+
+
+class LibrarySaveRequest(BaseModel):
+    """Add a block to the sheet-music library. Only ``block_name`` is
+    required; the rest is library-only metadata."""
+    block_name: str
+    title: Optional[str] = None
+    collection: str = ""
+    note: str = ""
+
+
 class SplitRequest(BaseModel):
     tag: Optional[str] = None        # collection tag for the split sections
 

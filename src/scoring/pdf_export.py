@@ -680,6 +680,34 @@ def _progression_to_chordmode(
     return " ".join(tokens)
 
 
+def chordmode_from_bar_symbols(symbols: "list | None") -> Optional[str]:
+    """Build a per-bar LilyPond ``\\chordmode`` string from a list of absolute
+    chord symbols (one per bar, e.g. ``["Bm7", "E7", "Bm7", ...]`` — the same
+    per-bar chords the practice chart detects). Each bar becomes one whole-note
+    chord; a no-chord or unparseable bar ("N.C.") becomes an ``s1`` spacer so
+    the ChordNames context stays exactly bar-aligned with the staff. Returns
+    None if nothing parsed (so no empty ChordNames layer is added)."""
+    if not symbols:
+        return None
+    import music21
+    tokens: list = []
+    any_chord = False
+    for sym in symbols:
+        s = str(sym or "").strip()
+        if not s or s.upper().replace(".", "") in ("NC", "NCHORD"):
+            tokens.append("s1")   # spacer keeps the bar count aligned
+            continue
+        try:
+            cs = music21.harmony.ChordSymbol(s)
+            root = _to_lily_pitch(cs.root().name)
+            suffix = _LILY_QUALITY_BY_COMMON_NAME.get(cs.commonName, "")
+            tokens.append(f"{root}1{suffix}")
+            any_chord = True
+        except Exception:
+            tokens.append("s1")
+    return " ".join(tokens) if any_chord else None
+
+
 def _postprocess_ly(
     ly_src: str,
     *,
@@ -687,6 +715,8 @@ def _postprocess_ly(
     instrument_names: "list[str] | None" = None,
     drum_indices_and_modes: "list[tuple[int, str]] | None" = None,
     suppress_tagline: bool = True,
+    landscape: bool = True,
+    staff_size: "int | None" = None,
 ) -> str:
     """Surgical edits on music21's emitted ``.ly`` source:
 
@@ -711,15 +741,41 @@ def _postprocess_ly(
         flags=re.MULTILINE,
     )
 
+    # A larger global staff size makes a single-instrument part read big and
+    # uncrowded (fewer bars per line) instead of tiny-and-crammed. Injected at
+    # top level, right after \version, where set-global-staff-size must live.
+    if staff_size:
+        out = re.sub(
+            r'(\\version\s+"[^"]*"\s*\n)',
+            r"\1#(set-global-staff-size %d)\n" % int(staff_size),
+            out, count=1,
+        )
+
     # Page setup goes in the `\paper { }` block music21 emits at the
     # bottom of the .ly. Both `set-paper-size` and `set-default-paper-size`
     # are silently ignored on bare-\score documents in LilyPond 2.26,
-    # so we have to set paper-width/paper-height explicitly to get
-    # landscape letter (11×8.5in).
-    paper_directives: list = [
-        "paper-width = 11\\in",
-        "paper-height = 8.5\\in",
+    # so we have to set paper-width/paper-height explicitly. The full score
+    # uses landscape letter (many staves); single-instrument parts use
+    # PORTRAIT (8.5×11) so bars aren't crammed 16-to-a-line — it reads like a
+    # real part. Generous margins + ragged-last/ragged-bottom + a little
+    # system spacing give it room to breathe.
+    if landscape:
+        paper_directives: list = ["paper-width = 11\\in", "paper-height = 8.5\\in"]
+    else:
+        paper_directives = ["paper-width = 8.5\\in", "paper-height = 11\\in"]
+    paper_directives += [
+        "top-margin = 0.6\\in",
+        "bottom-margin = 0.6\\in",
+        "left-margin = 0.7\\in",
+        "right-margin = 0.7\\in",
+        "ragged-last = ##t",
+        "ragged-bottom = ##t",
+        "system-system-spacing.basic-distance = #15",
+        "system-system-spacing.padding = #4",
     ]
+    if not instrument_names:
+        # No per-staff name to indent for → start the first system at the margin.
+        paper_directives.append("indent = 0\\in")
     if suppress_tagline:
         paper_directives.append("tagline = ##f")
     paper_block = "\\paper {\n  " + "\n  ".join(paper_directives) + "\n}"
@@ -844,6 +900,9 @@ def score_to_full_pdf(
     out_path: "Path | str",
     *,
     chordmode: Optional[str] = None,
+    landscape: bool = True,
+    label_staves: bool = True,
+    staff_size: "int | None" = None,
 ) -> Path:
     """Engrave ``score`` to a single PDF, optionally with a ChordNames
     layer above the top staff.
@@ -867,8 +926,12 @@ def score_to_full_pdf(
     src = ly_src_path.read_text()
     src = _postprocess_ly(
         src, chordmode=chordmode,
-        instrument_names=_staff_names_for(score),
+        # A single-instrument part doesn't need its name repeated on every
+        # line — the title already says which instrument it is.
+        instrument_names=_staff_names_for(score) if label_staves else None,
         drum_indices_and_modes=_drum_indices_and_modes(score),
+        landscape=landscape,
+        staff_size=staff_size,
     )
     ly_src_path.write_text(src)
 
@@ -949,8 +1012,11 @@ def score_to_part_pdfs(
         single.insert(0, part)
 
         try:
+            # Parts render PORTRAIT and without a repeated staff name — the
+            # title carries the instrument, so lines stay uncluttered.
             pdf_path = score_to_full_pdf(
                 single, out / f"{unique}.pdf", chordmode=chordmode,
+                landscape=False, label_staves=False, staff_size=24,
             )
             result[str(part_name)] = pdf_path
         except Exception:
@@ -995,6 +1061,7 @@ def export_zip(
     swing: float = 0.0,
     lead_lyrics: Optional[str] = None,
     sections: Optional[list] = None,
+    chordmode: Optional[str] = None,
 ) -> Path:
     """End-to-end: MIDI → engraved PDFs → single ZIP file.
 
@@ -1005,11 +1072,13 @@ def export_zip(
         parts/<OtherTrack>.pdf
         ...
 
-    When ``progression`` is provided (a list of roman numerals such as
-    ``["I", "V", "vi", "IV"]``), chord-symbol markers (``G``, ``D``,
-    ``Em``, ``C``) are engraved above the top staff of every PDF in
-    the ZIP. ``bars`` controls how the progression is laid out — defaults
-    to ``len(progression)`` so each chord gets one bar.
+    Chord symbols are engraved above the top staff of every PDF (so the
+    bassist sees the same changes as the pianist). Provide them either as
+    a ready-made LilyPond ``chordmode`` string (e.g. built from the block's
+    detected per-bar chords via :func:`chordmode_from_bar_symbols`) or as a
+    roman-numeral ``progression`` (``["I","V","vi","IV"]``) + ``bars``. If
+    engraving *with* chords fails (a chord/bar-count mismatch can make
+    LilyPond error), it retries once without them so the PDF still renders.
 
     Raises ``RuntimeError`` if LilyPond is not installed.
     """
@@ -1024,32 +1093,37 @@ def export_zip(
     out_zip = Path(out_zip_path)
     out_zip.parent.mkdir(parents=True, exist_ok=True)
 
-    score = midi_to_score(
-        midi_path, key=key, scale=scale, tempo=tempo, title=title,
-        swing=swing, sections=sections,
-    )
-
-    if lead_lyrics:
-        _attach_lead_lyrics(score, lead_lyrics)
-
-    chordmode = _progression_to_chordmode(
+    chordmode = chordmode or _progression_to_chordmode(
         progression, key, bars or (len(progression) if progression else 0),
     )
 
-    with tempfile.TemporaryDirectory() as td:
-        td_path = Path(td)
-        full_pdf = score_to_full_pdf(
-            score, td_path / "full_score.pdf", chordmode=chordmode,
+    def _engrave(cm: Optional[str]) -> None:
+        # Re-parse per attempt: score_to_part_pdfs reparents parts, so a shared
+        # score can't be safely engraved twice (needed for the no-chord retry).
+        score = midi_to_score(
+            midi_path, key=key, scale=scale, tempo=tempo, title=title,
+            swing=swing, sections=sections,
         )
-        parts = score_to_part_pdfs(
-            score, td_path / "parts", chordmode=chordmode,
-        )
+        if lead_lyrics:
+            _attach_lead_lyrics(score, lead_lyrics)
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            full_pdf = score_to_full_pdf(score, td_path / "full_score.pdf", chordmode=cm)
+            parts = score_to_part_pdfs(score, td_path / "parts", chordmode=cm)
+            tmp_zip = td_path / "_export.zip"
+            with zipfile.ZipFile(tmp_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.write(full_pdf, arcname="full_score.pdf")
+                for _, pdf_path in parts.items():
+                    zf.write(pdf_path, arcname=f"parts/{pdf_path.name}")
+            shutil.move(str(tmp_zip), str(out_zip))
 
-        tmp_zip = td_path / "_export.zip"
-        with zipfile.ZipFile(tmp_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.write(full_pdf, arcname="full_score.pdf")
-            for _, pdf_path in parts.items():
-                zf.write(pdf_path, arcname=f"parts/{pdf_path.name}")
-        shutil.move(str(tmp_zip), str(out_zip))
-
+    try:
+        _engrave(chordmode)
+    except Exception:
+        if chordmode:
+            logger.warning("engraving with chord symbols failed for %r — "
+                           "retrying without chords", title, exc_info=True)
+            _engrave(None)
+        else:
+            raise
     return out_zip

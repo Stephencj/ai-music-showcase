@@ -3,10 +3,11 @@ import GenerateScreen from "./components/GenerateScreen";
 import ComposeScreen from "./components/ComposeScreen";
 import PracticeScreen from "./components/PracticeScreen";
 import BandScreen from "./components/BandScreen";
+import LibraryScreen from "./components/LibraryScreen";
 import type { BlockSpec } from "./types";
 import DressUpGallery from "./dressup/DressUpGallery";
 
-type Tab = "generate" | "compose" | "practice" | "band";
+type Tab = "generate" | "compose" | "practice" | "band" | "library";
 
 export default function App() {
   if (typeof location !== "undefined" && new URLSearchParams(location.search).has("dressupgallery")) {
@@ -45,6 +46,10 @@ export default function App() {
         <BandScreen isActive={tab === "band"} onWriteSong={() => setTab("generate")}
           onOpenPractice={(block) => { setPracticeBlock(block); setTab("practice"); }} />
       </div>
+      <div className={"tab-pane" + (tab === "library" ? "" : " hidden")}>
+        <LibraryScreen isActive={tab === "library"}
+          onOpen={(block) => { setPracticeBlock(block); setTab("practice"); }} />
+      </div>
 
       <nav className="tabbar">
         <button className={tab === "generate" ? "on" : ""} onClick={() => setTab("generate")}>
@@ -58,6 +63,9 @@ export default function App() {
         </button>
         <button className={tab === "band" ? "on" : ""} onClick={() => setTab("band")}>
           <span className="ico">🎸</span>Band
+        </button>
+        <button className={tab === "library" ? "on" : ""} onClick={() => setTab("library")}>
+          <span className="ico">📚</span>Library
         </button>
       </nav>
     </div>

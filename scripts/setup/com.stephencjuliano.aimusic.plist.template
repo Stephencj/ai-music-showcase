@@ -11,9 +11,15 @@
   instead of throttling it like a background daemon — the iPhone
   WebView clicks are user-interactive use.
 
-  KeepAlive SuccessfulExit=false makes launchd respawn on crashes or
-  signals (the /admin/restart endpoint relies on this), and
-  NetworkState=true prevents thrashing during network outages.
+  KeepAlive is unconditionally true so launchd respawns the process on
+  ANY exit — a crash (non-zero) OR a graceful shutdown (exit 0). The
+  /admin/restart endpoint sends itself SIGTERM, which uvicorn turns into
+  a clean exit-0 shutdown; the earlier {SuccessfulExit=false} only
+  respawned on failures, so that graceful restart left the app dead and
+  the iOS reset button couldn't recover it. To take the app down
+  deliberately, `launchctl bootout` it (unloads past KeepAlive) rather
+  than `stop`. Runaway/OOM crash-loops are bounded by the memguard
+  LaunchAgent, so unconditional respawn is safe here.
 -->
 <plist version="1.0">
 <dict>
@@ -45,12 +51,7 @@
     <true/>
 
     <key>KeepAlive</key>
-    <dict>
-        <key>SuccessfulExit</key>
-        <false/>
-        <key>NetworkState</key>
-        <true/>
-    </dict>
+    <true/>
 
     <key>ThrottleInterval</key>
     <integer>10</integer>

@@ -13,6 +13,11 @@
   --danger: #f87171;
   --radius: 16px;
   --shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  /* Home-indicator clearance for bottom-anchored UI (tab bar, fixed CTA).
+     The iOS WebView viewport isn't viewport-fit=cover, so env() reports 0
+     there — fall back to 22px so the tab bar clears the home indicator's
+     white line instead of clashing with it. */
+  --safe-bottom: max(env(safe-area-inset-bottom), 22px);
 }
 
 * { box-sizing: border-box; }
@@ -33,7 +38,7 @@ body {
 .app {
   max-width: 720px;
   margin: 0 auto;
-  padding: 0 16px calc(152px + env(safe-area-inset-bottom));
+  padding: 0 16px calc(152px + var(--safe-bottom));
 }
 /* Tab panes stay mounted (state persists); only the active one shows. */
 .tab-pane.hidden { display: none; }
@@ -45,18 +50,18 @@ body {
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: calc(12px + env(safe-area-inset-top)) 4px 12px;
+  gap: 10px;
+  padding: calc(8px + env(safe-area-inset-top)) 4px 8px;
   background: linear-gradient(180deg, var(--bg) 60%, rgba(15, 16, 32, 0));
 }
 .topbar .logo {
-  width: 38px; height: 38px; border-radius: 10px;
+  width: 32px; height: 32px; border-radius: 9px;
   background: linear-gradient(135deg, var(--violet), var(--blue));
   display: grid; place-items: center;
-  font-size: 22px; box-shadow: var(--shadow);
+  font-size: 19px; box-shadow: var(--shadow);
 }
-.topbar h1 { font-size: 18px; margin: 0; font-weight: 700; letter-spacing: 0.2px; }
-.topbar .sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.topbar h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: 0.2px; line-height: 1.15; }
+.topbar .sub { font-size: 11px; color: var(--muted); margin-top: 0; }
 
 /* Cards */
 .card {
@@ -133,7 +138,7 @@ select, input[type="text"], input[type="number"] {
    active screen mounts one, so Generate / Compose never collide. */
 .action-bar {
   position: fixed; left: 0; right: 0;
-  bottom: calc(58px + env(safe-area-inset-bottom));
+  bottom: calc(58px + var(--safe-bottom));
   z-index: 20;
   padding: 10px 16px;
   background: linear-gradient(0deg, var(--bg) 75%, rgba(15, 16, 32, 0));
@@ -160,7 +165,7 @@ audio { width: 100%; margin: 8px 0 12px; }
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
   display: flex;
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--safe-bottom);
   background: var(--bg-2);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -894,7 +899,7 @@ audio { width: 100%; margin: 8px 0 12px; }
   position: fixed; inset: 0; z-index: 1000;
   background: radial-gradient(120% 120% at 50% 0%, #14203a 0%, #0a0f1c 60%, #060912 100%);
   color: #eef2fb; display: flex; flex-direction: column;
-  padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 12px);
+  padding: env(safe-area-inset-top) 16px calc(var(--safe-bottom) + 12px);
   overflow: hidden;
 }
 .kk-top { display: flex; align-items: center; gap: 12px; padding: 10px 2px; }
@@ -1076,7 +1081,7 @@ audio { width: 100%; margin: 8px 0 12px; }
   opacity: 0.6; transition: transform 0.1s ease-out; }
 .show-floor.pulse { transform: scale(1.06); opacity: 0.85; }
 
-.show-controls { flex: 0 0 auto; padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+.show-controls { flex: 0 0 auto; padding: 10px 12px calc(12px + var(--safe-bottom));
   background: rgba(0,0,0,0.35); display: flex; flex-direction: column; gap: 8px; align-items: center; }
 .show-songs { display: flex; gap: 8px; overflow-x: auto; max-width: 100%; }
 .show-song { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer;
@@ -1509,3 +1514,68 @@ audio { width: 100%; margin: 8px 0 12px; }
   .mini-transport button, .mini-speed button { cursor: pointer; }
   .block-card:hover { border-color: rgba(255,255,255,0.18); }
 }
+
+/* --- Sheet-music library ------------------------------------------------ */
+.library-screen { padding: 14px 14px 96px; }
+.library-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin: 4px 2px 12px;
+}
+.library-head h2 { margin: 0; font-size: 20px; }
+.library-empty {
+  margin: 24px 6px; padding: 22px; text-align: center;
+  border: 1px dashed rgba(255,255,255,0.16); border-radius: 14px;
+  color: var(--muted);
+}
+.library-empty p { margin: 6px 0; }
+.library-list { display: flex; flex-direction: column; gap: 12px; }
+.library-card { padding: 14px; }
+.library-card audio { width: 100%; margin: 10px 0 4px; }
+.library-card-head { display: flex; align-items: flex-start; gap: 10px; }
+.library-card-title { min-width: 0; flex: 1; }
+.lib-title {
+  font-size: 16px; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fav-btn {
+  background: none; border: none; cursor: pointer; padding: 0 2px;
+  font-size: 22px; line-height: 1; color: var(--muted);
+}
+.fav-btn.on { color: #ffcf4d; }
+.library-actions { flex-wrap: wrap; gap: 8px; align-items: center; }
+.library-actions .btn { text-decoration: none; }
+.library-part-row {
+  display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; flex-wrap: wrap;
+}
+.library-part-row label { flex: 0 0 auto; }
+.part-select {
+  flex: 1 1 auto; min-width: 140px; max-width: 100%;
+  background: var(--bg-2); color: var(--text);
+  border: 1px solid rgba(255,255,255,0.14); border-radius: 10px;
+  padding: 8px 10px; font-size: 14px; font-weight: 600;
+}
+
+/* --- Block version control --------------------------------------------- */
+.versions { margin: 10px 0 2px; }
+.versions-body {
+  margin-top: 8px; padding: 10px; border-radius: 12px;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.version-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 8px; border-radius: 10px;
+  background: var(--bg-2); border: 1px solid rgba(255,255,255,0.06);
+}
+.version-row.active { border-color: rgba(120,170,255,0.55); }
+.version-info { flex: 1 1 180px; min-width: 0; }
+.version-label { font-weight: 700; color: var(--text); }
+.version-row audio { flex: 1 1 200px; height: 34px; }
+.version-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.hist-badge {
+  display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .04em;
+  text-transform: uppercase; padding: 1px 6px; border-radius: 6px; margin-right: 6px;
+  background: rgba(120,170,255,0.18); color: #a9c7ff; vertical-align: middle;
+}
+.hist-badge.vocal { background: rgba(255,180,120,0.18); color: #ffc69a; }
+.vocal-row { border-left: 2px solid rgba(255,180,120,0.35); }

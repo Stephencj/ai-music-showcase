@@ -475,6 +475,46 @@ def delete_vocal_take(name: str, take_id: str) -> bool:
     return False
 
 
+def set_preview_take(name: str, take_id: "str | None") -> None:
+    """Point the block's play/preview audio at a saved vocal take's mix, or
+    clear it (``take_id=None``) to revert to the instrumental preview. Stored
+    as ``preview_take`` in the block yaml — non-destructive: the instrumental
+    ``.mp3`` / ``.wav`` are untouched, so this is fully reversible."""
+    yaml_path = _yaml_path(name)
+    if not yaml_path.exists():
+        raise FileNotFoundError(f"Block not found: {name}")
+    with open(yaml_path, "r") as f:
+        meta = yaml.safe_load(f) or {}
+    if take_id:
+        tid = _safe_take_id(take_id)
+        if not vocal_take_file(name, tid, "mix"):
+            raise FileNotFoundError(f"No mix for take {take_id!r}")
+        meta["preview_take"] = tid
+    else:
+        meta.pop("preview_take", None)
+    with open(yaml_path, "w") as f:
+        yaml.safe_dump(meta, f, sort_keys=False, default_flow_style=False)
+
+
+def active_preview_audio(name: str,
+                         sample_rate: int = _DEFAULT_PREVIEW_SR) -> Optional[Path]:
+    """The audio the block's play button should stream: a chosen vocal take's
+    mix when ``preview_take`` is set (and still present), otherwise the
+    instrumental preview."""
+    yaml_path = _yaml_path(name)
+    if yaml_path.exists():
+        try:
+            with open(yaml_path, "r") as f:
+                tid = (yaml.safe_load(f) or {}).get("preview_take")
+        except Exception:  # noqa: BLE001
+            tid = None
+        if tid:
+            p = vocal_take_file(name, tid, "mix")
+            if p:
+                return p
+    return ensure_preview_audio(name, sample_rate=sample_rate)
+
+
 def delete_block(name: str) -> None:
     """Remove the .mid, .yaml, .wav, .mp3, .peaks.json, Melody Studio
     sidecar, and saved vocal takes for a block. Silently ignores missing
@@ -489,6 +529,7 @@ def delete_block(name: str) -> None:
         except OSError:
             pass
     shutil.rmtree(_vocals_dir(name), ignore_errors=True)
+    shutil.rmtree(BLOCKS_DIR / f"{safe}.versions", ignore_errors=True)
 
 
 def _peaks_path(name: str) -> Path:
@@ -655,6 +696,12 @@ def rename_block(old: str, new: str) -> str:
     for src, dst in pairs:
         if src.exists():
             src.rename(dst)
+    # Move the per-block directories too (saved vocal takes + versions), so a
+    # rename doesn't orphan them under the old name.
+    for suffix in (".vocals", ".versions"):
+        src_dir = BLOCKS_DIR / f"{old_safe}{suffix}"
+        if src_dir.exists():
+            src_dir.rename(BLOCKS_DIR / f"{new_safe}{suffix}")
     yaml_path = _yaml_path(new)
     with open(yaml_path, "r") as f:
         meta = yaml.safe_load(f) or {}

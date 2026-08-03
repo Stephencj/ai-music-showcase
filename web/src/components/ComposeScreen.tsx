@@ -24,6 +24,7 @@ import Waveform from "./Waveform";
 import Sparkline from "./Sparkline";
 import KaraokeScreen from "./KaraokeScreen";
 import PickerField from "./PickerField";
+import BlockHistory from "./BlockHistory";
 
 interface TLItem {
   id: string;
@@ -479,7 +480,18 @@ function BlockCard({
   const [regenSet, setRegenSet] = useState<Set<string>>(new Set());
   const [editBusy, setEditBusy] = useState(false);
   const [karaoke, setKaraoke] = useState(false);
+  const [savedToLib, setSavedToLib] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const saveToLibrary = async () => {
+    setSavedToLib("saving");
+    try {
+      await api.addToLibrary(block.name);
+      setSavedToLib("saved");
+    } catch {
+      setSavedToLib("error");
+    }
+  };
 
   // Vocals panel state
   const [lyrics, setLyrics] = useState(block.lyrics ?? "");
@@ -500,7 +512,7 @@ function BlockCard({
   const [vocMsg, setVocMsg] = useState("");
   const [vocUrls, setVocUrls] = useState<{ audio: string | null; vocal?: string | null; pdf?: string | null } | null>(null);
   const [noteCount, setNoteCount] = useState<number | null>(null);
-  const [takes, setTakes] = useState<api.VocalTake[]>([]);
+  const [historyReload, setHistoryReload] = useState(0);
   // Auto-tune: pitch-correct a recorded/uploaded vocal onto the composed melody.
   const [showAutotune, setShowAutotune] = useState(false);
   const [atMode, setAtMode] = useState<"natural" | "hard">("natural");
@@ -512,14 +524,9 @@ function BlockCard({
 
   const voiceOptions = engine === "studio" ? studioVoices : voices;
 
-  const loadTakes = () =>
-    api.listVocalTakes(block.name).then((r) => setTakes(r.takes)).catch(() => setTakes([]));
-  async function onDeleteTake(id: string) {
-    try {
-      await api.deleteVocalTake(block.name, id);
-      setTakes((ts) => ts.filter((t) => t.id !== id));
-    } catch (e) { setVocMsg(String(e)); }
-  }
+  // Sung takes now live in the unified block History timeline (BlockHistory).
+  // Bumping this key makes an open History re-fetch after a new take lands.
+  const bumpHistory = () => setHistoryReload((k) => k + 1);
 
   useEffect(() => {
     if (open && noteCount === null) {
@@ -531,7 +538,6 @@ function BlockCard({
         .then((r) => { setSectionVoices(r.sections); setSectionEngines(r.sections.map((s) => s.suggested)); })
         .catch(() => setSectionVoices([]));
     }
-    if (open) loadTakes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, engines]);
 
@@ -589,7 +595,7 @@ function BlockCard({
         { mode: atMode, strength: atStrength, toKey: atToKey });
       const job = await api.pollVocal(job_id, (p, m) => { setVocProg(p); setVocMsg(m); });
       if (job.status === "error") setVocMsg(job.error || "Auto-tune failed");
-      else if (job.result) { setVocUrls({ audio: job.result.urls.audio, vocal: job.result.urls.vocal, pdf: job.result.urls.pdf }); loadTakes(); setVocMsg(""); }
+      else if (job.result) { setVocUrls({ audio: job.result.urls.audio, vocal: job.result.urls.vocal, pdf: job.result.urls.pdf }); bumpHistory(); setVocMsg(""); }
     } catch (e) { setVocMsg(String(e)); }
     finally { setVocBusy(false); }
   }
@@ -621,7 +627,7 @@ function BlockCard({
       const { job_id } = await api.renderVocals(block.name, { lyrics, voice, engine: engine || "rough", harmonies, clarity, phonetic: phon, section_engines });
       const job = await api.pollVocal(job_id, (p, m) => { setVocProg(p); setVocMsg(m); });
       if (job.status === "error") setVocMsg(job.error || "Vocal render failed");
-      else if (job.result) { setVocUrls({ audio: job.result.urls.audio, vocal: job.result.urls.vocal, pdf: job.result.urls.pdf }); loadTakes(); }
+      else if (job.result) { setVocUrls({ audio: job.result.urls.audio, vocal: job.result.urls.vocal, pdf: job.result.urls.pdf }); bumpHistory(); }
     } catch (e) { setVocMsg(String(e)); }
     finally { setVocBusy(false); }
   }
@@ -642,6 +648,13 @@ function BlockCard({
   const drag = useDraggable({ id: `lib:${block.name}`, disabled: selectMode });
 
   useEffect(() => () => { audioRef.current?.pause(); }, []);
+
+  // When the block's play source changes (a version restored, or a vocal take
+  // set as the block's audio), drop the cached <audio> so the next Play uses
+  // the new source. block.audio_url carries a ?v= token that changes with it.
+  useEffect(() => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; setPlaying(false); }
+  }, [block.audio_url]);
 
   function togglePlay() {
     if (!block.has_preview) return;
@@ -867,31 +880,7 @@ function BlockCard({
             )}
             {vocBusy && <div className="progress"><div style={{ width: `${Math.round(vocProg * 100)}%` }} /></div>}
             {vocMsg && !vocUrls && <div className={vocMsg.startsWith("Error") || vocMsg.includes("OPENAI") ? "error" : "progress-msg"}>{vocMsg}</div>}
-            {takes.length > 0 && (
-              <div className="takes">
-                <div className="te-note">Saved takes ({takes.length})</div>
-                {takes.map((t) => (
-                  <div key={t.id} className="take-row">
-                    <audio controls src={api.vocalTakeUrl(block.name, t.id, "mix")} />
-                    <div className="take-info">
-                      <span className="te-note">
-                        {new Date(t.created).toLocaleString()} · {t.engine}
-                        {t.voice ? ` / ${t.voice.replace(/^tiger_/, "")}` : ""}
-                        {t.harmonies ? " · +harm" : ""}
-                        {t.clarity ? " · ✦clarity" : ""}
-                        {t.phonetic ? " · 🗣" : ""}
-                        {(() => { const n = (t.section_engines ?? []).filter((s) => s.engine === "rough").length; return n ? ` · rap×${n}` : ""; })()}
-                      </span>
-                      <div className="links">
-                        {t.files.vocal && <a href={api.vocalTakeUrl(block.name, t.id, "vocal")} download>↓ Stem</a>}
-                        {t.files.score && <a href={api.vocalTakeUrl(block.name, t.id, "score")} download>↓ Score</a>}
-                        <button className="btn ghost sm" onClick={() => onDeleteTake(t.id)} title="Delete this take">🗑 Delete</button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="te-note">Sung takes are saved to this block's History (below).</div>
           </div>
 
           <div className="tag-edit">
@@ -913,9 +902,10 @@ function BlockCard({
           </div>
 
           <div className="links">
+            <a href={api.blockPdfFullUrl(block.name)} data-testid="view-pdf">📄 View PDF</a>
             <a href={api.blockFileUrl(block.name, "midi")} download>↓ MIDI</a>
             <a href={api.blockFileUrl(block.name, "wav")} download>↓ WAV</a>
-            <a href={api.blockFileUrl(block.name, "pdf")} download>↓ PDF</a>
+            <a href={api.blockFileUrl(block.name, "pdf")} download>↓ PDF parts</a>
             <a href={api.blockFileUrl(block.name, "stems")} download>↓ Stems</a>
           </div>
 
@@ -927,8 +917,16 @@ function BlockCard({
             </button>
           </div>
 
+          <BlockHistory name={block.name} reloadKey={historyReload} onRestored={onChanged} />
+
           <div className="bc-actions">
             <button className="btn secondary sm" onClick={() => onAdd(block.name)}>+ Timeline</button>
+            <button className="btn secondary sm" onClick={saveToLibrary}
+              disabled={savedToLib === "saving" || savedToLib === "saved"}
+              data-testid="save-to-library">
+              {savedToLib === "saved" ? "★ Saved" : savedToLib === "saving" ? "Saving…"
+                : savedToLib === "error" ? "★ Retry" : "★ Save to Library"}
+            </button>
             <button className="btn ghost sm danger" onClick={() => onDelete(block.name)} aria-label="Delete">🗑 Delete</button>
           </div>
         </div>

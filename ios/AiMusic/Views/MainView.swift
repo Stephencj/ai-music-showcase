@@ -296,6 +296,17 @@ struct StudioWebView: UIViewRepresentable {
             let downloadable = Coordinator.downloadableExtensions
             let urlExt = url.pathExtension.lowercased()
             let extLooksLikeDownload = downloadable.contains(urlExt)
+            let mime = (http.mimeType ?? "").lowercased()
+
+            // Inline PDF (a block's full score or an instrument part) → open in
+            // the native PDFKit viewer, NOT the WebView (which would render it
+            // over the Studio UI and lose the user's place) and NOT the share
+            // sheet. An *attachment* PDF still falls through to download/share.
+            if !isAttachment && (mime == "application/pdf" || urlExt == "pdf") {
+                decisionHandler(.cancel)
+                self.presentPDFViewer(from: url)
+                return
+            }
 
             // Some Gradio downloads are MIME-typed but lack the
             // Content-Disposition header. Fall back to the extension
@@ -358,6 +369,29 @@ struct StudioWebView: UIViewRepresentable {
                 Task { @MainActor in self?.presentShareSheet(for: dest) }
             }
             task.resume()
+        }
+
+        // Present the native PDFKit score viewer over the WebView. The tapped
+        // URL is /api/blocks/<name>/pdf/full or /pdf/part/<id>; we derive the
+        // block name and the server base so the viewer can offer the
+        // instrument-track toggle and save-to-library.
+        @MainActor
+        private func presentPDFViewer(from url: URL) {
+            guard var comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                  comps.scheme != nil, comps.host != nil else { return }
+            let segments = url.path(percentEncoded: false).split(separator: "/").map(String.init)
+            guard let bi = segments.firstIndex(of: "blocks"), bi + 1 < segments.count else { return }
+            let blockName = segments[bi + 1]
+            comps.path = ""
+            comps.query = nil
+            comps.fragment = nil
+            guard let baseURL = comps.url,
+                  let presenter = Coordinator.topMostViewController() else { return }
+            let screen = PDFViewerScreen(blockName: blockName, baseURL: baseURL,
+                                         token: token, initialPartURL: url)
+            let hosting = UIHostingController(rootView: screen)
+            hosting.modalPresentationStyle = .fullScreen
+            presenter.present(hosting, animated: true)
         }
 
         @MainActor

@@ -2,3 +2,10 @@ node_modules/
 dist/
 *.tsbuildinfo
 .vite/
+
+# Playwright
+/test-results/
+/playwright-report/
+/test-screenshots/
+/blob-report/
+/.last-run.json

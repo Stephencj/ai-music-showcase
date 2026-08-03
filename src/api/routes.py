@@ -19,7 +19,9 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from src.composition import instruments as instruments_mod
 from src.daw_integration.generic import block_concat
+from src.daw_integration.generic import block_versions
 from src.daw_integration.generic import blocks as block_store
+from src.daw_integration.generic import library as library_store
 from src.daw_integration.generic import songs as song_store
 from src.daw_integration.generic.styles import STYLES
 
@@ -27,14 +29,17 @@ from . import ai_requests, arrangement, service
 from .jobs import registry
 from .schemas import (
     AiAnswerRequest,
+    BlockVersionRequest,
     EditBlockRequest,
     MixPreviewRequest,
     ProduceBlockRequest,
     GenerateRequest,
     GeneratePartRequest,
+    LibrarySaveRequest,
     LyricsDraftRequest,
     ParsePromptRequest,
     PhoneticRequest,
+    PreviewTakeRequest,
     RenameRequest,
     SaveBlockFromJobRequest,
     SetLyricsRequest,
@@ -240,18 +245,33 @@ def list_blocks() -> list[dict]:
             "lyrics": b.get("lyrics", ""),
             "vocal_takes": b.get("_vocal_takes", 0),
             "has_preview": bool(b.get("_preview_path") or b.get("_wav_path")),
-            "audio_url": f"/api/blocks/{quote(name)}/audio",
+            "preview_take": b.get("preview_take"),
+            # ?v= busts the browser cache when the play source (take vs
+            # instrumental) changes, so the card's audio/waveform refresh.
+            "audio_url": f"/api/blocks/{quote(name)}/audio?v={quote(str(b.get('preview_take') or 'i'))}",
         })
     return out
 
 
 @router.get("/blocks/{name}/audio")
 def block_audio(name: str) -> FileResponse:
-    p = block_store.ensure_preview_audio(name)
+    # Honors a chosen vocal take as the block's preview; else the instrumental.
+    p = block_store.active_preview_audio(name)
     if not p:
         raise HTTPException(404, "No audio for block")
     media = "audio/mpeg" if Path(p).suffix == ".mp3" else "audio/wav"
     return _serve(Path(p), media)
+
+
+@router.post("/blocks/{name}/preview-take")
+def set_block_preview_take(name: str, req: PreviewTakeRequest) -> dict:
+    """Choose which audio the block plays: a vocal take's mix, or the
+    instrumental (``take_id: null``). Non-destructive and reversible."""
+    try:
+        block_store.set_preview_take(name, req.take_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc))
+    return {"ok": True, "preview_take": req.take_id}
 
 
 @router.get("/blocks/{name}/midi")
@@ -289,6 +309,82 @@ def block_pdf(name: str) -> FileResponse:
     return _serve(out, "application/zip", download=True)
 
 
+def _block_score_dir(name: str) -> Path:
+    """Ensure the block's engraved score is available as loose PDFs and return
+    the directory holding ``full_score.pdf`` + ``parts/<Track>.pdf``.
+
+    Engraves once (via the cached score zip) and extracts it, so the full
+    score and every instrument part are served from the same single render —
+    the in-app viewer can switch tracks without re-engraving."""
+    midi = block_store._midi_path(name)
+    if not midi.exists():
+        raise HTTPException(404, "No MIDI for block")
+    safe = block_store._safe_name(name)
+    cache_dir = service.API_OUT / "_blocks"
+    out_dir = cache_dir / f"{safe}_score"
+    if not (out_dir / "full_score.pdf").exists():
+        import zipfile
+        from src.scoring.pdf_export import export_zip
+        zip_path = cache_dir / f"{safe}.score.zip"
+        try:
+            if not zip_path.exists():
+                _, meta = block_store.load_block(name)
+                # Chord symbols above the staff for quick reference — from the
+                # block's detected per-bar chords (best-effort; export_zip
+                # retries without them if they don't align).
+                chordmode = None
+                try:
+                    from src.scoring.pdf_export import chordmode_from_bar_symbols
+                    sd = service.score_data(name)
+                    chordmode = chordmode_from_bar_symbols(
+                        [c.get("symbol") for c in sd.get("chords", [])])
+                except Exception:  # noqa: BLE001 — chords are optional
+                    chordmode = None
+                export_zip(midi, zip_path, tempo=meta.get("tempo"),
+                           title=name, chordmode=chordmode)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(zip_path) as zf:
+                zf.extractall(out_dir)
+        except Exception as exc:  # noqa: BLE001 — LilyPond optional
+            raise HTTPException(503, f"PDF engraving failed: {exc}")
+    return out_dir
+
+
+@router.get("/blocks/{name}/parts")
+def block_parts(name: str) -> dict:
+    """The score views the viewer can show: the full score plus one entry per
+    instrument part. Each carries the inline-PDF URL to open."""
+    d = _block_score_dir(name)
+    q = quote(name)
+    parts = [{"id": "full", "name": "Full score", "url": f"/api/blocks/{q}/pdf/full"}]
+    parts_dir = d / "parts"
+    if parts_dir.exists():
+        for p in sorted(parts_dir.glob("*.pdf")):
+            parts.append({
+                "id": p.stem,
+                "name": p.stem.replace("_", " ").strip(),
+                "url": f"/api/blocks/{q}/pdf/part/{quote(p.stem)}",
+            })
+    return {"parts": parts}
+
+
+@router.get("/blocks/{name}/pdf/full")
+def block_pdf_full(name: str) -> FileResponse:
+    """The full score, inline ``application/pdf`` for the in-app viewer."""
+    return _serve(_block_score_dir(name) / "full_score.pdf", "application/pdf")
+
+
+@router.get("/blocks/{name}/pdf/part/{part_id}")
+def block_pdf_part(name: str, part_id: str) -> FileResponse:
+    """One instrument part's sheet music, inline ``application/pdf``."""
+    parts_dir = (_block_score_dir(name) / "parts").resolve()
+    candidate = (parts_dir / f"{part_id}.pdf").resolve()
+    # Resolve strictly within parts/ so a crafted part_id can't escape the dir.
+    if parts_dir not in candidate.parents or not candidate.exists():
+        raise HTTPException(404, "No such part")
+    return _serve(candidate, "application/pdf")
+
+
 @router.get("/blocks/{name}/vocals")
 def list_block_vocals(name: str) -> dict:
     """Saved sung takes for a block, newest first (id, created, engine,
@@ -313,6 +409,57 @@ def delete_block_vocal_take(name: str, take_id: str) -> dict:
     if not block_store.delete_vocal_take(name, take_id):
         raise HTTPException(404, "Take not found")
     return {"ok": True}
+
+
+# --------------------------------------------------------------------------
+# Block version control — catalog generations/edits, restore any one
+# --------------------------------------------------------------------------
+@router.get("/blocks/{name}/history")
+def block_history(name: str) -> dict:
+    """Unified timeline for a block: versions + sung vocal takes, newest first."""
+    return block_versions.history(name)
+
+
+@router.get("/blocks/{name}/versions")
+def list_block_versions(name: str) -> dict:
+    """All saved versions of a block (newest first) + the active version id."""
+    return block_versions.list_versions(name)
+
+
+@router.post("/blocks/{name}/versions")
+def snapshot_block_version(name: str, req: BlockVersionRequest) -> dict:
+    """Snapshot the block's current state as a new version."""
+    try:
+        version = block_versions.snapshot_version(
+            name, label=req.label, note=req.note, source="manual")
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc))
+    return {"version": version}
+
+
+@router.post("/blocks/{name}/versions/{version_id}/restore")
+def restore_block_version(name: str, version_id: str) -> dict:
+    """Make a version the live block (auto-snapshots the current state first)."""
+    try:
+        return block_versions.restore_version(name, version_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.delete("/blocks/{name}/versions/{version_id}")
+def delete_block_version(name: str, version_id: str) -> dict:
+    if not block_versions.delete_version(name, version_id):
+        raise HTTPException(404, "Version not found")
+    return {"deleted": version_id}
+
+
+@router.get("/blocks/{name}/versions/{version_id}/preview")
+def block_version_preview(name: str, version_id: str) -> FileResponse:
+    """The version's preview audio, for A/B listening before restoring."""
+    p = block_versions.version_preview_path(name, version_id)
+    if not p:
+        raise HTTPException(404, "No preview for this version")
+    return _serve(p, "audio/mpeg")
 
 
 @router.get("/blocks/{name}/stems")
@@ -927,6 +1074,60 @@ def render_song(req: SongRenderRequest) -> dict:
     registry.run(job, lambda progress: service.run_song_render(
         req.timeline, req.with_pdf, progress, job.id))
     return {"job_id": job.id}
+
+
+# --------------------------------------------------------------------------
+# Sheet-music library (saved pieces + their assets)
+# --------------------------------------------------------------------------
+def _library_entry_urls(entry: dict) -> dict:
+    """Enrich a stored entry with the asset URLs the Library screen consumes
+    (all resolve to the referenced block's existing endpoints)."""
+    name = entry.get("block_name", "")
+    q = quote(name)
+    return {
+        **entry,
+        "pdf_url": f"/api/blocks/{q}/pdf/full",
+        "pdf_zip_url": f"/api/blocks/{q}/pdf",
+        "parts_url": f"/api/blocks/{q}/parts",
+        "audio_url": f"/api/blocks/{q}/audio",
+        "notes_url": f"/api/blocks/{q}/notes",
+        "musicxml_url": f"/api/blocks/{q}/musicxml",
+        "score_data_url": f"/api/blocks/{q}/score-data",
+    }
+
+
+@router.get("/library")
+def list_library() -> dict:
+    return {"library": [_library_entry_urls(e) for e in library_store.list_entries()]}
+
+
+@router.post("/library")
+def add_to_library(req: LibrarySaveRequest) -> dict:
+    if not block_store._midi_path(req.block_name).exists():
+        raise HTTPException(404, f"No such block: {req.block_name}")
+    try:
+        entry = library_store.add_entry(
+            req.block_name, title=req.title,
+            collection=req.collection, note=req.note)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"saved": entry["id"], "entry": _library_entry_urls(entry)}
+
+
+@router.post("/library/{entry_id}/favorite")
+def library_set_favorite(entry_id: str, favorite: bool = True) -> dict:
+    """Set (default) or clear an entry's favorite flag: ?favorite=false."""
+    try:
+        return {"entry": _library_entry_urls(library_store.set_favorite(entry_id, favorite))}
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.delete("/library/{entry_id}")
+def delete_library_entry(entry_id: str) -> dict:
+    if not library_store.delete_entry(entry_id):
+        raise HTTPException(404, "Library entry not found")
+    return {"deleted": entry_id}
 
 
 # --------------------------------------------------------------------------
