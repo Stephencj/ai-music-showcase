@@ -1612,6 +1612,84 @@ def save_current_as_block(name: str):
         raise _logged_error("Save as Block", e) from e
 
 
+def save_block_from_midi(midi_path: str, name: str = "") -> str:
+    """Save a specific MIDI file (by path) as a named block — a stateless,
+    race-free API for the gateway / iOS app. Unlike ``save_current_as_block``
+    this doesn't read live ``_state`` (which the next request may have
+    overwritten): it saves exactly the file it's handed, deriving tempo /
+    time-signature / bar count from that MIDI. De-dupes the name so casual
+    re-saves don't collide. Returns the final (safe) block name.
+    """
+    import pretty_midi
+    p = Path(str(midi_path or "").strip())
+    if not midi_path or not p.exists():
+        raise gr.Error(f"That song is no longer available to save ({midi_path}). Generate it again.")
+    try:
+        pm = pretty_midi.PrettyMIDI(str(p))
+    except Exception as e:
+        raise _logged_error("Save block from MIDI (load)", e) from e
+
+    # Derive tempo from the MIDI's tempo map (fall back to 120).
+    tempo = 120.0
+    try:
+        _times, tempi = pm.get_tempo_changes()
+        if len(tempi):
+            tempo = float(tempi[0])
+    except Exception:
+        pass
+    # Time signature from the MIDI (fall back to 4/4).
+    ts = (4, 4)
+    if pm.time_signature_changes:
+        first = pm.time_signature_changes[0]
+        ts = (int(first.numerator), int(first.denominator))
+    # Bars ≈ total beats / beats-per-bar.
+    beats = pm.get_end_time() * (tempo / 60.0)
+    bars = max(1, round(beats / (ts[0] or 4)))
+
+    base = (name or "song").strip() or "song"
+    existing = {b["name"] for b in block_store.list_blocks()}
+    final = base
+    i = 2
+    while block_store._safe_name(final) in existing:
+        final = f"{base} {i}"
+        i += 1
+    try:
+        block_store.save_block(
+            final, pm, tempo=tempo, time_signature=ts, bars=int(bars),
+        )
+    except Exception as e:
+        raise _logged_error("Save block from MIDI", e) from e
+    safe = block_store._safe_name(final)
+    logger.info("Saved block %r from MIDI %s", safe, p)
+    return safe
+
+
+def _snapshot_current_midi() -> str:
+    """Copy the just-composed MIDI to a unique, durable path and return it.
+
+    The working file (``data/outputs/app/last_composition.mid``) is overwritten
+    by the next generation, so handing the gateway that path would let a later
+    save-as-block capture the WRONG song. Snapshotting gives each generated song
+    a stable handle that still refers to *this* song after more are made."""
+    import shutil
+    import uuid
+    p = _state.get("midi_path")
+    if not p or not Path(p).exists():
+        return ""
+    snaps = Path(p).parent / "snapshots"
+    snaps.mkdir(parents=True, exist_ok=True)
+    dest = snaps / f"{uuid.uuid4().hex}.mid"
+    shutil.copy2(str(p), str(dest))
+    # Keep the snapshot dir bounded — retain the 60 most recent.
+    try:
+        snapshots = sorted(snaps.glob("*.mid"), key=lambda f: f.stat().st_mtime, reverse=True)
+        for old in snapshots[60:]:
+            old.unlink(missing_ok=True)
+    except Exception:
+        pass
+    return str(dest)
+
+
 # ===================================================================
 # Tab — Compose Song (multi-section, freeform tracks)
 # ===================================================================
@@ -4852,6 +4930,27 @@ def build_app() -> gr.Blocks:
                         _save_and_bump,
                         [block_name_in, library_trigger],
                         [save_block_status, library_trigger],
+                    )
+
+                    # API-only endpoint (no visible UI): the gateway / iOS app
+                    # saves an assistant-generated song as a block by passing the
+                    # exact MIDI path it got back at generation time. Hidden
+                    # components exist solely to expose `/save_block_from_midi`.
+                    _api_midi_in = gr.Textbox(visible=False)
+                    _api_name_in = gr.Textbox(visible=False)
+                    _api_block_out = gr.Textbox(visible=False)
+                    _api_save_btn = gr.Button(visible=False)
+                    _api_save_btn.click(
+                        save_block_from_midi,
+                        [_api_midi_in, _api_name_in],
+                        [_api_block_out],
+                        api_name="save_block_from_midi",
+                    )
+                    _api_midipath_out = gr.Textbox(visible=False)
+                    _api_midipath_btn = gr.Button(visible=False)
+                    _api_midipath_btn.click(
+                        _snapshot_current_midi, None, [_api_midipath_out],
+                        api_name="snapshot_current_midi",
                     )
 
             def _apply_preset(style_name: str):

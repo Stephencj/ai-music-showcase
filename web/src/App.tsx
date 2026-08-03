@@ -13,9 +13,14 @@ export default function App() {
   if (typeof location !== "undefined" && new URLSearchParams(location.search).has("dressupgallery")) {
     return <DressUpGallery />;
   }
-  const [tab, setTab] = useState<Tab>("generate");
+  // Deep link: ?block=<name> opens that block straight into Practice (used by
+  // the "Open in Music app" button in the LocalAIClient iOS app).
+  const deepBlock = typeof location !== "undefined"
+    ? new URLSearchParams(location.search).get("block")
+    : null;
+  const [tab, setTab] = useState<Tab>(deepBlock ? "practice" : "generate");
   const [editSpec, setEditSpec] = useState<BlockSpec | null>(null);
-  const [practiceBlock, setPracticeBlock] = useState<string | null>(null);
+  const [practiceBlock, setPracticeBlock] = useState<string | null>(deepBlock);
 
   return (
     <div className="app">
