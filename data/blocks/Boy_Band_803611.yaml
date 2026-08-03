@@ -5,7 +5,7 @@ time_signature:
 - 4
 bars: 32
 duration_seconds: 73.846144
-created: '2026-05-24T19:29:05'
+created: '2026-08-02T21:31:25'
 instruments:
 - name: Drum kit
   program: 0
@@ -19,15 +19,7 @@ instruments:
   program: 0
   is_drum: false
   n_notes: 436
-- name: Lead Vocal
-  program: 53
-  is_drum: false
-  n_notes: 88
-- name: Backing Vocals
-  program: 52
-  is_drum: false
-  n_notes: 88
-n_notes: 1220
+n_notes: 1044
 spec:
   genre: boy_band
   key: A
@@ -62,18 +54,3 @@ spec:
     label: Outro
     role: outro
   section: null
-lyrics: 'Oh, oh, oh yeah, here we go,
-
-  You said forever, then you turned and walked away,
-
-  Left me with nothing but the lies you used to say.
-
-  You broke my heart, so baby, now just go away,
-
-  I''m done with crying over every yesterday.
-
-  Take back the love you gave, I don''t need it anymore,
-
-  Don''t come knocking on my door.
-
-  So go, go, go, just go away from me.'
