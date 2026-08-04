@@ -209,14 +209,28 @@ export default function DressUp({ members, onChange, onClose, onPerform, hideClo
           </div>
 
           {/* item grid — each a mini figure wearing that option */}
-          {category.shapes.length > 0 && (
+          {category.shapes.length > 0 && (() => {
+            // Neutral baseline: every garment slot rendered at its worn item's
+            // OWN default colour (skin/body identity kept), so a colour the user
+            // picked in one slot can't bleed into — and repaint — the whole grid.
+            const neutral: Member = { ...cur };
+            for (const c of CATS) {
+              if (!c.colorKey || c.id === "skin") continue;
+              const def = c.shapes.find((sh) => sh.id === cur[c.shapeKey])?.defaultColor;
+              if (def) (neutral as unknown as Record<string, unknown>)[c.colorKey] = def;
+            }
+            return (
             <div className="du-items">
               {category.shapes.map((s) => {
                 const worn = cur[category.shapeKey] === s.id;
-                // Preview each item in ITS default colour (not the current slot).
+                // Preview each item in ITS default colour, on the neutral base —
+                // pinned to the item default (or a stable fallback), NEVER the
+                // currently-selected slot colour.
                 const preview: Member = {
-                  ...cur, [category.shapeKey]: s.id,
-                  ...(category.colorKey && s.defaultColor ? { [category.colorKey]: s.defaultColor } : {}),
+                  ...neutral, [category.shapeKey]: s.id,
+                  ...(category.colorKey
+                    ? { [category.colorKey]: s.defaultColor ?? category.colors?.[0]?.id ?? neutral[category.colorKey] }
+                    : {}),
                 } as Member;
                 return (
                   <button key={s.id} className={"du-item" + (worn ? " on" : "")}
@@ -227,7 +241,8 @@ export default function DressUp({ members, onChange, onClose, onPerform, hideClo
                 );
               })}
             </div>
-          )}
+            );
+          })()}
 
           {/* pinned footer: photo (Top) + colour strip for the current slot */}
           {(category.photo || (category.colors && category.colorKey)) && (
