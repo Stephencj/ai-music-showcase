@@ -52,8 +52,8 @@ test("load a saved band from the Band game populates the roster", async ({ page 
       name: "The Testers", fans: 0, money: 0, gigs: 0,
       members: [
         { id: "m1", name: "Ava", part: "Vocals", genre: "rock_anthem_full", body: "girl" },
-        { id: "m2", name: "Bo", part: "Guitar", genre: "rock_anthem_full", body: "boy" },
-        { id: "m3", name: "Cy", part: "Drums", genre: "funk_full_song", body: "boy" },
+        { id: "m2", name: "Bo", part: "Bass", genre: "funk_full_song", body: "boy" },
+        { id: "m3", name: "Cy", part: "Guitar", genre: "rock_anthem_full", body: "boy" },
       ],
     }));
   });
@@ -64,7 +64,16 @@ test("load a saved band from the Band game populates the roster", async ({ page 
   await page.getByTestId("band-load").click();
 
   await expect(page.getByTestId("band-member")).toHaveCount(3);
-  // Majority genre (2× rock) wins the blend.
-  await expect(page.getByTestId("band-summary")).toContainText("3 instruments");
-  await expect(page.getByTestId("band-summary")).toContainText("Rock");
+  const summary = page.getByTestId("band-summary");
+  // Vocalist sets the overarching genre (Rock); 3 parts → 3 instruments.
+  await expect(summary).toContainText("3 instruments");
+  await expect(summary).toContainText(/base genre:\s*Rock/);
+  // The funk bassist colours the verse (blend on by default).
+  await expect(summary).toContainText(/Verse/);
+  await expect(summary).toContainText(/Funk/);
+  await page.screenshot({ path: "test-screenshots/band-blend.png", fullPage: true });
+
+  // Toggling blend off drops the per-section colouring.
+  await page.getByTestId("band-blend").click();
+  await expect(summary).not.toContainText("section blend");
 });

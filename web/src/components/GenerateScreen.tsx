@@ -87,6 +87,7 @@ export default function GenerateScreen({
   // drive the song, superseding the single Genre picker.
   const [bandMode, setBandMode] = useState(false);
   const [bandMembers, setBandMembers] = useState<Member[]>([]);
+  const [bandBlend, setBandBlend] = useState(true);   // colour sections by member genre
   const [bandMsg, setBandMsg] = useState<string | null>(null);
   const [master, setMaster] = useState("default");
   const [withPdf, setWithPdf] = useState(true);
@@ -343,16 +344,18 @@ export default function GenerateScreen({
     setSaveMsg(null); setSplitMsg(null);
     setProgress(0); setMessage("Starting…");
     try {
-      // A band supersedes the Genre picker: its roster sets the instruments and
-      // the members' most-common genre sets the overarching feel.
-      const bp = bandMode && bandMembers.length ? bandGenerateParams(bandMembers) : null;
+      // A band supersedes the Genre picker: its roster sets the instruments, the
+      // overarching genre comes from the band, and (when blending) each member's
+      // genre colours the sections their part leads.
+      const bp = bandMode && bandMembers.length
+        ? bandGenerateParams(bandMembers, bandBlend) : null;
       const body: GenerateBody = {
         genre: bp?.genre || preset.id, key, scale, tempo: Number(tempo),
         seed: seed.trim() ? Number(seed) : null,
         swing,
         instruments: bp ? bp.instruments : [...instruments],
         sections: [...sections],
-        section_presets: sectionPresets,
+        section_presets: bp ? { ...sectionPresets, ...bp.section_presets } : sectionPresets,
         section_overrides: sectionOverrides,
         with_pdf: withPdf, with_stems: withStems, master_preset: master,
       };
@@ -500,6 +503,14 @@ export default function GenerateScreen({
               + Add member
             </button>
           )}
+          {bandMode && (
+            <button type="button" className={"chip" + (bandBlend ? " on" : "")}
+              data-testid="band-blend"
+              title="Colour each section with the genre of the member who leads it"
+              onClick={() => setBandBlend((v) => !v)}>
+              🎨 Blend by section
+            </button>
+          )}
         </div>
         {bandMode && (
           <>
@@ -534,11 +545,18 @@ export default function GenerateScreen({
               </div>
             ))}
             {bandMembers.length > 0 && (() => {
-              const bp = bandGenerateParams(bandMembers);
+              const bp = bandGenerateParams(bandMembers, bandBlend);
+              const blendPairs = Object.entries(bp.section_presets);
               return (
                 <div className="meta" data-testid="band-summary" style={{ marginTop: 4 }}>
                   → {bp.instruments.length} instrument{bp.instruments.length === 1 ? "" : "s"} ·
-                  {" "}genre: <strong>{genreName(bp.genre) || "(pick a member genre)"}</strong>
+                  {" "}base genre: <strong>{genreName(bp.genre) || "(pick a member genre)"}</strong>
+                  {bandBlend && blendPairs.length > 0 && (
+                    <div style={{ marginTop: 2 }}>
+                      section blend: {blendPairs.map(([role, g]) =>
+                        `${SECTION_LABELS[role] || role} → ${genreName(g)}`).join(" · ")}
+                    </div>
+                  )}
                 </div>
               );
             })()}
