@@ -357,7 +357,9 @@ export default function Figure({ member, size = 200 }: { member: Member; size?: 
 
       {/* head + face + front hair + glasses + hat, all scaled to the model head */}
       <g transform={headTf}>
-      <circle cx="100" cy="76" r="38" fill={skinFill} />
+      {/* Chibiverse-style head: width ≥ height, chubby cheeks, soft rounded
+          bottom (no pointed chin). Drawn in the head's design space. */}
+      <path d="M58 74 C58 32 142 32 142 74 C142 100 125 115 100 115 C75 115 58 100 58 74 Z" fill={skinFill} />
       <g>
         {member.body === "girl" ? (
           <g stroke={darker(hcol, 0.85)} strokeWidth="2" strokeLinecap="round" fill="none">
