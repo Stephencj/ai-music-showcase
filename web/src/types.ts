@@ -14,6 +14,7 @@ export interface Preset {
   default_instruments: string[];
   sections: SectionAvail[];
   progression?: string[];   // genre's chord loop as roman numerals (core unit)
+  progressions?: PresetProgressions;   // per-role pools + variants for the builder
 }
 
 // Consolidated genre catalog for the radial genre wheel.
@@ -188,6 +189,16 @@ export interface SectionOverride {
   scale?: string;
   tempo?: number;
   bars?: number;
+  progression?: string[];    // per-section chord progression (roman numerals)
+  instruments?: string[];    // per-section instrument subset (ids); empty = all
+}
+
+// Progression choices for the section builder (from GET /presets).
+export interface ProgressionOption { index: number; symbols: string[]; }
+export interface PresetProgressions {
+  sections: Record<string, ProgressionOption[]>;   // role → pool
+  variants: { name: string; symbols: string[] }[]; // song-level forms
+  default: string[];
 }
 
 export interface GenerateBody {

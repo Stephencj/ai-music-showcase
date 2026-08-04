@@ -42,6 +42,37 @@ def available_sections(genre: str) -> list[dict]:
     return [{"role": r, "native": r in native} for r in SECTION_ORDER]
 
 
+def available_progressions(genre: str) -> dict:
+    """Progression choices the section builder can offer, so the UI (and the
+    conversational builder) can present real options instead of guessing.
+
+    Shape::
+
+        {"sections": {role: [{"index": i, "symbols": ["i","VI",...]}, ...]},
+         "variants": [{"name": "Quick change", "symbols": [...]}, ...],
+         "default":  ["i","VI","III","VII"]}
+
+    A role/variant absent just means the UI offers "Auto" (engine seed-picks).
+    """
+    from src.daw_integration.generic.styles import STYLES
+    preset = STYLES.get(genre)
+    out: dict = {"sections": {}, "variants": [], "default": []}
+    if preset is None:
+        return out
+
+    def _syms(plan) -> list[str]:
+        return [str(c[0]) if isinstance(c, (list, tuple)) else str(c) for c in plan]
+
+    for role, pool in (getattr(preset, "section_progressions", None) or {}).items():
+        out["sections"][role] = [
+            {"index": i, "symbols": _syms(p)} for i, p in enumerate(pool)
+        ]
+    for name, plan in (getattr(preset, "progression_variants", None) or []):
+        out["variants"].append({"name": name, "symbols": _syms(plan)})
+    out["default"] = _syms(preset.progression)
+    return out
+
+
 def build_sections(genre: str, roles: list[str],
                    section_presets: dict[str, str] | None = None,
                    section_overrides: dict[str, dict] | None = None) -> list[dict]:
@@ -145,6 +176,20 @@ def _attach_overrides(secs: list[dict],
                 s["bars_override"] = max(1, min(64, int(o["bars"])))
             except (TypeError, ValueError):
                 pass
+        # Per-section CHORD PROGRESSION (the section builder's core control): an
+        # explicit list of roman symbols or [symbol, duration] pairs. Honored
+        # directly by compose_song, overriding the section's role pool.
+        prog = o.get("progression")
+        if isinstance(prog, list) and prog:
+            s["progression"] = [
+                tuple(c) if isinstance(c, (list, tuple)) else c for c in prog
+            ]
+        # Per-section INSTRUMENT subset — a MASK over the song's enabled
+        # instruments (ids). Only these play in this section; empty/absent =
+        # all enabled instruments play (today's behavior).
+        insts = o.get("instruments")
+        if isinstance(insts, list) and insts:
+            s["instruments"] = [str(i) for i in insts]
     return secs
 
 

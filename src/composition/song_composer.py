@@ -629,6 +629,13 @@ def compose_song(
             if (getattr(inst_obj, "id", None) in _color_chord_ids
                     and pick_role in ("intro", "verse")):
                 continue
+            # Per-section instrument MASK (section builder): when a section names
+            # an explicit instrument subset, only those play in it.
+            _sec_instruments = section.get("instruments")
+            if _sec_instruments and (
+                    instrument_token not in _sec_instruments
+                    and getattr(inst_obj, "id", None) not in _sec_instruments):
+                continue
             # Lead guitar is featured, not constant: it plays its featured
             # sections (some verses, bridge solo, final chorus, opt. intro/
             # outro) or drops a short fill in a fill section; else it sits out.

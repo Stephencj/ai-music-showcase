@@ -86,6 +86,9 @@ def list_presets() -> list[dict]:
             "default_instruments": list(getattr(p, "default_instruments", []) or []),
             "sections": arrangement.available_sections(key),
             "progression": _core_progression(getattr(p, "progression", None)),
+            # Per-role progression pools + song-level variants for the
+            # section-by-section builder to offer as choices.
+            "progressions": arrangement.available_progressions(key),
         })
     out.sort(key=lambda d: d["name"].lower())
     return out

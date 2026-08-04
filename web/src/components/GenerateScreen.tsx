@@ -47,6 +47,8 @@ function overrideBadges(o: import("../types").SectionOverride | undefined): stri
   if (o.feature_lead) tags.push("🎸 solo");
   if (o.energy != null) tags.push(o.energy < 0.85 ? "↓ sparse" : "↑ big");
   if (o.knobs?.drum_fill && o.knobs.drum_fill > 1) tags.push("fills");
+  if (o.progression?.length) tags.push(`🎼 ${o.progression.join("-")}`);
+  if (o.instruments?.length) tags.push(`🎛 ${o.instruments.length} instr`);
   return tags;
 }
 
@@ -547,10 +549,70 @@ export default function GenerateScreen({
                         onChange={(e) => setSecOv(s.role,
                           { tempo: e.target.value ? Number(e.target.value) : null })} />
                     </label>
+                    {/* Per-section chord progression (from the genre's pools + forms). */}
+                    {(() => {
+                      const pool = preset?.progressions?.sections?.[s.role] || [];
+                      const variants = preset?.progressions?.variants || [];
+                      const opts = [
+                        ...pool.map((o) => ({ key: `p${o.index}`, symbols: o.symbols, name: "" })),
+                        ...variants.map((v) => ({ key: `v:${v.name}`, symbols: v.symbols, name: v.name })),
+                      ];
+                      if (!opts.length) return null;
+                      const curProg = (sectionOverrides[s.role]?.progression || []).join(" ");
+                      return (
+                        <label className="sec-adv-tempo" style={{ minWidth: 150 }}>Chords
+                          <select value={curProg}
+                            onChange={(e) => {
+                              const found = opts.find((o) => o.symbols.join(" ") === e.target.value);
+                              setSecOv(s.role, { progression: found ? found.symbols : null });
+                            }}>
+                            <option value="">Auto</option>
+                            {opts.map((o) => (
+                              <option key={o.key} value={o.symbols.join(" ")}>
+                                {o.name ? o.name + ": " : ""}{o.symbols.join("-")}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      );
+                    })()}
+                    {/* Per-section instrument subset — which enabled instruments play here. */}
+                    {(() => {
+                      const enabled = families.flatMap((f) => f.instruments)
+                        .filter((i) => instruments.has(i.id));
+                      if (enabled.length < 2) return null;
+                      const sel = new Set(sectionOverrides[s.role]?.instruments || []);
+                      const active = (id: string) => sel.size === 0 || sel.has(id);
+                      return (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4,
+                          alignItems: "center", flexBasis: "100%", marginTop: 2 }}>
+                          <span className="meta" style={{ marginRight: 2 }}>Plays</span>
+                          {enabled.map((i) => (
+                            <button type="button" key={i.id}
+                              className={"chip" + (active(i.id) ? " on" : "")}
+                              style={{ fontSize: 11, padding: "2px 8px" }}
+                              onClick={() => {
+                                const base = sel.size ? new Set(sel)
+                                  : new Set(enabled.map((x) => x.id));
+                                base.has(i.id) ? base.delete(i.id) : base.add(i.id);
+                                const arr = [...base];
+                                setSecOv(s.role, {
+                                  instruments: arr.length === enabled.length ? null : arr,
+                                });
+                              }}>
+                              {i.label}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
                     {(sectionOverrides[s.role]?.key || sectionOverrides[s.role]?.tempo != null
-                      || sectionOverrides[s.role]?.bars != null) && (
+                      || sectionOverrides[s.role]?.bars != null
+                      || sectionOverrides[s.role]?.progression
+                      || sectionOverrides[s.role]?.instruments) && (
                       <button type="button" className="btn ghost sm" style={{ width: "auto" }}
-                        onClick={() => setSecOv(s.role, { key: null, scale: null, tempo: null, bars: null })}>
+                        onClick={() => setSecOv(s.role, { key: null, scale: null, tempo: null,
+                          bars: null, progression: null, instruments: null })}>
                         Clear</button>
                     )}
                   </div>
