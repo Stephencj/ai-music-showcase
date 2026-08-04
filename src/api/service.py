@@ -547,9 +547,14 @@ def live_stem_path(key: str, track_file: str) -> Path:
 
 
 def _unique_block_name(block_store, base: str) -> str:
+    # Blocks persist their name as a filesystem-safe slug (spaces → "_"),
+    # so compare on the SAME normalization or a display name like
+    # "Dup Test Song" would never match the stored "Dup_Test_Song" and
+    # save_block(overwrite=False) would then collide → FileExistsError.
+    safe = block_store._safe_name
     existing = {b.get("name") for b in block_store.list_blocks()}
     name, n = base, 1
-    while name in existing:
+    while safe(name) in existing:
         n += 1
         name = f"{base} {n}"
     return name
