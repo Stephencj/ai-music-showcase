@@ -525,7 +525,8 @@ export default function GenerateScreen({
                 {on && (
                   <span className="sec-adv-wrap">
                   <button type="button" className={"sec-adv-btn" + (advRole === s.role ? " on" : "")}
-                    title="Key / mode / tempo for this section"
+                    data-testid={"sec-adv-" + s.role}
+                    title="Key / mode / tempo / chords / instruments for this section"
                     onClick={() => setAdvRole(advRole === s.role ? null : s.role)}>⋯</button>
                   {advRole === s.role && (
                   <div className="section-adv">
@@ -561,7 +562,7 @@ export default function GenerateScreen({
                       const curProg = (sectionOverrides[s.role]?.progression || []).join(" ");
                       return (
                         <label className="sec-adv-tempo" style={{ minWidth: 150 }}>Chords
-                          <select value={curProg}
+                          <select value={curProg} data-testid={"sec-prog-" + s.role}
                             onChange={(e) => {
                               const found = opts.find((o) => o.symbols.join(" ") === e.target.value);
                               setSecOv(s.role, { progression: found ? found.symbols : null });
@@ -584,7 +585,8 @@ export default function GenerateScreen({
                       const sel = new Set(sectionOverrides[s.role]?.instruments || []);
                       const active = (id: string) => sel.size === 0 || sel.has(id);
                       return (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4,
+                        <div data-testid={"sec-plays-" + s.role}
+                          style={{ display: "flex", flexWrap: "wrap", gap: 4,
                           alignItems: "center", flexBasis: "100%", marginTop: 2 }}>
                           <span className="meta" style={{ marginRight: 2 }}>Plays</span>
                           {enabled.map((i) => (
