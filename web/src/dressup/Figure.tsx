@@ -221,29 +221,39 @@ function Top({ id, color, m }: { id: string; color: string; m: Model }) {
     case "sgtpepper": {
       const gold = "#e6b800", ty = a.shoulderY;
       const [slx] = a.shoulderL, [srx] = a.shoulderR;
-      const braidY = (i: number) => ty + 14 + i * 11;
+      const braidY = (i: number) => ty + 14 + i * 10;
       return <g>{sL}<path d={body} fill={color} />
-        <path d={`M${a.cx - 14} ${ty - 1} L${a.cx - 12} ${ty - 12} L${a.cx + 12} ${ty - 12} L${a.cx + 14} ${ty - 1} Z`} fill={d} />
+        {/* tall standing collar */}
+        <path d={`M${a.cx - 15} ${ty} L${a.cx - 13} ${ty - 15} L${a.cx + 13} ${ty - 15} L${a.cx + 15} ${ty} Z`} fill={d} />
+        <path d={`M${a.cx - 13} ${ty - 15} L${a.cx + 13} ${ty - 15}`} stroke={gold} strokeWidth="2" />
+        {/* gold epaulets + shoulder fringe */}
         <g fill={gold}>
-          <rect x={slx - 2} y={ty - 3} width="14" height="6" rx="2" />
-          <rect x={srx - 12} y={ty - 3} width="14" height="6" rx="2" />
+          <rect x={slx - 2} y={ty - 3} width="15" height="6" rx="2" />
+          <rect x={srx - 13} y={ty - 3} width="15" height="6" rx="2" />
         </g>
-        <g stroke={gold} strokeWidth="2.4" strokeLinecap="round">
-          {[0, 1, 2, 3].map((i) => <line key={i} x1={a.cx - 16} y1={braidY(i)} x2={a.cx + 16} y2={braidY(i)} />)}
+        <g stroke={gold} strokeWidth="1.4">
+          {[0, 1, 2].map((i) => <line key={i} x1={slx + 1 + i * 4} y1={ty + 3} x2={slx + 1 + i * 4} y2={ty + 11} />)}
+          {[0, 1, 2].map((i) => <line key={i} x1={srx - 1 - i * 4} y1={ty + 3} x2={srx - 1 - i * 4} y2={ty + 11} />)}
         </g>
-        <g fill={gold}>{[0, 1, 2, 3].map((i) => <circle key={i} cx={a.cx} cy={braidY(i)} r="2" />)}</g>
+        {/* rows of frog-braid trim tapering to a V, gold buttons each end */}
+        <g stroke={gold} strokeWidth="2.6" strokeLinecap="round">
+          {[0, 1, 2, 3, 4].map((i) => <line key={i} x1={a.cx - (17 - i * 2)} y1={braidY(i)} x2={a.cx + (17 - i * 2)} y2={braidY(i)} />)}
+        </g>
+        <g fill={gold}>
+          {[0, 1, 2, 3, 4].map((i) => <g key={i}><circle cx={a.cx - (17 - i * 2)} cy={braidY(i)} r="2.1" /><circle cx={a.cx + (17 - i * 2)} cy={braidY(i)} r="2.1" /></g>)}
+        </g>
       </g>;
     }
     case "disco": {
       const ty = a.shoulderY, belt = m.waist.y;
+      const seq = [[-20, 12], [20, 18], [-15, 30], [16, 34], [-8, 44], [10, 48], [-22, 26], [22, 40], [0, 22], [-4, 54], [8, 60]] as const;
       return <g>{sS}<path d={body} fill={color} />
-        <path d={`M${a.cx - 16} ${ty - 2} L${a.cx} ${ty + 40} L${a.cx + 16} ${ty - 2} Z`} fill={darker(color, 0.6)} />
+        {/* big pointed open collar */}
+        <path d={`M${a.cx - 20} ${ty - 3} L${a.cx} ${ty + 44} L${a.cx + 20} ${ty - 3} L${a.cx + 8} ${ty - 6} L${a.cx} ${ty + 8} L${a.cx - 8} ${ty - 6} Z`} fill={darker(color, 0.6)} />
         <rect x={a.waistL[0] - 2} y={belt - 4} width={a.waistR[0] - a.waistL[0] + 4} height="9" rx="2" fill={d} />
-        <rect x={a.cx - 4} y={belt - 3} width="8" height="7" rx="1" fill="#e6b800" />
-        <g>
-          <circle cx={a.cx - 20} cy={ty + 14} r="1.8" fill="#f8fafc" /><circle cx={a.cx + 20} cy={ty + 20} r="1.8" fill="#e6b800" />
-          <circle cx={a.cx - 15} cy={belt - 14} r="1.8" fill="#e6b800" /><circle cx={a.cx + 17} cy={belt - 10} r="1.8" fill="#f8fafc" />
-        </g>
+        <rect x={a.cx - 5} y={belt - 3} width="10" height="7" rx="1" fill="#e6b800" />
+        {/* lots of sequin sparkle */}
+        <g>{seq.map(([dx, dy], i) => <circle key={i} cx={a.cx + dx} cy={ty + dy} r={i % 2 ? 1.6 : 2} fill={i % 3 === 0 ? "#e6b800" : "#f8fafc"} opacity="0.9" />)}</g>
       </g>;
     }
     case "thriller": {
@@ -312,6 +322,83 @@ function Top({ id, color, m }: { id: string; color: string; m: Model }) {
         </g>
       </g>;
     }
+    // ── Music-icon signature looks ─────────────────────────────────────────
+    case "jamesbrown": {
+      const ty = a.shoulderY;
+      return <g>
+        <path d={`M${a.shoulderL[0] - 3} ${ty} C${a.cx - 34} ${ty + 40} ${a.cx - 26} ${ty + 64} ${a.cx} ${ty + 66} C${a.cx + 26} ${ty + 64} ${a.cx + 34} ${ty + 40} ${a.shoulderR[0] + 3} ${ty} C${a.cx + 16} ${ty + 8} ${a.cx - 16} ${ty + 8} ${a.shoulderL[0] - 3} ${ty} Z`} fill={darker(color, 0.7)} />
+        {sL}<path d={body} fill={color} />
+        <path d={`M${a.cx} ${ty} L${a.cx - 8} ${ty + 8} L${a.cx - 4} ${a.hemY - 2} L${a.cx + 4} ${a.hemY - 2} L${a.cx + 8} ${ty + 8} Z`} fill="#f8fafc" />
+        <path d={`M${a.cx - 3} ${ty + 8} L${a.cx + 3} ${ty + 8} L${a.cx + 2} ${a.hemY - 6} L${a.cx - 2} ${a.hemY - 6} Z`} fill="#20242c" />
+        <path d={`M${a.cx} ${ty} L${a.cx - 15} ${ty + 4} L${a.cx - 8} ${ty + 30} Z`} fill={d} />
+        <path d={`M${a.cx} ${ty} L${a.cx + 15} ${ty + 4} L${a.cx + 8} ${ty + 30} Z`} fill={d} />
+      </g>;
+    }
+    case "bootsy": {
+      const ty = a.shoulderY;
+      const st = [[-20, 16], [18, 22], [-14, 40], [16, 46], [0, 30], [-8, 56], [12, 60]] as const;
+      return <g>{sL}<path d={body} fill={color} />
+        <path d={`M${a.cx} ${a.hemY - 24} L${a.cx - 16} ${ty - 2} L${a.cx + 16} ${ty - 2} Z`} fill={darker(color, 0.55)} />
+        <g fill="#e6b800">{st.map(([dx, dy], i) => <text key={i} x={a.cx + dx} y={ty + dy} fontSize={i % 2 ? 9 : 13} textAnchor="middle">★</text>)}</g>
+      </g>;
+    }
+    case "clinton": {
+      const ty = a.shoulderY;
+      const rainbow = ["#ef4444", "#fb923c", "#facc15", "#34d399", "#38bdf8", "#a855f7"];
+      return <g>{sL}<path d={body} fill={color} />
+        <clipPath id={`gc-${m.id}`}><path d={body} /></clipPath>
+        <g clipPath={`url(#gc-${m.id})`}>{rainbow.map((c, i) => <rect key={i} x="50" y={ty - 6 + i * 12} width="100" height="12" fill={c} opacity="0.9" />)}</g>
+        <path d={`M${a.cx - 18} ${ty - 2} L${a.cx} ${ty + 16} L${a.cx + 18} ${ty - 2} L${a.cx + 10} ${ty - 10} L${a.cx} ${ty + 2} L${a.cx - 10} ${ty - 10} Z`} fill="#f8fafc" />
+      </g>;
+    }
+    case "freddie": {
+      const ty = a.shoulderY;
+      return <g>{sL}<path d={body} fill={color} />
+        <path d={`M${a.cx - 8} ${ty} L${a.cx - 8} ${a.hemY - 2} L${a.cx + 8} ${a.hemY - 2} L${a.cx + 8} ${ty} Z`} fill="#f8fafc" />
+        <path d={`M${a.cx - 8} ${ty} L${a.cx - 18} ${ty + 2} L${a.cx - 12} ${a.hemY - 2} L${a.cx - 8} ${a.hemY - 2} Z`} fill={color} />
+        <path d={`M${a.cx + 8} ${ty} L${a.cx + 18} ${ty + 2} L${a.cx + 12} ${a.hemY - 2} L${a.cx + 8} ${a.hemY - 2} Z`} fill={color} />
+        <g stroke="#d1352b" strokeWidth="3" strokeLinecap="round">
+          <line x1={a.shoulderL[0] - 1} y1={ty + 4} x2={a.wristL[0] - 1} y2={a.wristL[1]} />
+          <line x1={a.shoulderR[0] + 1} y1={ty + 4} x2={a.wristR[0] + 1} y2={a.wristR[1]} />
+        </g>
+        <g fill="#e6b800"><rect x={a.shoulderL[0] - 2} y={ty - 3} width="13" height="5" rx="2" /><rect x={a.shoulderR[0] - 11} y={ty - 3} width="13" height="5" rx="2" /></g>
+      </g>;
+    }
+    case "elton": {
+      const ty = a.shoulderY;
+      const spk = [[-18, 16], [16, 20], [-12, 36], [14, 42], [0, 28], [-6, 52], [10, 56], [-20, 46]] as const;
+      return <g>{sL}<path d={body} fill={color} />
+        <g fill={lighten(color, 1.25)}>
+          <ellipse cx={a.shoulderL[0] - 3} cy={ty + 3} rx="9" ry="6" /><ellipse cx={a.shoulderL[0]} cy={ty + 12} rx="7" ry="5" />
+          <ellipse cx={a.shoulderR[0] + 3} cy={ty + 3} rx="9" ry="6" /><ellipse cx={a.shoulderR[0]} cy={ty + 12} rx="7" ry="5" />
+        </g>
+        <text x={a.cx} y={ty + 36} fontSize="18" textAnchor="middle" fill="#e6b800">★</text>
+        <g>{spk.map(([dx, dy], i) => <circle key={i} cx={a.cx + dx} cy={ty + dy} r={i % 2 ? 1.6 : 2.2} fill={i % 3 === 0 ? "#e6b800" : "#f8fafc"} />)}</g>
+      </g>;
+    }
+    case "liberace": {
+      const ty = a.shoulderY, capeBot = a.hemY + 64;
+      return <g>
+        <path d={`M${a.shoulderL[0] - 8} ${ty - 2} C${a.cx - 46} ${ty + 40} ${a.cx - 42} ${ty + 90} ${a.cx - 28} ${capeBot} L${a.cx + 28} ${capeBot} C${a.cx + 42} ${ty + 90} ${a.cx + 46} ${ty + 40} ${a.shoulderR[0] + 8} ${ty - 2} Z`} fill={color} />
+        <path d={`M${a.shoulderL[0] - 8} ${ty - 2} C${a.cx - 46} ${ty + 40} ${a.cx - 42} ${ty + 90} ${a.cx - 28} ${capeBot}`} fill="none" stroke="#f8fafc" strokeWidth="6" strokeLinecap="round" />
+        <path d={`M${a.shoulderR[0] + 8} ${ty - 2} C${a.cx + 46} ${ty + 40} ${a.cx + 42} ${ty + 90} ${a.cx + 28} ${capeBot}`} fill="none" stroke="#f8fafc" strokeWidth="6" strokeLinecap="round" />
+        {sL}<path d={body} fill="#20242c" />
+        <path d={`M${a.cx - 6} ${ty} L${a.cx - 6} ${a.hemY - 2} L${a.cx + 6} ${a.hemY - 2} L${a.cx + 6} ${ty} Z`} fill="#f8fafc" />
+        <g fill="#e6b800"><circle cx={a.cx} cy={ty + 16} r="1.7" /><circle cx={a.cx} cy={ty + 26} r="1.7" /><circle cx={a.cx} cy={ty + 36} r="1.7" /></g>
+        <path d={`M${a.cx - 5} ${ty + 6} L${a.cx} ${ty + 9} L${a.cx - 5} ${ty + 12} Z M${a.cx + 5} ${ty + 6} L${a.cx} ${ty + 9} L${a.cx + 5} ${ty + 12} Z`} fill="#20242c" />
+      </g>;
+    }
+    case "boygeorge": {
+      const ty = a.shoulderY;
+      return <g>{sL}<path d={body} fill={color} /><path d={skirtPath(m, 48)} fill={color} />
+        <clipPath id={`bg-${m.id}`}><path d={body} /></clipPath>
+        <g clipPath={`url(#bg-${m.id})`} stroke={lighten(color, 1.4)} strokeWidth="2.4" opacity="0.7">
+          <line x1={a.cx - 20} y1={ty + 10} x2={a.cx + 20} y2={ty + 30} /><line x1={a.cx + 20} y1={ty + 10} x2={a.cx - 20} y2={ty + 30} />
+          <line x1={a.cx - 20} y1={ty + 34} x2={a.cx + 20} y2={ty + 54} /><line x1={a.cx + 20} y1={ty + 34} x2={a.cx - 20} y2={ty + 54} />
+        </g>
+        <g stroke="#d1352b" strokeWidth="3" strokeLinecap="round"><line x1={a.cx - 6} y1={ty} x2={a.cx - 11} y2={ty + 22} /><line x1={a.cx + 6} y1={ty} x2={a.cx + 11} y2={ty + 22} /></g>
+      </g>;
+    }
     default: // tee
       return <g>{sS}<path d={body} fill={color} />{neckLo}</g>;
   }
@@ -343,6 +430,30 @@ function Bottom({ id, color, m }: { id: string; color: string; m: Model }) {
     }
     case "midiskirt":
       return <g><path d={skirtPath(m, 92)} fill={color} /></g>;
+    case "bellbottoms": {
+      const g = a.legInnerX, t = m.leg.thickness, fy = a.footY, fl = t * 1.15, top = (a.hemY + fy) / 2;
+      return <g><path d={pantsPath(m)} fill={color} />
+        <path d={`M${a.cx - g - t} ${top} L${a.cx - g - t - fl} ${fy} L${a.cx - g - 1} ${fy} L${a.cx - g - 1} ${top} Z`} fill={color} />
+        <path d={`M${a.cx + g + t} ${top} L${a.cx + g + t + fl} ${fy} L${a.cx + g + 1} ${fy} L${a.cx + g + 1} ${top} Z`} fill={color} />
+      </g>;
+    }
+    case "slacks": {
+      const g = a.legInnerX, t = m.leg.thickness;
+      return <g><path d={pantsPath(m)} fill={color} />
+        <line x1={a.cx - g - t / 2} y1={a.hemY} x2={a.cx - g - t / 2} y2={a.footY - 4} stroke={lighten(color, 1.12)} strokeWidth="1.2" />
+        <line x1={a.cx + g + t / 2} y1={a.hemY} x2={a.cx + g + t / 2} y2={a.footY - 4} stroke={lighten(color, 1.12)} strokeWidth="1.2" />
+      </g>;
+    }
+    case "rippedjeans": {
+      const g = a.legInnerX, t = m.leg.thickness, kneeY = (a.hemY + a.footY) / 2;
+      return <g><path d={pantsPath(m)} fill={color} />
+        <line x1={a.cx} y1={a.hemY - 4} x2={a.cx} y2={a.footY - 6} stroke={d} strokeWidth="1.5" />
+        <g stroke={lighten(color, 1.35)} strokeWidth="2.6" strokeLinecap="round">
+          <line x1={a.cx - g - t + 2} y1={kneeY} x2={a.cx - g - 2} y2={kneeY + 2} />
+          <line x1={a.cx + g + 2} y1={kneeY} x2={a.cx + g + t - 2} y2={kneeY + 2} />
+        </g>
+      </g>;
+    }
     default: // pants
       return <path d={pantsPath(m)} fill={color} />;
   }
@@ -401,6 +512,22 @@ function Makeup({ id }: { id: string }) {
     case "lips": return lips;
     case "eyeshadow": return shadow;
     case "glam": return <g>{shadow}{lips}<circle cx="80" cy="91" r="5" fill="#fb7185" opacity="0.4" /><circle cx="120" cy="91" r="5" fill="#fb7185" opacity="0.4" /></g>;
+    case "glitter": return (
+      <g>{shadow}{lips}
+        <g fill="#fde047">
+          <circle cx="78" cy="74" r="1.3" /><circle cx="84" cy="70" r="1" /><circle cx="90" cy="73" r="1.2" />
+          <circle cx="122" cy="74" r="1.3" /><circle cx="116" cy="70" r="1" /><circle cx="110" cy="73" r="1.2" />
+        </g>
+        <g fill="#f8fafc"><circle cx="81" cy="72" r="0.8" /><circle cx="119" cy="72" r="0.8" /><circle cx="100" cy="68" r="1" /></g>
+      </g>);
+    case "star": return (
+      <g>{shadow}{lips}
+        <path d="M120 70 L122 76 L128 76 L123 80 L125 86 L120 82 L115 86 L117 80 L112 76 L118 76 Z" fill="#fbbf24" stroke="#b45309" strokeWidth="0.6" />
+      </g>);
+    case "lightning": return (
+      <g>{lips}
+        <path d="M104 60 L88 84 L98 84 L92 104 L118 78 L106 78 L114 60 Z" fill="#ef4444" opacity="0.9" stroke="#1d4ed8" strokeWidth="1.2" strokeLinejoin="round" />
+      </g>);
     default: return null;
   }
 }
@@ -430,6 +557,21 @@ function AccessoryFront({ id, color, m }: { id: string; color: string; m: Model 
       return <g fill={color}><path d={`M${a.shoulderL[0] + 6} ${a.shoulderY + 2} C${a.shoulderL[0] + 6} ${a.shoulderY - 2} ${a.shoulderL[0] + 10} ${a.shoulderY - 2} ${a.shoulderL[0] + 10} ${a.shoulderY + 2} L${a.shoulderL[0] + 12} ${a.shoulderY + 48} L${a.shoulderL[0] + 4} ${a.shoulderY + 48} Z`} /><path d={`M${a.shoulderR[0] - 6} ${a.shoulderY + 2} C${a.shoulderR[0] - 6} ${a.shoulderY - 2} ${a.shoulderR[0] - 10} ${a.shoulderY - 2} ${a.shoulderR[0] - 10} ${a.shoulderY + 2} L${a.shoulderR[0] - 12} ${a.shoulderY + 48} L${a.shoulderR[0] - 4} ${a.shoulderY + 48} Z`} /></g>;
     case "headphones":
       return <g fill="none" stroke={color} strokeWidth="4"><path d="M64 76 C64 36 136 36 136 76" /><rect x="58" y="72" width="10" height="18" rx="4" fill={color} /><rect x="132" y="72" width="10" height="18" rx="4" fill={color} /></g>;
+    case "boa": {
+      // Fluffy feather boa draped around the neck and over the shoulders.
+      const lo = lighten(color, 1.22), pts: [number, number, number][] = [];
+      const lx = a.shoulderL[0], rx = a.shoulderR[0], y0 = ny + 2;
+      for (let i = 0; i <= 12; i++) {
+        const t = i / 12, x = lx + (rx - lx) * t;
+        const y = y0 + Math.sin(t * Math.PI) * -8 + (t < 0.5 ? 0 : 0);
+        pts.push([x, y, i % 2 ? 6.5 : 8]);
+      }
+      // Add draping tails down the front.
+      pts.push([lx + 4, ny + 22, 7], [lx + 2, ny + 40, 6], [rx - 4, ny + 22, 7], [rx - 2, ny + 40, 6]);
+      return <g>{pts.map(([x, y, r], i) => (
+        <circle key={i} cx={x} cy={y} r={r} fill={i % 3 === 0 ? lo : color} opacity="0.95" />
+      ))}</g>;
+    }
     default: return null;
   }
 }

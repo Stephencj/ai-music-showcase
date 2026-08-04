@@ -48,8 +48,8 @@ export default function DressUpGallery() {
       <Row title="Glasses" make={() => GLASSES.map((s) => ({ label: s.name, m: { ...base(), glasses: s.id } }))} />
       <Row title="Facial hair (boy)" make={() => FACIAL_HAIR.map((s) => ({ label: s.name, m: { ...base(), body: "boy" as const, hair: "short", facialHair: s.id } }))} />
       <Row title="Makeup" make={() => MAKEUP.map((s) => ({ label: s.name, m: { ...base(), makeup: s.id } }))} />
-      <Row title="Tops" make={() => TOPS.map((s) => ({ label: s.name, m: { ...base(), top: s.id, topColor: "coral", bottom: s.id === "dress" || s.id === "gown" ? "none" : "pants" } }))} />
-      <Row title="Bottoms" make={() => BOTTOMS.filter((s) => s.id !== "none").map((s) => ({ label: s.name, m: { ...base(), bottom: s.id, bottomColor: "indigo" } }))} />
+      <Row title="Tops" make={() => TOPS.map((s) => ({ label: s.name, m: { ...base(), top: s.id, topColor: s.defaultColor ?? "coral", bottom: s.id === "dress" || s.id === "gown" ? "none" : "pants" } }))} />
+      <Row title="Bottoms" make={() => BOTTOMS.filter((s) => s.id !== "none").map((s) => ({ label: s.name, m: { ...base(), bottom: s.id, bottomColor: s.defaultColor ?? "indigo" } }))} />
       <Row title="Shoes" make={() => SHOES.map((s) => ({ label: s.name, m: { ...base(), shoes: s.id, shoesColor: "red" } }))} />
       <Row title="Accessories" make={() => ACCESSORIES.map((s) => ({ label: s.name, m: { ...base(), accessory: s.id, accessoryColor: "purple" } }))} />
     </div>

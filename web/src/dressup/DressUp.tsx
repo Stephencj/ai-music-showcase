@@ -33,6 +33,19 @@ const CATS: Cat[] = [
   { id: "skin", label: "Skin", icon: "🖐", shapes: [], shapeKey: "skin", colors: SKINS, colorKey: "skin" },
 ];
 
+// Signature looks that come with a matching bottom (suits share the top colour).
+const LOOK_BOTTOM: Record<string, { bottom: string; matchColor?: boolean }> = {
+  flapper: { bottom: "none" }, boygeorge: { bottom: "none" },
+  zoot: { bottom: "slacks", matchColor: true }, suit40s: { bottom: "slacks", matchColor: true },
+  sgtpepper: { bottom: "slacks", matchColor: true }, jamesbrown: { bottom: "slacks", matchColor: true },
+  liberace: { bottom: "slacks" }, thriller: { bottom: "slacks" },
+  rocknroll: { bottom: "jeans" }, indie: { bottom: "jeans" }, freddie: { bottom: "jeans" },
+  disco: { bottom: "bellbottoms" }, clinton: { bottom: "bellbottoms" },
+  bootsy: { bottom: "bellbottoms", matchColor: true }, elton: { bottom: "bellbottoms", matchColor: true },
+  grunge: { bottom: "rippedjeans" }, poppunk: { bottom: "rippedjeans" },
+  moderndrip: { bottom: "joggers" },
+};
+
 const STAR_KEY = "dressup.stars";
 const TRIED_KEY = "dressup.tried";
 const loadTried = (): Set<string> => {
@@ -84,8 +97,16 @@ export default function DressUp({ members, onChange, onClose, onPerform, hideClo
       (p as Record<string, unknown>)[category.colorKey] = picked.defaultColor;
     }
     if (key === "top") {
+      const look = LOOK_BOTTOM[id];
       if (id === "dress" || id === "gown") p.bottom = "none";
-      else if (cur && cur.bottom === "none") p.bottom = "pants";
+      else if (look) {
+        p.bottom = look.bottom;
+        if (look.bottom !== "none") {
+          const bshape = BOTTOMS.find((b) => b.id === look.bottom);
+          p.bottomColor = (look.matchColor ? (p as Record<string, string>).topColor : bshape?.defaultColor)
+            || cur?.bottomColor;
+        }
+      } else if (cur && cur.bottom === "none") p.bottom = "pants";
     }
     if (key === "bottom" && id !== "none" && cur && (cur.top === "dress" || cur.top === "gown")) p.top = "tee";
     patch(p, `${cat}:${id}`);
@@ -150,29 +171,31 @@ export default function DressUp({ members, onChange, onClose, onPerform, hideClo
             {members.length < 6 && <button className="du-mini add" onClick={addMember}>＋</button>}
           </div>
 
-          <div className="du-figure"><Figure member={cur} size={210} /></div>
+          <div className="du-stage-row">
+            <div className="du-figure"><Figure member={cur} size={210} /></div>
 
-          {/* body type */}
-          <div className="du-body-toggle">
-            <button className={cur.body === "girl" ? "on" : ""} onClick={() => setBody("girl")}>👧 Girl</button>
-            <button className={cur.body === "boy" ? "on" : ""} onClick={() => setBody("boy")}>👦 Boy</button>
+            {/* compact body/build controls, off to the side */}
+            <div className="du-side">
+              <div className="du-body-toggle du-vert">
+                <button className={cur.body === "girl" ? "on" : ""} onClick={() => setBody("girl")}>👧 Girl</button>
+                <button className={cur.body === "boy" ? "on" : ""} onClick={() => setBody("boy")}>👦 Boy</button>
+              </div>
+              <div className="du-body-toggle du-vert">
+                {(() => {
+                  const builds = modelsFor(cur.body);
+                  const curModel = cur.model ?? builds[0]?.id;   // fall back to the gender's default
+                  return builds.map((mdl) => (
+                    <button key={mdl.id} className={curModel === mdl.id ? "on" : ""} onClick={() => patch({ model: mdl.id })}>
+                      {mdl.label}
+                    </button>
+                  ));
+                })()}
+              </div>
+              {onPerform && (
+                <button className="du-perform" onClick={onPerform}>🎬 Show!</button>
+              )}
+            </div>
           </div>
-
-          {/* build (body model) */}
-          <div className="du-body-toggle">
-            {(() => {
-              const builds = modelsFor(cur.body);
-              const curModel = cur.model ?? builds[0]?.id;   // fall back to the gender's default
-              return builds.map((mdl) => (
-                <button key={mdl.id} className={curModel === mdl.id ? "on" : ""} onClick={() => patch({ model: mdl.id })}>
-                  {mdl.label}
-                </button>
-              ));
-            })()}
-          </div>
-          {onPerform && (
-            <button className="du-perform" onClick={onPerform}>🎬 Put on a show!</button>
-          )}
         </div>
 
         <div className="du-board">

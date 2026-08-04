@@ -61,19 +61,19 @@ export const HAIR_COLORS: Swatch[] = [
 // Each slot's shapes. "none" entries let a slot be empty. theme tags drive the
 // cohesion ("on-brand") bonus in imageBreakdown.
 export const HAIR: Shape[] = [
-  { id: "short", name: "Short" },
-  { id: "buzz", name: "Buzz" },
-  { id: "bob", name: "Bob", theme: "sweet" },
-  { id: "long", name: "Long", theme: "sweet" },
-  { id: "wavy", name: "Wavy", theme: "fancy" },
-  { id: "curly", name: "Curly", theme: "sweet" },
-  { id: "pony", name: "Ponytail", theme: "sporty" },
-  { id: "pigtails", name: "Pigtails", theme: "sweet" },
-  { id: "bun", name: "Top bun", theme: "fancy" },
-  { id: "braids", name: "Braids", theme: "sweet" },
-  { id: "afro", name: "Afro" },
-  { id: "mohawk", name: "Mohawk", theme: "rock" },
-  { id: "spiky", name: "Spiky", theme: "rock" },
+  { defaultColor: "h-brown", id: "short", name: "Short" },
+  { defaultColor: "h-black", id: "buzz", name: "Buzz" },
+  { defaultColor: "h-brown", id: "bob", name: "Bob", theme: "sweet" },
+  { defaultColor: "h-chestnut", id: "long", name: "Long", theme: "sweet" },
+  { defaultColor: "h-brown", id: "wavy", name: "Wavy", theme: "fancy" },
+  { defaultColor: "h-black", id: "curly", name: "Curly", theme: "sweet" },
+  { defaultColor: "h-brown", id: "pony", name: "Ponytail", theme: "sporty" },
+  { defaultColor: "h-brown", id: "pigtails", name: "Pigtails", theme: "sweet" },
+  { defaultColor: "h-black", id: "bun", name: "Top bun", theme: "fancy" },
+  { defaultColor: "h-black", id: "braids", name: "Braids", theme: "sweet" },
+  { defaultColor: "h-black", id: "afro", name: "Afro" },
+  { defaultColor: "h-pink", id: "mohawk", name: "Mohawk", theme: "rock" },
+  { defaultColor: "h-blue", id: "spiky", name: "Spiky", theme: "rock" },
 ];
 
 export const HATS: Shape[] = [
@@ -130,6 +130,14 @@ export const TOPS: Shape[] = [
   { defaultColor: "black", id: "poppunk", name: "'00s Pop-punk", emoji: "🤘", theme: "rock" },
   { defaultColor: "teal", id: "indie", name: "'10s Indie", emoji: "🎶", theme: "sweet" },
   { defaultColor: "black", id: "moderndrip", name: "'20s Modern street", emoji: "🧢", theme: "sporty" },
+  // Music-icon signature looks
+  { defaultColor: "purple", id: "jamesbrown", name: "James Brown", emoji: "🎤", theme: "fancy" },
+  { defaultColor: "pink", id: "bootsy", name: "Bootsy Collins", emoji: "⭐", theme: "sparkle" },
+  { defaultColor: "purple", id: "clinton", name: "George Clinton", emoji: "🌈", theme: "sparkle" },
+  { defaultColor: "yellow", id: "freddie", name: "Freddie Mercury", emoji: "👑", theme: "rock" },
+  { defaultColor: "purple", id: "elton", name: "Elton John", emoji: "🕶️", theme: "sparkle" },
+  { defaultColor: "white", id: "liberace", name: "Liberace", emoji: "🕯️", theme: "fancy" },
+  { defaultColor: "coral", id: "boygeorge", name: "Boy George", emoji: "🎩", theme: "sweet" },
 ];
 
 export const BOTTOMS: Shape[] = [
@@ -142,6 +150,9 @@ export const BOTTOMS: Shape[] = [
   { defaultColor: "green", id: "cargo", name: "Cargo pants", emoji: "🎖️", theme: "sporty" },
   { defaultColor: "gray", id: "joggers", name: "Joggers", emoji: "🏃", theme: "sporty" },
   { defaultColor: "indigo", id: "midiskirt", name: "Long skirt", emoji: "👗", theme: "cozy" },
+  { defaultColor: "blue", id: "bellbottoms", name: "Bell-bottoms", emoji: "🔔", theme: "sparkle" },
+  { defaultColor: "black", id: "slacks", name: "Dress slacks", emoji: "👔", theme: "fancy" },
+  { defaultColor: "blue", id: "rippedjeans", name: "Ripped jeans", emoji: "🕳️", theme: "rock" },
   { id: "none", name: "(dress only)", emoji: "🚫" },
 ];
 
@@ -172,6 +183,9 @@ export const MAKEUP: Shape[] = [
   { id: "lips", name: "Lipstick", theme: "fancy" },
   { id: "eyeshadow", name: "Eyeshadow", theme: "sparkle" },
   { id: "glam", name: "Full glam", theme: "sparkle" },
+  { id: "glitter", name: "Glitter", emoji: "✨", theme: "sparkle" },
+  { id: "star", name: "Face star", emoji: "⭐", theme: "sparkle" },
+  { id: "lightning", name: "Lightning bolt", emoji: "⚡", theme: "rock" },
 ];
 
 export const ACCESSORIES: Shape[] = [
@@ -183,6 +197,7 @@ export const ACCESSORIES: Shape[] = [
   { defaultColor: "red", id: "cape", name: "Cape", emoji: "🦸", theme: "rock" },
   { defaultColor: "blue", id: "backpack", name: "Backpack", emoji: "🎒", theme: "sporty" },
   { defaultColor: "black", id: "headphones", name: "Headphones", emoji: "🎧", theme: "rock" },
+  { defaultColor: "pink", id: "boa", name: "Feather boa", emoji: "🪶", theme: "sparkle" },
   { defaultColor: "black", id: "choker", name: "Choker", emoji: "🖤", theme: "rock" },
   { defaultColor: "brown", id: "guitarstrap", name: "Guitar strap", emoji: "🎸", theme: "rock" },
 ];
