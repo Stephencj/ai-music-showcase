@@ -7,7 +7,7 @@ import { type Member, skinHex, hairHex, colorHex } from "./wardrobe";
 import {
   type Model, type HeadDim, resolveModel, anchors, torsoPath, armPath,
   sleeveShort, sleeveLong, legsPath, pantsPath, skirtPath,
-  hairCap, hairSides, hairBack, hairShine,
+  hairCap, hairSides, hairBack, hairShine, headPath,
 } from "./models";
 
 const EYE_Y = 83;
@@ -298,6 +298,9 @@ export default function Figure({ member, size = 200 }: { member: Member; size?: 
   // Map the head art (authored at cy76 r38) onto this model's head.
   const hs = m.head.r / 38;
   const headTf = `translate(${m.head.cx} ${m.head.cy}) scale(${hs}) translate(-100 -76)`;
+  // Head dims for hair, widened to the model's cheek width so hair covers the
+  // chubbier head (no skin at the temples).
+  const headHair = { ...m.head, wF: m.face.w / 38 };
   const skinG = `skin-${member.id}`;
   const skinFill = `url(#${skinG})`;
 
@@ -322,7 +325,7 @@ export default function Figure({ member, size = 200 }: { member: Member; size?: 
       <AccessoryBack id={member.accessory} color={colorHex(member.accessoryColor)} m={m} />
       {/* Hair is built from the head's dimensions (model coords), so it tracks
           the head like garments track the body. Back hair falls behind the body. */}
-      <Hair id={member.hair} color={hcol} layer="back" head={m.head} />
+      <Hair id={member.hair} color={hcol} layer="back" head={headHair} />
 
       {/* legs (skin) + bottoms + shoes */}
       <path d={legsPath(m)} fill={skinFill} />
@@ -357,9 +360,9 @@ export default function Figure({ member, size = 200 }: { member: Member; size?: 
 
       {/* head + face + front hair + glasses + hat, all scaled to the model head */}
       <g transform={headTf}>
-      {/* Chibiverse-style head: width ≥ height, chubby cheeks, soft rounded
-          bottom (no pointed chin). Drawn in the head's design space. */}
-      <path d="M58 74 C58 32 142 32 142 74 C142 100 125 115 100 115 C75 115 58 100 58 74 Z" fill={skinFill} />
+      {/* Chibiverse head — per-model silhouette (girls rounder w/ a soft chin,
+          boys a broader jaw; athletic wider than slim). */}
+      <path d={headPath(m.face)} fill={skinFill} />
       <g>
         {member.body === "girl" ? (
           <g stroke={darker(hcol, 0.85)} strokeWidth="2" strokeLinecap="round" fill="none">
@@ -403,14 +406,18 @@ export default function Figure({ member, size = 200 }: { member: Member; size?: 
         {member.body === "boy" && <FacialHair id={member.facialHair} color={hcol} />}
       </g>
       </g>
-      <Hair id={member.hair} color={hcol} layer="front" head={m.head} />
+      <Hair id={member.hair} color={hcol} layer="front" head={headHair} />
       {member.hair !== "afro" && member.hair !== "buzz" && (
-        <path d={hairShine(m.head)} fill="none" stroke={lighten(hcol, 1.5)}
+        <path d={hairShine(headHair)} fill="none" stroke={lighten(hcol, 1.5)}
           strokeWidth={m.head.r * 0.12} strokeLinecap="round" opacity="0.45" />
       )}
       <g transform={headTf}>
         <Glasses id={member.glasses} />
-        <Hat id={member.hat} color={colorHex(member.hatColor)} />
+        {/* widen the hat horizontally to the model's cheek width so it covers
+            the chubbier head (hats are authored around the r38 circle). */}
+        <g transform={`translate(100 0) scale(${(m.face.w / 38).toFixed(3)} 1) translate(-100 0)`}>
+          <Hat id={member.hat} color={colorHex(member.hatColor)} />
+        </g>
       </g>
     </svg>
   );

@@ -14,6 +14,10 @@ export interface Model {
   build: string;          // "slim" | "athletic"
   label: string;
   head: { cx: number; cy: number; r: number };
+  // Face silhouette in the head's DESIGN space (circle was r38 at cx100).
+  // w = cheek half-width, chin = chin half-width. Girls rounder w/ a soft small
+  // chin; boys a wider jaw; athletic builds broader/squarer than slim.
+  face: { w: number; chin: number };
   neckW: number;                       // half-width of the neck
   shoulder: { y: number; w: number };  // w = half-width from centre (cx=100)
   waist: { y: number; w: number };
@@ -31,28 +35,28 @@ const CX = 100;
 export const MODELS: Record<string, Model> = {
   girl_slim: {
     id: "girl_slim", gender: "girl", build: "slim", label: "Slim",
-    head: { cx: CX, cy: 62, r: 51 }, neckW: 7,
+    head: { cx: CX, cy: 62, r: 51 }, face: { w: 44, chin: 23 }, neckW: 7,
     shoulder: { y: 128, w: 28 }, waist: { y: 156, w: 23 }, hip: { y: 182, w: 31 },
     hemY: 188, arm: { thickness: 12, wristY: 180, wristIn: 5 },
     leg: { footY: 250, gap: 3, thickness: 17 },
   },
   girl_athletic: {
     id: "girl_athletic", gender: "girl", build: "athletic", label: "Athletic",
-    head: { cx: CX, cy: 62, r: 51 }, neckW: 8,
+    head: { cx: CX, cy: 62, r: 51 }, face: { w: 45, chin: 27 }, neckW: 8,
     shoulder: { y: 126, w: 33 }, waist: { y: 156, w: 28 }, hip: { y: 184, w: 34 },
     hemY: 190, arm: { thickness: 14, wristY: 182, wristIn: 6 },
     leg: { footY: 250, gap: 3, thickness: 19 },
   },
   boy_slim: {
     id: "boy_slim", gender: "boy", build: "slim", label: "Slim",
-    head: { cx: CX, cy: 62, r: 51 }, neckW: 8,
+    head: { cx: CX, cy: 62, r: 51 }, face: { w: 45, chin: 32 }, neckW: 8,
     shoulder: { y: 128, w: 31 }, waist: { y: 158, w: 28 }, hip: { y: 184, w: 30 },
     hemY: 190, arm: { thickness: 14, wristY: 182, wristIn: 6 },
     leg: { footY: 250, gap: 3, thickness: 19 },
   },
   boy_athletic: {
     id: "boy_athletic", gender: "boy", build: "athletic", label: "Athletic",
-    head: { cx: CX, cy: 61, r: 52 }, neckW: 10,
+    head: { cx: CX, cy: 61, r: 52 }, face: { w: 48, chin: 37 }, neckW: 10,
     shoulder: { y: 126, w: 39 }, waist: { y: 160, w: 33 }, hip: { y: 186, w: 34 },
     hemY: 192, arm: { thickness: 16, wristY: 184, wristIn: 7 },
     leg: { footY: 250, gap: 3, thickness: 21 },
@@ -176,7 +180,20 @@ export function pantsPath(m: Model, crop = 0): string {
 
 // ── Head-fitted HAIR builders (hair tracks the head circle, like garments
 //    track the body) ─────────────────────────────────────────────────────────
-export interface HeadDim { cx: number; cy: number; r: number; }
+// wF = horizontal width factor (face cheek-width ÷ base radius) so the hair
+// covers a WIDER (chubbier) head without leaving skin at the temples.
+export interface HeadDim { cx: number; cy: number; r: number; wF?: number; }
+
+/** The head silhouette (DESIGN space, cx100) from a model's `face`: a chubby
+ *  chibi shape — wider than tall, full cheeks, soft rounded chin (no point).
+ *  `w` = cheek half-width, `chin` = chin half-width. */
+export function headPath(f: { w: number; chin: number }): string {
+  const cx = 100, top = 28, cheekY = 74, jawY = 100, chinY = 115;
+  const w = f.w, cw = f.chin;
+  return `M${cx - w} ${cheekY} C${cx - w} ${top} ${cx + w} ${top} ${cx + w} ${cheekY} `
+    + `C${cx + w} ${jawY} ${cx + cw} ${chinY} ${cx} ${chinY} `
+    + `C${cx - cw} ${chinY} ${cx - w} ${jawY} ${cx - w} ${cheekY} Z`;
+}
 const HP = (x: number, y: number) => `${x.toFixed(1)} ${y.toFixed(1)}`;
 
 /** A hair cap fitted to the head: fully covers the crown (control points sit
@@ -184,31 +201,31 @@ const HP = (x: number, y: number) => `${x.toFixed(1)} ${y.toFixed(1)}`;
  *  forehead hairline with soft scalloped bangs. `hairlineF`/`volumeF` are
  *  fractions of the head radius. */
 export function hairCap(h: HeadDim, hairlineF = 0.30, volumeF = 0.18): string {
-  const { cx, cy, r } = h;
+  const { cx, cy, r } = h; const wF = h.wF ?? 1;
+  const X = (f: number) => cx + r * f * wF;   // horizontal offset, scaled to face width
   // Rounded, WIDE crown (two cubics meeting at a flat top) so the head reads
   // round, not a cone. Top sits just above the head so the crown is covered.
   const topY = cy - r * (1.02 + volumeF);
-  const sx = r * 1.08;
   const midY = cy + r * 0.3;
   const hl = cy - r * hairlineF;
   const up = r * 0.12, dn = r * 0.05;
   return [
-    `M${HP(cx - sx, midY)}`,
-    `C${HP(cx - sx, cy - r * 0.86)} ${HP(cx - r * 0.5, topY)} ${HP(cx, topY)}`,     // left → flat top
-    `C${HP(cx + r * 0.5, topY)} ${HP(cx + sx, cy - r * 0.86)} ${HP(cx + sx, midY)}`, // right
-    `C${HP(cx + sx, hl + dn)} ${HP(cx + r * 0.6, hl - up)} ${HP(cx + r * 0.42, hl + dn)}`,
-    `C${HP(cx + r * 0.3, hl - up)} ${HP(cx + r * 0.14, hl - up)} ${HP(cx, hl + dn)}`,
-    `C${HP(cx - r * 0.14, hl - up)} ${HP(cx - r * 0.3, hl - up)} ${HP(cx - r * 0.42, hl + dn)}`,
-    `C${HP(cx - r * 0.6, hl - up)} ${HP(cx - sx, hl + dn)} ${HP(cx - sx, midY)} Z`,
+    `M${HP(X(-1.08), midY)}`,
+    `C${HP(X(-1.08), cy - r * 0.86)} ${HP(X(-0.5), topY)} ${HP(X(0), topY)}`,     // left → flat top
+    `C${HP(X(0.5), topY)} ${HP(X(1.08), cy - r * 0.86)} ${HP(X(1.08), midY)}`,    // right
+    `C${HP(X(1.08), hl + dn)} ${HP(X(0.6), hl - up)} ${HP(X(0.42), hl + dn)}`,
+    `C${HP(X(0.3), hl - up)} ${HP(X(0.14), hl - up)} ${HP(X(0), hl + dn)}`,
+    `C${HP(X(-0.14), hl - up)} ${HP(X(-0.3), hl - up)} ${HP(X(-0.42), hl + dn)}`,
+    `C${HP(X(-0.6), hl - up)} ${HP(X(-1.08), hl + dn)} ${HP(X(-1.08), midY)} Z`,
   ].join(" ");
 }
 
 /** Face-framing locks down each temple to `dropF`·r below the head centre. */
 export function hairSides(h: HeadDim, dropF = 0.7): string {
-  const { cx, cy, r } = h;
+  const { cx, cy, r } = h; const wF = h.wF ?? 1;
   const topY = cy - r * 0.2, botY = cy + r * dropF;
-  const oL = cx - r * 1.04, iL = cx - r * 0.82;
-  const oR = cx + r * 1.04, iR = cx + r * 0.82;
+  const oL = cx - r * 1.04 * wF, iL = cx - r * 0.82 * wF;
+  const oR = cx + r * 1.04 * wF, iR = cx + r * 0.82 * wF;
   return `M${HP(oL, topY)} C${HP(oL - r * 0.12, cy)} ${HP(oL, botY)} ${HP(iL, botY)} C${HP(iL - r * 0.02, cy)} ${HP(iL, topY)} ${HP(oL, topY)} Z `
     + `M${HP(oR, topY)} C${HP(oR + r * 0.12, cy)} ${HP(oR, botY)} ${HP(iR, botY)} C${HP(iR + r * 0.02, cy)} ${HP(iR, topY)} ${HP(oR, topY)} Z`;
 }
@@ -216,8 +233,8 @@ export function hairSides(h: HeadDim, dropF = 0.7): string {
 /** Long hair falling down the BACK (drawn behind the body), reaching `lenY`.
  *  A SOLID mass so it covers behind the head AND the neck (no skin gap). */
 export function hairBack(h: HeadDim, lenY: number): string {
-  const { cx, cy, r } = h;
-  const sx = r * 1.16, top = cy - r * 1.5, bx = r * 1.02;
+  const { cx, cy, r } = h; const wF = h.wF ?? 1;
+  const sx = r * 1.16 * wF, top = cy - r * 1.5, bx = r * 1.02 * wF;
   return [
     `M${HP(cx - sx, cy - r * 0.2)}`,
     `C${HP(cx - sx, top)} ${HP(cx + sx, top)} ${HP(cx + sx, cy - r * 0.2)}`,       // over the crown
