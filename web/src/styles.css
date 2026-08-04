@@ -996,7 +996,7 @@ audio { width: 100%; margin: 8px 0 12px; }
   cursor: pointer; background: linear-gradient(120deg, #f472b6, #fb7185); color: #fff; box-shadow: 0 8px 20px rgba(244,114,182,0.4); }
 
 .du-main { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
-.du-stage { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px; }
+.du-stage { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px 8px; }
 .du-members { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .du-mini { display: flex; flex-direction: column; align-items: center; width: 50px; height: 56px; overflow: hidden;
   border-radius: 12px; border: 2px solid transparent; background: rgba(255,255,255,0.12); cursor: pointer; color: #fff; }
@@ -1004,16 +1004,19 @@ audio { width: 100%; margin: 8px 0 12px; }
 .du-mini.add { align-items: center; justify-content: center; font-size: 24px; }
 .du-mini span { font-size: 11px; margin-top: -6px; }
 .du-figure { display: flex; justify-content: center; filter: drop-shadow(0 10px 18px rgba(0,0,0,0.35)); }
-.du-figure .duf { max-height: 38vh; width: auto; }
+.du-figure .duf { max-height: 30vh; width: auto; }
 .du-body-toggle { display: flex; gap: 8px; }
 .du-body-toggle button { font-size: 16px; font-weight: 700; padding: 8px 16px; border-radius: 999px; cursor: pointer;
   border: 2px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.10); color: #fff; }
 .du-body-toggle button.on { background: #fde047; color: #3b2566; border-color: #fde047; }
 .du-perform { font-size: 15px; padding: 10px 18px; }
 
-.du-board { flex: 1 1 auto; min-height: 0; overflow-y: auto; background: rgba(255,255,255,0.95); color: #1f2937;
-  border-radius: 22px 22px 0 0; padding: 12px; }
-.du-cats { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; }
+.du-board { flex: 1 1 auto; min-height: 0; overflow-y: auto; background: rgba(255,255,255,0.97); color: #1f2937;
+  border-radius: 22px 22px 0 0; padding: 0 12px; }
+/* Category tabs pinned to the top of the scrolling board. */
+.du-cats { position: sticky; top: 0; z-index: 3; display: flex; gap: 8px; overflow-x: auto;
+  background: #fff; padding: 10px 0 8px; margin: 0 -12px; padding-left: 12px; padding-right: 12px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
 .du-cat { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 64px; padding: 8px 4px;
   border-radius: 14px; border: 2px solid transparent; background: #f1f0f6; cursor: pointer; color: #1f2937; }
 .du-cat.on { border-color: #a855f7; background: #f3e8ff; }
@@ -1028,7 +1031,11 @@ audio { width: 100%; margin: 8px 0 12px; }
 .du-photo-btn { font-size: 15px; font-weight: 800; padding: 12px 16px; border-radius: 14px; border: none; cursor: pointer;
   background: linear-gradient(120deg, #38bdf8, #6366f1); color: #fff; }
 .du-photo-clear { font-size: 13px; padding: 10px 14px; border-radius: 12px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; }
-.du-colors { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+/* Photo + colour controls pinned to the bottom so they're always reachable. */
+.du-footer { position: sticky; bottom: 0; z-index: 3; background: #fff; margin: 8px -12px 0;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); box-shadow: 0 -5px 12px rgba(0,0,0,0.07); }
+.du-colors { display: flex; flex-wrap: nowrap; gap: 8px; margin-top: 8px; overflow-x: auto; padding-bottom: 2px; }
+.du-color { flex: 0 0 auto; }
 .du-color { width: 40px; height: 40px; border-radius: 50%; border: 3px solid #fff; cursor: pointer;
   box-shadow: 0 0 0 1px rgba(0,0,0,0.15); }
 .du-color.on { box-shadow: 0 0 0 3px #a855f7; transform: scale(1.1); }

@@ -166,6 +166,152 @@ function Top({ id, color, m }: { id: string; color: string; m: Model }) {
       return <g>{sL}<path d={body} fill={color} /><clipPath id={`pf-${m.id}`}><path d={body} /></clipPath><g clipPath={`url(#pf-${m.id})`} stroke={d} strokeWidth="2.4" opacity="0.5"><line x1="40" y1={a.shoulderY + 16} x2="160" y2={a.shoulderY + 16} /><line x1="40" y1={a.shoulderY + 32} x2="160" y2={a.shoulderY + 32} /><line x1="40" y1={a.shoulderY + 48} x2="160" y2={a.shoulderY + 48} /></g></g>;
     case "overalls":
       return <g>{sS}<path d={body} fill="#e9edf2" /><path d={`M${a.cx - m.waist.w} ${m.waist.y} L${a.hipL[0]} ${a.hemY} L${a.hipR[0]} ${a.hemY} L${a.cx + m.waist.w} ${m.waist.y} Z`} fill={color} /><rect x={a.cx - 11} y={m.waist.y + 2} width="22" height="15" rx="2" fill={darker(color, 0.85)} /><path d={`M${a.cx - 14} ${a.shoulderY} L${a.cx - 9} ${a.shoulderY} L${a.cx - 9} ${m.waist.y + 4} L${a.cx - 14} ${m.waist.y + 4} Z`} fill={color} /><path d={`M${a.cx + 14} ${a.shoulderY} L${a.cx + 9} ${a.shoulderY} L${a.cx + 9} ${m.waist.y + 4} L${a.cx + 14} ${m.waist.y + 4} Z`} fill={color} /></g>;
+    // ── Decade band outfits — one iconic look per decade, 1920s→2020s ──
+    case "flapper": {
+      const ty = a.shoulderY;
+      const skHemY = a.hemY - 6 + 38; // skirtPath waistY(=hemY-6) + len
+      const fx0 = a.cx - m.hip.w - 8, fx1 = a.cx + m.hip.w + 8;
+      return <g>
+        <path d={body} fill={color} />
+        <rect x={a.hemL[0]} y={a.hemY - 5} width={a.hemR[0] - a.hemL[0]} height="7" fill={d} />
+        <path d={skirtPath(m, 38)} fill={color} />
+        <g stroke={color} strokeWidth="3" strokeLinecap="round">
+          {Array.from({ length: 9 }, (_, i) => { const x = fx0 + (fx1 - fx0) * (i / 8); return <line key={i} x1={x} y1={skHemY} x2={x} y2={skHemY + 10} />; })}
+        </g>
+        <g fill="#e6b800">
+          <circle cx={a.cx - 14} cy={ty + 16} r="2" /><circle cx={a.cx + 16} cy={ty + 28} r="2" />
+          <circle cx={a.cx - 4} cy={ty + 40} r="2" /><circle cx={a.cx + 8} cy={ty + 10} r="2" />
+        </g>
+      </g>;
+    }
+    case "zoot": {
+      const [slx, sly] = a.shoulderL, [srx, sry] = a.shoulderR;
+      const midY = a.shoulderY + 34;
+      return <g>{sL}<path d={body} fill={color} />
+        <path d={`M${slx} ${sly} L${slx + 14} ${sly - 6} L${slx + 16} ${sly + 8} Z`} fill={darker(color, 0.7)} />
+        <path d={`M${srx} ${sry} L${srx - 14} ${sry - 6} L${srx - 16} ${sry + 8} Z`} fill={darker(color, 0.7)} />
+        <path d={`M${a.cx} ${a.shoulderY} L${a.cx - 18} ${a.shoulderY + 6} L${a.cx - 6} ${midY} L${a.cx} ${a.shoulderY + 18} Z`} fill={d} />
+        <path d={`M${a.cx} ${a.shoulderY} L${a.cx + 18} ${a.shoulderY + 6} L${a.cx + 6} ${midY} L${a.cx} ${a.shoulderY + 18} Z`} fill={darker(color, 0.6)} />
+        <rect x={a.cx - 3} y={a.shoulderY + 8} width="6" height={a.hemY - a.shoulderY - 16} rx="2" fill="#e6b800" />
+      </g>;
+    }
+    case "suit40s": {
+      const ty = a.shoulderY;
+      return <g>{sL}<path d={body} fill={color} />
+        <path d={`M${a.cx} ${ty} L${a.cx - 11} ${ty + 4} L${a.cx} ${ty + 40} L${a.cx + 11} ${ty + 4} Z`} fill="#f8fafc" />
+        <g fill="#20242c">
+          <path d={`M${a.cx - 2} ${ty + 8} L${a.cx - 11} ${ty + 3} L${a.cx - 11} ${ty + 13} Z`} />
+          <path d={`M${a.cx + 2} ${ty + 8} L${a.cx + 11} ${ty + 3} L${a.cx + 11} ${ty + 13} Z`} />
+          <rect x={a.cx - 2} y={ty + 6} width="4" height="5" rx="1" />
+        </g>
+        <g fill={d}>
+          <circle cx={a.cx - 8} cy={ty + 24} r="1.4" /><circle cx={a.cx - 8} cy={ty + 32} r="1.4" />
+          <circle cx={a.cx + 8} cy={ty + 24} r="1.4" /><circle cx={a.cx + 8} cy={ty + 32} r="1.4" />
+        </g>
+      </g>;
+    }
+    case "rocknroll": {
+      const ty = a.shoulderY;
+      return <g>{sS}<path d={body} fill={color} />
+        <path d={`M${a.cx - 4} ${ty} L${a.cx - 20} ${ty - 6} L${a.cx - 16} ${ty + 10} Z`} fill={d} />
+        <path d={`M${a.cx + 4} ${ty} L${a.cx + 20} ${ty - 6} L${a.cx + 16} ${ty + 10} Z`} fill={d} />
+        <path d={`M${a.cx + 2} ${ty + 18} L${a.cx - 6} ${ty + 34} L${a.cx - 1} ${ty + 34} L${a.cx - 6} ${ty + 48} L${a.cx + 8} ${ty + 30} L${a.cx + 2} ${ty + 30} L${a.cx + 7} ${ty + 18} Z`} fill="#e6b800" />
+      </g>;
+    }
+    case "sgtpepper": {
+      const gold = "#e6b800", ty = a.shoulderY;
+      const [slx] = a.shoulderL, [srx] = a.shoulderR;
+      const braidY = (i: number) => ty + 14 + i * 11;
+      return <g>{sL}<path d={body} fill={color} />
+        <path d={`M${a.cx - 14} ${ty - 1} L${a.cx - 12} ${ty - 12} L${a.cx + 12} ${ty - 12} L${a.cx + 14} ${ty - 1} Z`} fill={d} />
+        <g fill={gold}>
+          <rect x={slx - 2} y={ty - 3} width="14" height="6" rx="2" />
+          <rect x={srx - 12} y={ty - 3} width="14" height="6" rx="2" />
+        </g>
+        <g stroke={gold} strokeWidth="2.4" strokeLinecap="round">
+          {[0, 1, 2, 3].map((i) => <line key={i} x1={a.cx - 16} y1={braidY(i)} x2={a.cx + 16} y2={braidY(i)} />)}
+        </g>
+        <g fill={gold}>{[0, 1, 2, 3].map((i) => <circle key={i} cx={a.cx} cy={braidY(i)} r="2" />)}</g>
+      </g>;
+    }
+    case "disco": {
+      const ty = a.shoulderY, belt = m.waist.y;
+      return <g>{sS}<path d={body} fill={color} />
+        <path d={`M${a.cx - 16} ${ty - 2} L${a.cx} ${ty + 40} L${a.cx + 16} ${ty - 2} Z`} fill={darker(color, 0.6)} />
+        <rect x={a.waistL[0] - 2} y={belt - 4} width={a.waistR[0] - a.waistL[0] + 4} height="9" rx="2" fill={d} />
+        <rect x={a.cx - 4} y={belt - 3} width="8" height="7" rx="1" fill="#e6b800" />
+        <g>
+          <circle cx={a.cx - 20} cy={ty + 14} r="1.8" fill="#f8fafc" /><circle cx={a.cx + 20} cy={ty + 20} r="1.8" fill="#e6b800" />
+          <circle cx={a.cx - 15} cy={belt - 14} r="1.8" fill="#e6b800" /><circle cx={a.cx + 17} cy={belt - 10} r="1.8" fill="#f8fafc" />
+        </g>
+      </g>;
+    }
+    case "thriller": {
+      const blk = "#20242c", ty = a.shoulderY;
+      const [slx] = a.shoulderL, [srx] = a.shoulderR;
+      return <g>{sL}<path d={body} fill={color} />
+        <clipPath id={`zp-${m.id}`}><path d={body} /></clipPath>
+        <g clipPath={`url(#zp-${m.id})`}>
+          <path d={`M${slx} ${ty} L${slx + 18} ${ty} L${slx + 8} ${ty + 22} L${slx} ${ty + 16} Z`} fill={blk} />
+          <path d={`M${srx} ${ty} L${srx - 18} ${ty} L${srx - 8} ${ty + 22} L${srx} ${ty + 16} Z`} fill={blk} />
+          <g stroke={blk} strokeWidth="2.2" strokeLinecap="round">
+            <line x1={a.cx - 16} y1={ty + 8} x2={a.cx + 6} y2={ty + 30} />
+            <line x1={a.cx - 6} y1={ty + 8} x2={a.cx + 16} y2={ty + 30} />
+            <line x1={a.cx - 18} y1={ty + 24} x2={a.cx + 2} y2={ty + 44} />
+          </g>
+        </g>
+        <path d={`M${a.cx - 13} ${ty - 1} L${a.cx - 11} ${ty - 11} L${a.cx + 11} ${ty - 11} L${a.cx + 13} ${ty - 1} Z`} fill={d} />
+      </g>;
+    }
+    case "grunge": {
+      const ty = a.shoulderY, teeW = 16;
+      return <g>{sL}<path d={body} fill={color} />
+        <clipPath id={`gr-${m.id}`}><path d={body} /></clipPath>
+        <g clipPath={`url(#gr-${m.id})`} stroke={darker(color, 0.6)} strokeWidth="2.5" opacity="0.6">
+          <line x1="40" y1={ty + 16} x2="160" y2={ty + 16} />
+          <line x1="40" y1={ty + 40} x2="160" y2={ty + 40} />
+          <line x1={a.cx - 28} y1={ty} x2={a.cx - 28} y2={a.hemY} />
+          <line x1={a.cx + 28} y1={ty} x2={a.cx + 28} y2={a.hemY} />
+        </g>
+        <rect x={a.cx - teeW / 2} y={ty} width={teeW} height={a.hemY - ty} fill={darker(color, 0.5)} />
+        <text x={a.cx} y={ty + 30} fontSize="10" fill="#f8fafc" textAnchor="middle" opacity="0.8">♪</text>
+        <g stroke={d} strokeWidth="2">
+          <line x1={a.cx - teeW / 2} y1={ty} x2={a.cx - teeW / 2} y2={a.hemY} />
+          <line x1={a.cx + teeW / 2} y1={ty} x2={a.cx + teeW / 2} y2={a.hemY} />
+        </g>
+      </g>;
+    }
+    case "poppunk": {
+      const ty = a.shoulderY;
+      const [slx] = a.shoulderL, [srx] = a.shoulderR;
+      const studRow = (y: number) => [0, 1, 2, 3, 4].map((i) => { const x = slx + 8 + (srx - slx - 16) * (i / 4); return <circle key={`${y}-${i}`} cx={x} cy={y} r="1.3" fill={d} />; });
+      return <g>{sS}<path d={body} fill={color} />
+        <rect x={a.cx - 2} y={ty} width="4" height="14" fill="#20242c" />
+        <rect x={a.cx - 12} y={ty + 14} width="24" height="24" rx="2" fill={darker(color, 0.55)} />
+        <g>{studRow(ty + 4)}{studRow(a.hemY - 4)}</g>
+      </g>;
+    }
+    case "indie": {
+      const ty = a.shoulderY;
+      return <g>{sL}<path d={body} fill={color} />
+        <path d={`M${a.cx} ${ty + 2} L${a.cx - 12} ${ty} L${a.cx - 7} ${ty + 22} Z`} fill={d} />
+        <path d={`M${a.cx} ${ty + 2} L${a.cx + 12} ${ty} L${a.cx + 7} ${ty + 22} Z`} fill={d} />
+        <line x1={a.cx} y1={ty + 4} x2={a.cx} y2={a.hemY - 6} stroke={d} strokeWidth="1.5" />
+        <g fill={d}>{[0, 1, 2, 3].map((i) => <circle key={i} cx={a.cx} cy={ty + 24 + i * 12} r="1.6" />)}</g>
+        <rect x={a.cx + 8} y={ty + 18} width="12" height="12" rx="1.5" fill="none" stroke={d} strokeWidth="1.5" />
+      </g>;
+    }
+    case "moderndrip": {
+      const ty = a.shoulderY;
+      return <g>{sL}<path d={body} fill={color} />
+        <rect x={a.cx - 16} y={ty + 12} width="32" height="30" rx="3" fill={darker(color, 0.55)} />
+        <path d={`M${a.cx - 12} ${ty} Q${a.cx} ${ty + 12} ${a.cx + 12} ${ty}`} fill="none" stroke="#e6b800" strokeWidth="2.2" />
+        <g stroke="#f8fafc" strokeWidth="2.4" strokeLinecap="round">
+          <line x1={a.cx - 5} y1={ty + 2} x2={a.cx - 5} y2={ty + 12} />
+          <line x1={a.cx + 5} y1={ty + 2} x2={a.cx + 5} y2={ty + 12} />
+        </g>
+      </g>;
+    }
     default: // tee
       return <g>{sS}<path d={body} fill={color} />{neckLo}</g>;
   }

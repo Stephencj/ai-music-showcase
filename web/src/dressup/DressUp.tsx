@@ -77,6 +77,12 @@ export default function DressUp({ members, onChange, onClose, onPerform, hideClo
   // the dress for a tee so the bottom shows.
   const wear = (key: keyof Member, id: string) => {
     const p: Partial<Member> = { [key]: id } as Partial<Member>;
+    // Each item carries its own DEFAULT colour — applying it means switching
+    // items shows that item's default rather than carrying the last colour over.
+    const picked = category.shapes.find((s) => s.id === id);
+    if (category.colorKey && picked?.defaultColor) {
+      (p as Record<string, unknown>)[category.colorKey] = picked.defaultColor;
+    }
     if (key === "top") {
       if (id === "dress" || id === "gown") p.bottom = "none";
       else if (cur && cur.bottom === "none") p.bottom = "pants";
@@ -184,7 +190,11 @@ export default function DressUp({ members, onChange, onClose, onPerform, hideClo
             <div className="du-items">
               {category.shapes.map((s) => {
                 const worn = cur[category.shapeKey] === s.id;
-                const preview: Member = { ...cur, [category.shapeKey]: s.id } as Member;
+                // Preview each item in ITS default colour (not the current slot).
+                const preview: Member = {
+                  ...cur, [category.shapeKey]: s.id,
+                  ...(category.colorKey && s.defaultColor ? { [category.colorKey]: s.defaultColor } : {}),
+                } as Member;
                 return (
                   <button key={s.id} className={"du-item" + (worn ? " on" : "")}
                     onClick={() => wear(category.shapeKey, s.id)}>
@@ -196,25 +206,27 @@ export default function DressUp({ members, onChange, onClose, onPerform, hideClo
             </div>
           )}
 
-          {/* photo-on-shirt (Top category) */}
-          {category.photo && (
-            <div className="du-photo-row">
-              <input ref={fileRef} type="file" accept="image/*" capture="environment"
-                style={{ display: "none" }} onChange={onFile} />
-              <button className="du-photo-btn" onClick={() => fileRef.current?.click()}>📷 Put a photo on the shirt</button>
-              {cur.shirtPhoto && <button className="du-photo-clear" onClick={() => patch({ shirtPhoto: undefined })}>Remove photo</button>}
-            </div>
-          )}
-
-          {/* color strip for the current slot */}
-          {category.colors && category.colorKey && (
-            <div className="du-colors">
-              {category.colors.map((sw) => (
-                <button key={sw.id} title={sw.name}
-                  className={"du-color" + (cur[category.colorKey!] === sw.id ? " on" : "")}
-                  style={{ background: sw.hex }}
-                  onClick={() => patch({ [category.colorKey!]: sw.id } as Partial<Member>, `${category.id}c:${sw.id}`)} />
-              ))}
+          {/* pinned footer: photo (Top) + colour strip for the current slot */}
+          {(category.photo || (category.colors && category.colorKey)) && (
+            <div className="du-footer">
+              {category.photo && (
+                <div className="du-photo-row">
+                  <input ref={fileRef} type="file" accept="image/*" capture="environment"
+                    style={{ display: "none" }} onChange={onFile} />
+                  <button className="du-photo-btn" onClick={() => fileRef.current?.click()}>📷 Photo on shirt</button>
+                  {cur.shirtPhoto && <button className="du-photo-clear" onClick={() => patch({ shirtPhoto: undefined })}>Remove</button>}
+                </div>
+              )}
+              {category.colors && category.colorKey && (
+                <div className="du-colors">
+                  {category.colors.map((sw) => (
+                    <button key={sw.id} title={sw.name}
+                      className={"du-color" + (cur[category.colorKey!] === sw.id ? " on" : "")}
+                      style={{ background: sw.hex }}
+                      onClick={() => patch({ [category.colorKey!]: sw.id } as Partial<Member>, `${category.id}c:${sw.id}`)} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

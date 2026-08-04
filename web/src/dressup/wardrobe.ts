@@ -12,7 +12,7 @@ export const THEME_LABEL: Record<ThemeTag, string> = {
 };
 
 export interface Swatch { id: string; name: string; hex: string; }
-export interface Shape { id: string; name: string; emoji?: string; theme?: ThemeTag; }
+export interface Shape { id: string; name: string; emoji?: string; theme?: ThemeTag; defaultColor?: string; }
 
 // Bright, kid-friendly palette for clothes/hair/accessories.
 export const COLORS: Swatch[] = [
@@ -78,18 +78,18 @@ export const HAIR: Shape[] = [
 
 export const HATS: Shape[] = [
   { id: "none", name: "None", emoji: "🚫" },
-  { id: "beanie", name: "Beanie", emoji: "🧢", theme: "cozy" },
-  { id: "cap", name: "Cap", emoji: "🧢", theme: "sporty" },
-  { id: "party", name: "Party hat", emoji: "🥳", theme: "sparkle" },
-  { id: "crown", name: "Crown", emoji: "👑", theme: "fancy" },
-  { id: "flower", name: "Flower", emoji: "🌸", theme: "sweet" },
-  { id: "bow", name: "Big bow", emoji: "🎀", theme: "sweet" },
-  { id: "tophat", name: "Top hat", emoji: "🎩", theme: "fancy" },
-  { id: "cowboy", name: "Cowboy", emoji: "🤠", theme: "rock" },
-  { id: "ears", name: "Cat ears", emoji: "🐱", theme: "sweet" },
-  { id: "bucket", name: "Bucket hat", emoji: "🎣", theme: "sporty" },
-  { id: "headband", name: "Headband", emoji: "🎀", theme: "sporty" },
-  { id: "bandana", name: "Bandana", emoji: "🏴‍☠️", theme: "rock" },
+  { defaultColor: "gray", id: "beanie", name: "Beanie", emoji: "🧢", theme: "cozy" },
+  { defaultColor: "red", id: "cap", name: "Cap", emoji: "🧢", theme: "sporty" },
+  { defaultColor: "pink", id: "party", name: "Party hat", emoji: "🥳", theme: "sparkle" },
+  { defaultColor: "yellow", id: "crown", name: "Crown", emoji: "👑", theme: "fancy" },
+  { defaultColor: "pink", id: "flower", name: "Flower", emoji: "🌸", theme: "sweet" },
+  { defaultColor: "pink", id: "bow", name: "Big bow", emoji: "🎀", theme: "sweet" },
+  { defaultColor: "black", id: "tophat", name: "Top hat", emoji: "🎩", theme: "fancy" },
+  { defaultColor: "brown", id: "cowboy", name: "Cowboy", emoji: "🤠", theme: "rock" },
+  { defaultColor: "pink", id: "ears", name: "Cat ears", emoji: "🐱", theme: "sweet" },
+  { defaultColor: "green", id: "bucket", name: "Bucket hat", emoji: "🎣", theme: "sporty" },
+  { defaultColor: "coral", id: "headband", name: "Headband", emoji: "🎀", theme: "sporty" },
+  { defaultColor: "red", id: "bandana", name: "Bandana", emoji: "🏴‍☠️", theme: "rock" },
 ];
 
 export const GLASSES: Shape[] = [
@@ -102,45 +102,57 @@ export const GLASSES: Shape[] = [
 ];
 
 export const TOPS: Shape[] = [
-  { id: "tee", name: "T-shirt", emoji: "👕" },
-  { id: "long", name: "Long sleeve", emoji: "👚", theme: "cozy" },
-  { id: "tank", name: "Tank top", emoji: "🎽", theme: "sporty" },
-  { id: "hoodie", name: "Hoodie", emoji: "🧥", theme: "cozy" },
-  { id: "dress", name: "Dress", emoji: "👗", theme: "sweet" },
-  { id: "gown", name: "Sparkle gown", emoji: "✨", theme: "sparkle" },
-  { id: "tutu-top", name: "Leotard", emoji: "🩰", theme: "fancy" },
-  { id: "jacket", name: "Leather jacket", emoji: "🧥", theme: "rock" },
-  { id: "stripes", name: "Striped tee", emoji: "👕", theme: "sweet" },
-  { id: "jersey", name: "Sports jersey", emoji: "🏀", theme: "sporty" },
-  { id: "crop", name: "Crop top", emoji: "🎽", theme: "sporty" },
-  { id: "sweater", name: "Sweater", emoji: "🧶", theme: "cozy" },
-  { id: "flannel", name: "Flannel", emoji: "🪵", theme: "rock" },
-  { id: "blazer", name: "Blazer", emoji: "🤵", theme: "fancy" },
-  { id: "puffer", name: "Puffer", emoji: "🧥", theme: "cozy" },
-  { id: "overalls", name: "Overalls", emoji: "👖", theme: "cozy" },
+  { defaultColor: "sky", id: "tee", name: "T-shirt", emoji: "👕" },
+  { defaultColor: "gray", id: "long", name: "Long sleeve", emoji: "👚", theme: "cozy" },
+  { defaultColor: "coral", id: "tank", name: "Tank top", emoji: "🎽", theme: "sporty" },
+  { defaultColor: "gray", id: "hoodie", name: "Hoodie", emoji: "🧥", theme: "cozy" },
+  { defaultColor: "pink", id: "dress", name: "Dress", emoji: "👗", theme: "sweet" },
+  { defaultColor: "purple", id: "gown", name: "Sparkle gown", emoji: "✨", theme: "sparkle" },
+  { defaultColor: "pink", id: "tutu-top", name: "Leotard", emoji: "🩰", theme: "fancy" },
+  { defaultColor: "black", id: "jacket", name: "Leather jacket", emoji: "🧥", theme: "rock" },
+  { defaultColor: "red", id: "stripes", name: "Striped tee", emoji: "👕", theme: "sweet" },
+  { defaultColor: "blue", id: "jersey", name: "Sports jersey", emoji: "🏀", theme: "sporty" },
+  { defaultColor: "coral", id: "crop", name: "Crop top", emoji: "🎽", theme: "sporty" },
+  { defaultColor: "teal", id: "sweater", name: "Sweater", emoji: "🧶", theme: "cozy" },
+  { defaultColor: "red", id: "flannel", name: "Flannel", emoji: "🪵", theme: "rock" },
+  { defaultColor: "indigo", id: "blazer", name: "Blazer", emoji: "🤵", theme: "fancy" },
+  { defaultColor: "black", id: "puffer", name: "Puffer", emoji: "🧥", theme: "cozy" },
+  { defaultColor: "blue", id: "overalls", name: "Overalls", emoji: "👖", theme: "cozy" },
+  // Decade band outfits — one iconic "famous band" look per decade, 1920s→2020s.
+  { defaultColor: "silver", id: "flapper", name: "'20s Flapper", emoji: "🎷", theme: "sparkle" },
+  { defaultColor: "purple", id: "zoot", name: "'30s Zoot suit", emoji: "🎺", theme: "fancy" },
+  { defaultColor: "black", id: "suit40s", name: "'40s Crooner suit", emoji: "🎙️", theme: "fancy" },
+  { defaultColor: "yellow", id: "rocknroll", name: "'50s Rock'n'roll", emoji: "🎸", theme: "rock" },
+  { defaultColor: "red", id: "sgtpepper", name: "'60s Band jacket", emoji: "🥁", theme: "fancy" },
+  { defaultColor: "silver", id: "disco", name: "'70s Disco", emoji: "🕺", theme: "sparkle" },
+  { defaultColor: "red", id: "thriller", name: "'80s Zip jacket", emoji: "⚡", theme: "rock" },
+  { defaultColor: "red", id: "grunge", name: "'90s Grunge", emoji: "🎸", theme: "cozy" },
+  { defaultColor: "black", id: "poppunk", name: "'00s Pop-punk", emoji: "🤘", theme: "rock" },
+  { defaultColor: "teal", id: "indie", name: "'10s Indie", emoji: "🎶", theme: "sweet" },
+  { defaultColor: "black", id: "moderndrip", name: "'20s Modern street", emoji: "🧢", theme: "sporty" },
 ];
 
 export const BOTTOMS: Shape[] = [
-  { id: "pants", name: "Pants", emoji: "👖" },
-  { id: "jeans", name: "Jeans", emoji: "👖", theme: "rock" },
-  { id: "shorts", name: "Shorts", emoji: "🩳", theme: "sporty" },
-  { id: "skirt", name: "Skirt", emoji: "👗", theme: "sweet" },
-  { id: "tutu", name: "Tutu", emoji: "🩰", theme: "fancy" },
-  { id: "leggings", name: "Leggings", emoji: "🦵", theme: "sporty" },
-  { id: "cargo", name: "Cargo pants", emoji: "🎖️", theme: "sporty" },
-  { id: "joggers", name: "Joggers", emoji: "🏃", theme: "sporty" },
-  { id: "midiskirt", name: "Long skirt", emoji: "👗", theme: "cozy" },
+  { defaultColor: "gray", id: "pants", name: "Pants", emoji: "👖" },
+  { defaultColor: "blue", id: "jeans", name: "Jeans", emoji: "👖", theme: "rock" },
+  { defaultColor: "sky", id: "shorts", name: "Shorts", emoji: "🩳", theme: "sporty" },
+  { defaultColor: "pink", id: "skirt", name: "Skirt", emoji: "👗", theme: "sweet" },
+  { defaultColor: "pink", id: "tutu", name: "Tutu", emoji: "🩰", theme: "fancy" },
+  { defaultColor: "black", id: "leggings", name: "Leggings", emoji: "🦵", theme: "sporty" },
+  { defaultColor: "green", id: "cargo", name: "Cargo pants", emoji: "🎖️", theme: "sporty" },
+  { defaultColor: "gray", id: "joggers", name: "Joggers", emoji: "🏃", theme: "sporty" },
+  { defaultColor: "indigo", id: "midiskirt", name: "Long skirt", emoji: "👗", theme: "cozy" },
   { id: "none", name: "(dress only)", emoji: "🚫" },
 ];
 
 export const SHOES: Shape[] = [
-  { id: "sneakers", name: "Sneakers", emoji: "👟", theme: "sporty" },
-  { id: "boots", name: "Boots", emoji: "🥾", theme: "rock" },
-  { id: "sandals", name: "Sandals", emoji: "🩴", theme: "cozy" },
-  { id: "flats", name: "Flats", emoji: "🥿", theme: "sweet" },
-  { id: "heels", name: "Heels", emoji: "👠", theme: "fancy" },
-  { id: "hightops", name: "High-tops", emoji: "👟", theme: "rock" },
-  { id: "maryjanes", name: "Mary Janes", emoji: "🥿", theme: "sweet" },
+  { defaultColor: "white", id: "sneakers", name: "Sneakers", emoji: "👟", theme: "sporty" },
+  { defaultColor: "black", id: "boots", name: "Boots", emoji: "🥾", theme: "rock" },
+  { defaultColor: "brown", id: "sandals", name: "Sandals", emoji: "🩴", theme: "cozy" },
+  { defaultColor: "pink", id: "flats", name: "Flats", emoji: "🥿", theme: "sweet" },
+  { defaultColor: "red", id: "heels", name: "Heels", emoji: "👠", theme: "fancy" },
+  { defaultColor: "black", id: "hightops", name: "High-tops", emoji: "👟", theme: "rock" },
+  { defaultColor: "red", id: "maryjanes", name: "Mary Janes", emoji: "🥿", theme: "sweet" },
   { id: "barefoot", name: "Barefoot", emoji: "🦶" },
 ];
 
@@ -164,15 +176,15 @@ export const MAKEUP: Shape[] = [
 
 export const ACCESSORIES: Shape[] = [
   { id: "none", name: "None", emoji: "🚫" },
-  { id: "necklace", name: "Necklace", emoji: "📿", theme: "fancy" },
-  { id: "scarf", name: "Scarf", emoji: "🧣", theme: "cozy" },
-  { id: "bowtie", name: "Bow tie", emoji: "🎀", theme: "fancy" },
-  { id: "wings", name: "Fairy wings", emoji: "🧚", theme: "sparkle" },
-  { id: "cape", name: "Cape", emoji: "🦸", theme: "rock" },
-  { id: "backpack", name: "Backpack", emoji: "🎒", theme: "sporty" },
-  { id: "headphones", name: "Headphones", emoji: "🎧", theme: "rock" },
-  { id: "choker", name: "Choker", emoji: "🖤", theme: "rock" },
-  { id: "guitarstrap", name: "Guitar strap", emoji: "🎸", theme: "rock" },
+  { defaultColor: "yellow", id: "necklace", name: "Necklace", emoji: "📿", theme: "fancy" },
+  { defaultColor: "red", id: "scarf", name: "Scarf", emoji: "🧣", theme: "cozy" },
+  { defaultColor: "black", id: "bowtie", name: "Bow tie", emoji: "🎀", theme: "fancy" },
+  { defaultColor: "white", id: "wings", name: "Fairy wings", emoji: "🧚", theme: "sparkle" },
+  { defaultColor: "red", id: "cape", name: "Cape", emoji: "🦸", theme: "rock" },
+  { defaultColor: "blue", id: "backpack", name: "Backpack", emoji: "🎒", theme: "sporty" },
+  { defaultColor: "black", id: "headphones", name: "Headphones", emoji: "🎧", theme: "rock" },
+  { defaultColor: "black", id: "choker", name: "Choker", emoji: "🖤", theme: "rock" },
+  { defaultColor: "brown", id: "guitarstrap", name: "Guitar strap", emoji: "🎸", theme: "rock" },
 ];
 
 export const PARTS = ["Vocals", "Guitar", "Bass", "Keys", "Drums"] as const;
