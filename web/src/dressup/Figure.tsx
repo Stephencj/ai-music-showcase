@@ -1,95 +1,94 @@
-// The dress-up character — a full-body layered SVG built on ONE coordinate
-// system (viewBox 200×340) so every item lands on its anchor: hair/hats on the
-// head circle, tops on the torso, bottoms on the legs, shoes on the feet,
-// glasses on the eyes. Pure vector — recolors live, works offline. If you tweak
-// a garment, re-screenshot the gallery to confirm it still fits.
+// The dress-up character — a full-body layered SVG on a 200×340 viewBox. The
+// body is built from a MODEL's measurements (see models.ts) and every garment
+// is drawn against that model's ANCHORS, so clothes fit each standard model
+// (slim/athletic × girl/boy) instead of being pinned to one silhouette. Head-
+// anchored items (hair/hats/glasses/face) sit on the shared head circle.
+import { type Member, skinHex, hairHex, colorHex } from "./wardrobe";
 import {
-  type Member, skinHex, hairHex, colorHex,
-} from "./wardrobe";
+  type Model, type HeadDim, resolveModel, anchors, torsoPath, armPath,
+  sleeveShort, sleeveLong, legsPath, pantsPath, skirtPath,
+  hairCap, hairSides, hairBack, hairShine,
+} from "./models";
 
-// Shared anchors (the whole body is drawn against these).
-const HEAD = { cx: 100, cy: 76, r: 40 };
-const EYE_Y = 80;
+const EYE_Y = 83;
 
 const darker = (hex: string, f = 0.78) => {
   const n = parseInt(hex.slice(1), 16);
   const r = Math.round(((n >> 16) & 255) * f), g = Math.round(((n >> 8) & 255) * f), b = Math.round((n & 255) * f);
   return `rgb(${r},${g},${b})`;
 };
+const lighten = (hex: string, f = 1.4) => {
+  const n = parseInt(hex.slice(1), 16);
+  const cl = (v: number) => Math.min(255, Math.round(v * f));
+  return `rgb(${cl((n >> 16) & 255)},${cl((n >> 8) & 255)},${cl(n & 255)})`;
+};
 
-function Hair({ id, color, layer }: { id: string; color: string; layer: "back" | "front" }) {
+// Hair is authored against the head circle (design coords cx100 cy76 r38, so
+// x62–138, y38–114). Cute style: a soft PUFFY crown with a scalloped FRINGE of
+// rounded bangs to a low hairline (so no bald forehead), + side locks.
+//   fringe(hl): puffy dome + soft bangs dipping to y≈hl at the brow.
+//   sideLock(x,dir): a soft lock down the temple past the cheek.
+// Hair is built from the HEAD circle's dimensions (like garments from body
+// measurements): hairCap covers the crown to a forehead hairline, hairSides
+// frames the face, hairBack falls down the back. Everything scales with the
+// model's head automatically, so size/fit always matches.
+function Hair({ id, color, layer, head }: { id: string; color: string; layer: "back" | "front"; head: HeadDim }) {
   const back = layer === "back";
+  const { cx, cy, r } = head;
+  const backY = (f: number) => cy + r * f;   // absolute y for the back-hair length
+  const R = (fx: number, fy: number) => [cx + r * fx, cy + r * fy] as const;
   switch (id) {
     case "buzz":
-      return back ? null : <path d="M64 60 C62 38 138 38 136 60 C128 44 72 44 64 60 Z" fill={color} opacity={0.85} />;
+      return back ? null : <path d={hairCap(head, 0.4, 0.04)} fill={color} opacity={0.9} />;
     case "short":
-      return back ? null : <path d="M62 64 C58 34 142 34 138 64 C138 50 126 42 100 42 C74 42 62 50 62 64 Z" fill={color} />;
+      return back ? null : <path d={hairCap(head, 0.34, 0.16)} fill={color} />;
     case "bob":
-      if (back) return <path d="M58 56 C58 30 142 30 142 56 L142 96 C142 104 132 104 132 92 L132 64 C132 50 68 50 68 64 L68 92 C68 104 58 104 58 96 Z" fill={color} />;
-      return <path d="M60 62 C58 34 142 34 140 62 C138 48 126 40 100 40 C74 40 62 48 60 62 Z" fill={color} />;
+      if (back) return <path d={hairBack(head, backY(1.15))} fill={color} />;
+      return <g fill={color}><path d={hairCap(head, 0.32, 0.18)} /><path d={hairSides(head, 1.3)} /></g>;
     case "long":
-      if (back) return <path d="M56 56 C56 28 144 28 144 56 L150 150 C150 162 134 162 134 150 L130 80 C130 60 70 60 70 80 L66 150 C66 162 50 162 50 150 Z" fill={color} />;
-      return <path d="M60 64 C56 32 144 32 140 64 C138 46 124 38 100 38 C76 38 62 46 60 64 Z" fill={color} />;
+      if (back) return <path d={hairBack(head, backY(2.5))} fill={color} />;
+      return <g fill={color}><path d={hairCap(head, 0.32, 0.2)} /><path d={hairSides(head, 0.9)} /></g>;
     case "wavy":
-      if (back) return <path d="M54 54 C54 26 146 26 146 54 C152 100 150 140 154 170 C150 158 140 158 138 148 C142 120 138 90 132 74 C132 58 68 58 68 74 C62 90 58 120 62 148 C60 158 50 158 46 170 C50 140 48 100 54 54 Z" fill={color} />;
-      return <path d="M60 64 C56 30 144 30 140 64 C136 46 124 38 100 38 C76 38 64 46 60 64 Z" fill={color} />;
+      if (back) return <path d={hairBack(head, backY(2.7))} fill={color} />;
+      return <g fill={color}><path d={hairCap(head, 0.32, 0.22)} /><path d={hairSides(head, 0.95)} /></g>;
     case "curly":
-      if (back) return (
-        <g fill={color}>
-          <circle cx="62" cy="60" r="14" /><circle cx="138" cy="60" r="14" />
-          <circle cx="60" cy="92" r="13" /><circle cx="140" cy="92" r="13" />
-          <circle cx="64" cy="120" r="11" /><circle cx="136" cy="120" r="11" />
-        </g>
-      );
-      return (
-        <g fill={color}>
-          <circle cx="74" cy="44" r="13" /><circle cx="100" cy="38" r="14" /><circle cx="126" cy="44" r="13" />
-          <circle cx="62" cy="58" r="12" /><circle cx="138" cy="58" r="12" />
-        </g>
-      );
-    case "pony":
-      if (back) return <path d="M132 56 C150 60 156 110 150 150 C148 160 138 158 138 148 C142 120 138 80 124 66 Z" fill={color} />;
-      return <path d="M62 62 C58 34 142 34 138 62 C138 48 126 42 100 42 C74 42 62 50 62 62 Z" fill={color} />;
-    case "pigtails":
-      if (back) return (
-        <g fill={color}>
-          <ellipse cx="52" cy="78" rx="14" ry="22" /><ellipse cx="148" cy="78" rx="14" ry="22" />
-        </g>
-      );
-      return <path d="M62 60 C58 34 142 34 138 60 C138 46 126 40 100 40 C74 40 62 48 62 60 Z" fill={color} />;
-    case "bun":
+      if (back) return (<g fill={color}>{([[-1, -0.35], [1, -0.35], [-1.12, 0.25], [1.12, 0.25], [-0.95, 0.8], [0.95, 0.8]] as const).map((f, i) => { const [x, y] = R(f[0], f[1]); return <circle key={i} cx={x} cy={y} r={r * 0.34} />; })}</g>);
+      return (<g fill={color}>{([[-0.6, -0.78], [-0.28, -0.92], [0, -0.98], [0.28, -0.92], [0.6, -0.78], [-0.9, -0.35], [0.9, -0.35]] as const).map((f, i) => { const [x, y] = R(f[0], f[1]); return <circle key={i} cx={x} cy={y} r={r * 0.3} />; })}</g>);
+    case "pony": {
+      const [ax, ay] = R(0.7, -0.15), [bx, by] = R(0.55, -0.15);
+      if (back) return <path d={`M${ax} ${ay} C${cx + r * 1.75} ${cy} ${cx + r * 1.7} ${backY(2.4)} ${cx + r * 0.85} ${backY(2.6)} C${cx + r * 1.3} ${cy + r} ${bx} ${cy} ${bx} ${by} Z`} fill={color} />;
+      return <g fill={color}><path d={hairCap(head, 0.32, 0.2)} /><path d={hairSides(head, 0.85)} /></g>;
+    }
+    case "pigtails": {
+      const [lx, ly] = R(-1.15, 0.5), [rx, ry] = R(1.15, 0.5);
+      if (back) return <g fill={color}><circle cx={lx} cy={ly} r={r * 0.42} /><circle cx={rx} cy={ry} r={r * 0.42} /></g>;
+      return <g fill={color}><path d={hairCap(head, 0.32, 0.2)} /><path d={hairSides(head, 0.8)} /></g>;
+    }
+    case "bun": {
+      const [bx, by] = R(0, -1.35);
       if (back) return null;
-      return (
-        <g fill={color}>
-          <circle cx="100" cy="32" r="13" />
-          <path d="M62 60 C60 38 140 38 138 60 C138 48 126 42 100 42 C74 42 62 48 62 60 Z" />
-        </g>
-      );
-    case "braids":
-      if (back) return (
-        <g fill={color}>
-          <path d="M64 64 C56 90 58 130 62 150 C64 158 74 156 72 148 C70 120 70 92 74 72 Z" />
-          <path d="M136 64 C144 90 142 130 138 150 C136 158 126 156 128 148 C130 120 130 92 126 72 Z" />
-          <circle cx="68" cy="96" r="6" /><circle cx="67" cy="120" r="6" /><circle cx="68" cy="142" r="6" />
-          <circle cx="132" cy="96" r="6" /><circle cx="133" cy="120" r="6" /><circle cx="132" cy="142" r="6" />
-        </g>
-      );
-      return <path d="M62 62 C58 32 142 32 138 62 C138 46 126 40 100 40 C74 40 62 48 62 62 Z" fill={color} />;
+      return <g fill={color}><circle cx={bx} cy={by} r={r * 0.32} /><path d={hairCap(head, 0.32, 0.14)} /></g>;
+    }
+    case "braids": {
+      const braid = (dir: number) => `M${cx + dir * r * 0.72} ${cy + r * 0.1} C${cx + dir * r * 1.1} ${cy + r} ${cx + dir * r * 1.0} ${backY(2.7)} ${cx + dir * r * 0.68} ${backY(2.9)} C${cx + dir * r * 0.46} ${backY(2.1)} ${cx + dir * r * 0.58} ${cy + r} ${cx + dir * r * 0.48} ${cy + r * 0.2} Z`;
+      if (back) return <g fill={color}><path d={braid(-1)} /><path d={braid(1)} /></g>;
+      return <path d={hairCap(head, 0.32, 0.16)} fill={color} />;
+    }
     case "afro":
-      if (back) return <circle cx="100" cy="56" r="50" fill={color} />;
+      if (back) return <circle cx={cx} cy={cy - r * 0.35} r={r * 1.36} fill={color} />;
       return null;
-    case "mohawk":
+    case "mohawk": {
+      const [x0, y0] = R(-0.22, -0.6), [x1] = R(0.22, -0.6);
       if (back) return null;
-      return <path d="M92 40 C92 18 108 18 108 40 L108 48 L92 48 Z" fill={color} />;
-    case "spiky":
+      return <g fill={color}><path d={hairCap(head, 0.5, 0.0)} opacity="0.5" /><path d={`M${x0} ${y0} C${x0} ${cy - r * 1.7} ${x1} ${cy - r * 1.7} ${x1} ${y0} L${x1} ${cy - r * 0.3} L${x0} ${cy - r * 0.3} Z`} /></g>;
+    }
+    case "spiky": {
+      const s = (fx: number, fy: number) => { const [x, y] = R(fx, fy); return `${x} ${y}`; };
       if (back) return null;
-      return (
-        <g fill={color}>
-          <path d="M62 56 L70 30 L82 50 L96 26 L104 50 L118 28 L130 52 L138 56 C120 44 80 44 62 56 Z" />
-        </g>
-      );
+      return <g fill={color}><path d={hairCap(head, 0.36, 0.1)} /><path d={`M${s(-1, -0.7)} L${s(-0.7, -1.65)} L${s(-0.35, -0.9)} L${s(0, -1.85)} L${s(0.35, -0.9)} L${s(0.7, -1.65)} L${s(1, -0.7)} C${s(0.5, -1.05)} ${s(-0.5, -1.05)} ${s(-1, -0.7)} Z`} /></g>;
+    }
     default:
-      return back ? null : <path d="M62 64 C58 34 142 34 138 64 C138 50 126 42 100 42 C74 42 62 50 62 64 Z" fill={color} />;
+      return back ? null : <path d={hairCap(head, 0.32, 0.18)} fill={color} />;
   }
 }
 
@@ -121,92 +120,115 @@ function Glasses({ id }: { id: string }) {
   }
 }
 
-// Shared torso silhouette — hourglass for "girl" (nipped waist, flared hips),
-// broad & straight for "boy". Used by the skin torso and the simple tops so the
-// CLOTHED shape (not just hidden skin) reads as the right body type.
-export const torsoPath = (body: string) => body === "girl"
-  ? "M64 130 C61 148 81 165 79 180 C77 191 72 196 72 206 L128 206 C128 196 123 191 121 180 C119 165 139 148 136 130 C118 121 82 121 64 130 Z"
-  : "M60 130 C56 152 74 198 80 206 L120 206 C126 198 144 152 140 130 C120 119 80 119 60 130 Z";
+// Chest region used to clip a printed shirt photo (scaled to the model).
+function chestRect(m: Model) {
+  const w = Math.round(m.waist.w * 1.1);
+  return { x: 100 - w / 2, y: m.shoulder.y + 12, w, h: 34 };
+}
 
-// Top covers the torso (shoulders y130 → hem y206); dress/gown flare into a
-// skirt (and imply bottom "none").
-function Top({ id, color, body, hasPhoto }: { id: string; color: string; body: string; hasPhoto?: boolean }) {
+// Tops covers the torso (shoulder→hem); dress/gown flare into a skirt.
+function Top({ id, color, m }: { id: string; color: string; m: Model }) {
   const d = darker(color);
-  const sleeveS = <><path d="M64 130 C52 138 48 152 52 162 L66 158 C66 144 70 136 74 132 Z" fill={color} /><path d="M136 130 C148 138 152 152 148 162 L134 158 C134 144 130 136 126 132 Z" fill={color} /></>;
-  const sleeveL = <><path d="M64 130 C50 144 48 176 52 198 C53 202 62 202 63 198 C64 176 70 148 76 134 Z" fill={color} /><path d="M136 130 C150 144 152 176 148 198 C147 202 138 202 137 198 C136 176 130 148 124 134 Z" fill={color} /></>;
-  const body0 = torsoPath(body);
-  const tankBody = body === "girl"
-    ? "M76 128 C73 148 81 166 80 180 C79 192 76 200 84 206 L116 206 C124 200 121 192 120 180 C119 166 127 148 124 128 C116 140 84 140 76 128 Z"
-    : "M76 128 C72 150 80 200 84 206 L116 206 C120 200 128 150 124 128 C116 140 84 140 76 128 Z";
+  const body = torsoPath(m);
+  const a = anchors(m);
+  const sS = <>{[...(["L", "R"] as const)].map((s) => <path key={s} d={sleeveShort(m, s)} fill={color} />)}</>;
+  const sL = <>{[...(["L", "R"] as const)].map((s) => <path key={s} d={sleeveLong(m, s)} fill={color} />)}</>;
+  const neckLo = <path d={`M${a.cx - 12} ${a.shoulderY - 2} Q${a.cx} ${a.shoulderY + 10} ${a.cx + 12} ${a.shoulderY - 2}`} fill="none" stroke={d} strokeWidth="2" opacity="0.5" />;
   switch (id) {
     case "tank":
-      return <path d={tankBody} fill={color} />;
+      return <g><path d={body} fill={color} /><g stroke={color} strokeWidth="5" strokeLinecap="round"><line x1={a.cx - 12} y1={a.shoulderY} x2={a.cx - 8} y2={a.shoulderY - 8} /><line x1={a.cx + 12} y1={a.shoulderY} x2={a.cx + 8} y2={a.shoulderY - 8} /></g></g>;
     case "long":
-      return <g>{sleeveL}<path d={body0} fill={color} />{!hasPhoto && <path d="M88 124 C92 134 108 134 112 124" fill={skinFill} />}</g>;
+      return <g>{sL}<path d={body} fill={color} />{neckLo}</g>;
     case "hoodie":
-      return <g><path d="M70 120 C70 104 130 104 130 120 C120 116 80 116 70 120 Z" fill={d} />{sleeveL}<path d={body0} fill={color} /><rect x="84" y="170" width="32" height="22" rx="5" fill={d} /><line x1="100" y1="128" x2="100" y2="166" stroke={d} strokeWidth="2" /></g>;
+      return <g><path d={`M${a.cx - 22} ${a.shoulderY - 4} C${a.cx - 22} ${a.shoulderY - 20} ${a.cx + 22} ${a.shoulderY - 20} ${a.cx + 22} ${a.shoulderY - 4} C${a.cx + 10} ${a.shoulderY - 10} ${a.cx - 10} ${a.shoulderY - 10} ${a.cx - 22} ${a.shoulderY - 4} Z`} fill={d} />{sL}<path d={body} fill={color} /><rect x={a.cx - 16} y={a.hemY - 34} width="32" height="22" rx="5" fill={d} /><line x1={a.cx} y1={a.shoulderY + 4} x2={a.cx} y2={a.hemY - 38} stroke={d} strokeWidth="2" /></g>;
     case "jacket":
-      return <g>{sleeveL}<path d={body0} fill={color} /><path d="M100 124 L86 130 L92 200 L100 200 Z" fill={d} /><path d="M100 124 L114 130 L108 200 L100 200 Z" fill={darker(color, 0.6)} /></g>;
+      return <g>{sL}<path d={body} fill={color} /><path d={`M${a.cx} ${a.shoulderY} L${a.cx - 12} ${a.shoulderY + 6} L${a.cx - 6} ${a.hemY - 4} L${a.cx} ${a.hemY - 4} Z`} fill={d} /><path d={`M${a.cx} ${a.shoulderY} L${a.cx + 12} ${a.shoulderY + 6} L${a.cx + 6} ${a.hemY - 4} L${a.cx} ${a.hemY - 4} Z`} fill={darker(color, 0.62)} /></g>;
     case "stripes":
-      return <g>{sleeveS}<path d={body0} fill={color} /><g stroke="#f8fafc" strokeWidth="5" opacity="0.9"><line x1="66" y1="150" x2="134" y2="150" /><line x1="70" y1="168" x2="130" y2="168" /><line x1="74" y1="186" x2="126" y2="186" /></g></g>;
+      return <g>{sS}<path d={body} fill={color} /><clipPath id={`t-${m.id}`}><path d={body} /></clipPath><g clipPath={`url(#t-${m.id})`} stroke="#f8fafc" strokeWidth="5" opacity="0.9"><line x1="50" y1={a.shoulderY + 18} x2="150" y2={a.shoulderY + 18} /><line x1="50" y1={a.shoulderY + 36} x2="150" y2={a.shoulderY + 36} /><line x1="50" y1={a.shoulderY + 54} x2="150" y2={a.shoulderY + 54} /></g></g>;
     case "jersey":
-      return <g><path d={tankBody} fill={color} /><text x="100" y="180" fontSize="26" fontWeight="700" fill="#f8fafc" textAnchor="middle">7</text></g>;
+      return <g><path d={body} fill={color} />{sS}<text x={a.cx} y={(a.shoulderY + a.hemY) / 2 + 6} fontSize="24" fontWeight="700" fill="#f8fafc" textAnchor="middle">7</text></g>;
     case "dress":
-      return <g>{sleeveS}<path d="M64 130 C60 152 72 188 74 198 L62 256 C84 264 116 264 138 256 L126 198 C128 188 140 152 136 130 C118 122 82 122 64 130 Z" fill={color} /></g>;
+      return <g>{sS}<path d={body} fill={color} /><path d={skirtPath(m, 56)} fill={color} /></g>;
     case "gown":
-      return <g><path d="M76 128 C72 150 78 186 78 196 L54 290 C84 300 116 300 146 290 L122 196 C122 186 128 150 124 128 C116 140 84 140 76 128 Z" fill={color} /><g fill="#fef9c3" opacity="0.9"><circle cx="84" cy="230" r="2" /><circle cx="110" cy="250" r="2" /><circle cx="96" cy="270" r="2" /><circle cx="120" cy="225" r="2" /></g></g>;
-    case "tutu-top":
-      return <path d={tankBody} fill={color} />;
+      return <g><path d={body} fill={color} /><path d={skirtPath(m, 96)} fill={color} /><g fill="#fef9c3" opacity="0.9"><circle cx={a.cx - 14} cy="236" r="2" /><circle cx={a.cx + 12} cy="256" r="2" /><circle cx={a.cx - 2} cy="272" r="2" /><circle cx={a.cx + 20} cy="230" r="2" /></g></g>;
+    case "crop": {
+      const [slx, sly] = a.shoulderL, [srx, sry] = a.shoulderR;
+      const [wlx, wy] = a.waistL, [wrx] = a.waistR, cw = (sly + wy) / 2;
+      return <g>{sS}<path d={`M${slx} ${sly} C${slx - 2} ${cw} ${wlx - 1} ${cw} ${wlx} ${wy + 8} L${wrx} ${wy + 8} C${wrx + 1} ${cw} ${srx + 2} ${cw} ${srx} ${sry} Z`} fill={color} /></g>;
+    }
+    case "sweater":
+      return <g>{sL}<path d={body} fill={color} /><rect x={a.hemL[0]} y={a.hemY - 8} width={a.hemR[0] - a.hemL[0]} height="9" fill={d} /><path d={`M${a.cx - 13} ${a.shoulderY - 2} Q${a.cx} ${a.shoulderY + 12} ${a.cx + 13} ${a.shoulderY - 2}`} fill="none" stroke={d} strokeWidth="4" /></g>;
+    case "flannel":
+      return <g>{sL}<path d={body} fill={color} /><clipPath id={`fl-${m.id}`}><path d={body} /></clipPath><g clipPath={`url(#fl-${m.id})`} stroke={d} strokeWidth="3" opacity="0.6"><line x1="50" y1={a.shoulderY + 14} x2="150" y2={a.shoulderY + 14} /><line x1="50" y1={a.shoulderY + 32} x2="150" y2={a.shoulderY + 32} /><line x1="50" y1={a.shoulderY + 50} x2="150" y2={a.shoulderY + 50} /><line x1={a.cx - 15} y1={a.shoulderY} x2={a.cx - 15} y2={a.hemY} /><line x1={a.cx + 15} y1={a.shoulderY} x2={a.cx + 15} y2={a.hemY} /></g></g>;
+    case "blazer":
+      return <g>{sL}<path d={body} fill={color} /><path d={`M${a.cx} ${a.shoulderY} L${a.cx - 13} ${a.shoulderY + 4} L${a.cx - 7} ${a.shoulderY + 30} L${a.cx} ${a.shoulderY + 20} Z`} fill={d} /><path d={`M${a.cx} ${a.shoulderY} L${a.cx + 13} ${a.shoulderY + 4} L${a.cx + 7} ${a.shoulderY + 30} L${a.cx} ${a.shoulderY + 20} Z`} fill={d} /><circle cx={a.cx} cy={a.shoulderY + 36} r="1.8" fill={d} /><circle cx={a.cx} cy={a.shoulderY + 46} r="1.8" fill={d} /></g>;
+    case "puffer":
+      return <g>{sL}<path d={body} fill={color} /><clipPath id={`pf-${m.id}`}><path d={body} /></clipPath><g clipPath={`url(#pf-${m.id})`} stroke={d} strokeWidth="2.4" opacity="0.5"><line x1="40" y1={a.shoulderY + 16} x2="160" y2={a.shoulderY + 16} /><line x1="40" y1={a.shoulderY + 32} x2="160" y2={a.shoulderY + 32} /><line x1="40" y1={a.shoulderY + 48} x2="160" y2={a.shoulderY + 48} /></g></g>;
+    case "overalls":
+      return <g>{sS}<path d={body} fill="#e9edf2" /><path d={`M${a.cx - m.waist.w} ${m.waist.y} L${a.hipL[0]} ${a.hemY} L${a.hipR[0]} ${a.hemY} L${a.cx + m.waist.w} ${m.waist.y} Z`} fill={color} /><rect x={a.cx - 11} y={m.waist.y + 2} width="22" height="15" rx="2" fill={darker(color, 0.85)} /><path d={`M${a.cx - 14} ${a.shoulderY} L${a.cx - 9} ${a.shoulderY} L${a.cx - 9} ${m.waist.y + 4} L${a.cx - 14} ${m.waist.y + 4} Z`} fill={color} /><path d={`M${a.cx + 14} ${a.shoulderY} L${a.cx + 9} ${a.shoulderY} L${a.cx + 9} ${m.waist.y + 4} L${a.cx + 14} ${m.waist.y + 4} Z`} fill={color} /></g>;
     default: // tee
-      return <g>{sleeveS}<path d={body0} fill={color} />{!hasPhoto && <path d="M88 124 C92 134 108 134 112 124" fill={skinFill} opacity="0.001" />}</g>;
+      return <g>{sS}<path d={body} fill={color} />{neckLo}</g>;
   }
 }
 
-// chest region used to clip the photo print
-const CHEST = { x: 84, y: 140, w: 32, h: 34 };
-const skinFill = "transparent";
-
-function Bottom({ id, color, body }: { id: string; color: string; body: string }) {
+function Bottom({ id, color, m }: { id: string; color: string; m: Model }) {
   const d = darker(color);
-  // Girl hips flare wider at the waistband (matches the hourglass torso).
-  const oL = body === "girl" ? 74 : 80, oR = body === "girl" ? 126 : 120;
-  const pants = `M${oL} 202 L79 298 L97 298 L99 214 L101 214 L103 298 L121 298 L${oR} 202 Z`;
+  const a = anchors(m);
   switch (id) {
     case "shorts":
-      return <path d={`M${oL} 202 L80 248 L97 248 L99 214 L101 214 L103 248 L120 248 L${oR} 202 Z`} fill={color} />;
+      return <path d={pantsPath(m, 60)} fill={color} />;
     case "skirt":
-      return <g><path d={`M${oL - 2} 202 L60 256 L140 256 L${oR + 2} 202 Z`} fill={color} /><path d="M60 256 L140 256" stroke={d} strokeWidth="2" /></g>;
+      return <g><path d={skirtPath(m, 50)} fill={color} /><path d={`M${a.cx - m.hip.w - 6} ${a.hemY - 6 + 50} L${a.cx + m.hip.w + 6} ${a.hemY - 6 + 50}`} stroke={d} strokeWidth="2" /></g>;
     case "tutu":
-      return <path d="M72 204 C72 204 58 244 56 246 L70 240 L66 250 L80 242 L78 252 L92 244 L92 254 L108 244 L108 254 L122 242 L120 252 L134 242 L130 250 L144 246 C142 244 128 204 128 204 Z" fill={color} opacity="0.92" />;
+      return <path d={skirtPath(m, 30)} fill={color} opacity="0.92" />;
     case "leggings":
-      return <g fill={color}><path d={`M${oL + 8} 204 L83 298 L96 298 L98 212 Z`} /><path d={`M${oR - 8} 204 L117 298 L104 298 L102 212 Z`} /></g>;
+      return <path d={pantsPath(m)} fill={color} />;
     case "none":
       return null;
     case "jeans":
-      return <g><path d={pants} fill={color} /><line x1="100" y1="208" x2="100" y2="296" stroke={d} strokeWidth="1.5" /><path d={`M${oL + 4} 212 L96 212`} stroke={d} strokeWidth="1.5" /></g>;
+      return <g><path d={pantsPath(m)} fill={color} /><line x1={a.cx} y1={a.hemY - 4} x2={a.cx} y2={a.footY - 6} stroke={d} strokeWidth="1.5" /></g>;
+    case "cargo": {
+      const outL = a.cx - a.legInnerX - m.leg.thickness, outR = a.cx + a.legInnerX + m.leg.thickness, py = a.hemY + 26;
+      return <g><path d={pantsPath(m)} fill={color} /><rect x={outL} y={py} width="9" height="13" rx="2" fill={d} /><rect x={outR - 9} y={py} width="9" height="13" rx="2" fill={d} /></g>;
+    }
+    case "joggers": {
+      const t = m.leg.thickness, g = a.legInnerX, fy = a.footY;
+      return <g><path d={pantsPath(m)} fill={color} /><rect x={a.cx - g - t} y={fy - 14} width={t} height="8" rx="2" fill={d} /><rect x={a.cx + g} y={fy - 14} width={t} height="8" rx="2" fill={d} /></g>;
+    }
+    case "midiskirt":
+      return <g><path d={skirtPath(m, 92)} fill={color} /></g>;
     default: // pants
-      return <path d={pants} fill={color} />;
+      return <path d={pantsPath(m)} fill={color} />;
   }
 }
 
-function Shoes({ id, color }: { id: string; color: string }) {
+function Shoes({ id, color, m }: { id: string; color: string; m: Model }) {
+  const a = anchors(m);
   const d = darker(color);
+  const fl = a.cx - a.legInnerX - m.leg.thickness / 2;
+  const fr = a.cx + a.legInnerX + m.leg.thickness / 2;
+  const y = a.footY;
+  const feet = [fl, fr];
   switch (id) {
     case "barefoot": return null;
     case "boots":
-      return <g fill={color}><path d="M80 270 L80 304 C80 308 98 308 98 304 L98 270 Z" /><path d="M102 270 L102 304 C102 308 120 308 120 304 L120 270 Z" /><rect x="78" y="302" width="22" height="6" rx="2" fill={d} /><rect x="100" y="302" width="22" height="6" rx="2" fill={d} /></g>;
+      return <g fill={color}>{feet.map((fx, i) => <g key={i}><path d={`M${fx - 9} ${y - 34} L${fx - 9} ${y + 2} C${fx - 9} ${y + 6} ${fx + 9} ${y + 6} ${fx + 9} ${y + 2} L${fx + 9} ${y - 34} Z`} /><rect x={fx - 10} y={y} width="20" height="6" rx="2" fill={d} /></g>)}</g>;
     case "sandals":
-      return <g fill={color}><ellipse cx="89" cy="306" rx="12" ry="5" /><ellipse cx="111" cy="306" rx="12" ry="5" /><path d="M84 300 L94 300 M106 300 L116 300" stroke={color} strokeWidth="3" /></g>;
+      return <g fill={color}>{feet.map((fx, i) => <g key={i}><ellipse cx={fx} cy={y + 4} rx="11" ry="5" /><path d={`M${fx - 6} ${y - 2} L${fx + 6} ${y - 2}`} stroke={color} strokeWidth="3" /></g>)}</g>;
     case "flats":
-      return <g fill={color}><ellipse cx="89" cy="304" rx="13" ry="6" /><ellipse cx="111" cy="304" rx="13" ry="6" /></g>;
+      return <g fill={color}>{feet.map((fx, i) => <ellipse key={i} cx={fx} cy={y + 2} rx="12" ry="6" />)}</g>;
     case "heels":
-      return <g fill={color}><path d="M78 300 C78 300 96 300 100 302 L96 308 L80 308 Z" /><path d="M122 300 C122 300 104 300 100 302 L104 308 L120 308 Z" /><rect x="80" y="308" width="3" height="8" fill={d} /><rect x="117" y="308" width="3" height="8" fill={d} /></g>;
+      return <g fill={color}>{feet.map((fx, i) => <g key={i}><path d={`M${fx - 10} ${y - 2} C${fx - 10} ${y - 2} ${fx + 6} ${y - 2} ${fx + 10} ${y} L${fx + 6} ${y + 6} L${fx - 8} ${y + 6} Z`} /><rect x={fx - 8} y={y + 6} width="3" height="8" fill={d} /></g>)}</g>;
+    case "hightops":
+      return <g>{feet.map((fx, i) => <g key={i}><path d={`M${fx - 10} ${y - 18} L${fx - 10} ${y + 2} C${fx - 10} ${y + 6} ${fx + 10} ${y + 6} ${fx + 10} ${y} L${fx + 8} ${y - 18} Z`} fill={color} /><rect x={fx - 11} y={y + 1} width="22" height="5" rx="2" fill="#f8fafc" /><rect x={fx - 9} y={y - 18} width="18" height="6" rx="2" fill={d} /></g>)}</g>;
+    case "maryjanes":
+      return <g fill={color}>{feet.map((fx, i) => <g key={i}><ellipse cx={fx} cy={y + 2} rx="12" ry="6" /><path d={`M${fx - 10} ${y - 2} L${fx + 10} ${y - 2}`} stroke={color} strokeWidth="3" /><circle cx={fx} cy={y - 2} r="1.6" fill={d} /></g>)}</g>;
     default: // sneakers
-      return <g><path d="M78 298 L78 306 C78 310 100 310 100 304 L98 298 Z" fill={color} /><path d="M122 298 L122 306 C122 310 100 310 100 304 L102 298 Z" fill={color} /><rect x="77" y="305" width="23" height="5" rx="2" fill="#f8fafc" /><rect x="100" y="305" width="23" height="5" rx="2" fill="#f8fafc" /></g>;
+      return <g>{feet.map((fx, i) => <g key={i}><path d={`M${fx - 10} ${y - 4} L${fx - 10} ${y + 2} C${fx - 10} ${y + 6} ${fx + 10} ${y + 6} ${fx + 10} ${y} L${fx + 8} ${y - 4} Z`} fill={color} /><rect x={fx - 11} y={y + 1} width="22" height="5" rx="2" fill="#f8fafc" /></g>)}</g>;
   }
 }
 
-// Boy-only facial hair, coloured to match the hair. Drawn over the lower face.
+// Boy-only facial hair, coloured to match the hair.
 function FacialHair({ id, color }: { id: string; color: string }) {
   switch (id) {
     case "stubble":
@@ -221,43 +243,45 @@ function FacialHair({ id, color }: { id: string; color: string }) {
   }
 }
 
-// Makeup — lips and/or eyeshadow. Drawn over the base face features.
 function Makeup({ id }: { id: string }) {
-  const lips = <path d="M90 96 Q100 105 110 96 Q100 101 90 96 Z" fill="#e11d48" />;
+  const lips = <path d="M92 99 Q100 105 108 99 Q100 102.5 92 99 Z" fill="#e11d48" />;
   const shadow = (
-    <g fill="#a855f7" opacity="0.55">
-      <path d="M80 76 Q86 72 92 75 Q86 74 80 76 Z" />
-      <path d="M120 76 Q114 72 108 75 Q114 74 120 76 Z" />
+    <g fill="#a855f7" opacity="0.5">
+      <path d="M79 78 Q85 74 91 77 Q85 76 79 78 Z" />
+      <path d="M121 78 Q115 74 109 77 Q115 76 121 78 Z" />
     </g>
   );
   switch (id) {
     case "lips": return lips;
     case "eyeshadow": return shadow;
-    case "glam": return <g>{shadow}{lips}<circle cx="80" cy="92" r="6" fill="#fb7185" opacity="0.4" /><circle cx="120" cy="92" r="6" fill="#fb7185" opacity="0.4" /></g>;
+    case "glam": return <g>{shadow}{lips}<circle cx="80" cy="91" r="5" fill="#fb7185" opacity="0.4" /><circle cx="120" cy="91" r="5" fill="#fb7185" opacity="0.4" /></g>;
     default: return null;
   }
 }
 
-function AccessoryBack({ id, color }: { id: string; color: string }) {
+function AccessoryBack({ id, color, m }: { id: string; color: string; m: Model }) {
+  const a = anchors(m);
   switch (id) {
     case "wings":
-      return <g fill={color} opacity="0.85"><path d="M70 150 C30 120 28 180 64 196 C50 176 58 162 70 158 Z" /><path d="M130 150 C170 120 172 180 136 196 C150 176 142 162 130 158 Z" /></g>;
+      return <g fill={color} opacity="0.85"><path d={`M${a.cx - 30} 150 C${a.cx - 70} 120 ${a.cx - 72} 180 ${a.cx - 36} 196 C${a.cx - 50} 176 ${a.cx - 42} 162 ${a.cx - 30} 158 Z`} /><path d={`M${a.cx + 30} 150 C${a.cx + 70} 120 ${a.cx + 72} 180 ${a.cx + 36} 196 C${a.cx + 50} 176 ${a.cx + 42} 162 ${a.cx + 30} 158 Z`} /></g>;
     case "cape":
-      return <path d="M66 132 C50 180 48 240 56 280 L144 280 C152 240 150 180 134 132 C120 150 80 150 66 132 Z" fill={color} opacity="0.9" />;
+      return <path d={`M${a.shoulderL[0]} ${a.shoulderY + 2} C${a.cx - 50} 180 ${a.cx - 52} 240 ${a.cx - 44} 280 L${a.cx + 44} 280 C${a.cx + 52} 240 ${a.cx + 50} 180 ${a.shoulderR[0]} ${a.shoulderY + 2} C${a.cx - 20} ${a.shoulderY + 16} ${a.cx + 20} ${a.shoulderY + 16} ${a.shoulderL[0]} ${a.shoulderY + 2} Z`} fill={color} opacity="0.9" />;
     default: return null;
   }
 }
 
-function AccessoryFront({ id, color }: { id: string; color: string }) {
+function AccessoryFront({ id, color, m }: { id: string; color: string; m: Model }) {
+  const a = anchors(m);
+  const ny = a.shoulderY - 4;
   switch (id) {
     case "necklace":
-      return <g fill="none" stroke={color} strokeWidth="3"><path d="M86 122 C92 138 108 138 114 122" /><circle cx="100" cy="138" r="4" fill={color} /></g>;
+      return <g fill="none" stroke={color} strokeWidth="3"><path d={`M${a.cx - 14} ${ny} C${a.cx - 8} ${ny + 16} ${a.cx + 8} ${ny + 16} ${a.cx + 14} ${ny}`} /><circle cx={a.cx} cy={ny + 16} r="4" fill={color} /></g>;
     case "scarf":
-      return <g fill={color}><path d="M80 120 C88 134 112 134 120 120 L122 134 C110 142 90 142 78 134 Z" /><rect x="92" y="130" width="10" height="34" rx="3" /></g>;
+      return <g fill={color}><path d={`M${a.cx - 20} ${ny - 2} C${a.cx - 12} ${ny + 12} ${a.cx + 12} ${ny + 12} ${a.cx + 20} ${ny - 2} L${a.cx + 22} ${ny + 12} C${a.cx + 10} ${ny + 20} ${a.cx - 10} ${ny + 20} ${a.cx - 22} ${ny + 12} Z`} /><rect x={a.cx - 8} y={ny + 8} width="10" height="34" rx="3" /></g>;
     case "bowtie":
-      return <g fill={color}><path d="M94 126 L82 120 L82 134 L94 130 Z" /><path d="M106 126 L118 120 L118 134 L106 130 Z" /><rect x="96" y="124" width="8" height="8" rx="2" fill={darker(color)} /></g>;
+      return <g fill={color}><path d={`M${a.cx - 6} ${ny + 4} L${a.cx - 18} ${ny - 2} L${a.cx - 18} ${ny + 12} L${a.cx - 6} ${ny + 8} Z`} /><path d={`M${a.cx + 6} ${ny + 4} L${a.cx + 18} ${ny - 2} L${a.cx + 18} ${ny + 12} L${a.cx + 6} ${ny + 8} Z`} /><rect x={a.cx - 4} y={ny + 2} width="8" height="8" rx="2" fill={darker(color)} /></g>;
     case "backpack":
-      return <g fill={color}><path d="M74 134 C74 130 78 130 78 134 L80 180 L72 180 Z" /><path d="M126 134 C126 130 122 130 122 134 L120 180 L128 180 Z" /></g>;
+      return <g fill={color}><path d={`M${a.shoulderL[0] + 6} ${a.shoulderY + 2} C${a.shoulderL[0] + 6} ${a.shoulderY - 2} ${a.shoulderL[0] + 10} ${a.shoulderY - 2} ${a.shoulderL[0] + 10} ${a.shoulderY + 2} L${a.shoulderL[0] + 12} ${a.shoulderY + 48} L${a.shoulderL[0] + 4} ${a.shoulderY + 48} Z`} /><path d={`M${a.shoulderR[0] - 6} ${a.shoulderY + 2} C${a.shoulderR[0] - 6} ${a.shoulderY - 2} ${a.shoulderR[0] - 10} ${a.shoulderY - 2} ${a.shoulderR[0] - 10} ${a.shoulderY + 2} L${a.shoulderR[0] - 12} ${a.shoulderY + 48} L${a.shoulderR[0] - 4} ${a.shoulderY + 48} Z`} /></g>;
     case "headphones":
       return <g fill="none" stroke={color} strokeWidth="4"><path d="M64 76 C64 36 136 36 136 76" /><rect x="58" y="72" width="10" height="18" rx="4" fill={color} /><rect x="132" y="72" width="10" height="18" rx="4" fill={color} /></g>;
     default: return null;
@@ -267,69 +291,125 @@ function AccessoryFront({ id, color }: { id: string; color: string }) {
 export default function Figure({ member, size = 200 }: { member: Member; size?: number }) {
   const skin = skinHex(member);
   const hcol = hairHex(member);
+  const m = resolveModel(member.model, member.body === "boy" ? "boy" : "girl");
+  const a = anchors(m);
   const clipId = `chest-${member.id}`;
+  const cr = chestRect(m);
+  // Map the head art (authored at cy76 r38) onto this model's head.
+  const hs = m.head.r / 38;
+  const headTf = `translate(${m.head.cx} ${m.head.cy}) scale(${hs}) translate(-100 -76)`;
+  const skinG = `skin-${member.id}`;
+  const skinFill = `url(#${skinG})`;
 
   return (
-    <svg className="duf" width={size} height={size * 1.7} viewBox="0 0 200 340" role="img" aria-label={`${member.name}`}>
+    <svg className="duf" width={size} height={size * 1.45} viewBox="0 0 200 290" role="img" aria-label={`${member.name}`}>
       <defs>
-        <clipPath id={clipId}><rect x={CHEST.x} y={CHEST.y} width={CHEST.w} height={CHEST.h} rx="4" /></clipPath>
+        <clipPath id={clipId}><rect x={cr.x} y={cr.y} width={cr.w} height={cr.h} rx="4" /></clipPath>
+        {/* Soft rounded shading so skin isn't a flat fill. */}
+        <radialGradient id={skinG} cx="42%" cy="32%" r="72%">
+          <stop offset="0%" stopColor={lighten(skin, 1.1)} />
+          <stop offset="62%" stopColor={skin} />
+          <stop offset="100%" stopColor={darker(skin, 0.9)} />
+        </radialGradient>
+        {/* Colour-agnostic garment shade: sheen at the top, shadow at the hem. */}
+        <linearGradient id="gShade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#fff" stopOpacity="0.14" />
+          <stop offset="34%" stopColor="#fff" stopOpacity="0" />
+          <stop offset="100%" stopColor="#000" stopOpacity="0.22" />
+        </linearGradient>
       </defs>
 
-      <AccessoryBack id={member.accessory} color={colorHex(member.accessoryColor)} />
-      <Hair id={member.hair} color={hcol} layer="back" />
+      <AccessoryBack id={member.accessory} color={colorHex(member.accessoryColor)} m={m} />
+      {/* Hair is built from the head's dimensions (model coords), so it tracks
+          the head like garments track the body. Back hair falls behind the body. */}
+      <Hair id={member.hair} color={hcol} layer="back" head={m.head} />
 
-      {/* legs + feet (skin) */}
-      <g fill={skin}>
-        <path d="M83 200 L82 300 C82 305 98 305 97 300 L99 204 Z" />
-        <path d="M101 204 L103 300 C102 305 118 305 118 300 L117 200 Z" />
+      {/* legs (skin) + bottoms + shoes */}
+      <path d={legsPath(m)} fill={skinFill} />
+      <Bottom id={member.bottom} color={colorHex(member.bottomColor)} m={m} />
+      <Shoes id={member.shoes} color={colorHex(member.shoesColor)} m={m} />
+
+      {/* torso + arms (skin), fitted to the model */}
+      <g fill={skinFill}>
+        <path d={torsoPath(m)} />
+        <path d={armPath(m, "L")} />
+        <path d={armPath(m, "R")} />
+        <circle cx={a.wristL[0]} cy={a.wristL[1] + 2} r={m.arm.thickness / 2 + 1} />
+        <circle cx={a.wristR[0]} cy={a.wristR[1] + 2} r={m.arm.thickness / 2 + 1} />
       </g>
-      <Bottom id={member.bottom} color={colorHex(member.bottomColor)} body={member.body} />
-      <Shoes id={member.shoes} color={colorHex(member.shoesColor)} />
 
-      {/* torso + arms (skin) — silhouette varies by body type (hourglass vs
-          broad); garment anchors stay fixed so clothes still fit both. */}
-      <g fill={skin}>
-        <path d={torsoPath(member.body)} />
-        <path d="M62 130 C52 150 48 176 52 198 C53 202 61 202 62 198 C63 176 68 150 74 134 Z" />
-        <path d="M138 130 C148 150 152 176 148 198 C147 202 139 202 138 198 C137 176 132 150 126 134 Z" />
-        <circle cx="57" cy="200" r="5" /><circle cx="143" cy="200" r="5" />
-      </g>
-
-      <Top id={member.top} color={colorHex(member.topColor)} body={member.body} hasPhoto={!!member.shirtPhoto} />
+      <Top id={member.top} color={colorHex(member.topColor)} m={m} />
       {member.shirtPhoto && (
-        <image href={member.shirtPhoto} x={CHEST.x} y={CHEST.y} width={CHEST.w} height={CHEST.h}
+        <image href={member.shirtPhoto} x={cr.x} y={cr.y} width={cr.w} height={cr.h}
           preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipId})`} />
       )}
+      {/* garment shading — sheen at the shoulders, shadow at the hem */}
+      <path d={torsoPath(m)} fill="url(#gShade)" />
+      {(member.top === "dress" || member.top === "gown") && (
+        <path d={skirtPath(m, member.top === "gown" ? 96 : 56)} fill="url(#gShade)" />
+      )}
 
-      {/* neck + head */}
-      <rect x="92" y="106" width="16" height="18" rx="4" fill={skin} />
-      <circle cx={HEAD.cx} cy={HEAD.cy} r={HEAD.r} fill={skin} />
+      <AccessoryFront id={member.accessory} color={colorHex(member.accessoryColor)} m={m} />
 
-      {/* face */}
+      {/* neck (short & chunky, tucked under the big head) */}
+      <rect x={100 - m.neckW} y={m.head.cy + m.head.r - 12} width={m.neckW * 2}
+        height={m.shoulder.y - (m.head.cy + m.head.r) + 16} rx={m.neckW} fill={skinFill} />
+
+      {/* head + face + front hair + glasses + hat, all scaled to the model head */}
+      <g transform={headTf}>
+      <circle cx="100" cy="76" r="38" fill={skinFill} />
       <g>
-        <circle cx="86" cy={EYE_Y} r="3.2" fill="#2b2b30" />
-        <circle cx="114" cy={EYE_Y} r="3.2" fill="#2b2b30" />
         {member.body === "girl" ? (
-          <g stroke="#2b2b30" strokeWidth="1.6" strokeLinecap="round">
-            <path d="M79 76 L82 78 M79 80 L82 80 M80 83 L83 82" fill="none" />
-            <path d="M121 76 L118 78 M121 80 L118 80 M120 83 L117 82" fill="none" />
+          <g stroke={darker(hcol, 0.85)} strokeWidth="2" strokeLinecap="round" fill="none">
+            <path d="M78 70 Q85 67.5 92 69.5" />
+            <path d="M108 69.5 Q115 67.5 122 70" />
           </g>
         ) : (
-          <g stroke="#6b4a2a" strokeWidth="2" strokeLinecap="round">
-            <path d="M81 72 L91 72" /><path d="M109 72 L119 72" />
+          <g stroke={darker(hcol, 0.8)} strokeWidth="2.8" strokeLinecap="round" fill="none">
+            <path d="M77 69 Q85 66 93 69" />
+            <path d="M107 69 Q115 66 123 69" />
           </g>
         )}
-        <circle cx="80" cy="92" r="5" fill="#fb7185" opacity="0.45" />
-        <circle cx="120" cy="92" r="5" fill="#fb7185" opacity="0.45" />
-        <path d="M90 96 Q100 104 110 96" stroke="#b9525a" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+        {/* Big, defined eyes — large dark iris + catch-lights + a bold upper
+            lid (not a wide white stare). */}
+        <g>
+          <ellipse cx="85" cy={EYE_Y} rx="7.4" ry="8.6" fill="#fdfdff" />
+          <ellipse cx="115" cy={EYE_Y} rx="7.4" ry="8.6" fill="#fdfdff" />
+          <circle cx="85" cy={EYE_Y + 1} r="5.9" fill="#4a3524" />
+          <circle cx="115" cy={EYE_Y + 1} r="5.9" fill="#4a3524" />
+          <circle cx="85" cy={EYE_Y + 1.6} r="3" fill="#20160e" />
+          <circle cx="115" cy={EYE_Y + 1.6} r="3" fill="#20160e" />
+          <circle cx="87.4" cy={EYE_Y - 2.4} r="2.3" fill="#fff" />
+          <circle cx="117.4" cy={EYE_Y - 2.4} r="2.3" fill="#fff" />
+          <circle cx="82.6" cy={EYE_Y + 3.4} r="1.1" fill="#fff" opacity="0.85" />
+          <circle cx="112.6" cy={EYE_Y + 3.4} r="1.1" fill="#fff" opacity="0.85" />
+          <path d="M77.6 77 Q85 73.4 92.4 77" stroke="#241a12" strokeWidth="2.6" fill="none" strokeLinecap="round" />
+          <path d="M107.6 77 Q115 73.4 122.4 77" stroke="#241a12" strokeWidth="2.6" fill="none" strokeLinecap="round" />
+          {member.body === "girl" && (
+            <g stroke="#241a12" strokeWidth="1.6" strokeLinecap="round">
+              <path d="M77.6 77 L74.8 75.2" />
+              <path d="M122.4 77 L125.2 75.2" />
+            </g>
+          )}
+        </g>
+        <path d="M99 88 Q100 91 102 91" stroke={darker(skin, 0.8)} strokeWidth="1.3"
+          fill="none" strokeLinecap="round" opacity="0.4" />
+        <ellipse cx="78" cy="95" rx="5.4" ry="3.4" fill="#fb7185" opacity="0.3" />
+        <ellipse cx="122" cy="95" rx="5.4" ry="3.4" fill="#fb7185" opacity="0.3" />
+        <path d="M92 99 Q100 105 108 99" stroke="#c15563" strokeWidth="2.2" fill="none" strokeLinecap="round" />
         <Makeup id={member.makeup} />
         {member.body === "boy" && <FacialHair id={member.facialHair} color={hcol} />}
       </g>
-
-      <AccessoryFront id={member.accessory} color={colorHex(member.accessoryColor)} />
-      <Hair id={member.hair} color={hcol} layer="front" />
-      <Glasses id={member.glasses} />
-      <Hat id={member.hat} color={colorHex(member.hatColor)} />
+      </g>
+      <Hair id={member.hair} color={hcol} layer="front" head={m.head} />
+      {member.hair !== "afro" && member.hair !== "buzz" && (
+        <path d={hairShine(m.head)} fill="none" stroke={lighten(hcol, 1.5)}
+          strokeWidth={m.head.r * 0.12} strokeLinecap="round" opacity="0.45" />
+      )}
+      <g transform={headTf}>
+        <Glasses id={member.glasses} />
+        <Hat id={member.hat} color={colorHex(member.hatColor)} />
+      </g>
     </svg>
   );
 }

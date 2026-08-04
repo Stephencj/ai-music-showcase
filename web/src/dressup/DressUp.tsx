@@ -7,6 +7,7 @@
 import { useRef, useState } from "react";
 import Figure from "./Figure";
 import CropModal from "./CropModal";
+import { modelsFor } from "./models";
 import {
   type Member, type BodyType, type Part, type Swatch, type Shape,
   PARTS, PART_ICON, SKINS, COLORS, HAIR_COLORS,
@@ -86,7 +87,8 @@ export default function DressUp({ members, onChange, onClose, onPerform, hideClo
   // Switching to a girl clears facial hair (girls never have it) and bumps off
   // the Beard tab if it was open.
   const setBody = (body: BodyType) => {
-    patch(body === "girl" ? { body, facialHair: "none" } : { body });
+    const model = modelsFor(body)[0].id;   // keep the model consistent with the gender
+    patch(body === "girl" ? { body, model, facialHair: "none" } : { body, model });
     if (body === "girl" && cat === "beard") setCat("top");
   };
   const visibleCats = CATS.filter((c) => c.id !== "beard" || cur?.body === "boy");
@@ -148,6 +150,19 @@ export default function DressUp({ members, onChange, onClose, onPerform, hideClo
           <div className="du-body-toggle">
             <button className={cur.body === "girl" ? "on" : ""} onClick={() => setBody("girl")}>👧 Girl</button>
             <button className={cur.body === "boy" ? "on" : ""} onClick={() => setBody("boy")}>👦 Boy</button>
+          </div>
+
+          {/* build (body model) */}
+          <div className="du-body-toggle">
+            {(() => {
+              const builds = modelsFor(cur.body);
+              const curModel = cur.model ?? builds[0]?.id;   // fall back to the gender's default
+              return builds.map((mdl) => (
+                <button key={mdl.id} className={curModel === mdl.id ? "on" : ""} onClick={() => patch({ model: mdl.id })}>
+                  {mdl.label}
+                </button>
+              ));
+            })()}
           </div>
           {onPerform && (
             <button className="du-perform" onClick={onPerform}>🎬 Put on a show!</button>

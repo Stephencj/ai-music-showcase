@@ -4,6 +4,8 @@
 // in a chosen colour, so it works fully client-side and is ready to spin off
 // into a standalone app. A "look" is a shape id + colour id per body slot.
 
+import { MODEL_IDS } from "./models";
+
 export type ThemeTag = "sweet" | "rock" | "sparkle" | "sporty" | "cozy" | "fancy";
 export const THEME_LABEL: Record<ThemeTag, string> = {
   sweet: "Sweet", rock: "Rock", sparkle: "Sparkle", sporty: "Sporty", cozy: "Cozy", fancy: "Fancy",
@@ -85,6 +87,9 @@ export const HATS: Shape[] = [
   { id: "tophat", name: "Top hat", emoji: "🎩", theme: "fancy" },
   { id: "cowboy", name: "Cowboy", emoji: "🤠", theme: "rock" },
   { id: "ears", name: "Cat ears", emoji: "🐱", theme: "sweet" },
+  { id: "bucket", name: "Bucket hat", emoji: "🎣", theme: "sporty" },
+  { id: "headband", name: "Headband", emoji: "🎀", theme: "sporty" },
+  { id: "bandana", name: "Bandana", emoji: "🏴‍☠️", theme: "rock" },
 ];
 
 export const GLASSES: Shape[] = [
@@ -107,6 +112,12 @@ export const TOPS: Shape[] = [
   { id: "jacket", name: "Leather jacket", emoji: "🧥", theme: "rock" },
   { id: "stripes", name: "Striped tee", emoji: "👕", theme: "sweet" },
   { id: "jersey", name: "Sports jersey", emoji: "🏀", theme: "sporty" },
+  { id: "crop", name: "Crop top", emoji: "🎽", theme: "sporty" },
+  { id: "sweater", name: "Sweater", emoji: "🧶", theme: "cozy" },
+  { id: "flannel", name: "Flannel", emoji: "🪵", theme: "rock" },
+  { id: "blazer", name: "Blazer", emoji: "🤵", theme: "fancy" },
+  { id: "puffer", name: "Puffer", emoji: "🧥", theme: "cozy" },
+  { id: "overalls", name: "Overalls", emoji: "👖", theme: "cozy" },
 ];
 
 export const BOTTOMS: Shape[] = [
@@ -116,6 +127,9 @@ export const BOTTOMS: Shape[] = [
   { id: "skirt", name: "Skirt", emoji: "👗", theme: "sweet" },
   { id: "tutu", name: "Tutu", emoji: "🩰", theme: "fancy" },
   { id: "leggings", name: "Leggings", emoji: "🦵", theme: "sporty" },
+  { id: "cargo", name: "Cargo pants", emoji: "🎖️", theme: "sporty" },
+  { id: "joggers", name: "Joggers", emoji: "🏃", theme: "sporty" },
+  { id: "midiskirt", name: "Long skirt", emoji: "👗", theme: "cozy" },
   { id: "none", name: "(dress only)", emoji: "🚫" },
 ];
 
@@ -125,6 +139,8 @@ export const SHOES: Shape[] = [
   { id: "sandals", name: "Sandals", emoji: "🩴", theme: "cozy" },
   { id: "flats", name: "Flats", emoji: "🥿", theme: "sweet" },
   { id: "heels", name: "Heels", emoji: "👠", theme: "fancy" },
+  { id: "hightops", name: "High-tops", emoji: "👟", theme: "rock" },
+  { id: "maryjanes", name: "Mary Janes", emoji: "🥿", theme: "sweet" },
   { id: "barefoot", name: "Barefoot", emoji: "🦶" },
 ];
 
@@ -155,6 +171,8 @@ export const ACCESSORIES: Shape[] = [
   { id: "cape", name: "Cape", emoji: "🦸", theme: "rock" },
   { id: "backpack", name: "Backpack", emoji: "🎒", theme: "sporty" },
   { id: "headphones", name: "Headphones", emoji: "🎧", theme: "rock" },
+  { id: "choker", name: "Choker", emoji: "🖤", theme: "rock" },
+  { id: "guitarstrap", name: "Guitar strap", emoji: "🎸", theme: "rock" },
 ];
 
 export const PARTS = ["Vocals", "Guitar", "Bass", "Keys", "Drums"] as const;
@@ -177,7 +195,8 @@ export type BodyType = "girl" | "boy";
 export interface Member {
   id: string; name: string; part: Part;
   genre?: string;        // preferred genre preset id (drives band-aware generation)
-  body: BodyType;
+  body: BodyType;        // gender (girl/boy) — kept for back-compat
+  model?: string;        // standard body model id (see models.ts); drives the fitted silhouette
   skin: string;
   hair: string; hairColor: string;
   hat: string; hatColor: string;
@@ -197,6 +216,7 @@ export function newId(): string { return `m${Date.now().toString(36)}${(_seq++).
 export function defaultMember(part: Part, name: string, body: BodyType = "girl"): Member {
   return {
     id: newId(), name, part, body,
+    model: body === "boy" ? "boy_slim" : "girl_slim",
     skin: "sk2",
     hair: "short", hairColor: "h-brown",
     hat: "none", hatColor: "pink",
@@ -221,6 +241,8 @@ export function normalizeMember(m: Record<string, unknown> | null | undefined): 
     ...d,
     id: typeof o.id === "string" ? o.id : d.id,
     genre: typeof o.genre === "string" ? o.genre : undefined,
+    model: (typeof o.model === "string" && MODEL_IDS.includes(o.model))
+      ? o.model : d.model,
     skin: ok(SKINS, o.skin, d.skin),
     hair: ok(HAIR, o.hair, d.hair), hairColor: ok(HAIR_COLORS, o.hairColor, d.hairColor),
     hat: ok(HATS, o.hat, d.hat), hatColor: ok(COLORS, o.hatColor, d.hatColor),

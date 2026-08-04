@@ -5,6 +5,7 @@ import {
   type Member, defaultMember,
   HAIR, HATS, GLASSES, TOPS, BOTTOMS, SHOES, ACCESSORIES, HAIR_COLORS, FACIAL_HAIR, MAKEUP,
 } from "./wardrobe";
+import { MODELS } from "./models";
 
 function Row({ title, make }: { title: string; make: () => { label: string; m: Member }[] }) {
   return (
@@ -27,6 +28,14 @@ export default function DressUpGallery() {
   return (
     <div style={{ padding: 16, background: "#0c0c11", minHeight: "100vh" }}>
       <h2 style={{ color: "#eee" }}>Dress-up fit gallery</h2>
+      <Row title="Models" make={() => Object.values(MODELS).map((mod) => ({
+        label: `${mod.gender} · ${mod.build}`,
+        m: { ...base(), body: mod.gender, model: mod.id,
+          hair: mod.gender === "girl" ? "long" : "short",
+          top: mod.gender === "girl" ? "dress" : "tee",
+          topColor: mod.gender === "girl" ? "pink" : "sky",
+          bottom: mod.gender === "girl" ? "none" : "jeans" },
+      }))} />
       <Row title="Body" make={() => [
         { label: "girl · tee", m: { ...base(), body: "girl" as const } },
         { label: "boy · tee", m: { ...base(), body: "boy" as const } },
