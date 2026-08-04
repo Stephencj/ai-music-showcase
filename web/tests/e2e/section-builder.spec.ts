@@ -74,4 +74,10 @@ test("per-section chord progression + instrument subset controls work", async ({
   await expect(chorusRow.locator(".section-badge", { hasText: "🎛" })).toBeVisible();
 
   await page.screenshot({ path: "test-screenshots/section-builder.png", fullPage: true });
+
+  // The panel is an inline expander now (not an off-screen popover): Clear is
+  // on-screen and clickable WITHOUT force, and it restores Auto (badges gone).
+  await chorusRow.locator(".section-adv").getByRole("button", { name: "Clear" }).click();
+  await expect(chorusRow.locator(".section-badge", { hasText: "🎼" })).toHaveCount(0);
+  await expect(chorusRow.locator(".section-badge", { hasText: "🎛" })).toHaveCount(0);
 });

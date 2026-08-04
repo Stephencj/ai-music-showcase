@@ -528,7 +528,9 @@ export default function GenerateScreen({
                     data-testid={"sec-adv-" + s.role}
                     title="Key / mode / tempo / chords / instruments for this section"
                     onClick={() => setAdvRole(advRole === s.role ? null : s.role)}>⋯</button>
-                  {advRole === s.role && (
+                  </span>
+                )}
+                {on && advRole === s.role && (
                   <div className="section-adv">
                     {(() => { const ki = secKeyInfo(s.role); return (
                       <button type="button" className="keypick sm" onClick={() => setSecKeyRole(s.role)}
@@ -618,8 +620,6 @@ export default function GenerateScreen({
                         Clear</button>
                     )}
                   </div>
-                  )}
-                  </span>
                 )}
                 {secKeyRole === s.role && (() => { const ki = secKeyInfo(s.role); return (
                   <CircleOfFifths tonic={ki.key} mode={ki.scale} sharps

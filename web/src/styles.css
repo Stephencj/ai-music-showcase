@@ -1329,14 +1329,14 @@ audio { width: 100%; margin: 8px 0 12px; }
   cursor: pointer; font-size: 16px; line-height: 1;
 }
 .sec-adv-btn:hover, .sec-adv-btn.on { border-color: var(--accent); color: var(--text); }
-.sec-adv-wrap { position: relative; flex: 0 0 auto; display: inline-flex; }
+.sec-adv-wrap { flex: 0 0 auto; display: inline-flex; }
+/* Inline full-width expander (not an off-screen popover): flows below the
+   section row and wraps within the viewport so nothing clips on a phone. */
 .section-adv {
-  position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  width: max-content; max-width: 320px;
-  padding: 10px; border-radius: 10px;
-  background: var(--card); border: 1px solid rgba(255,255,255,0.14);
-  box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+  flex-basis: 100%; width: 100%; max-width: 100%;
+  display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap;
+  margin-top: 8px; padding: 10px 12px; border-radius: 10px;
+  background: var(--bg-2); border: 1px solid rgba(255,255,255,0.14);
 }
 .keypick.sm { padding: 6px 10px; font-size: 12px; width: auto; }
 .sec-adv-tempo { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
