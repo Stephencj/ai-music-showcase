@@ -162,11 +162,21 @@ export type Part = (typeof PARTS)[number];
 export const PART_ICON: Record<string, string> = {
   Vocals: "🎤", Guitar: "🎸", Bass: "🎸", Keys: "🎹", Drums: "🥁",
 };
+// A member's part → the INSTRUMENT_REGISTRY id it contributes to a generated
+// song's roster. Keeps the band lineup mapping onto real tracks.
+export const PART_INSTRUMENT: Record<Part, string> = {
+  Vocals: "vocal_lead",
+  Guitar: "electric_guitar_clean",
+  Bass: "electric_bass",
+  Keys: "piano",
+  Drums: "drum_kit",
+};
 
 export type BodyType = "girl" | "boy";
 
 export interface Member {
   id: string; name: string; part: Part;
+  genre?: string;        // preferred genre preset id (drives band-aware generation)
   body: BodyType;
   skin: string;
   hair: string; hairColor: string;
@@ -210,6 +220,7 @@ export function normalizeMember(m: Record<string, unknown> | null | undefined): 
   return {
     ...d,
     id: typeof o.id === "string" ? o.id : d.id,
+    genre: typeof o.genre === "string" ? o.genre : undefined,
     skin: ok(SKINS, o.skin, d.skin),
     hair: ok(HAIR, o.hair, d.hair), hairColor: ok(HAIR_COLORS, o.hairColor, d.hairColor),
     hat: ok(HATS, o.hat, d.hat), hatColor: ok(COLORS, o.hatColor, d.hatColor),

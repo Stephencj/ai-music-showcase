@@ -4,6 +4,8 @@ import type { BlockSpec, Family, GenerateBody, GenreFamily, Job, JobResult, Pres
 import CircleOfFifths from "./CircleOfFifths";
 import PickerField from "./PickerField";
 import GenreWheel from "./GenreWheel";
+import { loadSavedBand, bandGenerateParams } from "../band";
+import { type Member, type Part, PARTS, PART_ICON, defaultMember } from "../dressup/wardrobe";
 
 const SCALES = [
   "major", "minor", "dorian", "phrygian", "lydian", "mixolydian", "locrian",
@@ -81,6 +83,11 @@ export default function GenerateScreen({
   const [secKeyRole, setSecKeyRole] = useState<string | null>(null); // section whose circle-of-fifths is open
   const [instruments, setInstruments] = useState<Set<string>>(new Set());
   const [openFams, setOpenFams] = useState<Set<string>>(new Set());
+  // Band-aware generation: when on, the roster's instruments + members' genres
+  // drive the song, superseding the single Genre picker.
+  const [bandMode, setBandMode] = useState(false);
+  const [bandMembers, setBandMembers] = useState<Member[]>([]);
+  const [bandMsg, setBandMsg] = useState<string | null>(null);
   const [master, setMaster] = useState("default");
   const [withPdf, setWithPdf] = useState(true);
   const [withStems, setWithStems] = useState(false);
@@ -249,6 +256,32 @@ export default function GenerateScreen({
     });
   }
 
+  // Genre choices for the per-member genre pickers (flatten the wheel catalog).
+  const genreOptions = useMemo(
+    () => genreFamilies.flatMap((f) => f.genres.map((g) => ({ id: g.id, name: g.name }))),
+    [genreFamilies]);
+  const genreName = (id: string | null | undefined) =>
+    id ? (genreOptions.find((g) => g.id === id)?.name || id) : "";
+
+  function loadBand() {
+    const b = loadSavedBand();
+    if (!b) { setBandMsg("No saved band yet — create one in the Band tab, then reload."); return; }
+    setBandMembers(b.members);
+    setBandMsg(`Loaded “${b.name}” · ${b.members.length} member${b.members.length === 1 ? "" : "s"}`);
+  }
+  function addMember() {
+    const part: Part = PARTS[Math.min(bandMembers.length, PARTS.length - 1)];
+    setBandMembers((prev) => [...prev,
+      { ...defaultMember(part, `Member ${prev.length + 1}`), genre: presetId }]);
+    setBandMsg(null);
+  }
+  function patchMember(id: string, patch: Partial<Member>) {
+    setBandMembers((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  }
+  function removeMember(id: string) {
+    setBandMembers((prev) => prev.filter((m) => m.id !== id));
+  }
+
   // Apply a parsed SongPlan onto the form: seed the preset's defaults, then
   // layer the plan's explicit overrides (key/scale/tempo/swing/per-section
   // presets) and merge any called-out instruments over the preset's defaults.
@@ -310,11 +343,15 @@ export default function GenerateScreen({
     setSaveMsg(null); setSplitMsg(null);
     setProgress(0); setMessage("Starting…");
     try {
+      // A band supersedes the Genre picker: its roster sets the instruments and
+      // the members' most-common genre sets the overarching feel.
+      const bp = bandMode && bandMembers.length ? bandGenerateParams(bandMembers) : null;
       const body: GenerateBody = {
-        genre: preset.id, key, scale, tempo: Number(tempo),
+        genre: bp?.genre || preset.id, key, scale, tempo: Number(tempo),
         seed: seed.trim() ? Number(seed) : null,
         swing,
-        instruments: [...instruments], sections: [...sections],
+        instruments: bp ? bp.instruments : [...instruments],
+        sections: [...sections],
         section_presets: sectionPresets,
         section_overrides: sectionOverrides,
         with_pdf: withPdf, with_stems: withStems, master_preset: master,
@@ -445,8 +482,72 @@ export default function GenerateScreen({
         </div>
       </div>
 
-      <div className="card">
-        <h2>Genre</h2>
+      <div className="card" data-testid="band-card">
+        <h2>Band</h2>
+        <div className="chips">
+          <button type="button" className={"chip" + (bandMode ? " on" : "")}
+            data-testid="band-toggle"
+            onClick={() => { setBandMode(!bandMode); setBandMsg(null); }}>
+            🎤 Generate as a band
+          </button>
+          {bandMode && (
+            <button type="button" className="chip" data-testid="band-load" onClick={loadBand}>
+              Load saved band
+            </button>
+          )}
+          {bandMode && (
+            <button type="button" className="chip" data-testid="band-add" onClick={addMember}>
+              + Add member
+            </button>
+          )}
+        </div>
+        {bandMode && (
+          <>
+            <div className="meta" style={{ margin: "8px 0 6px" }}>
+              The lineup's instruments and the members' genres drive the song —
+              this supersedes the Genre picker below.
+            </div>
+            {bandMsg && <div className="meta" style={{ marginBottom: 6 }}>{bandMsg}</div>}
+            {bandMembers.length === 0 && (
+              <div className="meta">No members yet — “Load saved band” or “+ Add member”.</div>
+            )}
+            {bandMembers.map((m) => (
+              <div key={m.id} className="band-member-row" data-testid="band-member"
+                style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap",
+                  marginBottom: 6 }}>
+                <input value={m.name} placeholder="Name"
+                  onChange={(e) => patchMember(m.id, { name: e.target.value })}
+                  style={{ flex: "1 1 90px", minWidth: 0, padding: "6px 8px",
+                    borderRadius: 8, background: "var(--bg-2)", color: "var(--text)",
+                    border: "1px solid rgba(255,255,255,0.12)" }} />
+                <select value={m.part} data-testid="band-member-part"
+                  onChange={(e) => patchMember(m.id, { part: e.target.value as Part })}>
+                  {PARTS.map((p) => <option key={p} value={p}>{PART_ICON[p]} {p}</option>)}
+                </select>
+                <select value={m.genre || ""} data-testid="band-member-genre"
+                  onChange={(e) => patchMember(m.id, { genre: e.target.value || undefined })}>
+                  <option value="">Genre…</option>
+                  {genreOptions.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+                <button type="button" className="btn ghost sm" style={{ width: "auto" }}
+                  onClick={() => removeMember(m.id)} aria-label="Remove member">✕</button>
+              </div>
+            ))}
+            {bandMembers.length > 0 && (() => {
+              const bp = bandGenerateParams(bandMembers);
+              return (
+                <div className="meta" data-testid="band-summary" style={{ marginTop: 4 }}>
+                  → {bp.instruments.length} instrument{bp.instruments.length === 1 ? "" : "s"} ·
+                  {" "}genre: <strong>{genreName(bp.genre) || "(pick a member genre)"}</strong>
+                </div>
+              );
+            })()}
+          </>
+        )}
+      </div>
+
+      <div className={"card" + (bandMode && bandMembers.length ? " superseded" : "")}>
+        <h2>Genre {bandMode && bandMembers.length ? <span className="meta">— set by the band</span> : null}</h2>
         <button type="button" className="genre-pick" onClick={() => setShowGenre(true)}
           title="Pick a genre on the wheel">
           <span className="genre-dot" style={{ background: curGenre.color }} />

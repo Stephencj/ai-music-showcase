@@ -1339,6 +1339,11 @@ audio { width: 100%; margin: 8px 0 12px; }
   background: var(--bg-2); border: 1px solid rgba(255,255,255,0.14);
 }
 .keypick.sm { padding: 6px 10px; font-size: 12px; width: auto; }
+/* Genre card dims when a band supersedes it. */
+.card.superseded { opacity: 0.5; }
+.card.superseded h2 .meta { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.band-member-row select { padding: 6px 8px; border-radius: 8px; font-size: 12px;
+  background: var(--bg-2); color: var(--text); border: 1px solid rgba(255,255,255,0.12); }
 .sec-adv-tempo { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .sec-adv-tempo input { width: 76px; padding: 6px 8px; border-radius: 8px;
   background: var(--bg-2); color: var(--text); border: 1px solid rgba(255,255,255,0.12); }
