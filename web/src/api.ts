@@ -47,8 +47,8 @@ export const parsePrompt = (prompt: string) =>
 export const generate = (body: GenerateBody) =>
   jpost<{ job_id: string }>("/api/generate", body);
 export const getJob = (id: string) => jget<Job>(`/api/jobs/${id}`);
-export const saveBlockFromJob = (job_id: string, name: string) =>
-  jpost<{ name: string }>("/api/blocks/from-job", { job_id, name });
+export const saveBlockFromJob = (job_id: string, name: string, overwrite = false) =>
+  jpost<{ name: string }>("/api/blocks/from-job", { job_id, name, overwrite });
 export const splitJob = (id: string, tag?: string) =>
   jpost<{ section_blocks: string[]; tag: string | null }>(`/api/jobs/${id}/split`, tag ? { tag } : {});
 
