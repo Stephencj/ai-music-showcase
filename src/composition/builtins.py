@@ -1252,12 +1252,12 @@ _add_bass_tech("blues_walking_boogie", pattern="walking",
                approach_tones=True, swing_floor=0.18,
                label="Blues walking boogie",
                description="Walking blues boogie line over I-IV-V changes.")
-_add_melody_tech("blues_pent_riff", roles=("verse",), tags=("blues",),
+_add_melody_tech("blues_pent_riff", roles=("verse", "chorus"), tags=("blues",),
                  note_density=0.75, melody_style="blues",
                  label="Blues pentatonic riff",
                  description="Pentatonic-flavoured blues riff with bends.")
 _add_drum_tech("blues_shuffle_kit", pattern="basic_rock",
-               roles=("verse",), tags=("blues",), density=0.8,
+               roles=("verse", "chorus"), tags=("blues",), density=0.8,
                swing_floor=0.18,
                label="Blues shuffle kit",
                description="Shuffled basic rock kit at medium density.")

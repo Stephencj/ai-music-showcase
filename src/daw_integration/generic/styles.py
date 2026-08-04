@@ -117,6 +117,15 @@ class StylePreset:
     # ``pacing_options``.
     bridge_pacing_options: tuple[str, ...] = ()
 
+    # Per-section chord CONTRAST. Maps a canonical section role
+    # (``verse`` / ``chorus`` / ``bridge`` / ``intro`` / ``outro``) to a
+    # POOL of progressions; ``compose_song`` seed-picks one per section so
+    # the verse and the chorus don't replay the same loop, and different
+    # seeds land on different progressions. A role absent here falls back to
+    # the song ``progression`` (so intro/outro can stay on the home loop).
+    # Roman-numeral symbols realize in the song key, same as ``progression``.
+    section_progressions: dict = field(default_factory=dict)
+
     def __post_init__(self):
         # Synthesise a Default entry if no variants were declared so every
         # preset uniformly exposes a non-empty list.
@@ -866,6 +875,25 @@ STYLES: dict[str, StylePreset] = {
         default_instruments=['drum_kit', 'electric_bass', 'electric_guitar_dirty', 'electric_guitar_clean', 'organ_hammond', 'lead_guitar', 'vocal_lead'],
         pacing_options=('uniform_1', 'uniform_1', 'stretch_tonic_2'),
         bridge_pacing_options=('with_secondary_doms', 'stretch_tonic_2', 'with_chromatic_passing'),
+        section_progressions={
+            "verse": [
+                [("i", 1.0), ("i", 1.0), ("VII", 1.0), ("VI", 1.0)],
+                [("i", 1.0), ("v", 1.0), ("VI", 1.0), ("VII", 1.0)],
+                [("i", 1.0), ("III", 1.0), ("VII", 1.0), ("VI", 1.0)],
+                [("i", 1.0), ("VI", 1.0), ("VII", 1.0), ("v", 1.0)],
+            ],
+            "chorus": [
+                [("VI", 1.0), ("VII", 1.0), ("i", 1.0), ("i", 1.0)],
+                [("VI", 1.0), ("VII", 1.0), ("III", 1.0), ("VII", 1.0)],
+                [("i", 1.0), ("VII", 1.0), ("VI", 1.0), ("VII", 1.0)],
+                [("III", 1.0), ("VII", 1.0), ("i", 1.0), ("VI", 1.0)],
+            ],
+            "bridge": [
+                [("iv", 1.0), ("VI", 1.0), ("III", 1.0), ("VII", 1.0)],
+                [("VI", 1.0), ("VII", 1.0), ("iv", 1.0), ("v", 1.0)],
+                [("iv", 1.0), ("i", 1.0), ("v", 1.0), ("VI", 1.0)],
+            ],
+        },
     ),
 
     "funk_full_song": StylePreset(
@@ -900,6 +928,23 @@ STYLES: dict[str, StylePreset] = {
         default_instruments=['drum_kit', 'electric_bass', 'electric_piano', 'electric_guitar_clean', 'brass_section', 'vocal_lead'],
         pacing_options=('uniform_1', 'short_long_subbar', 'uniform_2'),
         bridge_pacing_options=('short_long_subbar', 'uniform_2'),
+        section_progressions={
+            "verse": [
+                [("i7", 2.0), ("IV7", 2.0)],
+                [("i7", 1.0), ("i7", 1.0), ("IV7", 1.0), ("IV7", 1.0)],
+                [("i7", 2.0), ("IV7", 1.0), ("v7", 1.0)],
+            ],
+            "chorus": [
+                [("i7", 1.0), ("v7", 1.0), ("IV7", 1.0), ("i7", 1.0)],
+                [("IV7", 2.0), ("i7", 2.0)],
+                [("i7", 1.0), ("IV7", 1.0), ("ii", 1.0), ("IV7", 1.0)],
+            ],
+            "bridge": [
+                [("v7", 1.0), ("IV7", 1.0), ("i7", 2.0)],
+                [("ii", 1.0), ("v7", 1.0), ("i7", 2.0)],
+                [("IV7", 1.0), ("v7", 1.0), ("i7", 1.0), ("i7", 1.0)],
+            ],
+        },
     ),
 
     "jazz_aaba_full": StylePreset(
@@ -941,6 +986,23 @@ STYLES: dict[str, StylePreset] = {
         voicing="seventh", bass_pattern="walking", drum_pattern="basic_rock",
         chord_rhythm="pulse_quarter", melody_style="motif",
         chord_octave=4, bass_octave=2, swing=0.18, default_bars=60,
+        # Idiomatic 12-bar forms. The whole song commits to ONE per generation
+        # (blues keeps its form; it doesn't change mid-song), so successive
+        # generations differ without the choruses fighting each other.
+        progression_variants=[
+            ("Quick change", [
+                ("I7", 1.0), ("IV7", 1.0), ("I7", 1.0), ("I7", 1.0),
+                ("IV7", 1.0), ("IV7", 1.0), ("I7", 1.0), ("I7", 1.0),
+                ("V7", 1.0), ("IV7", 1.0), ("I7", 1.0), ("V7", 1.0)]),
+            ("Slow blues turnaround", [
+                ("I7", 1.0), ("I7", 1.0), ("I7", 1.0), ("I7", 1.0),
+                ("IV7", 1.0), ("IV7", 1.0), ("I7", 1.0), ("I7", 1.0),
+                ("V7", 1.0), ("IV7", 1.0), ("I7", 1.0), ("I7", 1.0)]),
+            ("Jazzy ii-V", [
+                ("I7", 1.0), ("IV7", 1.0), ("I7", 1.0), ("I7", 1.0),
+                ("IV7", 1.0), ("IV7", 1.0), ("I7", 1.0), ("VI7", 1.0),
+                ("ii7", 1.0), ("V7", 1.0), ("I7", 1.0), ("V7", 1.0)]),
+        ],
         rhythm_variants={
             "Full song": [
                 {"start_bar": 0,  "end_bar": 11, "label": "Chorus 1 (head)",
@@ -1034,6 +1096,25 @@ STYLES: dict[str, StylePreset] = {
         default_instruments=['drum_kit', 'synth_bass', 'electric_piano', 'vocal_lead'],
         pacing_options=('uniform_1', 'uniform_2'),
         bridge_pacing_options=('uniform_2', 'with_chromatic_passing'),
+        section_progressions={
+            "verse": [
+                [("i", 1.0), ("VI", 1.0), ("III", 1.0), ("VII", 1.0)],
+                [("i", 1.0), ("iv", 1.0), ("VI", 1.0), ("v", 1.0)],
+                [("i", 1.0), ("VII", 1.0), ("VI", 1.0), ("VII", 1.0)],
+                [("i", 1.0), ("v", 1.0), ("VI", 1.0), ("III", 1.0)],
+            ],
+            "chorus": [
+                [("i", 1.0), ("VI", 1.0), ("VII", 1.0), ("i", 1.0)],
+                [("VI", 1.0), ("VII", 1.0), ("i", 1.0), ("i", 1.0)],
+                [("i", 1.0), ("VII", 1.0), ("VI", 1.0), ("v", 1.0)],
+                [("iv", 1.0), ("VI", 1.0), ("VII", 1.0), ("i", 1.0)],
+            ],
+            "bridge": [
+                [("iv", 1.0), ("VI", 1.0), ("III", 1.0), ("VII", 1.0)],
+                [("VI", 1.0), ("iv", 1.0), ("i", 1.0), ("v", 1.0)],
+                [("iv", 1.0), ("v", 1.0), ("VI", 1.0), ("VII", 1.0)],
+            ],
+        },
     ),
 
     "country_full": StylePreset(

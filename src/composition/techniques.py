@@ -21,6 +21,21 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+# Tags that denote a GENRE family (as opposed to character/instrument tags like
+# "piano", "vocal", "pad"). Used by ``TechniqueBank.pick`` to keep a genre from
+# borrowing another genre's signature technique (no salsa kit in a blues song).
+# A tag missing here simply isn't penalized — safe degradation. Keep in sync
+# with the genre tags emitted by ``builtins.py`` / ``_GENRE_TAG_MAP``.
+GENRE_TAGS = frozenset({
+    "jazz", "bebop", "hard_bop", "bossa_jazz", "modal_jazz", "ballad_jazz",
+    "jazz_blues", "dixieland", "big_band",
+    "blues", "rock", "metal", "punk",
+    "funk_rock", "funk", "soul", "motown", "gospel", "disco",
+    "pop", "edm", "hip_hop", "reggae", "country", "latin", "afro",
+    "drum_n_bass", "ballad",
+})
+
+
 # ---------------------------------------------------------------------------
 # Context passed into every Technique.apply()
 # ---------------------------------------------------------------------------
@@ -168,20 +183,24 @@ class TechniqueBank:
         if not candidates:
             return None
         weights = []
-        # Boost each candidate by 8× *per matched preferred tag*. So a
-        # technique tagged `("jazz", "bossa_jazz")` competing against a
-        # generic "jazz" technique under preferred_tags=("jazz",
-        # "bossa_jazz") gets 8×8=64× while the generic one gets 8×.
-        # The high multiplier counts against the ~80-100 baseline-
-        # technique pool, which would otherwise drown out a genre with
-        # only 1-2 candidates per cell. Cells with no tagged candidate
-        # at all fall back to the cross-genre baseline.
+        # Weighting under a genre (``preferred_tags``) has three tiers:
+        #   • a candidate carrying a preferred tag is BOOSTED 8× per match
+        #     (a jazz+bossa_jazz technique under ("jazz","bossa_jazz") → 64×);
+        #   • a candidate carrying a DIFFERENT genre tag (and none preferred)
+        #     is PENALIZED — a blues song shouldn't grab a salsa kit just
+        #     because the salsa kit also fits the "chorus" role;
+        #   • genre-neutral candidates (only character/instrument tags, or
+        #     untagged) keep weight 1 and remain the variety pool.
+        # Cells with no tagged candidate at all still fall back to baseline.
         for t in candidates:
-            w = max(1, int(t.weight))
+            w = float(max(1, int(t.weight)))
             if preferred_tags:
-                for tag in preferred_tags:
-                    if tag in t.tags:
-                        w *= 8
+                matched = sum(1 for tag in preferred_tags if tag in t.tags)
+                if matched:
+                    w *= 8 ** matched
+                elif any(tag in GENRE_TAGS and tag not in preferred_tags
+                         for tag in t.tags):
+                    w *= 0.04   # wrong-genre technique — nearly excluded
             weights.append(w)
         total = float(sum(weights))
         roll = float(rng.random()) * total

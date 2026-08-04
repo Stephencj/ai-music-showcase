@@ -380,7 +380,20 @@ def compose_song(
     eff_bars = int(bars if bars is not None else preset.default_bars)
     # A caller-supplied progression (e.g. one detected from an audio sample)
     # overrides the preset's; it still flows through pacing/slicing per section.
-    progression = list(progression) if progression else list(preset.progression)
+    # Otherwise, when the preset ships multiple progression_variants, seed-pick
+    # ONE for the whole song — this gives cross-generation harmonic variety while
+    # keeping the form consistent within the song (e.g. blues picks one 12-bar
+    # form per generation instead of always the same one). Presets that use
+    # per-section contrast (section_progressions) rely on that instead.
+    if progression:
+        progression = list(progression)
+    elif len(preset.progression_variants) > 1:
+        _variants = preset.progression_variants
+        _vidx = int(np.random.default_rng(
+            _sub_seed(seed, "song_progression")).integers(len(_variants)))
+        progression = list(_variants[_vidx][1])
+    else:
+        progression = list(preset.progression)
     technique_overrides = technique_overrides or {}
     # Per-generation feel knobs (UI overrides merged over genre defaults).
     eff_knobs = resolve_knobs(genre, knobs)
@@ -454,6 +467,13 @@ def compose_song(
         if role == "chords" and inst_obj is not None
     ]
     voicing_assignments = assign_layered_voicings(chord_role_instruments)
+    # De-clutter: when several chord instruments stack (rock's dirty + clean
+    # guitar + organ), only the FIRST is a core voice. The extras are "color"
+    # layers that sit out the low-energy sections (intro/verse) and bloom back
+    # in for the chorus/bridge/outro — so verses breathe and the chorus lifts.
+    _color_chord_ids = {
+        getattr(o, "id", None) for o in chord_role_instruments[1:]
+    }
     # Is there a harmonic voice (chords/melody) to carry a section if we
     # drop a non-essential layer? Gates the intro drum-drop.
     _has_harmonic = any(
@@ -519,8 +539,18 @@ def compose_song(
         # Progression source: explicit per-section override > the section
         # preset's own progression (only when it differs from the song) >
         # the song progression.
+        # Per-section chord contrast: when the (section's) preset declares a
+        # progression POOL for this role, seed-pick one so verse/chorus/bridge
+        # differ and successive generations vary. Explicit overrides still win.
+        _role_pool = (sec_preset if sec_genre != genre else preset) \
+            .section_progressions.get(pick_role)
         if section.get("progression"):
             sec_progression = list(section["progression"])
+        elif _role_pool:
+            _pidx = int(np.random.default_rng(
+                _sub_seed(seed, label, "section_progression")
+            ).integers(len(_role_pool)))
+            sec_progression = list(_role_pool[_pidx])
         elif sec_genre != genre:
             sec_progression = list(sec_preset.progression)
         else:
@@ -593,6 +623,11 @@ def compose_song(
             # band breathes (backing vox/percussion enter on the chorus;
             # drums hold off in the intro).
             if not _plays_in_section(inst_obj, pick_role, _has_harmonic):
+                continue
+            # Thin stacked chord "color" layers out of the low-energy sections
+            # so verses aren't a wall of comping; they return for the lift.
+            if (getattr(inst_obj, "id", None) in _color_chord_ids
+                    and pick_role in ("intro", "verse")):
                 continue
             # Lead guitar is featured, not constant: it plays its featured
             # sections (some verses, bridge solo, final chorus, opt. intro/
