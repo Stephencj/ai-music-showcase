@@ -1360,6 +1360,11 @@ audio { width: 100%; margin: 8px 0 12px; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .slot-actions { flex: 0 0 auto; display: flex; gap: 6px; align-items: center; }
 .slot-lock { font-size: 16px; opacity: 0.7; }
+/* Perform-the-set controls in the stage show */
+.show-set { display: flex; flex-direction: column; gap: 8px; align-items: center;
+  margin-bottom: 10px; }
+.show-set-now { font-size: 14px; color: #fff; text-align: center; }
+.show-set-btns { display: flex; gap: 8px; align-items: center; }
 .sec-adv-tempo { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .sec-adv-tempo input { width: 76px; padding: 6px 8px; border-radius: 8px;
   background: var(--bg-2); color: var(--text); border: 1px solid rgba(255,255,255,0.12); }

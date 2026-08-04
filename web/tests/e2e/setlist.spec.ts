@@ -61,6 +61,55 @@ test("the encore unlocks once enough gigs are played", async ({ page }) => {
   await expect(page.getByTestId("gen-encore")).toBeVisible();
 });
 
+function seedBandWithSet(page: Page, gigs: number, withEncore: boolean) {
+  return page.addInitScript(({ g, enc }) => {
+    const setlist = [
+      { slot: "opener", blockName: "The Testers — Opener" },
+      { slot: "energy", blockName: "The Testers — Keep it up" },
+      { slot: "ballad", blockName: "The Testers — Ballad" },
+      { slot: "finale", blockName: "The Testers — Finale" },
+    ];
+    if (enc) setlist.push({ slot: "encore", blockName: "The Testers — Encore" });
+    localStorage.setItem("aimusic.band", JSON.stringify({
+      name: "The Testers", fans: g * 100, money: 0, gigs: g, role: "setlist",
+      members: [
+        { id: "m1", name: "Ava", part: "Vocals", genre: "rock_anthem_full", body: "girl" },
+        { id: "m2", name: "Bo", part: "Guitar", genre: "rock_anthem_full", body: "boy" },
+      ],
+      setlist,
+    }));
+  }, { g: gigs, enc: withEncore });
+}
+
+test("perform the set: play through the 4 songs to the finale payoff", async ({ page }) => {
+  await seedBandWithSet(page, 0, false);   // 0 gigs → encore excluded (4 songs)
+  await page.goto("/app/");
+  await openSetlist(page);
+
+  const perform = page.getByTestId("perform-set");
+  await expect(perform).toContainText("4 songs");
+  await perform.click();
+
+  await expect(page.getByTestId("show-set")).toBeVisible();
+  await page.getByTestId("play-set").click();
+  await expect(page.getByTestId("show-set-now")).toContainText("Song 1 of 4");
+  await page.screenshot({ path: "test-screenshots/perform-set.png", fullPage: true });
+
+  // Walk the set via Next (skips real audio) to the finale, then complete.
+  for (let i = 0; i < 6 && await page.getByTestId("set-next").isVisible(); i++) {
+    await page.getByTestId("set-next").click();
+  }
+  await expect(page.getByTestId("show-complete")).toContainText("Set complete");
+  await expect(page.getByTestId("show-complete")).toContainText("all 4 songs");
+});
+
+test("the encore joins the set once unlocked", async ({ page }) => {
+  await seedBandWithSet(page, 12, true);   // 12 gigs → encore included (5 songs)
+  await page.goto("/app/");
+  await openSetlist(page);
+  await expect(page.getByTestId("perform-set")).toContainText("5 songs");
+});
+
 test("generating the opener fills the slot with a band song", async ({ page }) => {
   test.setTimeout(90_000);   // a real generation job
   await seedBand(page, 0);

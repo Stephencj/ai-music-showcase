@@ -6,7 +6,7 @@ import PlayAlong from "./PlayAlong";
 import MixingDesk, { type MixState, type TrackSettings, cleanMix } from "./MixingDesk";
 import LiveMixer from "./LiveMixer";
 import DressUp from "../dressup/DressUp";
-import Performance from "../dressup/Performance";
+import Performance, { type RealSong } from "../dressup/Performance";
 import { type Member, imageBreakdown, normalizeMember } from "../dressup/wardrobe";
 import type { Preset } from "../types";
 import { bandGenerateParams } from "../band";
@@ -92,6 +92,7 @@ export default function BandScreen({ isActive, onWriteSong, onOpenPractice }: {
   const [live, setLive] = useState<string | null>(null);        // live-mixing a block
   const [stylist, setStylist] = useState(false);                // stylist studio open
   const [show, setShow] = useState(false);                      // watch the band perform
+  const [showSet, setShowSet] = useState(false);                // perform the whole set list
   const [presets, setPresets] = useState<Preset[]>([]);
   const [genSlot, setGenSlot] = useState<SlotId | null>(null);  // slot being generated
   const [genMsg, setGenMsg] = useState<string | null>(null);
@@ -106,6 +107,33 @@ export default function BandScreen({ isActive, onWriteSong, onOpenPractice }: {
     const bp = bandGenerateParams(band?.members || [], true);
     const p = presets.find((x) => x.id === bp.genre);
     return { genre: bp.genre || "pop", key: p?.key || "C", scale: p?.scale || "major", tempo: p?.tempo || 120 };
+  }
+
+  // The set's songs, in performance order, resolved to playable audio. The
+  // encore is only included once unlocked.
+  function setSongs(): RealSong[] {
+    const order: SlotId[] = ["opener", "energy", "ballad", "finale", "encore"];
+    const byName = new Map(blocks.map((b) => [b.name, b] as const));
+    const out: RealSong[] = [];
+    for (const slotId of order) {
+      if (slotId === "encore" && (band?.gigs ?? 0) < ENCORE_GIGS) continue;
+      const s = (band?.setlist || []).find((x) => x.slot === slotId);
+      if (!s?.blockName) continue;
+      const b = byName.get(s.blockName);
+      out.push({ id: s.blockName, name: s.blockName,
+        url: api.blockAudioUrl(s.blockName), bpm: b?.tempo || 120 });
+    }
+    return out;
+  }
+
+  // Playing a full set is a bigger gig — scaled by venue tier + image, and it
+  // counts toward the encore unlock (gigs++ via award).
+  function onSetComplete() {
+    // Award fans/money but keep the stage show up so its "Set complete!" payoff
+    // shows — the player closes it with Done.
+    const songs = setSongs().length || 1;
+    award({ fans: Math.round(30 * songs * tier.mult * image),
+            money: Math.round(20 * songs * tier.mult) });
   }
 
   async function generateSlot(slot: SlotDef) {
@@ -271,6 +299,12 @@ export default function BandScreen({ isActive, onWriteSong, onOpenPractice }: {
               );
             })()}
           </div>
+          {setSongs().length > 0 && (
+            <button className="btn" style={{ marginTop: 12 }} data-testid="perform-set"
+              onClick={() => setShowSet(true)}>
+              🎤 Perform the set ({setSongs().length} song{setSongs().length === 1 ? "" : "s"})
+            </button>
+          )}
           {genMsg && <div className="meta" data-testid="setlist-msg" style={{ marginTop: 10 }}>{genMsg}</div>}
         </div>
       )}
@@ -387,6 +421,12 @@ export default function BandScreen({ isActive, onWriteSong, onOpenPractice }: {
           }))}
           onComplete={() => award({ fans: Math.round(20 * image * tier.mult), money: 0 })}
           onClose={() => setShow(false)} />
+      )}
+      {showSet && (
+        <Performance members={band.members || []}
+          set={setSongs()}
+          onSetComplete={onSetComplete}
+          onClose={() => setShowSet(false)} />
       )}
     </>
   );
