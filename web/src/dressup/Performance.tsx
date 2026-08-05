@@ -2,12 +2,35 @@
 // time. Two song sources: built-in SYNTH tunes (offline, no files) and, when
 // provided (band app, online), your real generated songs played from audio +
 // their tempo. Watching a song through completes the show (a star / fans).
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Figure from "./Figure";
 import { type Member, PART_ICON } from "./wardrobe";
 import { SynthBand, SONGS, type Song } from "./music";
+import "./Performance.css";
 
 const SHOW_BEATS = 32;   // ~one full synth song before the payoff
+
+// Deterministic phone-lights strewn across the crowd (position + twinkle phase).
+const PHONE_LIGHTS = Array.from({ length: 18 }, (_, i) => ({
+  left: (i * 5.6 + (i % 3) * 2.3 + 3) % 100,
+  delay: ((i * 0.53) % 2.4).toFixed(2),
+  dur: (2 + (i % 4) * 0.4).toFixed(2),
+}));
+
+// Depth-stage the lineup: a focal front-center that fans back toward the wings,
+// so the row reads as a receding 3D stage instead of a flat line. depth is
+// 0 (near/front, large & bright) … 1 (far/back, small, raised, dimmer).
+function stageDepth(i: number, n: number) {
+  const center = (n - 1) / 2;
+  const maxDist = center || 1;
+  const dist = Math.abs(i - center) / maxDist;     // 0 center … 1 wings
+  const depth = dist;                              // wings recede upstage
+  const scale = 1 - depth * 0.32;                  // far members shrink
+  const raiseY = -depth * 44;                      // …and sit higher on the floor
+  const driftX = (center - i) * depth * 9;         // …pulled toward the vanishing point
+  const z = 100 - Math.round(depth * 90);          // near members stack in front
+  return { depth, scale, raiseY, driftX, z };
+}
 
 export interface RealSong { id: string; name: string; url: string; bpm: number; }
 type Track = { kind: "synth"; song: Song } | { kind: "audio"; song: RealSong };
@@ -34,6 +57,12 @@ export default function Performance({ members, realSongs, set, onComplete, onSet
   const rafRef = useRef(0);
   const completedRef = useRef(false);
   const setPosRef = useRef(-1);                    // stable index for the audio onEnded callback
+  // Respect prefers-reduced-motion: the CSS handles ambient animations; this
+  // gates the JS-driven per-beat bob so the whole scene can hold still.
+  const reduceMotion = useMemo(
+    () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
+    [],
+  );
 
   const complete = () => {
     if (completedRef.current) return;
@@ -101,26 +130,52 @@ export default function Performance({ members, realSongs, set, onComplete, onSet
   const lineup = members.length ? members : [];
 
   return (
-    <div className="show-screen" style={{ ["--mood" as string]: mood }}>
+    <div className="show-screen concert-screen" style={{ ["--mood" as string]: mood }}>
       <button className="du-x show-x" onClick={() => { stop(); onClose(); }}>✕</button>
       <audio ref={audioRef} onEnded={songEnded} style={{ display: "none" }} />
 
+      {/* Back-to-front atmosphere: haze, sweeping spotlight cones, base blobs */}
+      <div className="concert-haze" aria-hidden />
+      <div className="concert-spots" aria-hidden><i /><i /><i /><i /></div>
       <div className="show-lights"><i /><i /><i /></div>
 
       <div className="show-stage">
+        {/* Receding perspective floor sits behind the band */}
+        <div className="stage-floor" aria-hidden />
         <div className="show-band">
-          {lineup.map((m, i) => (
-            <div key={m.id} className={"show-member" + (playing ? " live" : "")}
-              style={{
-                animationDelay: `${(i % 3) * 0.12}s`,
-                transform: playing ? `translateY(${(beat + i) % 2 === 0 ? -10 : 0}px)` : "none",
-              }}>
-              <Figure member={m} size={120} />
-              <span className="show-part">{PART_ICON[m.part]}</span>
-            </div>
-          ))}
+          {lineup.map((m, i) => {
+            const n = lineup.length;
+            const { depth, scale, raiseY, driftX, z } = stageDepth(i, n);
+            const bob = playing && !reduceMotion
+              ? ((beat + i) % 2 === 0 ? -10 : 0) * (1 - depth * 0.35)
+              : 0;
+            return (
+              <div key={m.id} className={"show-member" + (playing ? " live" : "")}
+                style={{
+                  ["--depth" as string]: depth.toFixed(3),
+                  zIndex: z,
+                  animationDelay: `${(i % 3) * 0.12}s`,
+                  transform: `translateX(${driftX.toFixed(1)}px) translateY(${(raiseY + bob).toFixed(1)}px) scale(${scale.toFixed(3)})`,
+                }}>
+                <Figure member={m} size={120} />
+                <span className="show-part">{PART_ICON[m.part]}</span>
+              </div>
+            );
+          })}
         </div>
         <div className={"show-floor" + (downbeat ? " pulse" : "")} />
+
+        {/* Audience: a dark crowd silhouette lit by a field of phone lights */}
+        <div className="concert-crowd" aria-hidden>
+        <svg viewBox="0 0 100 24" preserveAspectRatio="none">
+          <path fill="#05040a"
+            d="M0 24 V14 q3 -6 6 0 q3 -7 6 -1 q3 -6 6 0 q3 -7 6 -1 q3 -6 6 0 q3 -7 6 -1 q3 -6 6 0 q3 -7 6 -1 q3 -6 6 0 q3 -7 6 -1 q3 -6 6 0 q3 -7 6 -1 q3 -6 6 0 q3 -7 6 -1 q3 -6 6 0 q3 -7 6 -1 q3 -6 6 0 V24 Z" />
+        </svg>
+        {PHONE_LIGHTS.map((p, i) => (
+          <span key={i} className="phone"
+            style={{ left: `${p.left}%`, animationDelay: `${p.delay}s`, animationDuration: `${p.dur}s` }} />
+        ))}
+        </div>
       </div>
 
       {done && (

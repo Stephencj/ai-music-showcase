@@ -10,7 +10,7 @@ import CropModal from "./CropModal";
 import { modelsFor } from "./models";
 import {
   type Member, type BodyType, type Part, type Swatch, type Shape,
-  PARTS, PART_ICON, SKINS, COLORS, HAIR_COLORS,
+  PARTS, PART_ICON, SKINS, COLORS, HAIR_COLORS, EYE_COLORS,
   HAIR, HATS, GLASSES, TOPS, BOTTOMS, SHOES, ACCESSORIES, FACIAL_HAIR, MAKEUP, defaultMember,
 } from "./wardrobe";
 import { exportBand, exportBandUrl, importBand } from "./canonical";
@@ -25,6 +25,7 @@ const CATS: Cat[] = [
   { id: "hair", label: "Hair", icon: "💇", shapes: HAIR, shapeKey: "hair", colors: HAIR_COLORS, colorKey: "hairColor" },
   { id: "hat", label: "Hat", icon: "🎩", shapes: HATS, shapeKey: "hat", colors: COLORS, colorKey: "hatColor" },
   { id: "glasses", label: "Glasses", icon: "👓", shapes: GLASSES, shapeKey: "glasses" },
+  { id: "eyes", label: "Eyes", icon: "👁", shapes: [], shapeKey: "eyeColor", colors: EYE_COLORS, colorKey: "eyeColor" },
   { id: "makeup", label: "Makeup", icon: "💄", shapes: MAKEUP, shapeKey: "makeup" },
   { id: "beard", label: "Beard", icon: "🧔", shapes: FACIAL_HAIR, shapeKey: "facialHair", colors: HAIR_COLORS, colorKey: "hairColor" },
   { id: "top", label: "Top", icon: "👕", shapes: TOPS, shapeKey: "top", colors: COLORS, colorKey: "topColor", photo: true },
@@ -286,16 +287,24 @@ export default function DressUp({ members, onChange, onClose, onPerform, hideClo
                   {cur.shirtPhoto && <button className="du-photo-clear" onClick={() => patch({ shirtPhoto: undefined })}>Remove</button>}
                 </div>
               )}
-              {category.colors && category.colorKey && (
+              {category.colors && category.colorKey && (() => {
+                // eyeColor stores the raw #hex (matching Figure's iris); every
+                // other palette stores a swatch id. Compare/patch accordingly.
+                const byHex = category.colorKey === "eyeColor";
+                return (
                 <div className="du-colors">
-                  {category.colors.map((sw) => (
+                  {category.colors.map((sw) => {
+                    const val = byHex ? sw.hex : sw.id;
+                    return (
                     <button key={sw.id} title={sw.name}
-                      className={"du-color" + (cur[category.colorKey!] === sw.id ? " on" : "")}
+                      className={"du-color" + (cur[category.colorKey!] === val ? " on" : "")}
                       style={{ background: sw.hex }}
-                      onClick={() => patch({ [category.colorKey!]: sw.id } as Partial<Member>, `${category.id}c:${sw.id}`)} />
-                  ))}
+                      onClick={() => patch({ [category.colorKey!]: val } as Partial<Member>, `${category.id}c:${sw.id}`)} />
+                    );
+                  })}
                 </div>
-              )}
+                );
+              })()}
             </div>
           )}
         </div>

@@ -1,0 +1,141 @@
+/* ── Concert stage: a pseudo-3D, depth-staged, lit performance scene ─────────
+   Pure CSS/SVG (no three.js). Layered from back to front:
+     backdrop haze → sweeping spotlight cones → perspective stage floor →
+     depth-staggered band (Figure per member) → glow reflections → crowd.
+   All selectors are scoped under `.concert-screen` so they out-specify the
+   base `.show-*` rules in styles.css regardless of import order.          */
+
+.show-screen.concert-screen {
+  background:
+    radial-gradient(140% 90% at 50% -10%, color-mix(in srgb, var(--mood, #7c3aed) 42%, #000) 0%, #08070f 62%, #050409 100%);
+  perspective: 1200px;
+}
+
+/* Atmospheric haze / hanging light glow at the very back */
+.concert-haze {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0; overflow: hidden;
+}
+.concert-haze::before {
+  content: ""; position: absolute; left: 50%; top: -8%; width: 120vw; height: 60vh;
+  transform: translateX(-50%);
+  background: radial-gradient(60% 70% at 50% 0%, color-mix(in srgb, var(--mood,#7c3aed) 55%, transparent) 0%, transparent 70%);
+  opacity: 0.55; filter: blur(20px);
+  animation: hazePulse 9s ease-in-out infinite;
+}
+@keyframes hazePulse { 0%,100% { opacity: 0.4; } 50% { opacity: 0.7; } }
+
+/* ── Sweeping spotlight cones ───────────────────────────────────────────── */
+.concert-spots { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
+.concert-spots i {
+  position: absolute; top: -14%; left: 50%; width: 40vw; height: 128vh;
+  transform-origin: top center;
+  clip-path: polygon(45% 0, 55% 0, 100% 100%, 0% 100%);
+  filter: blur(8px); opacity: 0.42; mix-blend-mode: screen;
+  will-change: transform, opacity;
+}
+.concert-spots i:nth-child(1) {
+  background: linear-gradient(to bottom, var(--mood, #7c3aed) 0%, transparent 60%);
+  animation: sweepA 8s ease-in-out infinite, spotPulse 3.1s ease-in-out infinite;
+}
+.concert-spots i:nth-child(2) {
+  background: linear-gradient(to bottom, #f472b6 0%, transparent 60%);
+  animation: sweepB 9.5s ease-in-out infinite, spotPulse 2.6s ease-in-out infinite;
+  animation-delay: -1.2s, -0.4s;
+}
+.concert-spots i:nth-child(3) {
+  background: linear-gradient(to bottom, #38bdf8 0%, transparent 60%);
+  animation: sweepC 7s ease-in-out infinite, spotPulse 3.6s ease-in-out infinite;
+  animation-delay: -3s, -1s;
+}
+.concert-spots i:nth-child(4) {
+  background: linear-gradient(to bottom, #fde047 0%, transparent 58%);
+  width: 30vw; opacity: 0.3;
+  animation: sweepB 11s ease-in-out infinite reverse, spotPulse 4.2s ease-in-out infinite;
+  animation-delay: -5s, -2s;
+}
+@keyframes sweepA { 0%,100% { transform: translateX(-50%) rotate(-16deg); } 50% { transform: translateX(-50%) rotate(10deg); } }
+@keyframes sweepB { 0%,100% { transform: translateX(-50%) rotate(14deg); }  50% { transform: translateX(-50%) rotate(-12deg); } }
+@keyframes sweepC { 0%,100% { transform: translateX(-50%) rotate(-6deg); }  50% { transform: translateX(-50%) rotate(20deg); } }
+@keyframes spotPulse { 0%,100% { opacity: 0.42; } 50% { opacity: 0.16; } }
+
+/* ── Perspective stage floor (receding grid + mood wash + reflection) ────── */
+.concert-screen .show-stage { position: relative; isolation: isolate; }
+.stage-floor {
+  position: absolute; left: 50%; bottom: 0; z-index: 0;
+  width: 200%; height: 46%;
+  transform: translateX(-50%) perspective(560px) rotateX(64deg);
+  transform-origin: bottom center;
+  background:
+    linear-gradient(0deg, rgba(255,255,255,0.10) 0 2px, transparent 2px 66px),
+    linear-gradient(90deg, rgba(255,255,255,0.07) 0 2px, transparent 2px 66px),
+    linear-gradient(to top, color-mix(in srgb, var(--mood,#7c3aed) 46%, #04030a) 0%, #04030a 78%);
+  background-size: 100% 66px, 66px 100%, 100% 100%;
+  -webkit-mask-image: radial-gradient(90% 120% at 50% 100%, #000 45%, transparent 88%);
+          mask-image: radial-gradient(90% 120% at 50% 100%, #000 45%, transparent 88%);
+  animation: floorScroll 6s linear infinite;
+}
+.stage-floor::after {   /* hot glow line at the front lip of the stage */
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4px;
+  background: color-mix(in srgb, var(--mood,#7c3aed) 80%, #fff);
+  filter: blur(2px); opacity: 0.8;
+}
+@keyframes floorScroll { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 0 66px, 0 0, 0 0; } }
+
+/* ── Depth-staggered band ───────────────────────────────────────────────── */
+.concert-screen .show-band {
+  position: relative; z-index: 2; gap: clamp(2px, 2vw, 18px);
+  align-items: flex-end; flex-wrap: nowrap; padding: 0 12px;
+  animation: bandParallax 12s ease-in-out infinite;
+}
+@keyframes bandParallax { 0%,100% { transform: translateX(-8px); } 50% { transform: translateX(8px); } }
+
+.concert-screen .show-member {
+  /* depth (0 = front/near, 1 = back/far) drives dimming, blur & stacking.
+     Scale/translate for depth + bob are set inline (they must combine).   */
+  filter: brightness(calc(1 - var(--depth, 0) * 0.38))
+          saturate(calc(1 - var(--depth, 0) * 0.25))
+          blur(calc(var(--depth, 0) * 0.7px));
+  opacity: calc(1 - var(--depth, 0) * 0.14);
+  will-change: transform;
+}
+.concert-screen .show-member .duf {
+  /* grounded contact shadow that tightens for far (smaller) members */
+  filter: drop-shadow(0 calc(14px - var(--depth,0) * 8px) calc(16px - var(--depth,0) * 8px) rgba(0,0,0,0.55));
+}
+.concert-screen .show-part {
+  top: -10px; font-size: 16px;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--mood,#7c3aed) 70%, #fff));
+}
+
+/* Glow reflection pool under the band (enhances the base .show-floor) */
+.concert-screen .show-floor {
+  position: relative; z-index: 1; height: 30px; margin-top: -10px;
+  filter: blur(1px);
+  animation: poolBreath 3.4s ease-in-out infinite;
+}
+@keyframes poolBreath { 0%,100% { opacity: 0.55; } 50% { opacity: 0.8; } }
+
+/* ── Crowd silhouette + phone lights ────────────────────────────────────── */
+.concert-crowd { position: absolute; left: 0; right: 0; bottom: 0; height: 96px; z-index: 3; pointer-events: none; }
+.concert-crowd svg { position: absolute; bottom: 0; left: 0; width: 100%; height: 100%; display: block; }
+.concert-crowd .phone {
+  position: absolute; bottom: 34px; width: 4px; height: 4px; border-radius: 50%;
+  background: #fff; box-shadow: 0 0 6px 2px rgba(255,255,255,0.8);
+  animation: twinkle 2.4s ease-in-out infinite;
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.15; transform: translateY(0) scale(0.8); }
+  50%      { opacity: 1;    transform: translateY(-4px) scale(1.1); }
+}
+
+/* ── Reduced motion: calm the scene ─────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .concert-haze::before,
+  .concert-spots i,
+  .stage-floor,
+  .concert-screen .show-band,
+  .concert-screen .show-floor,
+  .concert-crowd .phone,
+  .concert-screen .show-member.live { animation: none !important; }
+  .concert-spots i { opacity: 0.3; }
+}

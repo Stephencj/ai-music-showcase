@@ -45,6 +45,19 @@ export const SKINS: Swatch[] = [
   { id: "sk6", name: "Deep", hex: "#5a3620" },
 ];
 
+// Iris colours for the eye picker. These store the raw #hex on member.eyeColor
+// (not a swatch id like the other palettes), matching Figure's iris rendering.
+export const EYE_COLORS: Swatch[] = [
+  { id: "eye-brown", name: "Brown", hex: "#4a3524" },
+  { id: "eye-amber", name: "Amber", hex: "#8a5a2b" },
+  { id: "eye-hazel", name: "Hazel", hex: "#6b5334" },
+  { id: "eye-green", name: "Green", hex: "#3f7d4f" },
+  { id: "eye-blue", name: "Blue", hex: "#3f6fb0" },
+  { id: "eye-gray", name: "Gray", hex: "#6a7078" },
+  { id: "eye-violet", name: "Violet", hex: "#7a5aa8" },
+  { id: "eye-pink", name: "Pink", hex: "#c26b8a" },
+];
+
 export const HAIR_COLORS: Swatch[] = [
   { id: "h-black", name: "Black", hex: "#211f26" },
   { id: "h-brown", name: "Brown", hex: "#5a3318" },
