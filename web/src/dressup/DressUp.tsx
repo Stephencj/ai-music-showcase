@@ -13,6 +13,7 @@ import {
   PARTS, PART_ICON, SKINS, COLORS, HAIR_COLORS,
   HAIR, HATS, GLASSES, TOPS, BOTTOMS, SHOES, ACCESSORIES, FACIAL_HAIR, MAKEUP, defaultMember,
 } from "./wardrobe";
+import { exportBand, exportBandUrl, importBand } from "./canonical";
 
 interface Cat {
   id: string; label: string; icon: string;
@@ -68,6 +69,32 @@ export default function DressUp({ members, onChange, onClose, onPerform, hideClo
   const triedRef = useRef<Set<string>>(loadTried());
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [photoSrc, setPhotoSrc] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);   // tiny export/import confirmation
+  const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 1800); };
+
+  // Share band members with the wider character universe via canonical JSON.
+  const exportChars = async () => {
+    const json = exportBand(members);
+    try { await navigator.clipboard.writeText(json); flash("Band copied ✓"); }
+    catch { window.prompt("Copy your band JSON:", json); }
+  };
+  // One-click: copy a link that opens the game with this band pre-loaded.
+  const playInGame = async () => {
+    const url = exportBandUrl(members);
+    try { await navigator.clipboard.writeText(url); flash("Game link copied ✓"); }
+    catch { window.prompt("Copy this game link:", url); }
+  };
+  const importChars = () => {
+    const json = window.prompt("Paste character JSON to add to your band:");
+    if (!json) return;
+    try {
+      const added = importBand(json);
+      if (!added.length) { flash("Nothing to import"); return; }
+      onChange([...members, ...added]);
+      setSel(members.length);
+      flash(`Added ${added.length} ✓`);
+    } catch { flash("Bad JSON ✕"); }
+  };
 
   const cur = members[sel] || null;
   const category = CATS.find((c) => c.id === cat)!;
@@ -155,6 +182,10 @@ export default function DressUp({ members, onChange, onClose, onPerform, hideClo
       <div className="du-top">
         <span className="du-title">🎨 Dress Up</span>
         <span className={"du-stars" + (pop ? " pop" : "")}>⭐ {stars} · {level}</span>
+        {toast && <span className="du-stars">{toast}</span>}
+        <button className="du-x" title="Copy game link (play in game)" onClick={playInGame}>🎮</button>
+        <button className="du-x" title="Export band" onClick={exportChars}>⬆️</button>
+        <button className="du-x" title="Import characters" onClick={importChars}>⬇️</button>
         {!hideClose && <button className="du-x" onClick={onClose}>✕</button>}
       </div>
 

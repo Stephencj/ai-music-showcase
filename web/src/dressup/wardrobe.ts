@@ -225,6 +225,7 @@ export interface Member {
   body: BodyType;        // gender (girl/boy) — kept for back-compat
   model?: string;        // standard body model id (see models.ts); drives the fitted silhouette
   skin: string;
+  eyeColor?: string;     // iris colour (#hex); defaults to brown "#4a3524"
   hair: string; hairColor: string;
   hat: string; hatColor: string;
   glasses: string;
@@ -245,6 +246,7 @@ export function defaultMember(part: Part, name: string, body: BodyType = "girl")
     id: newId(), name, part, body,
     model: body === "boy" ? "boy_slim" : "girl_slim",
     skin: "sk2",
+    eyeColor: "#4a3524",
     hair: "short", hairColor: "h-brown",
     hat: "none", hatColor: "pink",
     glasses: "none",
@@ -271,6 +273,7 @@ export function normalizeMember(m: Record<string, unknown> | null | undefined): 
     model: (typeof o.model === "string" && MODEL_IDS.includes(o.model))
       ? o.model : d.model,
     skin: ok(SKINS, o.skin, d.skin),
+    eyeColor: (typeof o.eyeColor === "string" && /^#[0-9a-fA-F]{6}$/.test(o.eyeColor)) ? o.eyeColor : d.eyeColor,
     hair: ok(HAIR, o.hair, d.hair), hairColor: ok(HAIR_COLORS, o.hairColor, d.hairColor),
     hat: ok(HATS, o.hat, d.hat), hatColor: ok(COLORS, o.hatColor, d.hatColor),
     glasses: ok(GLASSES, o.glasses ?? o.shades, d.glasses),

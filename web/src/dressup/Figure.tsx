@@ -579,6 +579,10 @@ function AccessoryFront({ id, color, m }: { id: string; color: string; m: Model 
 export default function Figure({ member, size = 200 }: { member: Member; size?: number }) {
   const skin = skinHex(member);
   const hcol = hairHex(member);
+  // Per-character iris colour (round-trips via the canonical schema's eyes.color);
+  // pupil is a darkened shade of the iris so light eyes still read.
+  const iris = member.eyeColor || "#4a3524";
+  const pupil = darker(iris, 0.45);
   const m = resolveModel(member.model, member.body === "boy" ? "boy" : "girl");
   const a = anchors(m);
   const clipId = `chest-${member.id}`;
@@ -668,10 +672,10 @@ export default function Figure({ member, size = 200 }: { member: Member; size?: 
         <g>
           <ellipse cx="85" cy={EYE_Y} rx="7.4" ry="8.6" fill="#fdfdff" />
           <ellipse cx="115" cy={EYE_Y} rx="7.4" ry="8.6" fill="#fdfdff" />
-          <circle cx="85" cy={EYE_Y + 1} r="5.9" fill="#4a3524" />
-          <circle cx="115" cy={EYE_Y + 1} r="5.9" fill="#4a3524" />
-          <circle cx="85" cy={EYE_Y + 1.6} r="3" fill="#20160e" />
-          <circle cx="115" cy={EYE_Y + 1.6} r="3" fill="#20160e" />
+          <circle cx="85" cy={EYE_Y + 1} r="5.9" fill={iris} />
+          <circle cx="115" cy={EYE_Y + 1} r="5.9" fill={iris} />
+          <circle cx="85" cy={EYE_Y + 1.6} r="3" fill={pupil} />
+          <circle cx="115" cy={EYE_Y + 1.6} r="3" fill={pupil} />
           <circle cx="87.4" cy={EYE_Y - 2.4} r="2.3" fill="#fff" />
           <circle cx="117.4" cy={EYE_Y - 2.4} r="2.3" fill="#fff" />
           <circle cx="82.6" cy={EYE_Y + 3.4} r="1.1" fill="#fff" opacity="0.85" />
