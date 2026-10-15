@@ -1,0 +1,344 @@
+name: Vamp_A
+tempo: 72.0
+time_signature:
+- 4
+- 4
+bars: 16
+duration_seconds: 53.333333333333336
+created: '2026-08-22T16:42:42'
+instruments:
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 96
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 243
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 400
+- name: Electric Guitar (clean)
+  program: 27
+  is_drum: false
+  n_notes: 4
+n_notes: 743
+spec:
+  genre: funk_full_song
+  key: C
+  scale: major
+  tempo: 72.0
+  time_signature:
+  - 4
+  - 4
+  seed: 646896
+  swing: null
+  instruments:
+  - electric_bass
+  - piano
+  - drum_kit
+  - electric_guitar_clean
+  section_presets:
+    intro: soul_motown_full
+    bridge: soul_motown_full
+    outro: soul_motown_full
+    drop: jazz_modal_full
+    breakdown: jazz_modal_full
+    prechorus: jazz_modal_full
+    chorus: pop_full_song
+    solo: pop_full_song
+  section_overrides:
+    chorus:
+      progression:
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+      - I
+      - vi
+      - IV
+      - V
+  sections:
+  - start_bar: 0
+    end_bar: 3
+    label: Intro
+    role: intro
+    preset_id: soul_motown_full
+  - start_bar: 4
+    end_bar: 19
+    label: Vamp A
+    role: verse
+  - start_bar: 20
+    end_bar: 27
+    label: Chorus
+    role: chorus
+    preset_id: pop_full_song
+  - start_bar: 28
+    end_bar: 35
+    label: Bridge
+    role: bridge
+    preset_id: soul_motown_full
+  - start_bar: 36
+    end_bar: 51
+    label: Outro vamp
+    role: outro
+    preset_id: soul_motown_full
+  progression:
+  - root_pc: 0
+    quality: maj
+    symbol: I
+    start_bar: 0.0
+    end_bar: 2.0
+  - root_pc: 9
+    quality: min
+    symbol: vi
+    start_bar: 2.0
+    end_bar: 4.0
+  - root_pc: 0
+    quality: min7
+    symbol: i7
+    start_bar: 4.0
+    end_bar: 6.0
+  - root_pc: 5
+    quality: '7'
+    symbol: IV7
+    start_bar: 6.0
+    end_bar: 8.0
+  - root_pc: 7
+    quality: min7
+    symbol: v7
+    start_bar: 8.0
+    end_bar: 10.0
+  - root_pc: 0
+    quality: min7
+    symbol: i7
+    start_bar: 10.0
+    end_bar: 12.0
+  - root_pc: 5
+    quality: '7'
+    symbol: IV7
+    start_bar: 12.0
+    end_bar: 14.0
+  - root_pc: 7
+    quality: min7
+    symbol: v7
+    start_bar: 14.0
+    end_bar: 16.0
+  - root_pc: 0
+    quality: min7
+    symbol: i7
+    start_bar: 16.0
+    end_bar: 18.0
+  - root_pc: 5
+    quality: '7'
+    symbol: IV7
+    start_bar: 18.0
+    end_bar: 20.0
+  - root_pc: 0
+    quality: maj
+    symbol: I
+    start_bar: 20.0
+    end_bar: 22.0
+  - root_pc: 9
+    quality: min
+    symbol: vi
+    start_bar: 22.0
+    end_bar: 24.0
+  - root_pc: 5
+    quality: maj
+    symbol: IV
+    start_bar: 24.0
+    end_bar: 25.0
+  - root_pc: 7
+    quality: maj
+    symbol: V
+    start_bar: 25.0
+    end_bar: 26.0
+  - root_pc: 0
+    quality: maj
+    symbol: I
+    start_bar: 26.0
+    end_bar: 28.0
+  - root_pc: 0
+    quality: maj
+    symbol: I
+    start_bar: 28.0
+    end_bar: 28.5
+  - root_pc: 9
+    quality: min
+    symbol: vi
+    start_bar: 28.5
+    end_bar: 29.0
+  - root_pc: 5
+    quality: maj
+    symbol: IV
+    start_bar: 29.0
+    end_bar: 30.0
+  - root_pc: 7
+    quality: maj
+    symbol: V
+    start_bar: 30.0
+    end_bar: 31.0
+  - root_pc: 0
+    quality: maj
+    symbol: I
+    start_bar: 31.0
+    end_bar: 31.5
+  - root_pc: 9
+    quality: min
+    symbol: vi
+    start_bar: 31.5
+    end_bar: 32.0
+  - root_pc: 5
+    quality: maj
+    symbol: IV
+    start_bar: 32.0
+    end_bar: 33.0
+  - root_pc: 7
+    quality: maj
+    symbol: V
+    start_bar: 33.0
+    end_bar: 34.0
+  - root_pc: 0
+    quality: maj
+    symbol: I
+    start_bar: 34.0
+    end_bar: 34.5
+  - root_pc: 9
+    quality: min
+    symbol: vi
+    start_bar: 34.5
+    end_bar: 35.0
+  - root_pc: 5
+    quality: maj
+    symbol: IV
+    start_bar: 35.0
+    end_bar: 36.0
+  - root_pc: 0
+    quality: maj
+    symbol: I
+    start_bar: 36.0
+    end_bar: 38.0
+  - root_pc: 9
+    quality: min
+    symbol: vi
+    start_bar: 38.0
+    end_bar: 40.0
+  - root_pc: 5
+    quality: maj
+    symbol: IV
+    start_bar: 40.0
+    end_bar: 41.0
+  - root_pc: 7
+    quality: maj
+    symbol: V
+    start_bar: 41.0
+    end_bar: 42.0
+  - root_pc: 0
+    quality: maj
+    symbol: I
+    start_bar: 42.0
+    end_bar: 44.0
+  - root_pc: 9
+    quality: min
+    symbol: vi
+    start_bar: 44.0
+    end_bar: 46.0
+  - root_pc: 5
+    quality: maj
+    symbol: IV
+    start_bar: 46.0
+    end_bar: 47.0
+  - root_pc: 7
+    quality: maj
+    symbol: V
+    start_bar: 47.0
+    end_bar: 48.0
+  - root_pc: 0
+    quality: maj
+    symbol: I
+    start_bar: 48.0
+    end_bar: 50.0
+  - root_pc: 9
+    quality: min
+    symbol: vi
+    start_bar: 50.0
+    end_bar: 52.0
+  section:
+    start_bar: 4
+    end_bar: 19
+tags:
+- funk_full_song 646896

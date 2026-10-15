@@ -1,0 +1,38 @@
+name: Make_a_song_"Kentucky_Boots_Faggot"
+tempo: 112.0000597333652
+time_signature:
+- 4
+- 4
+bars: 80
+duration_seconds: 171.42847999999998
+created: '2026-08-03T19:46:06'
+instruments:
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 216
+- name: Acoustic Guitar
+  program: 25
+  is_drum: false
+  n_notes: 1154
+- name: Electric Guitar (clean)
+  program: 27
+  is_drum: false
+  n_notes: 1004
+- name: Lead Vocal
+  program: 4
+  is_drum: false
+  n_notes: 292
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 1288
+- name: Lead Guitar
+  program: 30
+  is_drum: false
+  n_notes: 208
+- name: Lead Guitar (dbl)
+  program: 30
+  is_drum: false
+  n_notes: 16
+n_notes: 4178

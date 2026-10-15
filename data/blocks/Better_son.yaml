@@ -1,0 +1,30 @@
+name: Better_son
+tempo: 104.00001386666852
+time_signature:
+- 4
+- 4
+bars: 80
+duration_seconds: 184.61535999999998
+created: '2026-08-03T19:45:56'
+instruments:
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 360
+- name: Piano
+  program: 0
+  is_drum: false
+  n_notes: 1044
+- name: Electric Guitar (clean)
+  program: 27
+  is_drum: false
+  n_notes: 1224
+- name: Lead Vocal
+  program: 4
+  is_drum: false
+  n_notes: 305
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 1485
+n_notes: 4418

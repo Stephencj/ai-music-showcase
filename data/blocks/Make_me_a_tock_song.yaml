@@ -1,0 +1,34 @@
+name: Make_me_a_tock_song
+tempo: 118.0001337334849
+time_signature:
+- 4
+- 4
+bars: 80
+duration_seconds: 162.71168
+created: '2026-08-03T19:38:56'
+instruments:
+- name: Electric Bass
+  program: 33
+  is_drum: false
+  n_notes: 424
+- name: Electric Piano
+  program: 4
+  is_drum: false
+  n_notes: 1252
+- name: Brass Section
+  program: 61
+  is_drum: false
+  n_notes: 1350
+- name: Lead Vocal
+  program: 4
+  is_drum: false
+  n_notes: 287
+- name: Drum kit
+  program: 0
+  is_drum: true
+  n_notes: 778
+- name: Backing Vocals
+  program: 52
+  is_drum: false
+  n_notes: 637
+n_notes: 4728
