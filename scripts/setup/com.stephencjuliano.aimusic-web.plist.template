@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The Music Producer web app (vite preview of web/dist) on port 5176.
+     Kept here so the live ~/Library/LaunchAgents copy is under version control:
+     install with  sed "s|@PROJECT_ROOT@|$PWD|g" scripts/setup/com.stephencjuliano.aimusic-web.plist.template
+       > ~/Library/LaunchAgents/com.stephencjuliano.aimusic-web.plist
+     Port 5176, not 5174: 5174 is Botanic Manic's. -->
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>AI_MUSIC_BACKEND</key>
+		<string>http://localhost:7860</string>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+	</dict>
+	<key>KeepAlive</key>
+	<dict>
+		<key>NetworkState</key>
+		<true/>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>Label</key>
+	<string>com.stephencjuliano.aimusic-web</string>
+	<key>ProcessType</key>
+	<string>Interactive</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/node</string>
+		<string>@PROJECT_ROOT@/web/node_modules/vite/bin/vite.js</string>
+		<string>preview</string>
+		<string>--host</string>
+		<string>--port</string>
+		<string>5176</string>
+		<string>--strictPort</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>@PROJECT_ROOT@/logs/web.err</string>
+	<key>StandardOutPath</key>
+	<string>@PROJECT_ROOT@/logs/web.out</string>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>WorkingDirectory</key>
+	<string>@PROJECT_ROOT@/web</string>
+</dict>
+</plist>

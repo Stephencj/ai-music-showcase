@@ -31,12 +31,13 @@ export default defineConfig({
       },
     },
   },
-  // `vite preview` serves the built dist (this is what the :5174 cloudflared
-  // tunnel points at). Proxy /api to the Python backend so the deployed PWA
-  // talks to the real engine same-origin.
+  // `vite preview` serves the built dist. Proxy /api to the Python backend so
+  // the deployed PWA talks to the real engine same-origin. Port 5176: 5174 is
+  // Botanic Manic's (it shared the number until 2026-10-26, so whichever bound
+  // first answered there, cloudflared's app.botanicmanics.com included).
   preview: {
     host: true,          // bind 0.0.0.0 so the LAN / Tailscale phone can reach it
-    port: 5174,
+    port: 5176,
     strictPort: true,
     // Reached only through authenticated tunnels (cloudflared app.botanicmanics.com)
     // and the Tailscale tailnet, so accept any Host header. Without this, newer
