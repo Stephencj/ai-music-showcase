@@ -29,7 +29,6 @@ import numpy as np
 from src.daw_integration.generic.midi_export import MidiExporter
 
 from .sfz import Note, SampleCache, SfzInstrument, SfzRenderer, Vibrato, load_sfz
-from .brushes import BRUSH_SWISH, BRUSH_TAP, render_brushes
 from .lead_voices import LeadLayer, voice
 from .synth_lead import LEAD_PATCHES, render_lead
 from .synth import DEFAULT_SAMPLE_RATE, FluidSynthRenderer, RenderedStems, TrackStem
@@ -163,6 +162,11 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
 )
 
 
+# GM drum kit 40: the General MIDI soundfont's recorded brush kit (taps on
+# the snare keys). Drum tracks on this program render through FluidSynth.
+BRUSH_KIT = 40
+
+
 def instrument_dir() -> Path:
     env = os.environ.get("AI_MUSIC_INSTRUMENTS")
     return Path(env) if env else DEFAULT_INSTRUMENT_DIR
@@ -171,6 +175,8 @@ def instrument_dir() -> Path:
 def sampled_for(program: int, is_drum: bool, root: Optional[Path] = None) -> Optional[SampledInstrument]:
     """The sampled library for a track, when it's installed."""
     root = root or instrument_dir()
+    if is_drum and program == BRUSH_KIT:
+        return None                           # the soundfont's recorded brush kit
     for inst in SAMPLED_INSTRUMENTS:
         if inst.is_drum != is_drum:
             continue
@@ -401,17 +407,8 @@ class SampledRenderer:
                 sfz = self._instrument(inst)
                 for region in sfz.regions:
                     region.seq_counter = 0
-                brush = [n for n in notes if n.pitch in (BRUSH_SWISH, BRUSH_TAP)] if track.is_drum else []
-                kit_notes = [n for n in notes if n not in brush] if brush else notes
                 audio = SfzRenderer(sfz, self.sample_rate, cache=SampleCache(), seed=self.seed + index,
-                                    sample_tune=self._tuner(inst)).render(kit_notes)
-                if brush:                             # synthesised brush taps and swishes over the kit
-                    b = render_brushes(brush, self.sample_rate, seed=self.seed + index)
-                    n_out = max(audio.shape[1], b.shape[1])
-                    mix = np.zeros((2, n_out), dtype=np.float32)
-                    mix[:, :audio.shape[1]] += audio
-                    mix[:, :b.shape[1]] += b
-                    audio = mix
+                                    sample_tune=self._tuner(inst)).render(notes)
             if inst.eq and audio.size:
                 audio = _voice_eq(audio, inst.eq, self.sample_rate)
             peak = float(np.abs(audio).max()) if audio.size else 0.0

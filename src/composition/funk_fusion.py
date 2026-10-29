@@ -107,42 +107,46 @@ def _arrangement(ctx: TechniqueContext) -> set[str]:
     return {a.strip() for a in (getattr(ctx, "arrangement", "") or "").replace("+", ",").split(",") if a.strip()}
 
 
-BRUSH_SWISH, BRUSH_TAP = 24, 25          # synthesised in render/brushes.py
+BRUSH_KIT = 40                           # GM drum kit 40: the soundfont's recorded brushes
+BRUSH_TRACK = "Brushes"
 
 
-def _brushify(notes: list[NoteEvent], ctx: TechniqueContext, clock: "_Clock", feel: str) -> list[NoteEvent]:
-    """Play any groove with brushes: snare and rim hits become brush taps
-    (ghosts stay ghosts), the hats move to a soft foot "chick" on the beats,
-    open hats drop, crashes and toms soften, and a swish sweeps each half bar."""
+def _brushify(notes: list[NoteEvent], clock: "_Clock") -> list[NoteEvent]:
+    """Play any groove with brushes (on the recorded brush kit): snare and rim
+    hits become brush taps (ghosts stay ghosts), hats soften with a foot
+    "chick" on 2 and 4, open hats drop, kick, crashes and toms soften. No
+    swirls."""
     out: list[NoteEvent] = []
     for n in notes:
         k, v = n.pitch, n.velocity
         if k in (SNARE, STICK):
-            out.append(NoteEvent(pitch=BRUSH_TAP, start=n.start, end=n.start + 0.12, velocity=min(127, int(v * 0.9) + 6)))
-        elif k in (CLOSED_HAT, PEDAL_HAT):
-            step = round((n.start / clock.step_len)) % 4
-            if step == 0 and round(n.start / clock.step_len) % 8 == 4:      # beats 2 and 4
-                out.append(NoteEvent(pitch=PEDAL_HAT, start=n.start, end=n.end, velocity=max(30, int(v * 0.6))))
+            out.append(NoteEvent(pitch=SNARE, start=n.start, end=n.start + 0.12, velocity=min(127, int(v * 0.9) + 6)))
+        elif k == CLOSED_HAT:
+            out.append(NoteEvent(pitch=CLOSED_HAT, start=n.start, end=n.end, velocity=max(28, int(v * 0.6))))
+            if round(n.start / clock.step_len) % 8 == 4:                    # beats 2 and 4
+                out.append(NoteEvent(pitch=PEDAL_HAT, start=n.start, end=n.end, velocity=max(30, int(v * 0.55))))
         elif k == OPEN_HAT:
             continue
         elif k in (CRASH, RIDE):
             out.append(NoteEvent(pitch=k, start=n.start, end=n.end, velocity=max(30, int(v * 0.55))))
         elif k in (TOM_HI, TOM_MID, TOM_LO):
             out.append(NoteEvent(pitch=k, start=n.start, end=n.end, velocity=max(30, int(v * 0.7))))
-        else:                                                              # kick
+        else:                                                              # kick, pedal hat
             out.append(NoteEvent(pitch=k, start=n.start, end=n.end, velocity=max(30, int(v * 0.85))))
-    for bar in range(ctx.bar_count):
-        if feel == "outro" and bar == ctx.bar_count - 1:
-            continue
-        for half in (0, 8):
-            t0 = clock.t(bar, half)
-            out.append(NoteEvent(pitch=BRUSH_SWISH, start=t0, end=t0 + clock.step_len * 7.5, velocity=72))
     return out
 
 
 def _emit_drums(midi, ctx: TechniqueContext, notes: list[NoteEvent], clock: "_Clock", feel: str) -> None:
     if "brushes" in _arrangement(ctx):
-        notes = _brushify(notes, ctx, clock, feel)
+        # Its own track on the brush kit (the routed kit's program would
+        # override it), so brushed and stick sections can share a score.
+        notes = _brushify(notes, clock)
+        for track in midi.tracks:
+            if track.name == BRUSH_TRACK and track.is_drum:
+                track.notes.extend(notes)
+                return
+        midi.add_notes(notes, track_name=BRUSH_TRACK, program=BRUSH_KIT, is_drum=True)
+        return
     _emit(midi, ctx, notes, name="Drums", program=0, is_drum=True)
 
 

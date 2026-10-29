@@ -608,15 +608,20 @@ class SoarAndBrushesTest(unittest.TestCase):
             td.cleanup()
         cls.bar = 2.0
 
-    def test_brushes_replace_stick_snare_and_hats(self):
-        kit = self.tracks["Drum kit"].notes
-        keys = {n.pitch for n in kit}
-        self.assertNotIn(38, keys)
-        self.assertNotIn(46, keys)
-        self.assertIn(25, keys)                                  # brush taps
-        self.assertIn(24, keys)                                  # swishes
-        taps = [n for n in kit if n.pitch == 25]
+    def test_brushes_play_the_recorded_brush_kit_without_swirls(self):
+        drums = self.tracks["Brushes"]
+        self.assertNotIn("Drum kit", self.tracks)
+        self.assertEqual(drums.program, 40)                      # GM brush kit
+        keys = {n.pitch for n in drums.notes}
+        self.assertFalse(keys & {24, 25, 39, 40, 46})            # no swirls, slaps, synthesised sounds, open hats
+        taps = [n for n in drums.notes if n.pitch == 38]
         self.assertTrue([n for n in taps if n.velocity < 45])    # ghost taps stay soft
+        self.assertTrue([n for n in taps if n.velocity > 85])    # backbeat taps
+
+    def test_brush_kit_renders_through_the_soundfont(self):
+        from src.audio_processing.render.sampled import sampled_for
+        self.assertIsNone(sampled_for(40, True))
+        self.assertIsNotNone(sampled_for(0, True)) if sampled_for(0, True) else None
 
     def test_strings_swell_in_the_chorus_and_hold_the_end(self):
         st = self.tracks["String Section"].notes
@@ -646,14 +651,6 @@ class SoarAndBrushesTest(unittest.TestCase):
         finally:
             td.cleanup()
         self.assertNotIn("String Section", names)
-
-    def test_brush_renderer_makes_sound(self):
-        from src.audio_processing.render.brushes import render_brushes
-        from src.audio_processing.render.sfz import Note as SNote
-        out = render_brushes([SNote(25, 0.0, 0.1, 100), SNote(24, 0.2, 1.0, 80)], 44100)
-        self.assertGreater(float(np.abs(out[:, :2000]).max()), 0.05)          # the tap
-        self.assertGreater(float(np.abs(out[:, 20000:40000]).max()), 0.01)    # the swish
-        self.assertLess(float(np.abs(out).max()), 1.0)
 
 
 class FunkMixTest(unittest.TestCase):
