@@ -76,19 +76,21 @@ def _riff_line(rng: np.random.Generator, count: int, start: int, end_on_tonic: b
     return out
 
 
-def riff_notes(ctx: TechniqueContext, bars: tuple[int, ...]) -> list[tuple[int, int, int, int]]:
+def riff_notes(ctx: TechniqueContext, bars: tuple[int, ...], feel: str = "intro") -> list[tuple[int, int, int, int]]:
     """The riff over the given section bars as (bar, step, length, semitones
     above the tonic). Each instrument places it in its own register.
 
-    A riff is two bars, a call and its answer, repeated over ``bars``."""
+    A riff is two bars, a call and its answer, repeated over ``bars``. A
+    one-bar turnaround or ending plays just the answer, which resolves."""
     rng = _shared_rng(ctx)
     rhythm = _RIFF_RHYTHMS[int(rng.integers(0, len(_RIFF_RHYTHMS)))]
     call = _riff_line(rng, len(rhythm), int(rng.choice((0, 1, 2))), end_on_tonic=False)
     answer_start = int(np.clip(round(np.mean([_PENTA.index(p % 12) if p % 12 in _PENTA else 2 for p in call])) + 1, 0, 5))
     answer = _riff_line(rng, len(rhythm), answer_start, end_on_tonic=True)
     out = []
+    answer_first = feel != "intro" and len(bars) == 1
     for n, bar in enumerate(bars):
-        line = call if n % 2 == 0 else answer
+        line = call if (n % 2 == 0) != answer_first else answer
         for (step, length), semis in zip(rhythm, line):
             out.append((bar, step, length, semis))
     return out
@@ -100,9 +102,9 @@ def riff_bars(ctx: TechniqueContext, feel: str) -> tuple[int, ...]:
     if feel == "intro":
         return tuple(range(n))                 # the tune opens on the riff
     if feel in HIGH_ROLES and n >= 4:
-        return (n - 2, n - 1)                  # turnaround into what's next
+        return (n - 1,)                        # one-bar turnaround into what's next
     if feel == "outro":
-        return tuple(range(max(0, n - 2)))     # riff, then the final hit
+        return tuple(range(max(0, n - 1)))     # riff, then the final hit
     return ()
 
 
@@ -124,7 +126,7 @@ def _drums(midi, ctx: TechniqueContext, feel: str) -> None:
     hits: list[tuple[int, float, int, float]] = []
     riff = riff_bars(ctx, feel)
     riff_steps: dict[int, list[tuple[int, int]]] = {}
-    for bar, step, length, _ in riff_notes(ctx, riff):
+    for bar, step, length, _ in riff_notes(ctx, riff, feel):
         riff_steps.setdefault(bar, []).append((step, length))
     high = feel in HIGH_ROLES
     kicks = _KICKS["high" if high else "bridge" if feel in ("bridge", "breakdown") else "verse"]
@@ -239,7 +241,7 @@ def _bass(midi, ctx: TechniqueContext, feel: str) -> None:
     bars = ctx.bar_count
     riff = riff_bars(ctx, feel)
     by_bar: dict[int, list] = {}
-    for bar, step, length, semis in riff_notes(ctx, riff):
+    for bar, step, length, semis in riff_notes(ctx, riff, feel):
         by_bar.setdefault(bar, []).append((step, length, semis))
     bank = _SLAP["high" if feel in HIGH_ROLES else "bridge" if feel in ("bridge", "breakdown") else "verse"]
     notes: list[NoteEvent] = []
@@ -342,7 +344,7 @@ def _horns(midi, ctx: TechniqueContext, feel: str) -> None:
     notes: list[NoteEvent] = []
     riff_set = set(riff)
     # The riff in octaves: trumpet line on top, trombone an octave below.
-    for bar, step, length, semis in riff_notes(ctx, riff):
+    for bar, step, length, semis in riff_notes(ctx, riff, feel):
         top = _fits(harm.tonic + semis + 60, 62, 77)
         s, v = _human(rng, clock.t(bar, step), 108 if length > 1 else 100, ms=3.0, vel_jitter=4.0)
         octaves = {"trumpet": (top,), "trombone": (top - 12,)}.get(part, (top, top - 12))
@@ -390,7 +392,7 @@ def _rhodes(midi, ctx: TechniqueContext, feel: str) -> None:
     bars = ctx.bar_count
     riff = riff_bars(ctx, feel)
     accents: dict[int, list[int]] = {}
-    for bar, step, length, _ in riff_notes(ctx, riff):
+    for bar, step, length, _ in riff_notes(ctx, riff, feel):
         if length >= 2 or step % 4 == 0:
             accents.setdefault(bar, []).append(step)
     notes: list[NoteEvent] = []
@@ -451,7 +453,7 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
     riff = riff_bars(ctx, feel)
     notes: list[NoteEvent] = []
     # The sax doubles the riff an octave above the trombone, with the trumpet.
-    for bar, step, length, semis in riff_notes(ctx, riff):
+    for bar, step, length, semis in riff_notes(ctx, riff, feel):
         p = _fits(harm.tonic + semis + 60, 62, 77)
         s, v = _human(rng, clock.t(bar, step), 104, ms=3.0, vel_jitter=4.0)
         notes.append(NoteEvent(pitch=p, start=s, end=s + clock.step_len * length * 0.85, velocity=v))

@@ -84,6 +84,60 @@ class FunkFusionTest(unittest.TestCase):
             td.cleanup()
 
 
+class OneBarRiffTest(unittest.TestCase):
+    """A tight 30 s cut: 1-bar riff intro, 1-bar turnaround, riff + hit ending."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.td = tempfile.TemporaryDirectory()
+        secs = build_sections(GENRE, ["intro", "verse", "chorus", "outro"], None,
+                              {"intro": {"bars": 1}, "verse": {"bars": 8},
+                               "chorus": {"bars": 8}, "outro": {"bars": 2}})
+        res = compose_song(genre=GENRE, sections=secs, seed=5, tempo=152,
+                           enabled_instruments=tuple(STYLES[GENRE].default_instruments),
+                           output_dir=Path(cls.td.name), skip_audio=True)
+        cls.tracks = {i.name: i for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments}
+        cls.bar = 4 * 60.0 / 152
+        cls.tonic_pc = 3                                   # Eb
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.td.cleanup()
+
+    def notes_in(self, name, bar):
+        return [n for n in self.tracks[name].notes
+                if bar * self.bar - 0.02 <= n.start < (bar + 1) * self.bar - 0.02]
+
+    def test_layout_is_nineteen_bars(self):
+        end = max(n.end for t in self.tracks.values() for n in t.notes)
+        self.assertLess(end, 19 * self.bar + 0.5)
+        self.assertTrue(self.notes_in("Drum kit", 18))
+
+    def test_riff_moments_are_one_bar_and_resolve(self):
+        # Bar 16 (the chorus's last) is the turnaround, bar 17 the outro riff:
+        # bass and sax together, the sax ending on the tonic.
+        for bar in (16, 17):
+            sax = self.notes_in("Alto Sax", bar)
+            bass = {round(n.start / (self.bar / 16)) for n in self.notes_in("Electric Bass", bar)}
+            self.assertTrue(sax)
+            self.assertGreater(len({round(n.start / (self.bar / 16)) for n in sax} & bass) / len(sax), 0.8)
+            self.assertEqual(sax[-1].pitch % 12, self.tonic_pc)
+        # The trumpet plays the riff as one line but stabs in two-note chords,
+        # so only bars 16 and 17 of the chorus/outro are riff bars.
+        def stacked(bar):
+            onsets = [round(n.start / (self.bar / 16)) for n in self.notes_in("Trumpet", bar)]
+            return any(onsets.count(o) > 1 for o in onsets)
+        self.assertTrue(stacked(15) or stacked(14))
+        self.assertFalse(stacked(16))
+        self.assertFalse(stacked(17))
+
+    def test_final_bar_is_one_band_hit(self):
+        hit = 18 * self.bar
+        for name, track in self.tracks.items():
+            late = [n for n in track.notes if n.start >= hit - 0.02]
+            self.assertTrue(all(abs(n.start - hit) < 0.03 for n in late), name)
+
+
 class FunkMixTest(unittest.TestCase):
     def test_profile_resolves_and_sax_leads_the_horns(self):
         profile = resolve_profile(GENRE)
