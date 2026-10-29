@@ -24,13 +24,14 @@ class LeadLayer:
     octave: int = 0
     db: float = 0.0
     drive_db: float = 0.0         # amp drive (guitar)
+    space: float = 0.0            # 0..1: this layer's own delay + big reverb (on top of the mix chain)
 
 
 @dataclass(frozen=True)
 class LeadVoice:
     label: str
     layers: tuple[LeadLayer, ...]
-    register: str = "synth"       # "synth" | "horn" | "guitar"
+    register: str = "synth"       # "synth" | "horn" | "guitar" | "guitar_high"
     gain_db: float = 0.0          # level-matches voices (sampled ones are peakier)
 
 
@@ -58,6 +59,16 @@ LEAD_VOICES: dict[str, LeadVoice] = {
     ), register="horn", gain_db=6.5),
     "guitar": LeadVoice("Electric guitar (Gretsch, fusion overdrive)", (
         LeadLayer("sfz", sfz="guitar_twang", sfz_short="guitar_staccato", drive_db=FUSION_DRIVE),
+    ), register="guitar", gain_db=2.5),
+    # The overdriven guitar an octave up, singing in a big space.
+    "guitar_high": LeadVoice("Overdriven guitar, an octave up, with delay + reverb", (
+        LeadLayer("sfz", sfz="guitar_twang", sfz_short="guitar_staccato", drive_db=FUSION_DRIVE, space=1.0),
+    ), register="guitar_high", gain_db=2.5),
+    # The guitar as it is, with the high, spacious one stacked an octave above.
+    "guitar_stack": LeadVoice("Overdriven guitar + the same an octave up in reverb", (
+        LeadLayer("sfz", sfz="guitar_twang", sfz_short="guitar_staccato", drive_db=FUSION_DRIVE),
+        LeadLayer("sfz", sfz="guitar_twang", sfz_short="guitar_staccato", drive_db=FUSION_DRIVE,
+                  octave=1, space=1.0, db=-3.0),
     ), register="guitar", gain_db=2.5),
     # Trumpet and overdriven guitar in unison: the horn's attack and body, the
     # guitar's singing sustain.

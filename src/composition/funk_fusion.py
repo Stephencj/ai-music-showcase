@@ -569,9 +569,16 @@ _LEAD_REGISTER = {
     # Trumpet's singing range (the horn-section and trumpet voices).
     "horn":   {"riff": (62, 77), "low": (62, 77), "high": (65, 81), "centre_low": 68, "centre_high": 73, "final": (67, 82)},
     "guitar": {"riff": (60, 76), "low": (60, 76), "high": (64, 81), "centre_low": 67, "centre_high": 72, "final": (64, 79)},
+    # An octave up, up to the guitar's top D (D6).
+    "guitar_high": {"riff": (72, 86), "low": (72, 86), "high": (74, 86), "centre_low": 79, "centre_high": 81, "final": (74, 86)},
 }
-# Lead voice → register (render/lead_voices.py names); unknown voices are synths.
-_VOICE_REGISTER = {"horns": "horn", "trumpet": "horn", "guitar": "guitar"}
+
+
+def _voice_register(name: str | None) -> str:
+    """The register a lead voice declares (one source of truth: the voice)."""
+    from src.audio_processing.render.lead_voices import voice
+    reg = voice(name).register
+    return reg if reg in _LEAD_REGISTER else "synth"
 RUN_INTO = ("verse", "prechorus", "bridge", "breakdown")
 # The transition run: 8ths speeding into 16ths, ending two 16ths before the
 # next section (the breath before its hit). (step, length in 16ths)
@@ -656,7 +663,7 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
     riff = riff_bars(ctx, feel)
     notes: list[NoteEvent] = []
     if synth:
-        reg_name = _VOICE_REGISTER.get(ctx.lead_voice or "", "synth")
+        reg_name = _voice_register(ctx.lead_voice)
     else:
         reg_name = "sax"
     reg = _LEAD_REGISTER[reg_name]

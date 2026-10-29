@@ -208,6 +208,21 @@ def _amp(audio: np.ndarray, drive_db: float, sample_rate: int) -> np.ndarray:
     return np.ascontiguousarray(np.asarray(out, dtype=np.float32).T)
 
 
+def _space(audio: np.ndarray, amount: float, sample_rate: int) -> np.ndarray:
+    """A lead-guitar space: a dotted-ish delay and a big, wide reverb, with
+    room for the tail."""
+    import pedalboard as pdb
+    tail = np.zeros((2, int(2.5 * sample_rate)), dtype=np.float32)
+    audio = np.concatenate([audio, tail], axis=1)
+    board = pdb.Pedalboard([
+        pdb.Delay(delay_seconds=0.29, feedback=0.3 * amount, mix=0.2 * amount),
+        pdb.Reverb(room_size=0.75, damping=0.4, wet_level=0.34 * amount,
+                   dry_level=1.0 - 0.25 * amount, width=1.0),
+    ])
+    out = board(audio.T.copy(), sample_rate=sample_rate)
+    return np.ascontiguousarray(np.asarray(out, dtype=np.float32).T)
+
+
 class SampledRenderer:
     """Per-track stems: SFZ where a library exists, FluidSynth elsewhere."""
 
@@ -261,6 +276,17 @@ class SampledRenderer:
         short_inst = self._sfz_by_id(layer.sfz_short) if layer.sfz_short else None
         if long_inst is None and short_inst is None:
             return None
+        # Notes an octave shift pushes past the instrument's top fold back
+        # down an octave rather than going silent.
+        top = max((r.hikey for i in (long_inst, short_inst) if i for r in i.regions), default=127)
+        bottom = min((r.lokey for i in (long_inst, short_inst) if i for r in i.regions), default=0)
+        folded = []
+        for n in shifted:
+            p = n.pitch
+            while p > top and p - 12 >= bottom:
+                p -= 12
+            folded.append(Note(p, n.start, n.end, n.velocity))
+        shifted = folded
         parts = []
         for inst, chosen in (
             (short_inst, [n for n in shifted if short_inst is not None and n.end - n.start < layer.short_below]),
@@ -280,6 +306,8 @@ class SampledRenderer:
             audio[:, :p.shape[1]] += p
         if layer.drive_db:
             audio = _amp(audio, layer.drive_db, self.sample_rate)
+        if layer.space:
+            audio = _space(audio, layer.space, self.sample_rate)
         return audio
 
     def _lead(self, notes: list[Note], index: int) -> np.ndarray:

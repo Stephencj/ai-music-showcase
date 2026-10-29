@@ -294,7 +294,7 @@ class LeadVoiceTest(unittest.TestCase):
     def test_voices(self):
         from src.audio_processing.render.lead_voices import LEAD_VOICES, voice
         self.assertTrue({"punch", "sonic", "ewi", "layered", "horns", "trumpet", "guitar",
-                         "trumpet_guitar"} <= set(LEAD_VOICES))
+                         "trumpet_guitar", "guitar_high", "guitar_stack"} <= set(LEAD_VOICES))
         blend = {(l.sfz, l.drive_db > 0) for l in LEAD_VOICES["trumpet_guitar"].layers}
         self.assertEqual(blend, {("trumpet_sus", False), ("guitar_twang", True)})
         self.assertIs(voice("sonic"), voice("punch"))                # the saved synth
@@ -313,6 +313,27 @@ class LeadVoiceTest(unittest.TestCase):
         third = spec[(freqs > 650) & (freqs < 670)].max()
         self.assertGreater(third / fund, 0.05)        # it really distorts, even from a quiet sample
         self.assertGreater(crest, 4.0)                # but isn't squared off into fuzz
+
+    def test_every_voice_register_is_known_to_the_composer(self):
+        from src.audio_processing.render.lead_voices import LEAD_VOICES
+        from src.composition.funk_fusion import _LEAD_REGISTER, _voice_register
+        for name, v in LEAD_VOICES.items():
+            self.assertIn(v.register, _LEAD_REGISTER, name)
+            self.assertEqual(_voice_register(name), v.register, name)
+
+    def test_octave_layers_fold_back_into_the_instruments_range(self):
+        from src.audio_processing.render.lead_voices import LeadLayer
+        from src.audio_processing.render.sfz import Note as SNote
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            gdir = root / "karoryfer.black-and-green-guitars" / "Programs"
+            gdir.mkdir(parents=True)
+            sf.write(str(gdir / "g.wav"), (0.5 * np.sin(2 * np.pi * 440 * np.arange(22050) / 44100)).astype(np.float32), 44100)
+            (gdir / "04-green_twang.sfz").write_text("<region> sample=g.wav lokey=40 hikey=86 pitch_keycenter=69")
+            r = sampled.SampledRenderer(root=root)
+            out = r._lead_layer(LeadLayer("sfz", sfz="guitar_twang", octave=1), [SNote(81, 0.0, 0.3, 100)], 0)
+            self.assertIsNotNone(out)                        # 93 is above the top: folds to 81, not silence
+            self.assertGreater(float(np.abs(out).max()), 0.05)
 
     def test_horn_voice_plays_lower_than_the_synth(self):
         def lead_median(voice_name):
