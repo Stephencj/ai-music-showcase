@@ -1788,6 +1788,7 @@ def run_video_score(req, progress, job_id: str) -> dict:
         chapters, duration=req.duration, hits=list(req.hits), genre=req.genre, seed=req.seed,
         base_tempo=req.base_tempo, lead_voice=req.lead_patch, hit_style=req.hit_style,
         curate=req.curate_hits, min_gap=req.min_hit_gap, offset=req.offset, arrangement=req.arrangement,
+        extra_instruments=list(req.extra_instruments),
         stops=[tuple(s) for s in req.stops], progress=progress)
     midi_path = job_dir / "score.mid"
     midi.build().write(str(midi_path))

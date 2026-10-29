@@ -100,8 +100,8 @@ class ComposeTest(unittest.TestCase):
         kit = {t.name: t for t in midi.tracks}["Drum kit"].notes
         first = [n for n in kit if n.start < plans[1].start - 0.05]
         second = [n for n in kit if n.start >= plans[1].start]
-        self.assertFalse([n for n in first if n.pitch == 38 and n.velocity < 45])     # calm: no ghosts
-        self.assertTrue([n for n in second if n.pitch == 38 and n.velocity < 45])     # pocket: ghosts
+        self.assertFalse([n for n in first if n.pitch == 46])                         # calm: no open hats
+        self.assertTrue([n for n in second if n.pitch == 46])                         # pocket: an open hat a phrase
 
     def test_merged_score_lands_chapters_and_hits_in_video_time(self):
         chapters = [Chapter(start=0.0, card=3.0, roles=("verse",), lead="synth_lead"),

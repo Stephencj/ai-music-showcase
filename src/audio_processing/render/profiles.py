@@ -115,6 +115,7 @@ _FUNK_FUSION = MixProfile(
         "chords":     {"gain_db": -6.5, "pan": -0.2},   # Rhodes chops sit under the horns
         "brass":      {"gain_db": -3.5, "pan": 0.0},    # short stabs need to punch
         "lead":       {"gain_db": -11.5, "pan": 0.0},   # the synth lead, centre
+        "strings":    {"gain_db": -6.0, "pan": 0.0, "stereo_widen": 0.35},
     },
     family_chains={"lead": "tight_lead"},               # dry and punchy like the band
     master_preset="loud",
@@ -124,6 +125,7 @@ _FUNK_FUSION = MixProfile(
         "synth":    {"gain_db": 0.0},                   # synth lead (family "lead")
         "trumpet":  {"pan": 0.35},
         "trombone": {"pan": 0.15},
+        "french horn": {"gain_db": -4.0, "pan": -0.25},  # a warm pad under the strings
     },
 )
 

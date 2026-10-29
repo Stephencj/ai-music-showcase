@@ -29,6 +29,7 @@ import numpy as np
 from src.daw_integration.generic.midi_export import MidiExporter
 
 from .sfz import Note, SampleCache, SfzInstrument, SfzRenderer, Vibrato, load_sfz
+from .brushes import BRUSH_SWISH, BRUSH_TAP, render_brushes
 from .lead_voices import LeadLayer, voice
 from .synth_lead import LEAD_PATCHES, render_lead
 from .synth import DEFAULT_SAMPLE_RATE, FluidSynthRenderer, RenderedStems, TrackStem
@@ -65,6 +66,19 @@ class SampledInstrument:
 
 
 SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
+    # Strings and French horn: VSCO 2 CE sustains (scripts/setup/make_vsco_sfz.py).
+    SampledInstrument(
+        id="string_section",
+        sfz="vsco2-ce-strings/strings_section_sus.sfz",
+        programs=(48, 49, 50, 51),            # string ensembles
+        auto_tune=True,
+    ),
+    SampledInstrument(
+        id="french_horn",
+        sfz="vsco2-ce-strings/french_horn_sus.sfz",
+        programs=(60,),
+        auto_tune=True,
+    ),
     # A lead guitar track (GM overdrive/distortion guitar) plays as the
     # stacked overdriven guitar voice, so a song can trade leads with the
     # main lead track.
@@ -387,8 +401,17 @@ class SampledRenderer:
                 sfz = self._instrument(inst)
                 for region in sfz.regions:
                     region.seq_counter = 0
+                brush = [n for n in notes if n.pitch in (BRUSH_SWISH, BRUSH_TAP)] if track.is_drum else []
+                kit_notes = [n for n in notes if n not in brush] if brush else notes
                 audio = SfzRenderer(sfz, self.sample_rate, cache=SampleCache(), seed=self.seed + index,
-                                    sample_tune=self._tuner(inst)).render(notes)
+                                    sample_tune=self._tuner(inst)).render(kit_notes)
+                if brush:                             # synthesised brush taps and swishes over the kit
+                    b = render_brushes(brush, self.sample_rate, seed=self.seed + index)
+                    n_out = max(audio.shape[1], b.shape[1])
+                    mix = np.zeros((2, n_out), dtype=np.float32)
+                    mix[:, :audio.shape[1]] += audio
+                    mix[:, :b.shape[1]] += b
+                    audio = mix
             if inst.eq and audio.size:
                 audio = _voice_eq(audio, inst.eq, self.sample_rate)
             peak = float(np.abs(audio).max()) if audio.size else 0.0

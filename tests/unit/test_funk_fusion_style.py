@@ -477,7 +477,8 @@ class CalmTest(unittest.TestCase):
 
     def test_plain_kit(self):
         kit = self.tracks["Drum kit"].notes
-        self.assertFalse([n for n in kit if n.pitch == 38 and n.velocity < 60])     # no ghost notes
+        ghosts = [n for n in kit if n.pitch == 38 and n.velocity < 60]
+        self.assertTrue(ghosts and all(n.velocity < 45 for n in ghosts))            # soft ghost notes
         self.assertFalse([n for n in kit if n.pitch == 46])                         # no open hats
         hats = sorted(n.start for n in kit if n.pitch == 42)
         gaps = np.diff(hats)
@@ -589,6 +590,70 @@ class PocketDrumsAndFlareTest(unittest.TestCase):
         flares = [b for b, n in enumerate(per_bar) if n >= 5]
         self.assertEqual(flares, [3, 11])                                    # every 4th bar, never a section's last
         self.assertTrue(all(n <= 3 for b, n in enumerate(per_bar) if b not in flares), per_bar)
+
+
+class SoarAndBrushesTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        td = tempfile.TemporaryDirectory()
+        try:
+            secs = build_sections(GENRE, ["verse", "chorus", "outro"], None,
+                                  {"verse": {"bars": 4}, "chorus": {"bars": 4}, "outro": {"bars": 2}})
+            band = tuple(STYLES[GENRE].default_instruments) + ("string_section", "french_horn")
+            res = compose_song(genre=GENRE, sections=secs, seed=5, tempo=120,
+                               arrangement="hits_only,calm_keys,calm_bass,pocket_drums,brushes,soar",
+                               enabled_instruments=band, output_dir=Path(td.name), skip_audio=True)
+            cls.tracks = {i.name: i for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments}
+        finally:
+            td.cleanup()
+        cls.bar = 2.0
+
+    def test_brushes_replace_stick_snare_and_hats(self):
+        kit = self.tracks["Drum kit"].notes
+        keys = {n.pitch for n in kit}
+        self.assertNotIn(38, keys)
+        self.assertNotIn(46, keys)
+        self.assertIn(25, keys)                                  # brush taps
+        self.assertIn(24, keys)                                  # swishes
+        taps = [n for n in kit if n.pitch == 25]
+        self.assertTrue([n for n in taps if n.velocity < 45])    # ghost taps stay soft
+
+    def test_strings_swell_in_the_chorus_and_hold_the_end(self):
+        st = self.tracks["String Section"].notes
+        verse = [n for n in st if n.start < 4 * self.bar - 0.1]
+        chorus = [n for n in st if 4 * self.bar - 0.1 <= n.start < 8 * self.bar - 0.1]
+        self.assertTrue(verse and chorus)
+        self.assertGreater(max(n.pitch for n in chorus), max(n.pitch for n in verse) + 10)   # violins open up
+        first = min(n.start for n in chorus); last = max(n.start for n in chorus)
+        v0 = np.mean([n.velocity for n in chorus if n.start == first])
+        v1 = np.mean([n.velocity for n in chorus if n.start == last])
+        self.assertGreater(v1, v0 + 15)                                                        # swelling
+        self.assertGreater(float(np.median([n.end - n.start for n in st])), self.bar * 0.9)     # sustained
+
+    def test_horn_only_in_the_chorus_and_ending(self):
+        horn = self.tracks["French Horn"].notes
+        self.assertTrue(horn)
+        self.assertFalse([n for n in horn if n.start < 4 * self.bar - 0.1])
+
+    def test_without_soar_strings_stay_silent(self):
+        td = tempfile.TemporaryDirectory()
+        try:
+            secs = build_sections(GENRE, ["verse"], None, {"verse": {"bars": 4}})
+            res = compose_song(genre=GENRE, sections=secs, seed=5, tempo=120,
+                               enabled_instruments=tuple(STYLES[GENRE].default_instruments) + ("string_section",),
+                               output_dir=Path(td.name), skip_audio=True)
+            names = {i.name for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments}
+        finally:
+            td.cleanup()
+        self.assertNotIn("String Section", names)
+
+    def test_brush_renderer_makes_sound(self):
+        from src.audio_processing.render.brushes import render_brushes
+        from src.audio_processing.render.sfz import Note as SNote
+        out = render_brushes([SNote(25, 0.0, 0.1, 100), SNote(24, 0.2, 1.0, 80)], 44100)
+        self.assertGreater(float(np.abs(out[:, :2000]).max()), 0.05)          # the tap
+        self.assertGreater(float(np.abs(out[:, 20000:40000]).max()), 0.01)    # the swish
+        self.assertLess(float(np.abs(out).max()), 1.0)
 
 
 class FunkMixTest(unittest.TestCase):

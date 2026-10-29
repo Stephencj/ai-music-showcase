@@ -91,6 +91,8 @@ class VideoScoreRequest(BaseModel):
     # Loudness of the delivered score (integrated LUFS). None = as mastered
     # (about −12); background music under a video sits around −23 to −28.
     target_lufs: Optional[float] = None
+    # Instruments added to the style's band (e.g. string_section, french_horn).
+    extra_instruments: list[str] = Field(default_factory=list)
     stops: list[list[float]] = Field(default_factory=list)   # band stops [start, end] in video seconds
 
 

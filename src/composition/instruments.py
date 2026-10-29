@@ -155,6 +155,7 @@ _add(Instrument("brass_section", "Brass Section", "brass", "chords", 61,
                 members=("trumpet", "trombone", "sax_alto", "sax_tenor"),
                 default_octave=4, voicing_role="pad", max_voices=4))
 _add(Instrument("trumpet",       "Trumpet",       "brass", "melody", 56, default_octave=5))
+_add(Instrument("french_horn",   "French Horn",   "brass", "chords", 60, default_octave=4))
 _add(Instrument("trombone",      "Trombone",      "brass", "melody", 57, default_octave=4))
 _add(Instrument("sax_alto",      "Alto Sax",      "brass", "melody", 65, default_octave=5))
 _add(Instrument("sax_tenor",     "Tenor Sax",     "brass", "melody", 66, default_octave=4))

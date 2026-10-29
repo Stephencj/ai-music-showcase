@@ -107,6 +107,45 @@ def _arrangement(ctx: TechniqueContext) -> set[str]:
     return {a.strip() for a in (getattr(ctx, "arrangement", "") or "").replace("+", ",").split(",") if a.strip()}
 
 
+BRUSH_SWISH, BRUSH_TAP = 24, 25          # synthesised in render/brushes.py
+
+
+def _brushify(notes: list[NoteEvent], ctx: TechniqueContext, clock: "_Clock", feel: str) -> list[NoteEvent]:
+    """Play any groove with brushes: snare and rim hits become brush taps
+    (ghosts stay ghosts), the hats move to a soft foot "chick" on the beats,
+    open hats drop, crashes and toms soften, and a swish sweeps each half bar."""
+    out: list[NoteEvent] = []
+    for n in notes:
+        k, v = n.pitch, n.velocity
+        if k in (SNARE, STICK):
+            out.append(NoteEvent(pitch=BRUSH_TAP, start=n.start, end=n.start + 0.12, velocity=min(127, int(v * 0.9) + 6)))
+        elif k in (CLOSED_HAT, PEDAL_HAT):
+            step = round((n.start / clock.step_len)) % 4
+            if step == 0 and round(n.start / clock.step_len) % 8 == 4:      # beats 2 and 4
+                out.append(NoteEvent(pitch=PEDAL_HAT, start=n.start, end=n.end, velocity=max(30, int(v * 0.6))))
+        elif k == OPEN_HAT:
+            continue
+        elif k in (CRASH, RIDE):
+            out.append(NoteEvent(pitch=k, start=n.start, end=n.end, velocity=max(30, int(v * 0.55))))
+        elif k in (TOM_HI, TOM_MID, TOM_LO):
+            out.append(NoteEvent(pitch=k, start=n.start, end=n.end, velocity=max(30, int(v * 0.7))))
+        else:                                                              # kick
+            out.append(NoteEvent(pitch=k, start=n.start, end=n.end, velocity=max(30, int(v * 0.85))))
+    for bar in range(ctx.bar_count):
+        if feel == "outro" and bar == ctx.bar_count - 1:
+            continue
+        for half in (0, 8):
+            t0 = clock.t(bar, half)
+            out.append(NoteEvent(pitch=BRUSH_SWISH, start=t0, end=t0 + clock.step_len * 7.5, velocity=72))
+    return out
+
+
+def _emit_drums(midi, ctx: TechniqueContext, notes: list[NoteEvent], clock: "_Clock", feel: str) -> None:
+    if "brushes" in _arrangement(ctx):
+        notes = _brushify(notes, ctx, clock, feel)
+    _emit(midi, ctx, notes, name="Drums", program=0, is_drum=True)
+
+
 def _hits_only(ctx: TechniqueContext) -> bool:
     return "hits_only" in _arrangement(ctx)
 
@@ -136,6 +175,9 @@ def _calm_drums(midi, ctx: TechniqueContext, feel: str) -> None:
         for step in range(0, 12 if fill else 16, 2):
             hits.append((bar, step, CLOSED_HAT, 70 if step % 4 == 0 else 52))
         hits += [(bar, 4, SNARE, 94), (bar, 12, SNARE, 96)]
+        for g in ((7, 10) if bar % 2 == 0 else (3, 7, 15)):            # soft ghost notes around the backbeat
+            if not (fill and g >= 12):
+                hits.append((bar, g, SNARE, float(rng.integers(26, 36))))
         hits += [(bar, 0, KICK, 98), (bar, 8, KICK, 90)] + ([(bar, 10, KICK, 80)] if bar % 2 else [])
         if bar == 0 and feel in HIGH_ROLES:
             hits.append((bar, 0, CRASH, 84))
@@ -149,7 +191,7 @@ def _calm_drums(midi, ctx: TechniqueContext, feel: str) -> None:
         t, v = _human(rng, clock.t(bar, step), vel, ms=3.0, vel_jitter=3.0)
         dur = clock.step_len * (8 if key == CRASH else 1)
         notes.append(NoteEvent(pitch=key, start=t, end=t + dur, velocity=v))
-    _emit(midi, ctx, notes, name="Drums", program=0, is_drum=True)
+    _emit_drums(midi, ctx, notes, clock, feel)
 
 
 def _pocket_drums(midi, ctx: TechniqueContext, feel: str) -> None:
@@ -202,7 +244,7 @@ def _pocket_drums(midi, ctx: TechniqueContext, feel: str) -> None:
         t, v = _human(rng, clock.t(bar, step), vel, ms=3.0, vel_jitter=3.0 if vel < 50 else 4.0)
         dur = clock.step_len * (8 if key in (CRASH, OPEN_HAT) else 1)
         notes.append(NoteEvent(pitch=key, start=t, end=t + dur, velocity=v))
-    _emit(midi, ctx, notes, name="Drums", program=0, is_drum=True)
+    _emit_drums(midi, ctx, notes, clock, feel)
 
 
 def _calm_bass(midi, ctx: TechniqueContext, feel: str) -> None:
@@ -495,7 +537,7 @@ def _drums(midi, ctx: TechniqueContext, feel: str) -> None:
         t, v = _human(rng, clock.t(bar, step), vel, ms=2.5, vel_jitter=4.0 if vel > 50 else 3.0)
         dur = clock.step_len * (8 if key in (CRASH, RIDE, OPEN_HAT) else 1)
         notes.append(NoteEvent(pitch=key, start=t, end=t + dur, velocity=v))
-    _emit(midi, ctx, _breathe(notes, ctx, clock), name="Drums", program=0, is_drum=True)
+    _emit_drums(midi, ctx, _breathe(notes, ctx, clock), clock, feel)
 
 
 # ---------------------------------------------------------------------------
@@ -1092,7 +1134,93 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
     finish(notes)
 
 
+# ---------------------------------------------------------------------------
+# SOARING STRINGS + FRENCH HORN ("soar")
+# ---------------------------------------------------------------------------
+
+def _soar(ctx: TechniqueContext) -> bool:
+    return "soar" in _arrangement(ctx)
+
+
+def _strings(midi, ctx: TechniqueContext, feel: str) -> None:
+    """Sustained string section: a low cello/viola pad in verses; in choruses
+    the violins open up on top with a slow stepwise line, swelling across the
+    section; high soft violins in bridges; a big held chord to end."""
+    if not _soar(ctx) or feel == "intro":
+        return
+    rng, clock, harm = ctx.rng, _Clock(ctx), _Harmony(ctx)
+    high = feel in HIGH_ROLES
+    events = harm.events
+    notes: list[NoteEvent] = []
+    top: Optional[int] = None
+    for k, ev in enumerate(events):
+        root_pc, quality = harm.at(ev.start_bar)
+        if feel == "outro" and k == len(events) - 1:
+            quality = "maj"
+        tones = chord_tones(root_pc, quality)
+        cello = _fits(root_pc + 36, 36, 47)
+        third = (root_pc + (3 if quality in ("min7", "min", "dim") else 4)) % 12
+        viola = min((p for p in range(55, 67) if p % 12 in (third, (root_pc + 7) % 12)), key=lambda p: abs(p - 60))
+        voices = [cello, viola]
+        progress = k / max(1, len(events) - 1)
+        if high or feel in ("bridge", "breakdown", "outro"):
+            lo, hi = (74, 88) if high else (76, 86)
+            cands = [p for p in range(lo, hi + 1) if p % 12 in tones]
+            if top is None:
+                top = min(cands, key=lambda p: abs(p - (77 if high else 79)))
+            else:                                   # a slow line, drifting upward through a chorus
+                up = [p for p in cands if 0 <= p - top <= 4]
+                top = (min(up, key=lambda p: p - top) if (high and up and rng.random() < 0.6)
+                       else min(cands, key=lambda p: abs(p - top)))
+            voices += [top - 12 if top - 12 >= 64 else top, top] if high else [top]
+        if feel in ("bridge", "breakdown"):
+            voices = voices[-1:]                                    # just high, soft violins
+        vel = int(58 + (40 * progress if high else 6 * progress)) if feel != "outro" else 96
+        if feel in ("bridge", "breakdown"):
+            vel = 50
+        start = clock.t(0, ev.start_bar * clock.steps)
+        end = clock.t(0, ev.end_bar * clock.steps) + 0.06            # legato overlap
+        if feel == "outro" and k == len(events) - 1:
+            end += clock.bar_len
+        for p in sorted(set(voices)):
+            s, v = _human(rng, start, vel, ms=8.0, vel_jitter=3.0)
+            notes.append(NoteEvent(pitch=p, start=s, end=end, velocity=v))
+    _emit(midi, ctx, notes, name="Strings", program=48)
+
+
+def _french_horn(midi, ctx: TechniqueContext, feel: str) -> None:
+    """Warm sustained horn thirds and fifths under the strings in choruses,
+    swelling with them, and in the final chord."""
+    if not _soar(ctx) or feel not in HIGH_ROLES + ("outro",):
+        return
+    rng, clock, harm = ctx.rng, _Clock(ctx), _Harmony(ctx)
+    notes: list[NoteEvent] = []
+    events = harm.events
+    for k, ev in enumerate(events):
+        if feel == "outro" and k < len(events) - 1:
+            continue
+        root_pc, quality = harm.at(ev.start_bar)
+        third = (root_pc + (3 if quality in ("min7", "min", "dim") else 4)) % 12
+        fifth = (root_pc + 7) % 12
+        pitches = [min((p for p in range(55, 70) if p % 12 == pc), key=lambda p: abs(p - 62)) for pc in (third, fifth)]
+        vel = 64 + int(26 * k / max(1, len(events) - 1)) if feel != "outro" else 92
+        start = clock.t(0, ev.start_bar * clock.steps)
+        end = clock.t(0, ev.end_bar * clock.steps) + 0.05 + (clock.bar_len if feel == "outro" else 0)
+        for p in sorted(set(pitches)):
+            s, v = _human(rng, start + 0.02, vel, ms=8.0, vel_jitter=3.0)
+            notes.append(NoteEvent(pitch=p, start=s, end=end, velocity=v))
+    _emit(midi, ctx, notes, name="French Horn", program=60)
+
+
 for _feel in ALL_ROLES:
+    _register(name=f"funk_fusion_strings_{_feel}", label=f"Soaring strings ({_feel})",
+              description="Sustained string section: low pad in verses, violins opening up and swelling in choruses.",
+              instruments=("string_section",), roles=(_feel,), weight=4, tags=(TAG,),
+              apply=lambda midi, ctx, _f=_feel: _strings(midi, ctx, _f))
+    _register(name=f"funk_fusion_french_horn_{_feel}", label=f"French horn pad ({_feel})",
+              description="Warm sustained horn thirds and fifths in choruses and the final chord.",
+              instruments=("french_horn",), roles=(_feel,), weight=4, tags=(TAG,),
+              apply=lambda midi, ctx, _f=_feel: _french_horn(midi, ctx, _f))
     _register(name=f"funk_fusion_kit_{_feel}", label=f"Funk-fusion kit ({_feel})",
               description="Driving 16th hats (open offbeats in the chorus), punchy kick and "
                           "backbeat with ghosts, fills every four bars, kicks on the band riff.",

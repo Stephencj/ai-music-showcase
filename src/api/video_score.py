@@ -245,6 +245,7 @@ def curate_hits(hits: list[float], chapter_starts: list[float], *, min_gap: floa
 def compose_score(chapters: list[Chapter], *, duration: float, hits: list[float],
                   genre: str = "funk_fusion_full", seed: int = 52, base_tempo: float = 158.0,
                   band: Optional[list[str]] = None, lead_voice: Optional[str] = None,
+                  extra_instruments: Optional[list[str]] = None,
                   hit_style: str = "groove", curate: bool = True, min_gap: float = 3.0,
                   offset: float = 0.0, stops: Optional[list] = None, arrangement: str = "",
                   progress: Optional[Callable[[str, float], None]] = None):
@@ -259,6 +260,7 @@ def compose_score(chapters: list[Chapter], *, duration: float, hits: list[float]
 
     preset = STYLES[genre]
     band = list(band or [i for i in preset.default_instruments if i not in ("synth_lead", "lead_guitar", "sax_alto")])
+    band += [i for i in (extra_instruments or []) if i not in band]
     plans = plan_segments(chapters, duration, base_tempo)
     hits = [h - offset for h in hits]
     stops = [(a - offset, b - offset) for a, b in (stops or [])]
