@@ -1255,8 +1255,8 @@ def _strings(midi, ctx: TechniqueContext, feel: str) -> None:
 
 def _french_horn(midi, ctx: TechniqueContext, feel: str) -> None:
     """Warm sustained horn thirds and fifths under the strings in choruses,
-    swelling with them, and in the final chord."""
-    if not _soar(ctx) or feel not in HIGH_ROLES + ("outro",):
+    swelling with them. The final chord is left to the strings."""
+    if not _soar(ctx) or feel not in HIGH_ROLES:
         return
     rng, clock, harm = ctx.rng, _Clock(ctx), _Harmony(ctx)
     notes: list[NoteEvent] = []

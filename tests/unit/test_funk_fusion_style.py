@@ -635,10 +635,14 @@ class SoarAndBrushesTest(unittest.TestCase):
         self.assertGreater(v1, v0 + 15)                                                        # swelling
         self.assertGreater(float(np.median([n.end - n.start for n in st])), self.bar * 0.9)     # sustained
 
-    def test_horn_only_in_the_chorus_and_ending(self):
+    def test_horn_only_in_the_chorus_and_the_strings_end_it(self):
         horn = self.tracks["French Horn"].notes
         self.assertTrue(horn)
         self.assertFalse([n for n in horn if n.start < 4 * self.bar - 0.1])
+        self.assertFalse([n for n in horn if n.start >= 8 * self.bar - 0.1])                   # not in the ending
+        last = [n for n in self.tracks["String Section"].notes if n.start >= 9 * self.bar - 0.1]
+        self.assertGreaterEqual(len(last), 2)
+        self.assertTrue(all(n.end - n.start > self.bar for n in last))                          # the final chord rings
 
     def test_without_soar_strings_stay_silent(self):
         td = tempfile.TemporaryDirectory()

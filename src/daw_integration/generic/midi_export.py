@@ -4525,13 +4525,7 @@ class MidiExporter:
                 is_drum=track.is_drum,
                 name=track.name,
             )
-            for n in track.notes:
-                instrument.notes.append(pretty_midi.Note(
-                    velocity=n.velocity,
-                    pitch=n.pitch,
-                    start=n.start,
-                    end=n.end,
-                ))
+            instrument.notes.extend(_midi_notes(track.notes))
             self._apply_articulation(instrument, track)
             pm.instruments.append(instrument)
 
@@ -4588,13 +4582,7 @@ class MidiExporter:
                 is_drum=track.is_drum,
                 name=track.name,
             )
-            for n in track.notes:
-                instrument.notes.append(pretty_midi.Note(
-                    velocity=n.velocity,
-                    pitch=n.pitch,
-                    start=n.start,
-                    end=n.end,
-                ))
+            instrument.notes.extend(_midi_notes(track.notes))
             self._apply_articulation(instrument, track)
             pm.instruments.append(instrument)
             yield track.name, pm
@@ -4604,6 +4592,24 @@ class MidiExporter:
         if not self.tracks:
             return 0.0
         return max(n.end for t in self.tracks for n in t.notes) if any(t.notes for t in self.tracks) else 0.0
+
+
+def _midi_notes(notes) -> list:
+    """Notes as pretty_midi notes, with overlapping repeats of a pitch
+    untangled. A MIDI channel can't hold two of the same pitch at once: a
+    legato overlap (the next chord starting before this one lets go) writes
+    note-on, then the old note's note-off, which ends the NEW note almost
+    immediately. So each note lets go just as the next one of its pitch
+    starts."""
+    out = [pretty_midi.Note(velocity=n.velocity, pitch=n.pitch, start=n.start, end=n.end) for n in notes]
+    last: dict[int, pretty_midi.Note] = {}
+    for n in sorted(out, key=lambda n: (n.start, n.pitch)):
+        prev = last.get(n.pitch)
+        if prev is not None and prev.end > n.start - 0.002 and prev.start < n.start:
+            prev.end = max(prev.start + 0.005, n.start - 0.002)
+        if prev is None or n.end > prev.end or prev.start < n.start:
+            last[n.pitch] = n
+    return out
 
 
 def inject_tempo_changes(path: "str | Path", changes: list[tuple[float, float]]) -> None:
