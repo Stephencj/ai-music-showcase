@@ -25,6 +25,7 @@ class LeadLayer:
     db: float = 0.0
     drive_db: float = 0.0         # amp drive (guitar)
     space: float = 0.0            # 0..1: this layer's own delay + big reverb (on top of the mix chain)
+    chorus: float = 0.0           # 0..1: a light stereo chorus (clean guitar shimmer)
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,10 @@ LEAD_VOICES: dict[str, LeadVoice] = {
         LeadLayer("sfz", sfz="guitar_twang", sfz_short="guitar_staccato", drive_db=FUSION_DRIVE,
                   octave=1, space=HIGH_SPACE, db=-3.0),
     ), register="guitar", gain_db=2.5),
+    # The Gretsch clean: a light chorus and a small, dry room (neo-soul).
+    "guitar_clean": LeadVoice("Clean jazz guitar (Gretsch, light chorus)", (
+        LeadLayer("sfz", sfz="guitar_twang", sfz_short="guitar_staccato", chorus=1.0, space=0.15),
+    ), register="guitar", gain_db=5.0),
     # Trumpet and overdriven guitar in unison: the horn's attack and body, the
     # guitar's singing sustain.
     "trumpet_guitar": LeadVoice("Trumpet + overdriven guitar in unison", (

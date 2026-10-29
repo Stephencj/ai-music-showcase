@@ -1039,6 +1039,46 @@ STYLES: dict[str, StylePreset] = {
         },
     ),
 
+    "neo_soul_full": StylePreset(
+        name="Neo-Soul Chill (Full song)", tempo=89, key="Eb", scale="minor",
+        # Laid-back neo-soul / chill R&B on minor-7th vamps (src/composition/
+        # neo_soul.py, picked strictly): Rhodes, round bass, a laid-back kit,
+        # a clean guitar answering.
+        progression=[("i7", 1.0), ("iv7", 1.0), ("i7", 1.0), ("iv7", 1.0)] * 8,
+        voicing="ninth", bass_pattern="root", drum_pattern="basic_rock",
+        chord_rhythm="pad", melody_style="motif",
+        chord_octave=3, bass_octave=2, swing=0.0, default_bars=32,
+        chord_program=4, melody_program=81,
+        rhythm_variants={
+            "Full song": [
+                {"start_bar": 0,  "end_bar": 1,  "label": "Intro"},
+                {"start_bar": 2,  "end_bar": 9,  "label": "Verse"},
+                {"start_bar": 10, "end_bar": 17, "label": "Chorus"},
+                {"start_bar": 18, "end_bar": 25, "label": "Bridge"},
+                {"start_bar": 26, "end_bar": 31, "label": "Outro"},
+            ],
+        },
+        default_instruments=['drum_kit', 'electric_bass', 'electric_piano', 'synth_lead'],
+        sound="sampled",
+        pacing_options=('uniform_1',),
+        bridge_pacing_options=('uniform_1',),
+        section_progressions={
+            "intro": [[("i7", 1.0), ("iv7", 1.0)]],
+            "verse": [
+                [("i7", 1.0), ("iv7", 1.0), ("i7", 1.0), ("iv7", 1.0)],
+                [("VII7", 1.0), ("i7", 1.0), ("iv7", 1.0), ("i7", 1.0)],
+                [("VImaj7", 1.0), ("i7", 1.0), ("iv7", 1.0), ("i7", 1.0)],
+            ],
+            "chorus": [
+                [("VImaj7", 1.0), ("VII7", 1.0), ("i7", 1.0), ("iv7", 1.0)],
+                [("iv7", 1.0), ("VII7", 1.0), ("i7", 1.0), ("VImaj7", 1.0)],
+            ],
+            "bridge": [[("iv7", 2.0), ("VII7", 2.0)], [("VImaj7", 2.0), ("VII7", 2.0)]],
+            "breakdown": [[("i7", 2.0), ("iv7", 2.0)]],
+            "outro": [[("iv7", 1.0), ("VII7", 1.0), ("i7", 2.0)]],
+        },
+    ),
+
     "jazz_aaba_full": StylePreset(
         name="Jazz AABA (Full song)", tempo=140, key="F", scale="major",
         # ii-V-I-I ×16 = 64 bars (four 16-bar A/B sections).

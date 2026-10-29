@@ -34,6 +34,7 @@ from src.composition.techniques import (
 from src.composition import builtins  # noqa: F401
 from src.composition import fusion  # noqa: F401
 from src.composition import funk_fusion  # noqa: F401
+from src.composition import neo_soul  # noqa: F401
 
 __all__ = [
     "BANK",

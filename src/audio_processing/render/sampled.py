@@ -318,6 +318,12 @@ class SampledRenderer:
             audio[:, :p.shape[1]] += p
         if layer.drive_db:
             audio = _amp(audio, layer.drive_db, self.sample_rate)
+        if layer.chorus:
+            import pedalboard as pdb
+            board = pdb.Pedalboard([pdb.Chorus(rate_hz=0.6, depth=0.2 * layer.chorus, centre_delay_ms=8.0,
+                                               feedback=0.0, mix=0.3 * layer.chorus)])
+            audio = np.ascontiguousarray(np.asarray(board(audio.T.copy(), sample_rate=self.sample_rate),
+                                                    dtype=np.float32).T)
         if layer.space:
             audio = _space(audio, layer.space, self.sample_rate)
         return audio

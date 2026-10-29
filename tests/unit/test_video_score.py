@@ -21,13 +21,22 @@ class PlanTest(unittest.TestCase):
         ]
         self.plans = plan_segments(self.chapters, 60.0, 158.0)
 
-    def test_every_chapter_is_whole_bars_ending_on_the_next_chapter(self):
+    def test_every_chapter_is_whole_bars_and_lands_near_its_cut(self):
+        from src.api.video_score import EARLY_SLACK, LATE_SLACK
         for p in self.plans:
             self.assertAlmostEqual(p.bars * 240.0 / p.tempo, p.end - p.start, places=6)
-        self.assertEqual([round(p.start, 3) for p in self.plans], [0.0, 13.1, 40.0, 55.3])
-        for a, b in zip(self.plans, self.plans[1:-1]):
-            self.assertAlmostEqual(a.end, b.start)
+        for a, b in zip(self.plans, self.plans[1:]):
+            self.assertAlmostEqual(a.end, b.start)                          # continuous music
+        self.assertEqual(self.plans[0].start, 0.0)
+        for p, ch in zip(self.plans[1:], self.chapters[1:]):
+            self.assertTrue(-EARLY_SLACK - 0.03 <= p.start - ch.start <= LATE_SLACK + 0.03, (p.start, ch.start))
         self.assertLessEqual(self.plans[-1].end, 60.0 + 1e-6)              # the tail may ring out
+
+    def test_slow_tempo_stays_steady(self):
+        starts = [0.0, 13.1, 29.8, 45.1, 63.1, 80.6, 100.7]
+        plans = plan_segments([Chapter(s) for s in starts], 120.0, 89.0)
+        tempos = [p.tempo for p in plans]
+        self.assertLessEqual(max(abs(a - b) for a, b in zip(tempos, tempos[1:])), 4.0)
 
     def test_the_tail_keeps_the_previous_tempo(self):
         plans = plan_segments([Chapter(0.0), Chapter(20.0), Chapter(40.0, roles=("outro",))], 46.1, 145.0)
@@ -74,7 +83,9 @@ class ComposeTest(unittest.TestCase):
         chapters = [Chapter(start=0.0, roles=("verse",)), Chapter(start=10.0, roles=("chorus",))]
         midi, plans, _ = compose_score(chapters, duration=20.0, hits=[14.2], curate=False)
         beat = 60.0 / plans[1].tempo
-        hit = 10.0 + np.ceil((14.2 - 10.0 - 0.03) / beat) * beat
+        grid = beat if beat <= 0.45 else beat / 2
+        start = plans[1].start
+        hit = start + np.ceil((14.2 - start - 0.03) / grid) * grid
         tracks = {t.name: t for t in midi.tracks}
         trumpet = [n.start for n in tracks["Trumpet"].notes]
         self.assertTrue(any(abs(t - hit) < 0.02 for t in trumpet))
@@ -92,10 +103,12 @@ class ComposeTest(unittest.TestCase):
         self.assertIn("Lead Guitar", tracks)
         guitar = [n.start for n in tracks["Lead Guitar"].notes]
         lead = [n.start for n in tracks["Synth Lead"].notes]
-        self.assertTrue(guitar and min(guitar) >= 10.0 - 0.02)          # the guitar takes chapter 2
-        self.assertTrue(lead and max(lead) < 10.0)
+        ch2 = plans[1].start                                            # within the slack of 10.0
+        self.assertTrue(abs(ch2 - 10.0) <= 0.55)
+        self.assertTrue(guitar and min(guitar) >= ch2 - 0.02)            # the guitar takes chapter 2
+        self.assertTrue(lead and max(lead) < ch2)
         crash = [n.start for n in tracks["Drum kit"].notes if n.pitch == 49]
-        self.assertTrue(any(abs(t - 10.0) < 0.02 for t in crash))       # the chapter's opening hit
+        self.assertTrue(any(abs(t - 10.0) <= 60.0 / plans[1].tempo / 4 / 2 + 0.03 for t in crash))  # the hit
         step = 60.0 / plans[1].tempo / 4
         self.assertTrue(any(abs(t - 14.2) <= step / 2 + 0.01 for t in crash))   # a caption hit, snapped
 

@@ -86,30 +86,89 @@ def choose_bars(lengths: list[float], base_tempo: float, max_nudge: float = 0.08
     return out[::-1]
 
 
+LATE_SLACK = 0.5           # a chapter's downbeat may land this much after its cut...
+EARLY_SLACK = 0.2          # ...or this much before it
+
+
+def plan_timing(starts: list[float], duration: float, base_tempo: float, *,
+                max_nudge: float = MAX_TEMPO_NUDGE, late: float = LATE_SLACK,
+                early: float = EARLY_SLACK) -> list[tuple[float, float, int, float]]:
+    """(music start, music end, bars, tempo) per chapter.
+
+    Exact downbeats on every cut would need big tempo jumps when bars are long
+    (slow tempos), so each chapter boundary may land a little late (or a touch
+    early) and the tempo stays steady. A dynamic programme over (boundary
+    offset, tempo) minimises tempo jumps, distance from the base tempo and
+    boundary error together. The last chapter (an end card) keeps the
+    previous tempo and lets its final hit ring out.
+    """
+    k = len(starts)
+    bounds = [0.0] + list(starts[1:])               # video times of chapter starts
+    tempos = np.arange(base_tempo * (1 - max_nudge), base_tempo * (1 + max_nudge) + 1e-9, 0.25)
+    offsets = np.round(np.arange(-early, late + 1e-9, 0.02), 2)
+    # state: (offset index, tempo index) at the start of chapter i
+    INF = float("inf")
+    cost = {(int(np.argmin(abs(offsets))), None): 0.0}
+    back: list[dict] = []
+    for i in range(k - 1):
+        length_target = bounds[i + 1] - bounds[i]
+        nxt: dict = {}
+        bk: dict = {}
+        for (oi, ti), c0 in cost.items():
+            m_start = bounds[i] + offsets[oi]
+            for tj, t in enumerate(tempos):
+                bar = 240.0 / t
+                for n in {max(1, int(np.floor((length_target - offsets[oi]) / bar))),
+                          max(1, int(np.ceil((length_target - offsets[oi]) / bar)))}:
+                    m_end = m_start + n * bar
+                    off = m_end - bounds[i + 1]
+                    if off < -early - 1e-9 or off > late + 1e-9:
+                        continue
+                    oj = int(np.argmin(abs(offsets - off)))
+                    jump = 0.0 if ti is None else (t - tempos[ti]) ** 2
+                    c = c0 + jump + 0.3 * (t - base_tempo) ** 2 + 60.0 * off ** 2
+                    key = (oj, tj)
+                    if c < nxt.get(key, INF):
+                        nxt[key] = c
+                        bk[key] = ((oi, ti), n, float(t), float(m_start), float(m_end))
+        if not nxt:                                  # no fit within the slack: fall back to exact fits
+            return [(s0, e, n, 240.0 * n / (e - s0)) for (s0, e), n in zip(
+                [(bounds[j], bounds[j + 1] if j + 1 < k else duration) for j in range(k)],
+                choose_bars([(bounds[j + 1] if j + 1 < k else duration) - bounds[j] for j in range(k)],
+                            base_tempo, max_nudge))]
+        cost = nxt
+        back.append(bk)
+    plan: list[tuple[float, float, int, float]] = []
+    state = min(cost, key=cost.get) if back else None
+    for bk in reversed(back):
+        prev, n, t, m_start, m_end = bk[state]
+        plan.append((m_start, m_end, n, t))
+        state = prev
+    plan.reverse()
+    # Lay the chosen bars/tempos end to end so the music is seamless (the
+    # programme's offsets are rounded to 20 ms).
+    t0, seamless = 0.0, []
+    for _, _, n, t in plan:
+        seamless.append((t0, t0 + n * 240.0 / t, n, t))
+        t0 = seamless[-1][1]
+    plan = seamless
+    tail_start = plan[-1][1] if plan else 0.0
+    tail_tempo = plan[-1][3] if plan else base_tempo
+    remaining = max(duration - tail_start, 0.1)
+    n = max(1, int(np.floor(remaining * tail_tempo / 240.0 + 0.15)))
+    plan.append((tail_start, min(duration, tail_start + n * 240.0 / tail_tempo), n, tail_tempo))
+    return plan
+
+
 def plan_segments(chapters: list[Chapter], duration: float, base_tempo: float) -> list[SegmentPlan]:
     """Bars and tempo per chapter, and its section list (bar ranges)."""
     chapters = sorted(chapters, key=lambda c: c.start)
-    bounds = [(0.0 if i == 0 else c.start, chapters[i + 1].start if i + 1 < len(chapters) else duration)
-              for i, c in enumerate(chapters)]
-    lengths = [max(e - s0, 0.1) for s0, e in bounds]
-    # The last chapter is the tail (an end card): it needn't fill its time —
-    # its final hit can ring out — so it keeps the previous chapter's tempo
-    # instead of jumping to whatever whole number of bars fits.
-    bar_counts = choose_bars(lengths[:-1], base_tempo, MAX_TEMPO_NUDGE) if len(lengths) > 1 else []
-    tail_tempo = (240.0 * bar_counts[-1] / lengths[-2]) if bar_counts else base_tempo
-    bar_counts.append(max(1, int(np.floor(lengths[-1] * tail_tempo / 240.0 + 0.15))))
+    timing = plan_timing([c.start for c in chapters], duration, base_tempo)
     plans = []
     for i, ch in enumerate(chapters):
-        start = 0.0 if i == 0 else ch.start          # the music starts with the video
-        end = chapters[i + 1].start if i + 1 < len(chapters) else duration
-        length = end - start
-        if length <= 0:
+        start, end, bars, tempo = timing[i]
+        if end - start <= 0:
             continue
-        bars = bar_counts[i]
-        tempo = 240.0 * bars / length
-        if i == len(chapters) - 1 and len(chapters) > 1:
-            tempo = tail_tempo
-            end = min(end, start + bars * 240.0 / tempo)
         bar = 240.0 / tempo
         card_bars = 0
         wants_intro = ch.intro if ch.intro is not None else i == 0

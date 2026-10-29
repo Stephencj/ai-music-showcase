@@ -62,7 +62,7 @@ _INSTRUMENT_ORDER: tuple[str, ...] = ("chords", "bass", "drums", "melody")
 # Genres whose tagged techniques are the whole idiom: a cell with a tagged
 # technique never falls back to the cross-genre pool (fusion's straight 16ths
 # would be wrecked by a swing walking bass or a country train beat).
-_STRICT_GENRES: frozenset[str] = frozenset({"fusion_full", "funk_fusion_full"})
+_STRICT_GENRES: frozenset[str] = frozenset({"fusion_full", "funk_fusion_full", "neo_soul_full"})
 
 _GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
     # Pop / rock family.
@@ -80,6 +80,7 @@ _GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
     "jazz":              ("jazz",),
     "fusion_full":       ("fusion",),
     "funk_fusion_full":  ("funk_fusion",),
+    "neo_soul_full":     ("neo_soul",),
     "jazz_aaba_full":    ("jazz",),
     "jazz_trade_fours":  ("jazz",),
     "blues_12bar_full":  ("blues",),

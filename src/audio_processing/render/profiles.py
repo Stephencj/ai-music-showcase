@@ -127,6 +127,20 @@ _FUNK_FUSION = MixProfile(
     },
 )
 
+_NEO_SOUL = MixProfile(
+    name="neo_soul",
+    label="Neo-soul (Rhodes forward, laid-back kit, dry lead)",
+    family_overrides={
+        "drums":      {"gain_db": -4.0},
+        "bass":       {"gain_db": -3.0},
+        "chords":     {"gain_db": -3.0, "pan": 0.0},    # the Rhodes leads the band
+        "lead":       {"gain_db": -8.0, "pan": 0.1},
+    },
+    master_preset="default",
+    sidechain_kick_into=(),
+    family_chains={"lead": "tight_lead"},
+)
+
 _BALLAD = MixProfile(
     name="ballad",
     label="Ballad (vocal + strings forward)",
@@ -177,7 +191,7 @@ _CINEMATIC = MixProfile(
 
 
 MIX_PROFILES: dict[str, MixProfile] = {
-    p.name: p for p in (_POP, _ROCK, _JAZZ, _BALLAD, _EDM, _CINEMATIC, _FUNK_FUSION)
+    p.name: p for p in (_POP, _ROCK, _JAZZ, _BALLAD, _EDM, _CINEMATIC, _FUNK_FUSION, _NEO_SOUL)
 }
 
 
@@ -210,6 +224,7 @@ _PRESET_TO_PROFILE: dict[str, str] = {
     "jazz_fusion":          "jazz",
     "fusion_full":          "jazz",
     "funk_fusion_full":     "funk_fusion",
+    "neo_soul_full":        "neo_soul",
     "jazz_aaba_full":       "jazz",
     "jazz_hard_bop_full":   "jazz",
     "jazz_modal_full":      "jazz",

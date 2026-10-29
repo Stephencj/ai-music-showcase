@@ -32,7 +32,7 @@ GENRE_TAGS = frozenset({
     "blues", "rock", "metal", "punk",
     "funk_rock", "funk", "soul", "motown", "gospel", "disco",
     "pop", "edm", "hip_hop", "reggae", "country", "latin", "afro",
-    "drum_n_bass", "ballad", "fusion", "funk_fusion",
+    "drum_n_bass", "ballad", "fusion", "funk_fusion", "neo_soul",
 })
 
 

@@ -371,10 +371,12 @@ def hit_steps(ctx: TechniqueContext, clock: "_Clock") -> dict[int, set[int]]:
     "groove" style the next beat (up to a beat late, so it sits in the time)."""
     out: dict[int, set[int]] = {}
     first = ctx.start_bar * clock.steps
-    beat = 4 * clock.step_len
+    # Next beat; at slow tempos (beats over 0.45 s) the next 8th, so a
+    # groove hit is never more than about a third of a second late.
+    grid = 4 if 4 * clock.step_len <= 0.45 else 2
     for t in ctx.hits:
         if _groove(ctx):
-            step = int(np.ceil((t - 0.03) / beat)) * 4 - first
+            step = int(np.ceil((t - 0.03) / (grid * clock.step_len))) * grid - first
         else:
             step = int(round(t / clock.step_len)) - first
         if 0 <= step < ctx.bar_count * clock.steps:

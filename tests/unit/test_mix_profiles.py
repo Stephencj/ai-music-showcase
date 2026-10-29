@@ -23,7 +23,7 @@ class ProfileRegistryTests(unittest.TestCase):
     def test_profiles_registered(self):
         self.assertEqual(
             set(MIX_PROFILES.keys()),
-            {"pop", "rock", "jazz", "ballad", "edm", "cinematic", "funk_fusion"},
+            {"pop", "rock", "jazz", "ballad", "edm", "cinematic", "funk_fusion", "neo_soul"},
         )
 
     def test_each_profile_has_a_label(self):
