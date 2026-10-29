@@ -62,7 +62,7 @@ _INSTRUMENT_ORDER: tuple[str, ...] = ("chords", "bass", "drums", "melody")
 # Genres whose tagged techniques are the whole idiom: a cell with a tagged
 # technique never falls back to the cross-genre pool (fusion's straight 16ths
 # would be wrecked by a swing walking bass or a country train beat).
-_STRICT_GENRES: frozenset[str] = frozenset({"fusion_full"})
+_STRICT_GENRES: frozenset[str] = frozenset({"fusion_full", "funk_fusion_full"})
 
 _GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
     # Pop / rock family.
@@ -79,6 +79,7 @@ _GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
     # Jazz / blues.
     "jazz":              ("jazz",),
     "fusion_full":       ("fusion",),
+    "funk_fusion_full":  ("funk_fusion",),
     "jazz_aaba_full":    ("jazz",),
     "jazz_trade_fours":  ("jazz",),
     "blues_12bar_full":  ("blues",),
@@ -628,11 +629,16 @@ def compose_song(
             # Arrangement: drop non-essential layers in some sections so the
             # band breathes (backing vox/percussion enter on the chorus;
             # drums hold off in the intro).
-            if not _plays_in_section(inst_obj, pick_role, _has_harmonic):
+            # Strict-idiom genres arrange every section themselves (a funk
+            # intro is the whole band on the riff), so the generic thinning
+            # below doesn't apply to them.
+            _own_arrangement = genre in _STRICT_GENRES
+            if not _own_arrangement and not _plays_in_section(inst_obj, pick_role, _has_harmonic):
                 continue
             # Thin stacked chord "color" layers out of the low-energy sections
             # so verses aren't a wall of comping; they return for the lift.
-            if (getattr(inst_obj, "id", None) in _color_chord_ids
+            if (not _own_arrangement
+                    and getattr(inst_obj, "id", None) in _color_chord_ids
                     and pick_role in ("intro", "verse")):
                 continue
             # Per-section instrument MASK (section builder): when a section names
@@ -671,11 +677,18 @@ def compose_song(
                     instrument_token, pick_role, rng,
                     preferred_tags=tags_for_pick, strict=strict,
                 )
-                if technique is None and instrument_token != inst_role:
-                    technique = BANK.pick(
+                if instrument_token != inst_role and (
+                        technique is None
+                        or (strict and not set(technique.tags) & set(tags_for_pick))):
+                    # A strict genre's own idiom on the role bucket beats a
+                    # generic instrument-specific technique.
+                    bucket = BANK.pick(
                         inst_role, pick_role, rng,
                         preferred_tags=tags_for_pick, strict=strict,
                     )
+                    if bucket is not None and (
+                            technique is None or set(bucket.tags) & set(tags_for_pick)):
+                        technique = bucket
             if technique is None:
                 logger.info(
                     "compose_song: no technique for (%s, %s) — skipping",
@@ -701,6 +714,7 @@ def compose_song(
                 bass_inversion=sec_knobs["bass_inversion"],
                 drum_fill=sec_knobs["drum_fill"],
                 lead_fill=(is_lead and lead_is_fill),
+                song_seed=int(seed),
             )
             try:
                 apply_technique(midi, technique, ctx)

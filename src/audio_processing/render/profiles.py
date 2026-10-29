@@ -40,6 +40,11 @@ class MixProfile:
     family_overrides: dict = field(default_factory=dict)
     master_preset: str = "default"
     sidechain_kick_into: tuple[str, ...] = ()
+    # Per-track defaults on top of the family, keyed by a lowercase substring
+    # of the track name (``{"sax": {"gain_db": 2.0}}``), for parts that share
+    # a family but play different roles (the sax lead vs. the horn stabs).
+    # A producer's own per-track settings win.
+    track_overrides: dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +103,24 @@ _JAZZ = MixProfile(
     sidechain_kick_into=(),
 )
 
+_FUNK_FUSION = MixProfile(
+    name="funk_fusion",
+    label="Funk fusion (horn stabs + sax lead forward)",
+    family_overrides={
+        "drums":      {"gain_db": -3.0},
+        "bass":       {"gain_db": -3.0},
+        "chords":     {"gain_db": -6.5, "pan": -0.2},   # Rhodes chops sit under the horns
+        "brass":      {"gain_db": -3.5, "pan": 0.0},    # short stabs need to punch
+    },
+    master_preset="loud",
+    sidechain_kick_into=(),
+    track_overrides={
+        "sax":      {"gain_db": -2.0},                  # lead, centre, just over the stabs
+        "trumpet":  {"pan": 0.35},
+        "trombone": {"pan": 0.15},
+    },
+)
+
 _BALLAD = MixProfile(
     name="ballad",
     label="Ballad (vocal + strings forward)",
@@ -148,7 +171,7 @@ _CINEMATIC = MixProfile(
 
 
 MIX_PROFILES: dict[str, MixProfile] = {
-    p.name: p for p in (_POP, _ROCK, _JAZZ, _BALLAD, _EDM, _CINEMATIC)
+    p.name: p for p in (_POP, _ROCK, _JAZZ, _BALLAD, _EDM, _CINEMATIC, _FUNK_FUSION)
 }
 
 
@@ -180,6 +203,7 @@ _PRESET_TO_PROFILE: dict[str, str] = {
     "jazz":                 "jazz",
     "jazz_fusion":          "jazz",
     "fusion_full":          "jazz",
+    "funk_fusion_full":     "funk_fusion",
     "jazz_aaba_full":       "jazz",
     "jazz_hard_bop_full":   "jazz",
     "jazz_modal_full":      "jazz",

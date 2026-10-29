@@ -56,6 +56,24 @@ class SampledInstrument:
 
 
 SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
+    # Horns: VSCO 2 CE (CC0) staccato samples, mapped by
+    # scripts/setup/make_brass_sfz.py.
+    SampledInstrument(
+        id="horn_section",
+        sfz="vsco2-ce/horns_stac.sfz",
+        programs=(61,),                       # Brass Section
+        eq=(("peak", 300.0, -2.0), ("high_shelf", 4000.0, 2.5)),
+    ),
+    SampledInstrument(
+        id="trumpet",
+        sfz="vsco2-ce/trumpet_stac.sfz",
+        programs=(56, 59),                    # Trumpet, Muted Trumpet
+    ),
+    SampledInstrument(
+        id="trombone",
+        sfz="vsco2-ce/trombone_stac.sfz",
+        programs=(57,),
+    ),
     SampledInstrument(
         id="rhodes",
         sfz="jlearman.jRhodes3c/jRhodes3c-looped-flac-sfz/_jRhodes-stereo-looped.sfz",

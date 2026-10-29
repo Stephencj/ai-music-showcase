@@ -1,0 +1,144 @@
+"""Funk Fusion (Full song): the band riff, horn parts, ranges, mix, brass maps."""
+
+import importlib.util
+import tempfile
+import unittest
+from pathlib import Path
+
+import numpy as np
+import pretty_midi
+import soundfile as sf
+
+import src.composition  # noqa: F401  (registers the technique bank)
+from src.api.arrangement import build_sections
+from src.audio_processing.render import sampled
+from src.audio_processing.render.pipeline import _with_profile_tracks
+from src.audio_processing.render.profiles import MIX_PROFILES, resolve_profile
+from src.composition.song_composer import compose_song
+from src.daw_integration.generic.midi_export import MidiExporter, NoteEvent
+from src.daw_integration.generic.styles import STYLES
+
+GENRE = "funk_fusion_full"
+
+
+def _compose(seed=5):
+    td = tempfile.TemporaryDirectory()
+    preset = STYLES[GENRE]
+    res = compose_song(genre=GENRE, sections=build_sections(GENRE, [], None, None), seed=seed,
+                       enabled_instruments=tuple(preset.default_instruments),
+                       output_dir=Path(td.name), skip_audio=True)
+    return td, res, pretty_midi.PrettyMIDI(res["midi_path"])
+
+
+class FunkFusionTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.td, cls.res, cls.pm = _compose()
+        cls.tracks = {i.name: i for i in cls.pm.instruments}
+        cls.bar = 4 * 60.0 / STYLES[GENRE].tempo
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.td.cleanup()
+
+    def test_every_part_plays_its_own_funk_fusion_pattern(self):
+        names = {s["technique"] for s in self.res["selections"]}
+        self.assertTrue(all(n.startswith("funk_fusion_") for n in names), names)
+        played = {s["instrument"] for s in self.res["selections"]}
+        self.assertEqual(played, set(STYLES[GENRE].default_instruments))
+
+    def test_tracks_and_ranges(self):
+        self.assertEqual(set(self.tracks), {"Drum kit", "Electric Bass", "Electric Piano",
+                                            "Trumpet", "Trombone", "Alto Sax"})
+        ranges = {"Electric Bass": (28, 55), "Trumpet": (55, 84), "Trombone": (40, 72),
+                  "Alto Sax": (58, 80), "Electric Piano": (48, 80)}
+        for name, (lo, hi) in ranges.items():
+            pitches = [n.pitch for n in self.tracks[name].notes]
+            self.assertGreaterEqual(min(pitches), lo, name)
+            self.assertLessEqual(max(pitches), hi, name)
+
+    def test_whole_band_opens_on_the_riff(self):
+        intro_end = 4 * self.bar
+        for name in self.tracks:
+            self.assertTrue(any(n.start < intro_end for n in self.tracks[name].notes), name)
+
+        def onsets(name):
+            return {round(n.start / (self.bar / 16)) for n in self.tracks[name].notes if n.start < intro_end}
+
+        bass, sax, trumpet = onsets("Electric Bass"), onsets("Alto Sax"), onsets("Trumpet")
+        self.assertGreater(len(bass & sax) / len(sax), 0.8)        # bass and sax play it together
+        self.assertGreater(len(trumpet & sax) / len(sax), 0.8)
+
+    def test_trumpet_sits_above_trombone(self):
+        tpt = np.median([n.pitch for n in self.tracks["Trumpet"].notes])
+        tbn = np.median([n.pitch for n in self.tracks["Trombone"].notes])
+        self.assertGreater(tpt, tbn)
+
+    def test_seed_changes_the_riff(self):
+        td, _, pm2 = _compose(seed=12)
+        try:
+            a = [n.pitch for n in self.tracks["Alto Sax"].notes[:12]]
+            b = [n.pitch for n in {i.name: i for i in pm2.instruments}["Alto Sax"].notes[:12]]
+            self.assertNotEqual(a, b)
+        finally:
+            td.cleanup()
+
+
+class FunkMixTest(unittest.TestCase):
+    def test_profile_resolves_and_sax_leads_the_horns(self):
+        profile = resolve_profile(GENRE)
+        self.assertIs(profile, MIX_PROFILES["funk_fusion"])
+        midi = MidiExporter(tempo=140, time_signature=(4, 4))
+        for name, prog in (("Alto Sax", 65), ("Trumpet", 56), ("Electric Piano", 4)):
+            midi.add_notes([NoteEvent(60, 0, 1, 100)], track_name=name, program=prog)
+        mix = _with_profile_tracks({"Trumpet": {"pan": -0.5}}, profile, midi)
+        self.assertEqual(mix["Alto Sax"]["gain_db"], -2.0)
+        self.assertEqual(mix["Trumpet"]["pan"], -0.5)                  # the producer's choice wins
+        self.assertNotIn("Electric Piano", mix)
+
+    def test_no_overrides_leaves_track_mix_alone(self):
+        midi = MidiExporter(tempo=120, time_signature=(4, 4))
+        self.assertIsNone(_with_profile_tracks(None, MIX_PROFILES["pop"], midi))
+
+
+class BrassMappingTest(unittest.TestCase):
+    def test_brass_programs_map_to_the_horn_libraries(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for inst in sampled.SAMPLED_INSTRUMENTS:
+                p = root / inst.sfz
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text("")
+            self.assertEqual(sampled.sampled_for(61, False, root).id, "horn_section")
+            self.assertEqual(sampled.sampled_for(56, False, root).id, "trumpet")
+            self.assertEqual(sampled.sampled_for(57, False, root).id, "trombone")
+            self.assertIsNone(sampled.sampled_for(62, False, root))    # synth brass stays GM
+
+    def test_make_brass_sfz_maps_names_an_octave_up(self):
+        spec = importlib.util.spec_from_file_location(
+            "make_brass_sfz", Path(__file__).resolve().parents[2] / "scripts/setup/make_brass_sfz.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            for folder, prefix in (("Trumpet/stac", "Sum_SHTrumpet_stac"),
+                                   ("Tenor Trombone/stac", "tenortbn_stac")):
+                d = base / "Brass" / folder
+                d.mkdir(parents=True)
+                for note in ("A3", "C4"):
+                    for v in (1, 2):
+                        sf.write(str(d / f"{prefix}_{note}_v{v}_rr1.wav"), np.zeros(10, dtype=np.float32), 44100)
+            mod.main(str(base))
+            text = (base / "trumpet_stac.sfz").read_text()
+            self.assertIn("pitch_keycenter=69", text)          # file "A3" sounds as A4
+            self.assertIn("pitch_keycenter=72", text)
+            self.assertIn("lovel=1 hivel=63", text)
+            self.assertIn("lovel=64 hivel=127", text)
+            horns = (base / "horns_stac.sfz").read_text()
+            self.assertIn("Tenor Trombone/stac", horns)
+            self.assertIn("Trumpet/stac", horns)
+            self.assertFalse((base / "trombone_sus.sfz").exists())   # nothing to map, no file
+
+
+if __name__ == "__main__":
+    unittest.main()

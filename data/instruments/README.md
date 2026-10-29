@@ -18,7 +18,16 @@ for r in jlearman.jRhodes3c karoryfer.black-and-blue-basses virtuosity_drums kar
 done
 ```
 
-About 2.7 GB on disk. A render loads only the samples its notes use.
+Horns (trumpet and trombone from VSCO 2 CE, CC0; ~200 MB). The library ships
+WAVs without SFZ maps, so generate them after downloading:
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/sgossner/VSCO-2-CE.git vsco2-ce
+(cd vsco2-ce && git sparse-checkout set "Brass/Trumpet" "Brass/Tenor Trombone") && rm -rf vsco2-ce/.git
+python ../../scripts/setup/make_brass_sfz.py vsco2-ce
+```
+
+About 2.9 GB on disk in all. A render loads only the samples its notes use.
 
 ## Libraries and licences
 
@@ -28,6 +37,7 @@ About 2.7 GB on disk. A render loads only the samples its notes use.
 | Electric bass (GM 32-37) | Karoryfer Black And Blue Basses | CC0 |
 | Drum kit | Virtuosity Drums (Versilian Studios / Karoryfer) | CC0 |
 | Saxes (GM 64-67) | Karoryfer Weresax | CC0 |
+| Trumpet (56, 59), trombone (57), brass section (61) | VSCO 2 CE staccato | CC0 |
 
 Music made with any of them can be used commercially. Don't commit or ship
 the jRhodes samples themselves.

@@ -100,6 +100,20 @@ def _write_wav(path: Path, audio: np.ndarray, sample_rate: int) -> None:
     sf.write(str(path), data, sample_rate, subtype="PCM_16")
 
 
+def _with_profile_tracks(track_mix: Optional[dict], profile, midi_obj: MidiExporter) -> Optional[dict]:
+    """Layer the profile's per-track defaults under the producer's track_mix."""
+    overrides = getattr(profile, "track_overrides", None) or {}
+    if not overrides:
+        return track_mix
+    merged = {k: dict(v) for k, v in (track_mix or {}).items()}
+    for track in midi_obj.tracks:
+        name = track.name.lower()
+        for needle, settings in overrides.items():
+            if needle in name:
+                merged[track.name] = {**settings, **merged.get(track.name, {})}
+    return merged
+
+
 def _trim_tail(audio: np.ndarray, sample_rate: int, *, floor_db: float = -60.0,
                keep: float = 0.6, fade: float = 0.4) -> np.ndarray:
     """Cut trailing near-silence (``(2, N)`` audio), ending in a short fade."""
@@ -181,6 +195,7 @@ def render_to_audio(
     eff_master = master_preset or profile.master_preset
     family_mix = apply_profile_to_family_mix(profile, _FAMILY_MIX)
     library = library or EffectChainLibrary()
+    track_mix = _with_profile_tracks(track_mix, profile, midi_obj)
     mixer = Mixer(
         library=library,
         family_mix=family_mix,

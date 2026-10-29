@@ -996,6 +996,49 @@ STYLES: dict[str, StylePreset] = {
         },
     ),
 
+    "funk_fusion_full": StylePreset(
+        name="Funk Fusion (Full song)", tempo=140, key="Eb", scale="major",
+        # High-energy video-game fusion: slap bass, horn stabs, Rhodes chops,
+        # a sax hook, and a band-wide unison riff that opens the tune and
+        # turns the choruses around (src/composition/funk_fusion.py, picked
+        # strictly). Secondary dominants (VI7, II7) keep the changes moving.
+        progression=[("Imaj7", 1.0), ("VI7", 1.0), ("ii7", 1.0), ("V7", 1.0)] * 9,
+        voicing="ninth", bass_pattern="funk_16ths", drum_pattern="funk",
+        chord_rhythm="funk_comp", melody_style="motif",
+        chord_octave=3, bass_octave=2, swing=0.0, default_bars=34,
+        chord_program=4, melody_program=65,
+        rhythm_variants={
+            "Full song": [
+                {"start_bar": 0,  "end_bar": 3,  "label": "Intro"},
+                {"start_bar": 4,  "end_bar": 11, "label": "Verse"},
+                {"start_bar": 12, "end_bar": 19, "label": "Chorus 1"},
+                {"start_bar": 20, "end_bar": 23, "label": "Bridge"},
+                {"start_bar": 24, "end_bar": 31, "label": "Chorus 2"},
+                {"start_bar": 32, "end_bar": 33, "label": "Outro"},
+            ],
+        },
+        default_instruments=['drum_kit', 'electric_bass', 'electric_piano', 'trumpet', 'trombone', 'sax_alto'],
+        sound="sampled",
+        pacing_options=('uniform_1',),
+        bridge_pacing_options=('uniform_1',),
+        section_progressions={
+            "intro": [[("Imaj7", 2.0), ("V7", 2.0)]],
+            "verse": [
+                [("Imaj7", 1.0), ("VI7", 1.0), ("ii7", 1.0), ("V7", 1.0)],
+                [("Imaj7", 1.0), ("IV7", 1.0), ("Imaj7", 1.0), ("V7", 1.0)],
+                [("Imaj7", 1.0), ("iii7", 1.0), ("II7", 1.0), ("V7", 1.0)],
+            ],
+            "chorus": [
+                [("IVmaj7", 1.0), ("V7", 1.0), ("iii7", 1.0), ("VI7", 1.0), ("ii7", 1.0), ("V7", 1.0), ("Imaj7", 2.0)],
+                [("IVmaj7", 1.0), ("V7", 1.0), ("Imaj7", 1.0), ("VI7", 1.0), ("ii7", 1.0), ("II7", 1.0), ("V7", 2.0)],
+            ],
+            "bridge": [
+                [("ii7", 1.0), ("V7", 1.0), ("ii7", 1.0), ("V7", 1.0)],
+            ],
+            "outro": [[("Imaj7", 2.0)]],
+        },
+    ),
+
     "jazz_aaba_full": StylePreset(
         name="Jazz AABA (Full song)", tempo=140, key="F", scale="major",
         # ii-V-I-I ×16 = 64 bars (four 16-bar A/B sections).

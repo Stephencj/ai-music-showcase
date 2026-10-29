@@ -20,10 +20,10 @@ from src.audio_processing.render.profiles import (
 
 class ProfileRegistryTests(unittest.TestCase):
 
-    def test_six_profiles_registered(self):
+    def test_profiles_registered(self):
         self.assertEqual(
             set(MIX_PROFILES.keys()),
-            {"pop", "rock", "jazz", "ballad", "edm", "cinematic"},
+            {"pop", "rock", "jazz", "ballad", "edm", "cinematic", "funk_fusion"},
         )
 
     def test_each_profile_has_a_label(self):

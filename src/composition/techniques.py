@@ -32,7 +32,7 @@ GENRE_TAGS = frozenset({
     "blues", "rock", "metal", "punk",
     "funk_rock", "funk", "soul", "motown", "gospel", "disco",
     "pop", "edm", "hip_hop", "reggae", "country", "latin", "afro",
-    "drum_n_bass", "ballad", "fusion",
+    "drum_n_bass", "ballad", "fusion", "funk_fusion",
 })
 
 
@@ -83,6 +83,8 @@ class TechniqueContext:
     bass_inversion: Optional[float] = None
     drum_fill: float = 1.0
     lead_fill: bool = False
+    # The song's seed, for material every instrument must share (a band riff).
+    song_seed: int = 0
 
     @property
     def bar_count(self) -> int:

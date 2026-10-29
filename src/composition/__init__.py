@@ -33,6 +33,7 @@ from src.composition.techniques import (
 # This side-effect is intentional — the module is documentation + registry.
 from src.composition import builtins  # noqa: F401
 from src.composition import fusion  # noqa: F401
+from src.composition import funk_fusion  # noqa: F401
 
 __all__ = [
     "BANK",
