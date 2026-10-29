@@ -36,6 +36,7 @@ class LeadVoice:
 
 
 FUSION_DRIVE = 16.0      # dB into the overdrive (see sampled._amp): singing, not fuzz
+HIGH_SPACE = 0.65        # delay + reverb on the high guitar (1.0 was a touch too much)
 
 _PUNCH = LeadVoice("Punchy synth (the \"Sonic\" synth)", (LeadLayer("synth", "punch"),))
 
@@ -62,13 +63,13 @@ LEAD_VOICES: dict[str, LeadVoice] = {
     ), register="guitar", gain_db=2.5),
     # The overdriven guitar an octave up, singing in a big space.
     "guitar_high": LeadVoice("Overdriven guitar, an octave up, with delay + reverb", (
-        LeadLayer("sfz", sfz="guitar_twang", sfz_short="guitar_staccato", drive_db=FUSION_DRIVE, space=1.0),
+        LeadLayer("sfz", sfz="guitar_twang", sfz_short="guitar_staccato", drive_db=FUSION_DRIVE, space=HIGH_SPACE),
     ), register="guitar_high", gain_db=2.5),
     # The guitar as it is, with the high, spacious one stacked an octave above.
     "guitar_stack": LeadVoice("Overdriven guitar + the same an octave up in reverb", (
         LeadLayer("sfz", sfz="guitar_twang", sfz_short="guitar_staccato", drive_db=FUSION_DRIVE),
         LeadLayer("sfz", sfz="guitar_twang", sfz_short="guitar_staccato", drive_db=FUSION_DRIVE,
-                  octave=1, space=1.0, db=-3.0),
+                  octave=1, space=HIGH_SPACE, db=-3.0),
     ), register="guitar", gain_db=2.5),
     # Trumpet and overdriven guitar in unison: the horn's attack and body, the
     # guitar's singing sustain.
