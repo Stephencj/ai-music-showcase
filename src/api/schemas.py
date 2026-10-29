@@ -53,6 +53,29 @@ class GenerateRequest(BaseModel):
     split_into_blocks: bool = False        # one block per section (mix & match)
 
 
+class VideoChapter(BaseModel):
+    """One chapter of a video to score (see src/api/video_score.py)."""
+    start: float                                   # seconds into the video
+    card: float = 0.0                              # title card length at its start
+    roles: list[str] = Field(default_factory=lambda: ["verse"])
+    key: Optional[str] = None
+    lead: str = "synth_lead"                       # or "lead_guitar"
+    label: str = ""
+
+
+class VideoScoreRequest(BaseModel):
+    """Score a whole video: one chapter per section of the video, each landing
+    on a downbeat, hits on captions/cards, rendered as one continuous mix."""
+    duration: float
+    chapters: list[VideoChapter]
+    hits: list[float] = Field(default_factory=list)   # seconds into the video
+    genre: str = "funk_fusion_full"
+    seed: int = 52
+    base_tempo: float = 158.0
+    lead_patch: Optional[str] = None
+    with_stems: bool = False
+
+
 class ParsePromptRequest(BaseModel):
     """Natural-language song description → a SongPlan that pre-fills the
     Generate form (rule-based, deterministic)."""

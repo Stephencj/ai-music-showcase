@@ -1765,3 +1765,44 @@ def _save_unique_block(block_store, base_name: str, pm, *,
                            time_signature=time_signature, bars=int(bars),
                            overwrite=False, spec=spec)
     return name
+
+
+def run_video_score(req, progress, job_id: str) -> dict:
+    """Compose a video score chapter by chapter (src/api/video_score.py),
+    render it once, and fit it to the video's exact length."""
+    import soundfile as sf
+
+    from src.audio_processing.render.pipeline import render_to_audio
+    from src.daw_integration.generic import blocks as block_store
+    from .video_score import Chapter, compose_score, fit_to_length
+
+    job_dir = API_OUT / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    _prune_old_job_dirs()
+    chapters = [Chapter(start=c.start, card=c.card, roles=tuple(c.roles or ["verse"]), key=c.key,
+                        lead=c.lead, label=c.label) for c in req.chapters]
+    midi, plans = compose_score(chapters, duration=req.duration, hits=list(req.hits),
+                                genre=req.genre, seed=req.seed, base_tempo=req.base_tempo,
+                                lead_voice=req.lead_patch, progress=progress)
+    midi_path = job_dir / "score.mid"
+    midi.build().write(str(midi_path))
+
+    progress("Rendering the score…", 0.5)
+    render = render_to_audio(midi, output_dir=job_dir / "render", with_stems=bool(req.with_stems),
+                             style_name=req.genre, lead_patch=req.lead_patch)
+    audio, sr = sf.read(str(render.mix_path), always_2d=True)
+    audio = fit_to_length(audio.T.astype("float32"), sr, req.duration)
+    wav_path = job_dir / "score.wav"
+    sf.write(str(wav_path), audio.T, sr, subtype="PCM_24")
+    mp3_path: Path | None = job_dir / "score.mp3"
+    if not block_store.write_preview_mp3(wav_path, mp3_path):
+        mp3_path = None
+    progress("Done.", 1.0)
+    return {
+        "duration": req.duration,
+        "chapters": [{"start": round(p.start, 3), "end": round(p.end, 3), "tempo": round(p.tempo, 2),
+                      "bars": p.bars, "sections": [(s["label"], s["role"], s["end_bar"] - s["start_bar"] + 1)
+                                                   for s in p.sections]} for p in plans],
+        "_paths": {"midi": str(midi_path), "audio_mp3": str(mp3_path) if mp3_path else None,
+                   "audio_wav": str(wav_path), "pdf": None},
+    }

@@ -34,6 +34,7 @@ from .schemas import (
     MixPreviewRequest,
     ProduceBlockRequest,
     GenerateRequest,
+    VideoScoreRequest,
     GeneratePartRequest,
     LibrarySaveRequest,
     LyricsDraftRequest,
@@ -155,6 +156,18 @@ def generate(req: GenerateRequest) -> dict:
         raise HTTPException(404, f"Unknown genre {req.genre!r}")
     job = registry.create()
     registry.run(job, lambda progress: service.run_generation(req, progress, job.id))
+    return {"job_id": job.id}
+
+
+@router.post("/score-video")
+def score_video(req: VideoScoreRequest) -> dict:
+    """Score a video chapter by chapter (src/api/video_score.py)."""
+    if req.genre not in STYLES:
+        raise HTTPException(404, f"Unknown genre {req.genre!r}")
+    if not req.chapters or req.duration <= 0:
+        raise HTTPException(422, "A video score needs a duration and at least one chapter")
+    job = registry.create()
+    registry.run(job, lambda progress: service.run_video_score(req, progress, job.id))
     return {"job_id": job.id}
 
 

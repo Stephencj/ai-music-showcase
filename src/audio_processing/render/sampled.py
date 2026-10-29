@@ -55,12 +55,24 @@ class SampledInstrument:
     # Tone voicing applied to the raw stem before the mixer's family chain:
     # (kind, frequency Hz, gain dB) with kind "low_shelf" / "high_shelf" / "peak".
     eq: tuple[tuple[str, float, float], ...] = ()
-    # "sfz" plays the library at ``sfz``; "synth" renders the built-in synth
-    # lead (render/synth_lead.py), which needs no download.
+    # "sfz" plays the library at ``sfz``; "synth" renders a lead voice
+    # (render/lead_voices.py: the built-in synth and/or sampled layers).
     engine: str = "sfz"
+    # For "synth" tracks: a fixed lead voice; empty = the render's lead_patch.
+    voice: str = ""
 
 
 SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
+    # A lead guitar track (GM overdrive/distortion guitar) plays as the
+    # stacked overdriven guitar voice, so a song can trade leads with the
+    # main lead track.
+    SampledInstrument(
+        id="lead_guitar",
+        sfz="",
+        programs=(29, 30),
+        engine="synth",
+        voice="guitar_stack",
+    ),
     # Lead-voice layers only (render/lead_voices.py): no GM program maps here.
     SampledInstrument(
         id="trumpet_sus",
@@ -310,9 +322,9 @@ class SampledRenderer:
             audio = _space(audio, layer.space, self.sample_rate)
         return audio
 
-    def _lead(self, notes: list[Note], index: int) -> np.ndarray:
-        """The lead track in its named voice (render/lead_voices.py)."""
-        lead_voice = voice(self.lead_patch)
+    def _lead(self, notes: list[Note], index: int, voice_name: Optional[str] = None) -> np.ndarray:
+        """A lead track in its named voice (render/lead_voices.py)."""
+        lead_voice = voice(voice_name if voice_name is not None else self.lead_patch)
         layers = []
         for layer in lead_voice.layers:
             audio = self._lead_layer(layer, notes, index)
@@ -343,7 +355,7 @@ class SampledRenderer:
             notes = [Note(pitch=int(n.pitch) + inst.key_offset, start=float(n.start),
                           end=float(n.end), velocity=int(n.velocity)) for n in track.notes]
             if inst.engine == "synth":
-                audio = self._lead(notes, index)
+                audio = self._lead(notes, index, inst.voice or self.lead_patch)
             else:
                 sfz = self._instrument(inst)
                 for region in sfz.regions:
@@ -361,7 +373,7 @@ class SampledRenderer:
             if inst.engine == "synth":
                 # Level-match lead voices after normalising (sampled voices are
                 # peakier, so equal peaks would leave them quieter).
-                audio *= 10 ** (voice(self.lead_patch).gain_db / 20.0)
+                audio *= 10 ** (voice(inst.voice or self.lead_patch).gain_db / 20.0)
             stems.append(TrackStem(name=track.name, program=track.program, is_drum=track.is_drum,
                                    audio=audio, sample_rate=self.sample_rate))
             logger.info("sampled: %s → %s (%.1fs)", track.name, inst.id, audio.shape[1] / self.sample_rate)

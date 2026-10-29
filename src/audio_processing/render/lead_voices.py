@@ -36,7 +36,7 @@ class LeadVoice:
 
 
 FUSION_DRIVE = 16.0      # dB into the overdrive (see sampled._amp): singing, not fuzz
-HIGH_SPACE = 0.4         # delay + reverb on the high guitar (1.0, then 0.65, were too much)
+HIGH_SPACE = 0.2         # delay + reverb on the high guitar (1.0, 0.65, 0.4 were all too wet)
 
 _PUNCH = LeadVoice("Punchy synth (the \"Sonic\" synth)", (LeadLayer("synth", "punch"),))
 

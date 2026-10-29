@@ -654,7 +654,10 @@ def _flares(ctx: TechniqueContext, clock: "_Clock", harm: "_Harmony", feel: str,
 def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
     """The lead: alto sax or synth lead (a synth sits about an octave higher).
     Before a chorus it plays a rising run that carries into the section."""
-    synth = ctx.instrument == "synth_lead" or getattr(ctx.instrument_obj, "program", 65) in range(80, 88)
+    program_in = getattr(ctx.instrument_obj, "program", 65)
+    guitar_lead = ctx.instrument == "lead_guitar" or program_in in (29, 30)
+    # "synth" = rendered as a lead voice (synth and/or sampled layers).
+    synth = guitar_lead or ctx.instrument == "synth_lead" or program_in in range(80, 88)
     name, program = ("Lead", 81) if synth else ("Melody", 65)
     rng = ctx.rng
     clock = _Clock(ctx)
@@ -662,7 +665,9 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
     bars = ctx.bar_count
     riff = riff_bars(ctx, feel)
     notes: list[NoteEvent] = []
-    if synth:
+    if guitar_lead:
+        reg_name = _voice_register("guitar_stack")
+    elif synth:
         reg_name = _voice_register(ctx.lead_voice)
     else:
         reg_name = "sax"

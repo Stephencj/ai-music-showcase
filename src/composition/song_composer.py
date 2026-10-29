@@ -655,7 +655,8 @@ def compose_song(
             # outro) or drops a short fill in a fill section; else it sits out.
             is_lead = getattr(inst_obj, "id", None) == "lead_guitar"
             lead_is_fill = is_lead and sec_idx in _lead_fill_secs
-            if is_lead and sec_idx not in _lead_sections and not lead_is_fill:
+            if (is_lead and not _own_arrangement
+                    and sec_idx not in _lead_sections and not lead_is_fill):
                 continue
             override_key = f"{role}:{instrument_token}"
             label_key = f"{label}:{instrument_token}"
