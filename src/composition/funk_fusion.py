@@ -102,8 +102,101 @@ def riff_notes(ctx: TechniqueContext, bars: tuple[int, ...], feel: str = "intro"
     return out
 
 
+def _arrangement(ctx: TechniqueContext) -> set[str]:
+    """Arrangement variants, comma separated (e.g. "hits_only,calm")."""
+    return {a.strip() for a in (getattr(ctx, "arrangement", "") or "").replace("+", ",").split(",") if a.strip()}
+
+
 def _hits_only(ctx: TechniqueContext) -> bool:
-    return getattr(ctx, "arrangement", "") == "hits_only"
+    return "hits_only" in _arrangement(ctx)
+
+
+def _calm(ctx: TechniqueContext) -> bool:
+    """"calm": a plainer band for background use — straight 8th hats and a
+    backbeat without ghosts or open hats, a legato finger bass on roots and
+    fifths, sustained Rhodes chords."""
+    return "calm" in _arrangement(ctx)
+
+
+def _calm_drums(midi, ctx: TechniqueContext, feel: str) -> None:
+    rng, clock, bars = ctx.rng, _Clock(ctx), ctx.bar_count
+    hits: list[tuple[int, float, int, float]] = []
+    for bar in range(bars):
+        last = bar == bars - 1
+        if feel == "outro" and last:
+            hits += [(bar, 0, KICK, 112), (bar, 0, CRASH, 104)]
+            continue
+        if feel == "intro" and bar < bars - 1:
+            for step in range(0, 16, 2):
+                hits.append((bar, step, CLOSED_HAT, 58 if step % 4 else 68))
+            continue
+        fill = last and feel != "outro"
+        for step in range(0, 12 if fill else 16, 2):
+            hits.append((bar, step, CLOSED_HAT, 70 if step % 4 == 0 else 52))
+        hits += [(bar, 4, SNARE, 94), (bar, 12, SNARE, 96)]
+        hits += [(bar, 0, KICK, 98), (bar, 8, KICK, 90)] + ([(bar, 10, KICK, 80)] if bar % 2 else [])
+        if bar == 0 and feel in HIGH_ROLES:
+            hits.append((bar, 0, CRASH, 84))
+        if fill:
+            hits += [(bar, 12, SNARE, 84), (bar, 14, TOM_MID, 86), (bar, 15, TOM_LO, 90)]
+    for bar, steps_ in hit_steps(ctx, clock).items():
+        for st in steps_:
+            hits += [(bar, st, KICK, 116), (bar, st, SNARE, 104), (bar, st, CRASH, 104)]
+    notes = []
+    for bar, step, key, vel in hits:
+        t, v = _human(rng, clock.t(bar, step), vel, ms=3.0, vel_jitter=3.0)
+        dur = clock.step_len * (8 if key == CRASH else 1)
+        notes.append(NoteEvent(pitch=key, start=t, end=t + dur, velocity=v))
+    _emit(midi, ctx, notes, name="Drums", program=0, is_drum=True)
+
+
+def _calm_bass(midi, ctx: TechniqueContext, feel: str) -> None:
+    rng, clock, harm, bars = ctx.rng, _Clock(ctx), _Harmony(ctx), ctx.bar_count
+    notes: list[NoteEvent] = []
+    for bar in range(bars):
+        if feel == "intro" and bar < bars - 1:
+            continue
+        if feel == "outro" and bar == bars - 1:
+            p = _fits(harm.tonic + 36, _LO, _LO + 11)
+            notes.append(NoteEvent(pitch=p, start=clock.t(bar, 0), end=clock.t(bar, 0) + clock.bar_len, velocity=96))
+            continue
+        # Root on 1, held; fifth on beat 4 leading on. Legato: each note runs into the next.
+        for step, length, fifth, vel in ((0, 12, False, 94), (12, 4, True, 82)):
+            root_pc, quality = harm.at(bar + step / clock.steps)
+            root = _fits(root_pc + 36, _LO, _LO + 11)
+            pitch = root + (6 if quality == "dim" else 7) if fifth else root
+            s, v = _human(rng, clock.t(bar, step), vel, ms=4.0, vel_jitter=3.0)
+            notes.append(NoteEvent(pitch=pitch, start=s, end=clock.t(bar, step + length) - 0.01, velocity=v))
+    for bar, steps_ in hit_steps(ctx, clock).items():
+        for st in steps_:
+            root_pc, _ = harm.at(bar + st / clock.steps)
+            t0 = clock.t(bar, st)
+            notes = [n for n in notes if not (t0 - 0.02 <= n.start < t0 + clock.step_len * 2)]
+            notes.append(NoteEvent(pitch=_fits(root_pc + 36, _LO, _LO + 11), start=t0, end=t0 + clock.step_len * 3, velocity=112))
+    _emit(midi, ctx, notes, name="Bass", program=33)
+
+
+def _calm_rhodes(midi, ctx: TechniqueContext, feel: str) -> None:
+    rng, clock, harm, bars = ctx.rng, _Clock(ctx), _Harmony(ctx), ctx.bar_count
+    notes: list[NoteEvent] = []
+    previous: Optional[list[int]] = None
+    for ev in harm.events:                                  # one sustained chord per change
+        root_pc, quality = harm.at(ev.start_bar)
+        if feel == "outro" and ev is harm.events[-1]:
+            quality = "maj"
+        voicing = _voice(root_pc, quality, previous)
+        previous = voicing
+        start = clock.t(0, ev.start_bar * clock.steps)
+        end = clock.t(0, ev.end_bar * clock.steps) - 0.02
+        for i, p in enumerate(voicing):
+            s, v = _human(rng, start + i * 0.012, 70, ms=4.0, vel_jitter=3.0)
+            notes.append(NoteEvent(pitch=p, start=s, end=end, velocity=v))
+    for bar, steps_ in hit_steps(ctx, clock).items():
+        for st in steps_:
+            root_pc, quality = harm.at(bar + st / clock.steps)
+            for p in _voice(root_pc, quality, previous):
+                notes.append(NoteEvent(pitch=p, start=clock.t(bar, st), end=clock.t(bar, st) + clock.step_len * 3, velocity=90))
+    _emit(midi, ctx, notes, name="Chords", program=4)
 
 
 def riff_bars(ctx: TechniqueContext, feel: str) -> tuple[int, ...]:
@@ -141,6 +234,8 @@ _KICKS = {
 
 
 def _drums(midi, ctx: TechniqueContext, feel: str) -> None:
+    if _calm(ctx):
+        return _calm_drums(midi, ctx, feel)
     rng = ctx.rng
     clock = _Clock(ctx)
     bars = ctx.bar_count
@@ -283,6 +378,8 @@ _LO, _HI = 31, 55
 
 
 def _bass(midi, ctx: TechniqueContext, feel: str) -> None:
+    if _calm(ctx):
+        return _calm_bass(midi, ctx, feel)
     rng = ctx.rng
     clock = _Clock(ctx)
     harm = _Harmony(ctx)
@@ -575,6 +672,8 @@ _CHOPS = {
 
 
 def _rhodes(midi, ctx: TechniqueContext, feel: str) -> None:
+    if _calm(ctx):
+        return _calm_rhodes(midi, ctx, feel)
     rng = ctx.rng
     clock = _Clock(ctx)
     harm = _Harmony(ctx)

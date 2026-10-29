@@ -454,6 +454,54 @@ class HitsOnlyTest(unittest.TestCase):
         self.assertEqual([n.pitch for n in tail], sorted((n.pitch for n in tail), reverse=True))
 
 
+class CalmTest(unittest.TestCase):
+    """"calm": plainer band for background — combined here with hits_only."""
+
+    TEMPO = 120
+
+    @classmethod
+    def setUpClass(cls):
+        cls.td = tempfile.TemporaryDirectory()
+        secs = build_sections(GENRE, ["intro", "verse", "chorus", "outro"], None,
+                              {"intro": {"bars": 2}, "verse": {"bars": 4}, "chorus": {"bars": 4}, "outro": {"bars": 2}})
+        res = compose_song(genre=GENRE, sections=secs, seed=5, tempo=cls.TEMPO, hits=[9.1],
+                           hit_style="groove", arrangement="hits_only,calm",
+                           enabled_instruments=tuple(STYLES[GENRE].default_instruments),
+                           output_dir=Path(cls.td.name), skip_audio=True)
+        cls.tracks = {i.name: i for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments}
+        cls.bar = 240.0 / cls.TEMPO
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.td.cleanup()
+
+    def test_plain_kit(self):
+        kit = self.tracks["Drum kit"].notes
+        self.assertFalse([n for n in kit if n.pitch == 38 and n.velocity < 60])     # no ghost notes
+        self.assertFalse([n for n in kit if n.pitch == 46])                         # no open hats
+        hats = sorted(n.start for n in kit if n.pitch == 42)
+        gaps = np.diff(hats)
+        self.assertGreater(float(np.median(gaps)), self.bar / 8 * 0.9)              # 8ths, not 16ths
+
+    def test_legato_finger_bass(self):
+        bass = [n for n in self.tracks["Electric Bass"].notes if n.start < 11 * self.bar]
+        self.assertEqual(self.tracks["Electric Bass"].program, 33)
+        self.assertGreater(float(np.median([n.end - n.start for n in bass])), self.bar * 0.2)
+        self.assertLessEqual(len(bass), 2 * 10 + 4)                                 # about two notes a bar
+
+    def test_sustained_rhodes(self):
+        rh = self.tracks["Electric Piano"].notes
+        self.assertGreater(float(np.median([n.end - n.start for n in rh])), self.bar * 0.9)
+
+    def test_hits_still_land(self):
+        import math
+        beat = self.bar / 4
+        grid = beat if beat <= 0.45 else beat / 2          # slow tempos snap to the next 8th
+        hit = math.ceil((9.1 - 0.03) / grid) * grid
+        kit = {n.pitch for n in self.tracks["Drum kit"].notes if abs(n.start - hit) < 0.02}
+        self.assertTrue({36, 38, 49} <= kit)
+
+
 class FunkMixTest(unittest.TestCase):
     def test_profile_resolves_and_sets_the_sax_level(self):
         profile = resolve_profile(GENRE)
