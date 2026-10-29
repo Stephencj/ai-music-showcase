@@ -113,6 +113,25 @@ class FunkFusionTest(unittest.TestCase):
             td.cleanup()
 
 
+class TomBridgeTest(unittest.TestCase):
+    def test_bridge_opens_on_a_tom_groove_then_builds(self):
+        td = tempfile.TemporaryDirectory()
+        try:
+            secs = build_sections(GENRE, ["verse", "bridge"], None, {"verse": {"bars": 4}, "bridge": {"bars": 8}})
+            res = compose_song(genre=GENRE, sections=secs, seed=5,
+                               enabled_instruments=tuple(STYLES[GENRE].default_instruments),
+                               output_dir=Path(td.name), skip_audio=True)
+            kit = next(i for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments if i.is_drum)
+            bar = 4 * 60.0 / STYLES[GENRE].tempo
+            first_half = [n for n in kit.notes if 4 * bar - 0.02 <= n.start < 8 * bar - 0.02]
+            second_half = [n for n in kit.notes if 8 * bar - 0.02 <= n.start < 12 * bar - 0.02]
+            toms = [n for n in first_half if n.pitch in (45, 47, 50)]
+            self.assertGreaterEqual(len(toms), 4 * 8)                       # toms drive every bar
+            self.assertGreater(sum(n.pitch == 38 for n in second_half), 12)  # the snare build stays
+        finally:
+            td.cleanup()
+
+
 class OneBarRiffTest(unittest.TestCase):
     """A tight 30 s cut: 1-bar riff intro, 1-bar turnaround, riff + hit ending."""
 

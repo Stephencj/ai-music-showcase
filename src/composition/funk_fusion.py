@@ -26,7 +26,7 @@ from src.daw_integration.generic.midi_export import NoteEvent
 
 from .builtins import _register
 from .fusion import (
-    ALL_ROLES, CLOSED_HAT, CRASH, KICK, OPEN_HAT, PEDAL_HAT, RIDE, SNARE,
+    ALL_ROLES, CLOSED_HAT, CRASH, KICK, OPEN_HAT, PEDAL_HAT, RIDE, SNARE, STICK,
     TOM_HI, TOM_LO, TOM_MID, _SEVENTH, _VOICINGS, _Clock, _Harmony, _emit,
     _fits, _human, _scale_pitches, _voice,
 )
@@ -117,6 +117,15 @@ def riff_bars(ctx: TechniqueContext, feel: str) -> tuple[int, ...]:
 # DRUMS
 # ---------------------------------------------------------------------------
 
+# Bridge/breakdown opening: toms carry the groove (low/mid/high around the
+# kick, a cross-stick on 4), instead of a sparse half-time beat.
+_TOM_GROOVE = (
+    (0, TOM_LO, 104), (3, TOM_LO, 84), (5, TOM_MID, 90), (7, TOM_MID, 78),
+    (8, TOM_LO, 98), (10, TOM_HI, 86), (11, TOM_MID, 80), (12, STICK, 92),
+    (14, TOM_LO, 92),
+)
+_TOM_KICKS = (0, 6, 10)
+
 _KICKS = {
     "verse":  ((0, 6, 10), (0, 3, 8, 10, 14)),
     "high":   ((0, 4, 6, 10, 12), (0, 3, 6, 8, 11, 14)),
@@ -161,17 +170,21 @@ def _drums(midi, ctx: TechniqueContext, feel: str) -> None:
             continue
         if feel in ("bridge", "breakdown"):
             half = bars // 2
-            if bar < half:   # bass-and-drums breakdown, half-time
-                for step in range(0, clock.steps, 2):
-                    hits.append((bar, step, PEDAL_HAT if step % 4 else CLOSED_HAT, 64))
-                hits.append((bar, 8, SNARE, 110))
+            if bar < half:   # bass-and-drums: a rolling tom groove
+                for step, key, vel in _TOM_GROOVE:
+                    hits.append((bar, step, key, vel))
+                for step in range(0, clock.steps, 4):
+                    hits.append((bar, step + 2, CLOSED_HAT, 52))   # quiet offbeat hat keeps time
+                if bar % 2 == 1 and bar < half - 1:
+                    for i, (step, key) in enumerate(((12, TOM_HI), (13, TOM_HI), (14, TOM_MID), (15, TOM_LO))):
+                        hits.append((bar, step, key, 88 + 6 * i))
             else:            # build: snare 8ths then 16ths, rising
                 rate = 2 if bar < bars - 1 else 1
                 for i, step in enumerate(range(0, clock.steps, rate)):
                     v = 60 + 40 * (bar - half + i / clock.steps * rate) / max(1, bars - half)
                     hits.append((bar, step, SNARE, v))
                 hits.append((bar, 0, CRASH, 90))
-            for step in kicks[bar % 2]:
+            for step in (_TOM_KICKS if bar < half else kicks[bar % 2]):
                 hits.append((bar, step, KICK, 100))
             continue
         # Groove: 16th hats, open on the offbeats in the high sections.
