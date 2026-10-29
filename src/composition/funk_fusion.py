@@ -1,6 +1,7 @@
 """High-energy funk-fusion techniques (tag ``funk_fusion``).
 
-The bouncy video-game fusion sound (think a kart racer's title screen): fast
+The bouncy video-game fusion sound (think a kart racer's title screen): the
+drums kick off and build, the band hits a one-bar unison riff, then fast
 straight 16ths, a slap-style bass with thumb roots and popped octaves, horn
 stabs, Rhodes chops, a hooky sax lead the horns answer, and a band-wide
 unison riff that opens the tune, turns the chorus around and ends it.
@@ -100,7 +101,7 @@ def riff_bars(ctx: TechniqueContext, feel: str) -> tuple[int, ...]:
     """Where the band plays the riff in a section of this role."""
     n = ctx.bar_count
     if feel == "intro":
-        return tuple(range(n))                 # the tune opens on the riff
+        return (n - 1,)                        # drums build, then the band hits the riff
     if feel in HIGH_ROLES and n >= 4:
         return (n - 1,)                        # one-bar turnaround into what's next
     if feel == "outro":
@@ -137,7 +138,8 @@ def _drums(midi, ctx: TechniqueContext, feel: str) -> None:
             hits += [(bar, 0, KICK, 118), (bar, 0, CRASH, 116), (bar, 0, SNARE, 108),
                      (bar, 0, TOM_LO, 100)]
             continue
-        big_fill = last and feel != "outro"
+        # In the intro the fill is the build in the bar before the riff.
+        big_fill = (bar == bars - 2) if feel == "intro" else (last and feel != "outro")
         small_fill = (bar % 4 == 3) and not big_fill and bar not in riff and ctx.drum_fill >= 0.5
         if bar in riff_steps:
             # Riff bar: kick and snare punch the riff's accents, hats keep 8ths.
@@ -252,6 +254,8 @@ def _bass(midi, ctx: TechniqueContext, feel: str) -> None:
             p = _fits(harm.tonic + 36, _LO, _LO + 11)
             notes.append(NoteEvent(pitch=p, start=clock.t(bar, 0), end=clock.t(bar, 0) + clock.bar_len, velocity=118))
             continue
+        if feel == "intro" and bar not in by_bar:
+            continue                              # the intro is drums until the riff
         if bar in by_bar:
             for step, length, semis in by_bar[bar]:
                 p = _fits(harm.tonic + semis + 36, _LO, _LO + 18)
@@ -355,7 +359,7 @@ def _horns(midi, ctx: TechniqueContext, feel: str) -> None:
     for pair in range(0, bars, 2):
         for step, length, vel in pattern:
             bar = pair + step // clock.steps
-            if bar >= bars or bar in riff_set:
+            if bar >= bars or bar in riff_set or feel == "intro":
                 continue
             if feel == "outro" and bar == bars - 1 and step:
                 continue
@@ -415,6 +419,8 @@ def _rhodes(midi, ctx: TechniqueContext, feel: str) -> None:
         if bar in accents:
             for step in accents[bar]:
                 chord(bar, step, 1, 90, bar + step / clock.steps)
+            continue
+        if feel == "intro":
             continue
         if feel in ("bridge", "breakdown") and bar < bars // 2:
             continue                              # breakdown: bass and drums only

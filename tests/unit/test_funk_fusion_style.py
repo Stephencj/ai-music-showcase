@@ -57,10 +57,17 @@ class FunkFusionTest(unittest.TestCase):
             self.assertGreaterEqual(min(pitches), lo, name)
             self.assertLessEqual(max(pitches), hi, name)
 
-    def test_whole_band_opens_on_the_riff(self):
+    def test_intro_is_drums_building_into_the_band_riff(self):
         intro_end = 4 * self.bar
-        for name in self.tracks:
-            self.assertTrue(any(n.start < intro_end for n in self.tracks[name].notes), name)
+        riff_start = 3 * self.bar - 0.02
+        for name, track in self.tracks.items():
+            early = [n for n in track.notes if n.start < riff_start]
+            if name == "Drum kit":
+                build = [n for n in early if 2 * self.bar - 0.02 <= n.start]
+                self.assertTrue(any(n.pitch in (45, 47, 50) for n in build))   # tom build
+            else:
+                self.assertFalse(early, name)
+            self.assertTrue(any(riff_start <= n.start < intro_end for n in track.notes), name)
 
         def onsets(name):
             return {round(n.start / (self.bar / 16)) for n in self.tracks[name].notes if n.start < intro_end}
