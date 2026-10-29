@@ -396,6 +396,64 @@ class LeadVoiceTest(unittest.TestCase):
             self.assertGreater(float(np.abs(out).max()), 0.05)
 
 
+class HitsOnlyTest(unittest.TestCase):
+    """70s-section arrangement: no lead or riffs, everyone lands the hits."""
+
+    TEMPO = 145
+    HITS = (7.0, 13.3)
+
+    @classmethod
+    def setUpClass(cls):
+        cls.td = tempfile.TemporaryDirectory()
+        secs = build_sections(GENRE, ["intro", "verse", "chorus", "outro"], None,
+                              {"intro": {"bars": 2}, "verse": {"bars": 4}, "chorus": {"bars": 4}, "outro": {"bars": 2}})
+        res = compose_song(genre=GENRE, sections=secs, seed=5, tempo=cls.TEMPO, hits=list(cls.HITS),
+                           hit_style="groove", arrangement="hits_only",
+                           enabled_instruments=tuple(STYLES[GENRE].default_instruments),
+                           output_dir=Path(cls.td.name), skip_audio=True)
+        cls.tracks = {i.name: i for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments}
+        cls.beat = 60.0 / cls.TEMPO
+        cls.bar = 4 * cls.beat
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.td.cleanup()
+
+    def hit_times(self):
+        import math
+        return [math.ceil((h - 0.03) / self.beat) * self.beat for h in self.HITS]
+
+    def near(self, t, times, tol=0.02):
+        return any(abs(t - x) <= tol for x in times)
+
+    def test_lead_and_horns_only_play_the_hits_and_the_ending(self):
+        final = 11 * self.bar
+        for name in ("Synth Lead", "Trumpet", "Trombone"):
+            starts = [n.start for n in self.tracks[name].notes if n.end - n.start > 0.05]
+            self.assertTrue(starts, name)
+            for t in starts:
+                self.assertTrue(self.near(t, self.hit_times()) or t >= final - 0.02, (name, t))
+
+    def test_unison_octaves_on_root_or_fifth(self):
+        hit = self.hit_times()[0]
+        tpt = [n.pitch for n in self.tracks["Trumpet"].notes if abs(n.start - hit) < 0.02]
+        tbn = [n.pitch for n in self.tracks["Trombone"].notes if abs(n.start - hit) < 0.02]
+        self.assertEqual(len(tpt), 1)
+        self.assertEqual(tbn, [tpt[0] - 12])
+
+    def test_the_kit_and_bass_land_every_hit(self):
+        for hit in self.hit_times():
+            kit = {n.pitch for n in self.tracks["Drum kit"].notes if abs(n.start - hit) < 0.02}
+            self.assertTrue({36, 38, 49} <= kit, kit)
+            self.assertTrue([n for n in self.tracks["Electric Bass"].notes if abs(n.start - hit) < 0.02])
+
+    def test_the_final_hit_falls_off(self):
+        final = 11 * self.bar
+        tail = sorted((n for n in self.tracks["Trumpet"].notes if n.start > final + 0.3), key=lambda n: n.start)
+        self.assertGreaterEqual(len(tail), 4)
+        self.assertEqual([n.pitch for n in tail], sorted((n.pitch for n in tail), reverse=True))
+
+
 class FunkMixTest(unittest.TestCase):
     def test_profile_resolves_and_sets_the_sax_level(self):
         profile = resolve_profile(GENRE)

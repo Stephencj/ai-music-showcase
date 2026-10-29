@@ -102,8 +102,14 @@ def riff_notes(ctx: TechniqueContext, bars: tuple[int, ...], feel: str = "intro"
     return out
 
 
+def _hits_only(ctx: TechniqueContext) -> bool:
+    return getattr(ctx, "arrangement", "") == "hits_only"
+
+
 def riff_bars(ctx: TechniqueContext, feel: str) -> tuple[int, ...]:
     """Where the band plays the riff in a section of this role."""
+    if _hits_only(ctx):
+        return ()
     n = ctx.bar_count
     if feel == "intro":
         return (n - 1,)                        # drums build, then the band hits the riff
@@ -219,11 +225,14 @@ def _drums(midi, ctx: TechniqueContext, feel: str) -> None:
     # Hit points: clear the kit around each one, then everything lands on it.
     points = hit_steps(ctx, clock)
     if points and _groove(ctx):
-        # In the groove: a kick under the stab, a crash only on a bar's first beat.
+        # In the groove: a kick under the stab, a crash only on a bar's first
+        # beat (hits-only: the whole kit lands every hit).
         for bar, steps_ in points.items():
             for st in steps_:
-                hits.append((bar, st, KICK, 112))
-                if st == 0:
+                hits.append((bar, st, KICK, 118 if _hits_only(ctx) else 112))
+                if _hits_only(ctx):
+                    hits += [(bar, st, SNARE, 108), (bar, st, CRASH, 110)]
+                elif st == 0:
                     hits.append((bar, st, CRASH, 104))
     elif points:
         hits = [h for h in hits if not _near_hit(points, h[0], int(h[1]), clock.steps, clear=1)]
@@ -334,7 +343,8 @@ def _bass(midi, ctx: TechniqueContext, feel: str) -> None:
             notes.append(NoteEvent(pitch=pitch, start=s, end=e, velocity=v))
             if deg != "G":
                 prev = pitch
-    points = {} if _groove(ctx) else hit_steps(ctx, clock)   # the bass keeps grooving
+    # The bass keeps grooving through groove-style hits (it lands them in hits-only).
+    points = {} if (_groove(ctx) and not _hits_only(ctx)) else hit_steps(ctx, clock)
     if points:
         step_len = clock.step_len
         def near(n):
@@ -460,6 +470,36 @@ def _part(voicing: list[int], part: str) -> list[int]:
     return voicing
 
 
+def unison_pitch(root_pc: int, quality: str, lo: int = 70, hi: int = 79) -> int:
+    """A 70s-section unison note: the chord's root or fifth, up top."""
+    fifth = (root_pc + (6 if quality == "dim" else 7)) % 12
+    cands = [p for p in range(lo, hi + 1) if p % 12 in (root_pc % 12, fifth)]
+    return min(cands, key=lambda p: abs(p - 75))
+
+
+def _seventies_hits(ctx, clock, harm, feel, part, rng) -> list[NoteEvent]:
+    """Tight unison-octave punches on the hit points (trumpet up top, trombone
+    an octave under), and a final hit that holds then falls off."""
+    out: list[NoteEvent] = []
+    octaves = {"trumpet": (0,), "trombone": (-12,)}.get(part, (0, -12))
+    for bar, steps_ in hit_steps(ctx, clock).items():
+        for st in steps_:
+            root_pc, quality = harm.at(bar + st / clock.steps)
+            top = unison_pitch(root_pc, quality)
+            s, v = _human(rng, clock.t(bar, st), 122, ms=1.0, vel_jitter=1.0)
+            for o in octaves:
+                out.append(NoteEvent(pitch=top + o, start=s, end=s + clock.step_len * 2 * 0.85, velocity=v))
+    if feel == "outro":
+        t0 = clock.t(ctx.bar_count - 1, 0)
+        top = unison_pitch(harm.tonic, "maj", 72, 79)
+        hold = 0.55
+        for o in octaves:
+            out.append(NoteEvent(pitch=top + o, start=t0, end=t0 + hold, velocity=124))
+        if part in ("trumpet", "section"):           # the classic fall-off
+            out += _gliss(ctx, harm, t0 + hold, t0 + hold + 0.28, top, top - 9, 96, 54)
+    return out
+
+
 def _horns(midi, ctx: TechniqueContext, feel: str) -> None:
     """Brass section stabs. A trumpet plays the top of each voicing and the
     riff's upper octave, a trombone the bottom and lower octave; a composite
@@ -479,6 +519,11 @@ def _horns(midi, ctx: TechniqueContext, feel: str) -> None:
         octaves = {"trumpet": (top,), "trombone": (top - 12,)}.get(part, (top, top - 12))
         for p in octaves:
             notes.append(NoteEvent(pitch=p, start=s, end=s + clock.step_len * length * 0.8, velocity=v))
+    if _hits_only(ctx):
+        notes += _seventies_hits(ctx, clock, harm, feel, part, rng)
+        _emit(midi, ctx, notes, name={"trumpet": "Trumpet", "trombone": "Trombone"}.get(part, "Horns"),
+              program={"trumpet": 56, "trombone": 57}.get(part, 61))
+        return
     pattern = _STABS["high" if feel in HIGH_ROLES else "bridge" if feel in ("bridge", "breakdown") else "verse"]
     top_near = 74 if feel in HIGH_ROLES else 70
     hits = hit_steps(ctx, clock)
@@ -701,6 +746,11 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
     synth = guitar_lead or ctx.instrument == "synth_lead" or program_in in range(80, 88)
     name, program = ("Lead", 81) if synth else ("Melody", 65)
     rng = ctx.rng
+    if _hits_only(ctx):
+        # No melody, runs or flares: the lead joins the horns' unison hits.
+        clock, harm = _Clock(ctx), _Harmony(ctx)
+        _emit(midi, ctx, _seventies_hits(ctx, clock, harm, feel, "trumpet", rng), name=name, program=program)
+        return
     clock = _Clock(ctx)
     harm = _Harmony(ctx)
     bars = ctx.bar_count

@@ -97,6 +97,9 @@ class TechniqueContext:
     # Band stops as (start, end) seconds from the song start: everyone rests
     # (styles that support it, e.g. Neo-Soul).
     stops: tuple = ()
+    # Arrangement variant a style may honour, e.g. Funk Fusion "hits_only":
+    # no lead, no riffs — the band grooves and everyone lands the hit points.
+    arrangement: str = ""
 
     @property
     def bar_count(self) -> int:

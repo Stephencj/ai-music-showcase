@@ -245,7 +245,7 @@ def compose_score(chapters: list[Chapter], *, duration: float, hits: list[float]
                   genre: str = "funk_fusion_full", seed: int = 52, base_tempo: float = 158.0,
                   band: Optional[list[str]] = None, lead_voice: Optional[str] = None,
                   hit_style: str = "groove", curate: bool = True, min_gap: float = 3.0,
-                  offset: float = 0.0, stops: Optional[list] = None,
+                  offset: float = 0.0, stops: Optional[list] = None, arrangement: str = "",
                   progress: Optional[Callable[[str, float], None]] = None):
     """``offset``: where music time 0 sits in the video (negative = the music
     starts before the video, e.g. a pickup into a downbeat). ``hits`` and
@@ -275,7 +275,8 @@ def compose_score(chapters: list[Chapter], *, duration: float, hits: list[float]
                 key=ch.key, enabled_instruments=tuple(band + [ch.lead]),
                 hits=[h - plan.start for h in hits if h - plan.start >= 0],
                 stops=[(a - plan.start, b - plan.start) for a, b in stops if b - plan.start > 0],
-                lead_voice=lead_voice, hit_style=hit_style, output_dir=Path(td), skip_audio=True,
+                lead_voice=lead_voice, hit_style=hit_style, arrangement=arrangement,
+                output_dir=Path(td), skip_audio=True,
             )
             pm = pretty_midi.PrettyMIDI(res["midi_path"])
         for inst in pm.instruments:

@@ -50,6 +50,9 @@ class GenerateRequest(BaseModel):
     # How hits land: "punch" (exact, the band breathes around them) or
     # "groove" (on the next beat, inside the groove).
     hit_style: Optional[str] = None
+    # Arrangement variant: "" (normal) or "hits_only" (Funk Fusion: no lead or
+    # riffs; the band lands the hits together, 70s-section horn punches).
+    arrangement: Optional[str] = None
     # Post-generation conveniences:
     save_as_block: bool = False
     block_name: Optional[str] = None
@@ -83,6 +86,7 @@ class VideoScoreRequest(BaseModel):
     curate_hits: bool = True                          # thin hits musically (see video_score)
     min_hit_gap: float = 3.0
     offset: float = 0.0                               # video time of music time 0 (negative = pickup)
+    arrangement: str = ""                             # e.g. "hits_only"
     stops: list[list[float]] = Field(default_factory=list)   # band stops [start, end] in video seconds
 
 
