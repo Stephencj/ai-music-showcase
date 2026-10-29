@@ -87,6 +87,9 @@ class VideoScoreRequest(BaseModel):
     min_hit_gap: float = 3.0
     offset: float = 0.0                               # video time of music time 0 (negative = pickup)
     arrangement: str = ""                             # e.g. "hits_only"
+    # Loudness of the delivered score (integrated LUFS). None = as mastered
+    # (about −12); background music under a video sits around −23 to −28.
+    target_lufs: Optional[float] = None
     stops: list[list[float]] = Field(default_factory=list)   # band stops [start, end] in video seconds
 
 

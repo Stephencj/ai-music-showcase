@@ -1798,6 +1798,11 @@ def run_video_score(req, progress, job_id: str) -> dict:
     audio = fit_to_length(audio.T.astype("float32"), sr, req.duration)
     if req.stops:
         audio = gate_stops(audio, sr, [tuple(s) for s in req.stops])
+    loudness = None
+    if req.target_lufs is not None:
+        from src.audio_processing.render.loudness import integrated_lufs, normalize
+        audio, _ = normalize(audio, sr, float(req.target_lufs))
+        loudness = round(integrated_lufs(audio, sr), 1)
     wav_path = job_dir / "score.wav"
     sf.write(str(wav_path), audio.T, sr, subtype="PCM_24")
     mp3_path: Path | None = job_dir / "score.mp3"
@@ -1807,6 +1812,7 @@ def run_video_score(req, progress, job_id: str) -> dict:
     return {
         "duration": req.duration,
         "hits": [round(h, 2) for h in used_hits],
+        "loudness_lufs": loudness,
         "chapters": [{"start": round(p.start, 3), "end": round(p.end, 3), "tempo": round(p.tempo, 2),
                       "bars": p.bars, "sections": [(s["label"], s["role"], s["end_bar"] - s["start_bar"] + 1)
                                                    for s in p.sections]} for p in plans],
