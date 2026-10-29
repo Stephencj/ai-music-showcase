@@ -559,6 +559,38 @@ class SimpleBassTest(unittest.TestCase):
         self.assertTrue({0, 6, 10} <= positions, positions)
 
 
+class PocketDrumsAndFlareTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        td = tempfile.TemporaryDirectory()
+        try:
+            secs = build_sections(GENRE, ["verse", "chorus"], None, {"verse": {"bars": 8}, "chorus": {"bars": 8}})
+            res = compose_song(genre=GENRE, sections=secs, seed=5, tempo=120,
+                               arrangement="hits_only,calm_keys,calm_bass,bass_flare,pocket_drums",
+                               enabled_instruments=tuple(STYLES[GENRE].default_instruments),
+                               output_dir=Path(td.name), skip_audio=True)
+            cls.tracks = {i.name: i for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments}
+        finally:
+            td.cleanup()
+        cls.bar = 2.0
+
+    def test_ghosts_without_busy_fills(self):
+        kit = self.tracks["Drum kit"].notes
+        ghosts = [n for n in kit if n.pitch == 38 and n.velocity < 45]
+        self.assertGreaterEqual(len(ghosts), 16 * 2)                         # ghosts in every bar
+        self.assertFalse([n for n in kit if n.pitch in (45, 47, 50)])        # no tom fills
+        self.assertLessEqual(len([n for n in kit if n.pitch == 46]), 4)      # one open hat a phrase
+        crashes = [n.start for n in kit if n.pitch == 49]
+        self.assertTrue(all(abs(t - 8 * self.bar) < 0.03 for t in crashes), crashes)   # only where the chorus starts
+
+    def test_bass_is_calm_with_an_occasional_flare(self):
+        bass = self.tracks["Electric Bass"].notes
+        per_bar = [len([n for n in bass if b * self.bar - 0.03 <= n.start < (b + 1) * self.bar - 0.03]) for b in range(16)]
+        flares = [b for b, n in enumerate(per_bar) if n >= 5]
+        self.assertEqual(flares, [3, 11])                                    # every 4th bar, never a section's last
+        self.assertTrue(all(n <= 3 for b, n in enumerate(per_bar) if b not in flares), per_bar)
+
+
 class FunkMixTest(unittest.TestCase):
     def test_profile_resolves_and_sets_the_sax_level(self):
         profile = resolve_profile(GENRE)

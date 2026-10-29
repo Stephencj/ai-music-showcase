@@ -1782,7 +1782,8 @@ def run_video_score(req, progress, job_id: str) -> dict:
     job_dir.mkdir(parents=True, exist_ok=True)
     _prune_old_job_dirs()
     chapters = [Chapter(start=c.start, card=c.card, roles=tuple(c.roles or ["verse"]), key=c.key,
-                        lead=c.lead, label=c.label, intro=c.intro, sections=c.sections) for c in req.chapters]
+                        lead=c.lead, label=c.label, intro=c.intro, sections=c.sections,
+                        arrangement=c.arrangement) for c in req.chapters]
     midi, plans, used_hits = compose_score(
         chapters, duration=req.duration, hits=list(req.hits), genre=req.genre, seed=req.seed,
         base_tempo=req.base_tempo, lead_voice=req.lead_patch, hit_style=req.hit_style,

@@ -44,6 +44,7 @@ class Chapter:
     # Explicit sections (a transcribed form): [{"role", "bars", "progression"?, "label"?}].
     # Used as-is at the base tempo; only for a single-chapter score.
     sections: Optional[list] = None
+    arrangement: Optional[str] = None   # this chapter's arrangement (overrides the score's)
 
 
 @dataclass
@@ -275,7 +276,8 @@ def compose_score(chapters: list[Chapter], *, duration: float, hits: list[float]
                 key=ch.key, enabled_instruments=tuple(band + [ch.lead]),
                 hits=[h - plan.start for h in hits if h - plan.start >= 0],
                 stops=[(a - plan.start, b - plan.start) for a, b in stops if b - plan.start > 0],
-                lead_voice=lead_voice, hit_style=hit_style, arrangement=arrangement,
+                lead_voice=lead_voice, hit_style=hit_style,
+                arrangement=ch.arrangement if ch.arrangement is not None else arrangement,
                 output_dir=Path(td), skip_audio=True,
             )
             pm = pretty_midi.PrettyMIDI(res["midi_path"])

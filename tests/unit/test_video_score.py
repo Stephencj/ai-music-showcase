@@ -93,6 +93,16 @@ class ComposeTest(unittest.TestCase):
         drums_before = [n for n in tracks["Drum kit"].notes if hit - 2 * beat / 4 - 0.01 <= n.start < hit - 0.02]
         self.assertTrue(drums_before)                                     # the groove keeps going into it
 
+    def test_a_chapter_can_carry_its_own_arrangement(self):
+        chapters = [Chapter(start=0.0, roles=("verse",), arrangement="hits_only,calm"),
+                    Chapter(start=10.0, roles=("verse",))]
+        midi, plans, _ = compose_score(chapters, duration=20.0, hits=[], curate=False, arrangement="pocket_drums")
+        kit = {t.name: t for t in midi.tracks}["Drum kit"].notes
+        first = [n for n in kit if n.start < plans[1].start - 0.05]
+        second = [n for n in kit if n.start >= plans[1].start]
+        self.assertFalse([n for n in first if n.pitch == 38 and n.velocity < 45])     # calm: no ghosts
+        self.assertTrue([n for n in second if n.pitch == 38 and n.velocity < 45])     # pocket: ghosts
+
     def test_merged_score_lands_chapters_and_hits_in_video_time(self):
         chapters = [Chapter(start=0.0, card=3.0, roles=("verse",), lead="synth_lead"),
                     Chapter(start=10.0, card=3.0, roles=("chorus",), lead="lead_guitar")]

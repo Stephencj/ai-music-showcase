@@ -152,6 +152,59 @@ def _calm_drums(midi, ctx: TechniqueContext, feel: str) -> None:
     _emit(midi, ctx, notes, name="Drums", program=0, is_drum=True)
 
 
+def _pocket_drums(midi, ctx: TechniqueContext, feel: str) -> None:
+    """"pocket_drums": a deep funk-rock pocket with a jazzier touch — steady
+    8th hats (a soft 16th pickup now and then), a solid backbeat with ghost
+    notes either side of it, a two-ghost drag once a phrase, one open hat at
+    each phrase's end, a crash only where a chorus starts, and no fills
+    beyond a one-beat snare pickup at the end of a verse."""
+    rng, clock, bars = ctx.rng, _Clock(ctx), ctx.bar_count
+    high = feel in HIGH_ROLES
+    hits: list[tuple[int, float, int, float]] = []
+    for bar in range(bars):
+        last = bar == bars - 1
+        if feel == "outro" and last:
+            hits += [(bar, 0, KICK, 110), (bar, 0, CRASH, 100)]
+            continue
+        if feel == "intro" and bar < bars - 1:
+            for step in range(0, 16, 2):
+                hits.append((bar, step, CLOSED_HAT, 58 if step % 4 else 66))
+            continue
+        pickup = last and feel in ("verse", "prechorus", "intro")
+        phrase_end = bar % 4 == 3 and not last
+        for step in range(0, 12 if pickup else 16, 2):
+            if phrase_end and step == 14:
+                hits.append((bar, 14, OPEN_HAT, 66))
+                continue
+            hits.append((bar, step, CLOSED_HAT, (78 if step % 4 == 0 else 56) + (4 if high else 0)))
+        if not pickup and rng.random() < 0.4:
+            hits.append((bar, 11, CLOSED_HAT, 40))                       # a soft 16th before beat 4
+        hits += [(bar, 4, SNARE, 104), (bar, 12, SNARE, 106)]
+        ghosts = (3, 7, 9) if bar % 2 == 0 else (7, 10, 15)
+        for g in ghosts:
+            if not (pickup and g >= 12):
+                hits.append((bar, g, SNARE, float(rng.integers(26, 38))))
+        if bar % 4 == 2:                                                  # the drag: two quick ghosts into the backbeat
+            hits += [(bar, 10, SNARE, 30), (bar, 11, SNARE, 36)]
+        kicks = ((0, 6, 10), (0, 3, 8, 10)) if not high else ((0, 6, 8, 10), (0, 3, 6, 10, 14))
+        for k in kicks[bar % 2]:
+            if not (pickup and k >= 12):
+                hits.append((bar, k, KICK, 102 if k == 0 else 88))
+        if bar == 0 and high:
+            hits.append((bar, 0, CRASH, 90))
+        if pickup:
+            hits += [(bar, 12, SNARE, 74), (bar, 13, SNARE, 80), (bar, 14, SNARE, 88), (bar, 15, SNARE, 96)]
+    for bar, steps_ in hit_steps(ctx, clock).items():
+        for st in steps_:
+            hits += [(bar, st, KICK, 116), (bar, st, SNARE, 104), (bar, st, CRASH, 104)]
+    notes = []
+    for bar, step, key, vel in hits:
+        t, v = _human(rng, clock.t(bar, step), vel, ms=3.0, vel_jitter=3.0 if vel < 50 else 4.0)
+        dur = clock.step_len * (8 if key in (CRASH, OPEN_HAT) else 1)
+        notes.append(NoteEvent(pitch=key, start=t, end=t + dur, velocity=v))
+    _emit(midi, ctx, notes, name="Drums", program=0, is_drum=True)
+
+
 def _calm_bass(midi, ctx: TechniqueContext, feel: str) -> None:
     rng, clock, harm, bars = ctx.rng, _Clock(ctx), _Harmony(ctx), ctx.bar_count
     notes: list[NoteEvent] = []
@@ -163,7 +216,19 @@ def _calm_bass(midi, ctx: TechniqueContext, feel: str) -> None:
             notes.append(NoteEvent(pitch=p, start=clock.t(bar, 0), end=clock.t(bar, 0) + clock.bar_len, velocity=96))
             continue
         # Root on 1, held; fifth on beat 4 leading on. Legato: each note runs into the next.
-        for step, length, fifth, vel in ((0, 12, False, 94), (12, 4, True, 82)):
+        flare = "bass_flare" in _arrangement(ctx) and bar % 4 == 3 and bar != bars - 1
+        line = ((0, 12, False, 94),) if flare else ((0, 12, False, 94), (12, 4, True, 82))
+        if flare:
+            # The occasional flare: seventh, octave, fifth, then a step into the next bar.
+            root_pc, quality = harm.at(bar + 0.75)
+            root = _fits(root_pc + 36, _LO, _LO + 11)
+            nxt_pc, _ = harm.at(min(bar + 1.0, bars - 1e-6))
+            target = _fits(nxt_pc + 36, _LO, _LO + 11)
+            for k, (step, pitch) in enumerate(((12, root + _SEVENTH.get(quality, 10)), (13, root + 12),
+                                               (14, root + 7), (15, target - 1))):
+                s, v = _human(rng, clock.t(bar, step), 84 + 3 * k, ms=2.5, vel_jitter=3.0)
+                notes.append(NoteEvent(pitch=pitch, start=s, end=s + clock.step_len * 0.85, velocity=v))
+        for step, length, fifth, vel in line:
             root_pc, quality = harm.at(bar + step / clock.steps)
             root = _fits(root_pc + 36, _LO, _LO + 11)
             pitch = root + (6 if quality == "dim" else 7) if fifth else root
@@ -323,6 +388,8 @@ _KICKS = {
 def _drums(midi, ctx: TechniqueContext, feel: str) -> None:
     if _calm(ctx, "drums"):
         return _calm_drums(midi, ctx, feel)
+    if "pocket_drums" in _arrangement(ctx):
+        return _pocket_drums(midi, ctx, feel)
     rng = ctx.rng
     clock = _Clock(ctx)
     bars = ctx.bar_count

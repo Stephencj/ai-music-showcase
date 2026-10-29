@@ -69,6 +69,7 @@ class VideoChapter(BaseModel):
     label: str = ""
     intro: Optional[bool] = None                   # None = only the first chapter
     sections: Optional[list[dict]] = None          # explicit form (single-chapter scores)
+    arrangement: Optional[str] = None              # this chapter's arrangement (overrides the score's)
 
 
 class VideoScoreRequest(BaseModel):
