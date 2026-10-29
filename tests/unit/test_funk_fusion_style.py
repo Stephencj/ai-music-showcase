@@ -681,6 +681,26 @@ class HornBedTest(unittest.TestCase):
         self.assertGreater(np.mean([n.velocity for n in chorus]), np.mean([n.velocity for n in verse]))
 
 
+class NoFalloffTest(unittest.TestCase):
+    def _ending(self, arrangement):
+        td = tempfile.TemporaryDirectory()
+        try:
+            secs = build_sections(GENRE, ["verse", "outro"], None, {"verse": {"bars": 2}, "outro": {"bars": 2}})
+            res = compose_song(genre=GENRE, sections=secs, seed=5, tempo=120, arrangement=arrangement,
+                               enabled_instruments=tuple(STYLES[GENRE].default_instruments),
+                               output_dir=Path(td.name), skip_audio=True)
+            tracks = {i.name: i for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments}
+        finally:
+            td.cleanup()
+        return [n for n in tracks["Trumpet"].notes if n.start >= 6.0 - 0.05]
+
+    def test_the_ending_can_skip_the_fall_off(self):
+        self.assertGreater(len(self._ending("hits_only")), 1)          # hold + the fall-off gliss
+        plain = self._ending("hits_only,no_falloff")
+        self.assertEqual(len({n.pitch for n in plain}), 1)              # just the held note
+        self.assertGreater(plain[0].end - plain[0].start, 1.5)          # ringing out
+
+
 class FunkMixTest(unittest.TestCase):
     def test_profile_resolves_and_sets_the_sax_level(self):
         profile = resolve_profile(GENRE)

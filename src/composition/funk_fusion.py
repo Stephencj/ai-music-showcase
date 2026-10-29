@@ -793,10 +793,11 @@ def _seventies_hits(ctx, clock, harm, feel, part, rng) -> list[NoteEvent]:
     if feel == "outro":
         t0 = clock.t(ctx.bar_count - 1, 0)
         top = unison_pitch(harm.tonic, "maj", 72, 79)
-        hold = 0.55
+        falloff = "no_falloff" not in _arrangement(ctx)
+        hold = 0.55 if falloff else clock.bar_len      # without the fall-off, the last note rings out
         for o in octaves:
             out.append(NoteEvent(pitch=top + o, start=t0, end=t0 + hold, velocity=124))
-        if part in ("trumpet", "section"):           # the classic fall-off
+        if falloff and part in ("trumpet", "section"):   # the classic fall-off
             out += _gliss(ctx, harm, t0 + hold, t0 + hold + 0.28, top, top - 9, 96, 54)
     return out
 
