@@ -430,6 +430,17 @@ class _Voice:
     offset: int
     cut_at: Optional[int] = None   # choke / polyphony stop
     cut_time: float = 0.006
+    vibrato: Optional["Vibrato"] = None
+
+
+@dataclass(frozen=True)
+class Vibrato:
+    """Delayed pitch vibrato for held notes (how a player eases a long note)."""
+    cents: float = 15.0          # depth, ± cents
+    rate: float = 5.3            # Hz
+    delay: float = 0.12          # seconds before it starts
+    ramp: float = 0.15           # seconds to reach full depth
+    min_length: float = 0.28     # only notes at least this long
 
 
 def _builtin_curve(index: int, x: float) -> float:
@@ -453,13 +464,15 @@ class SfzRenderer:
     """Render notes through one SFZ instrument to a stereo buffer."""
 
     def __init__(self, instrument: SfzInstrument, sample_rate: int = 44100, *,
-                 cache: Optional[SampleCache] = None, seed: int = 1, sample_tune=None) -> None:
+                 cache: Optional[SampleCache] = None, seed: int = 1, sample_tune=None,
+                 vibrato: Optional[Vibrato] = None) -> None:
         self.inst = instrument
         self.sr = sample_rate
         self.cache = cache or SampleCache()
         self.rng = np.random.default_rng(seed)
         # Optional (path, sample, keycenter) -> cents sharp, corrected per note.
         self.sample_tune = sample_tune
+        self.vibrato = vibrato
 
     # -- modulation helpers -------------------------------------------------
 
@@ -649,9 +662,12 @@ class SfzRenderer:
 
         one_shot = r.op.get("loop_mode") == "one_shot" or trigger_is_release(r)
         note_off = None if one_shot or end_s is None else int(round(end_s * self.sr))
+        vib = None
+        if self.vibrato is not None and end_s is not None and end_s - start_s >= self.vibrato.min_length:
+            vib = self.vibrato
         return _Voice(region=r, sample=sample, start=start, note_off=note_off, key=key,
                       velocity=vel, gain=gain, pan=max(-1.0, min(1.0, pan)),
-                      width=max(-1.0, min(1.0, width)), ratio=ratio, offset=offset)
+                      width=max(-1.0, min(1.0, width)), ratio=ratio, offset=offset, vibrato=vib)
 
     def _envelope(self, v: _Voice, length: int) -> np.ndarray:
         r = v.region
@@ -739,7 +755,16 @@ class SfzRenderer:
         length = min(length, out.shape[1] - v.start)
         src = v.sample.data
         n_src = src.shape[1]
-        pos = v.offset + np.arange(length, dtype=np.float64) * v.ratio
+        if v.vibrato is not None:
+            # Pitch wobble that fades in after the delay; same phase for every
+            # layer of a note, so stacked instruments wobble together.
+            t = np.arange(length, dtype=np.float64) / self.sr
+            depth = v.vibrato.cents * np.clip((t - v.vibrato.delay) / max(v.vibrato.ramp, 1e-3), 0.0, 1.0)
+            cents_t = depth * np.sin(2 * math.pi * v.vibrato.rate * np.maximum(t - v.vibrato.delay, 0.0))
+            rates = v.ratio * np.power(2.0, cents_t / 1200.0)
+            pos = v.offset + np.concatenate([[0.0], np.cumsum(rates[:-1])])
+        else:
+            pos = v.offset + np.arange(length, dtype=np.float64) * v.ratio
         loop = self._loop(v)
         loop_mode = v.region.op.get("loop_mode", "no_loop")
         if loop and loop_mode in ("loop_continuous", "loop_sustain"):

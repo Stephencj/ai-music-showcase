@@ -28,7 +28,7 @@ import numpy as np
 
 from src.daw_integration.generic.midi_export import MidiExporter
 
-from .sfz import Note, SampleCache, SfzInstrument, SfzRenderer, load_sfz
+from .sfz import Note, SampleCache, SfzInstrument, SfzRenderer, Vibrato, load_sfz
 from .lead_voices import LeadLayer, voice
 from .synth_lead import LEAD_PATCHES, render_lead
 from .synth import DEFAULT_SAMPLE_RATE, FluidSynthRenderer, RenderedStems, TrackStem
@@ -328,8 +328,9 @@ class SampledRenderer:
             for region in inst.regions:
                 region.seq_counter = 0
             spec = next((i for i in SAMPLED_INSTRUMENTS if i.engine == "sfz" and self._loaded.get(i.id) is inst), None)
+            vib = Vibrato(cents=layer.vibrato) if layer.vibrato else None
             parts.append(SfzRenderer(inst, self.sample_rate, cache=SampleCache(), seed=self.seed + index,
-                                     sample_tune=self._tuner(spec)).render(chosen))
+                                     sample_tune=self._tuner(spec), vibrato=vib).render(chosen))
         if not parts:
             return None
         n = max(p.shape[1] for p in parts)

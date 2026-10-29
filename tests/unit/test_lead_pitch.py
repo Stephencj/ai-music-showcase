@@ -74,3 +74,36 @@ class AutoTuneTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VibratoTest(unittest.TestCase):
+    def _pitch_track(self, audio, sr, a, b):
+        import librosa
+        seg = audio.mean(axis=0)[int(a * sr):int(b * sr)]
+        f = librosa.yin(seg, fmin=380, fmax=500, sr=sr, frame_length=2048, hop_length=256)
+        return 1200 * np.log2(f / 440.0)
+
+    def _render(self, notes, vibrato):
+        from src.audio_processing.render.sfz import SfzRenderer, Vibrato, load_sfz
+        sr = 44100
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            t = np.arange(sr * 2) / sr
+            sf.write(str(root / "a.wav"), (0.5 * np.sin(2 * np.pi * 440.0 * t)).astype(np.float32), sr)
+            (root / "i.sfz").write_text("<region> sample=a.wav pitch_keycenter=69")
+            return SfzRenderer(load_sfz(root / "i.sfz"), sr,
+                               vibrato=Vibrato() if vibrato else None).render(notes), sr
+
+    def test_held_notes_get_a_delayed_vibrato(self):
+        from src.audio_processing.render.sfz import Note
+        out, sr = self._render([Note(69, 0.0, 1.0, 100)], vibrato=True)
+        early = self._pitch_track(out, sr, 0.02, 0.11)
+        late = self._pitch_track(out, sr, 0.4, 0.9)
+        self.assertLess(float(np.ptp(early)), 10.0)         # steady at first (detector jitter only)
+        self.assertGreater(float(np.ptp(late)), 22.0)       # then wobbles ± ~15 cents
+        self.assertLess(abs(float(np.median(late))), 4.0)   # centred on pitch
+
+    def test_short_notes_stay_straight(self):
+        from src.audio_processing.render.sfz import Note
+        out, sr = self._render([Note(69, 0.0, 0.2, 100)], vibrato=True)
+        self.assertLess(float(np.ptp(self._pitch_track(out, sr, 0.05, 0.18))), 10.0)
