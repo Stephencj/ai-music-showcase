@@ -93,6 +93,17 @@ class ComposeTest(unittest.TestCase):
         drums_before = [n for n in tracks["Drum kit"].notes if hit - 2 * beat / 4 - 0.01 <= n.start < hit - 0.02]
         self.assertTrue(drums_before)                                     # the groove keeps going into it
 
+    def test_a_strings_opening_plays_at_full_energy(self):
+        chapters = [Chapter(start=0.0, roles=("verse",), card=6.0)]
+        quiet, _, _ = compose_score(chapters, duration=16.0, hits=[], curate=False, arrangement="hits_only,soar",
+                                    extra_instruments=["string_section"])
+        loud, _, _ = compose_score(chapters, duration=16.0, hits=[], curate=False,
+                                   arrangement="hits_only,soar,string_intro", extra_instruments=["string_section"])
+        first = [n for n in {t.name: t for t in loud.tracks}["String Section"].notes if n.start < 0.05]
+        self.assertTrue(first)
+        self.assertGreaterEqual(min(n.velocity for n in first), 95)
+        self.assertNotIn("String Section", {t.name for t in quiet.tracks if any(n.start < 0.05 for n in t.notes)})
+
     def test_a_chapter_can_carry_its_own_arrangement(self):
         chapters = [Chapter(start=0.0, roles=("verse",), arrangement="hits_only,calm"),
                     Chapter(start=10.0, roles=("verse",))]

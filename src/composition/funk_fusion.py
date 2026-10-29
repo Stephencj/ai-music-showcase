@@ -172,6 +172,10 @@ def _calm_drums(midi, ctx: TechniqueContext, feel: str) -> None:
             hits += [(bar, 0, KICK, 112), (bar, 0, CRASH, 104)]
             continue
         if feel == "intro" and bar < bars - 1:
+            if _string_intro(ctx):                   # the strings open; one hit with their first chord
+                if bar == 0:
+                    hits += [(0, 0, KICK, 112), (0, 0, CRASH, 100)]
+                continue
             for step in range(0, 16, 2):
                 hits.append((bar, step, CLOSED_HAT, 58 if step % 4 else 68))
             continue
@@ -213,6 +217,10 @@ def _pocket_drums(midi, ctx: TechniqueContext, feel: str) -> None:
             hits += [(bar, 0, KICK, 110), (bar, 0, CRASH, 100)]
             continue
         if feel == "intro" and bar < bars - 1:
+            if _string_intro(ctx):                   # the strings open; one hit with their first chord
+                if bar == 0:
+                    hits += [(0, 0, KICK, 112), (0, 0, CRASH, 100)]
+                continue
             for step in range(0, 16, 2):
                 hits.append((bar, step, CLOSED_HAT, 58 if step % 4 else 66))
             continue
@@ -379,6 +387,8 @@ def _calm_rhodes(midi, ctx: TechniqueContext, feel: str) -> None:
     notes: list[NoteEvent] = []
     previous: Optional[list[int]] = None
     for ev in harm.events:                                  # one sustained chord per change
+        if feel == "intro" and _string_intro(ctx) and ev.start_bar < bars - 1:
+            continue                                        # the strings open alone
         root_pc, quality = harm.at(ev.start_bar)
         if feel == "outro" and ev is harm.events[-1]:
             quality = "maj"
@@ -1207,10 +1217,78 @@ def _soar(ctx: TechniqueContext) -> bool:
     return "soar" in _arrangement(ctx)
 
 
+def _string_intro(ctx: TechniqueContext) -> bool:
+    return "string_intro" in _arrangement(ctx)
+
+
+def _string_intro_chords(midi, ctx: TechniqueContext) -> None:
+    """"string_intro", sustained half: a big full string chord on the first
+    downbeat (low cello root to high violins), a second on each harmony change,
+    growing toward the band's entrance."""
+    rng, clock, harm = ctx.rng, _Clock(ctx), _Harmony(ctx)
+    notes: list[NoteEvent] = []
+    events = harm.events
+    for k, ev in enumerate(events):
+        root_pc, quality = harm.at(ev.start_bar)
+        third = (root_pc + (3 if quality in ("min7", "min", "dim") else 4)) % 12
+        fifth = (root_pc + 7) % 12
+        cello = _fits(root_pc + 36, 36, 47)
+        viola = min((p for p in range(55, 67) if p % 12 in (third, fifth)), key=lambda p: abs(p - 60))
+        top = min((p for p in range(76, 89) if p % 12 in (root_pc % 12, fifth)), key=lambda p: abs(p - 81))
+        voices = sorted({cello, cello + 12, viola, top - 12, top})
+        vel = 100 + int(16 * k / max(1, len(events) - 1))
+        start = clock.t(0, ev.start_bar * clock.steps)
+        end = clock.t(0, ev.end_bar * clock.steps)
+        for p in voices:
+            s, v = _human(rng, start, vel, ms=4.0, vel_jitter=2.0)
+            notes.append(NoteEvent(pitch=p, start=s, end=end, velocity=v))
+    _emit(midi, ctx, notes, name="Strings", program=48)
+
+
+def _spiccato(midi, ctx: TechniqueContext, feel: str) -> None:
+    """"string_intro", driving half: spiccato strings under the chords. Low
+    strings pound a 3-3-2 pulse on the root, violins run 16ths on the root and
+    fifth, and the last bar climbs two octaves of chord tones into the band's
+    entrance, all on a crescendo."""
+    if feel != "intro" or not _string_intro(ctx):
+        return
+    rng, clock, harm, bars = ctx.rng, _Clock(ctx), _Harmony(ctx), ctx.bar_count
+    notes: list[NoteEvent] = []
+    total = bars * clock.steps
+
+    def add(bar: int, step: int, pitch: int, vel: float) -> None:
+        s, v = _human(rng, clock.t(bar, step), vel, ms=2.0, vel_jitter=3.0)
+        notes.append(NoteEvent(pitch=pitch, start=s, end=s + clock.step_len * 0.9, velocity=v))
+
+    for bar in range(bars):
+        last = bar == bars - 1
+        for step in range(clock.steps):
+            at = bar * clock.steps + step
+            grow = 72 + 44 * at / max(1, total - 1)             # crescendo across the intro
+            root_pc, quality = harm.at(bar + step / clock.steps)
+            low = _fits(root_pc + 36, 36, 47)
+            if step in (0, 3, 6, 8, 11, 14):                    # 3-3-2 pulse, cellos + violas in octaves
+                accent = 10 if step in (0, 8) else 0
+                add(bar, step, low, grow + accent)
+                add(bar, step, low + 12, grow + accent - 6)
+            fifth = 7 if quality != "dim" else 6
+            v_root = _fits(root_pc + 72, 67, 78)
+            if last and step >= 8:                              # the climb into the band
+                third = 3 if quality in ("min7", "min", "dim") else 4
+                seventh = _SEVENTH.get(quality, 10)
+                climb = [0, third, fifth, seventh, 12, 12 + third, 12 + fifth, 24]
+                add(bar, step, v_root - 12 + climb[step - 8], grow + 6)
+            else:
+                add(bar, step, v_root + (fifth if step % 2 else 0), grow - (8 if step % 2 else 0))
+    _emit(midi, ctx, notes, name="Spiccato Strings", program=45)
+
+
 def _strings(midi, ctx: TechniqueContext, feel: str) -> None:
     """Sustained string section: a low cello/viola pad in verses; in choruses
     the violins open up on top with a slow stepwise line, swelling across the
     section; high soft violins in bridges; a big held chord to end."""
+    if feel == "intro" and _string_intro(ctx):
+        return _string_intro_chords(midi, ctx)
     if not _soar(ctx) or feel == "intro":
         return
     rng, clock, harm = ctx.rng, _Clock(ctx), _Harmony(ctx)
@@ -1278,6 +1356,10 @@ def _french_horn(midi, ctx: TechniqueContext, feel: str) -> None:
 
 
 for _feel in ALL_ROLES:
+    _register(name=f"funk_fusion_spiccato_{_feel}", label=f"Spiccato strings ({_feel})",
+              description="With string_intro: a driving spiccato string opening that climbs into the band.",
+              instruments=("string_spiccato",), roles=(_feel,), weight=4, tags=(TAG,),
+              apply=lambda midi, ctx, _f=_feel: _spiccato(midi, ctx, _f))
     _register(name=f"funk_fusion_strings_{_feel}", label=f"Soaring strings ({_feel})",
               description="Sustained string section: low pad in verses, violins opening up and swelling in choruses.",
               instruments=("string_section",), roles=(_feel,), weight=4, tags=(TAG,),

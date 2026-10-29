@@ -73,6 +73,12 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
         auto_tune=True,
     ),
     SampledInstrument(
+        id="string_spiccato",
+        sfz="vsco2-ce-strings/strings_section_spic.sfz",
+        programs=(45,),                       # short bowed strings (GM pizzicato as the fallback)
+        auto_tune=True,
+    ),
+    SampledInstrument(
         id="french_horn",
         sfz="vsco2-ce-strings/french_horn_sus.sfz",
         programs=(60,),

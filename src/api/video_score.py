@@ -272,14 +272,20 @@ def compose_score(chapters: list[Chapter], *, duration: float, hits: list[float]
         ch = ordered[plan.index]
         if progress:
             progress(f"Composing chapter {plan.index + 1} of {len(plans)}…", 0.05 + 0.4 * plan.index / max(1, len(plans)))
+        ch_arrangement = ch.arrangement if ch.arrangement is not None else arrangement
+        sections = plan.sections
+        if "string_intro" in (ch_arrangement or "").replace(" ", "").split(","):
+            # A strings opening is meant to grab attention: play it at full
+            # energy, not pulled back like an ordinary intro.
+            sections = [dict(s, energy=1.0) if s.get("role") == "intro" else s for s in sections]
         with tempfile.TemporaryDirectory() as td:
             res = compose_song(
-                genre=genre, sections=plan.sections, seed=seed, tempo=plan.tempo,
+                genre=genre, sections=sections, seed=seed, tempo=plan.tempo,
                 key=ch.key, enabled_instruments=tuple(band + [ch.lead]),
                 hits=[h - plan.start for h in hits if h - plan.start >= 0],
                 stops=[(a - plan.start, b - plan.start) for a, b in stops if b - plan.start > 0],
                 lead_voice=lead_voice, hit_style=hit_style,
-                arrangement=ch.arrangement if ch.arrangement is not None else arrangement,
+                arrangement=ch_arrangement,
                 output_dir=Path(td), skip_audio=True,
             )
             pm = pretty_midi.PrettyMIDI(res["midi_path"])

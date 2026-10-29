@@ -712,6 +712,48 @@ class NoFalloffTest(unittest.TestCase):
         self.assertGreater(plain[0].end - plain[0].start, 1.5)          # ringing out
 
 
+class StringIntroTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        td = tempfile.TemporaryDirectory()
+        try:
+            secs = build_sections(GENRE, ["intro", "verse"], None, {"intro": {"bars": 3}, "verse": {"bars": 4}})
+            secs = [dict(s, energy=1.0) if s.get("role") == "intro" else s for s in secs]   # as the video scorer does
+            band = tuple(STYLES[GENRE].default_instruments) + ("string_section", "string_spiccato")
+            res = compose_song(genre=GENRE, sections=secs, seed=5, tempo=120,
+                               arrangement="hits_only,calm_keys,calm_bass,pocket_drums,brushes,soar,string_intro",
+                               enabled_instruments=band, output_dir=Path(td.name), skip_audio=True)
+            cls.tracks = {i.name: i for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments}
+        finally:
+            td.cleanup()
+        cls.bar = 2.0
+
+    def test_a_big_string_chord_opens_it(self):
+        first = [n for n in self.tracks["String Section"].notes if n.start < 0.05]
+        self.assertGreaterEqual(len(first), 4)
+        self.assertGreaterEqual(min(n.velocity for n in first), 95)
+        self.assertGreater(max(n.pitch for n in first) - min(n.pitch for n in first), 30)   # cello to violins
+
+    def test_spiccato_drives_and_climbs_on_a_crescendo_into_the_band(self):
+        sp = self.tracks["Spiccato Strings"].notes
+        self.assertFalse([n for n in sp if n.start >= 3 * self.bar - 0.05])               # intro only
+        self.assertGreater(len(sp), 3 * 16)                                               # 16ths + the pulse
+        early = np.mean([n.velocity for n in sp if n.start < self.bar])
+        late = np.mean([n.velocity for n in sp if n.start >= 2 * self.bar])
+        self.assertGreater(late, early + 20)
+        climb = sorted((n for n in sp if n.start >= 2.5 * self.bar - 0.03 and n.pitch >= 55), key=lambda n: n.start)
+        self.assertTrue(all(b.pitch > a.pitch for a, b in zip(climb, climb[1:])), [n.pitch for n in climb])
+
+    def test_the_keys_wait_for_the_band(self):
+        keys = [n for t, tr in self.tracks.items() if t in ("Electric Piano", "Chords") for n in tr.notes]
+        self.assertFalse([n for n in keys if n.start < 2 * self.bar - 0.05])
+
+    def test_the_drums_wait_for_the_band(self):
+        kit = self.tracks["Brushes"].notes
+        self.assertFalse([n for n in kit if 0.1 < n.start < 2 * self.bar - 0.05])          # only the opening hit
+        self.assertTrue([n for n in kit if n.start < 0.05])
+
+
 class FunkMixTest(unittest.TestCase):
     def test_profile_resolves_and_sets_the_sax_level(self):
         profile = resolve_profile(GENRE)
