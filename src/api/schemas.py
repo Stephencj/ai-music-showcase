@@ -65,6 +65,7 @@ class VideoChapter(BaseModel):
     lead: str = "synth_lead"                       # or "lead_guitar"
     label: str = ""
     intro: Optional[bool] = None                   # None = only the first chapter
+    sections: Optional[list[dict]] = None          # explicit form (single-chapter scores)
 
 
 class VideoScoreRequest(BaseModel):
@@ -81,6 +82,8 @@ class VideoScoreRequest(BaseModel):
     hit_style: str = "groove"                         # or "punch"
     curate_hits: bool = True                          # thin hits musically (see video_score)
     min_hit_gap: float = 3.0
+    offset: float = 0.0                               # video time of music time 0 (negative = pickup)
+    stops: list[list[float]] = Field(default_factory=list)   # band stops [start, end] in video seconds
 
 
 class ParsePromptRequest(BaseModel):

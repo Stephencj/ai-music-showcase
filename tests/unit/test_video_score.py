@@ -8,7 +8,7 @@ import numpy as np
 
 import src.composition  # noqa: F401
 from src.api.video_score import (Chapter, choose_bars, compose_score, curate_hits, fit_to_length,
-                                 plan_segments)
+                                 gate_stops, plan_segments)
 
 
 class PlanTest(unittest.TestCase):
@@ -111,6 +111,30 @@ class ComposeTest(unittest.TestCase):
         self.assertTrue(any(abs(t - 10.0) <= 60.0 / plans[1].tempo / 4 / 2 + 0.03 for t in crash))  # the hit
         step = 60.0 / plans[1].tempo / 4
         self.assertTrue(any(abs(t - 14.2) <= step / 2 + 0.01 for t in crash))   # a caption hit, snapped
+
+    def test_gate_stops_silences_windows_with_short_fades(self):
+        sr = 1000
+        a = np.ones((2, 3000), dtype=np.float32)
+        out = gate_stops(a, sr, [(1.0, 1.2)], fade_out=0.01, fade_in=0.01)
+        self.assertEqual(float(out[:, 1000:1200].max()), 0.0)
+        self.assertEqual(float(out[0, 980]), 1.0)                         # untouched before the fade
+        self.assertTrue(0.0 < float(out[0, 995]) < 1.0)                    # fading out
+        self.assertEqual(float(out[0, 1300]), 1.0)
+
+    def test_explicit_sections_offset_and_stops(self):
+        secs = [{"role": "intro", "bars": 1, "progression": ["iv7"]},
+                {"role": "verse", "bars": 4, "progression": ["i7", "iv7", "i7", "VImaj7"]}]
+        ch = [Chapter(start=0.0, key="Eb", sections=secs, intro=True)]
+        plans = plan_segments(ch, 20.0, 89.0)
+        self.assertEqual([s["role"] for s in plans[0].sections], ["intro", "verse"])
+        self.assertEqual(plans[0].sections[1]["progression"], ["i7", "iv7", "i7", "VImaj7"])
+        self.assertAlmostEqual(plans[0].tempo, 89.0)
+        bar = 240 / 89.0
+        midi, _, _ = compose_score(ch, duration=12.0, hits=[], genre="neo_soul_full", offset=-bar + 1.0,
+                                   stops=[(5.0, 5.4)], curate=False)
+        starts = [n.start for t in midi.tracks for n in t.notes]
+        self.assertGreaterEqual(min(starts), 0.0)                          # the pickup is trimmed at 0
+        self.assertFalse([s for s in starts if 5.0 + 0.01 <= s < 5.4 - 0.02])   # the band rests
 
     def test_fit_to_length(self):
         sr = 1000

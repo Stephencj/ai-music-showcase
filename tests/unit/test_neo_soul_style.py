@@ -57,6 +57,24 @@ class NeoSoulTest(unittest.TestCase):
         b = [(n.pitch, round(n.start, 4)) for t in again.values() for n in t.notes]
         self.assertEqual(a, b)
 
+    def test_one_hook_returns(self):
+        # Chorus sections play the same hook: the notes at the start of each
+        # chorus match.
+        secs = []
+        for k in range(2):
+            secs += [{"start_bar": 16 * k, "end_bar": 16 * k + 7, "label": "A", "role": "verse",
+                      "progression": ["i7", "iv7"] * 4},
+                     {"start_bar": 16 * k + 8, "end_bar": 16 * k + 15, "label": "B", "role": "chorus",
+                      "progression": ["i7", "iv7"] * 4}]
+        _, tracks = compose(sections=secs)
+        lead = tracks["Synth Lead"].notes
+        def phrase(bar0):
+            a, b = bar0 * self.bar, (bar0 + 2) * self.bar
+            return [n.pitch for n in lead if a - 0.05 <= n.start < b - 0.05]
+        self.assertTrue(phrase(8))
+        self.assertEqual(phrase(8), phrase(24))
+        self.assertEqual(phrase(8), phrase(12))                           # and again within the chorus
+
     def test_clean_guitar_voice(self):
         from src.audio_processing.render.lead_voices import LEAD_VOICES
         v = LEAD_VOICES["guitar_clean"]

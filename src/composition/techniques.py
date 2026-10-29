@@ -94,6 +94,9 @@ class TechniqueContext:
     # clears around them: a short spot) or "groove" (on the next beat, inside
     # the groove: a long piece that should flow).
     hit_style: str = "punch"
+    # Band stops as (start, end) seconds from the song start: everyone rests
+    # (styles that support it, e.g. Neo-Soul).
+    stops: tuple = ()
 
     @property
     def bar_count(self) -> int:

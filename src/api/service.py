@@ -1775,17 +1775,18 @@ def run_video_score(req, progress, job_id: str) -> dict:
 
     from src.audio_processing.render.pipeline import render_to_audio
     from src.daw_integration.generic import blocks as block_store
-    from .video_score import Chapter, compose_score, fit_to_length
+    from .video_score import Chapter, compose_score, fit_to_length, gate_stops
 
     job_dir = API_OUT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
     _prune_old_job_dirs()
     chapters = [Chapter(start=c.start, card=c.card, roles=tuple(c.roles or ["verse"]), key=c.key,
-                        lead=c.lead, label=c.label, intro=c.intro) for c in req.chapters]
+                        lead=c.lead, label=c.label, intro=c.intro, sections=c.sections) for c in req.chapters]
     midi, plans, used_hits = compose_score(
         chapters, duration=req.duration, hits=list(req.hits), genre=req.genre, seed=req.seed,
         base_tempo=req.base_tempo, lead_voice=req.lead_patch, hit_style=req.hit_style,
-        curate=req.curate_hits, min_gap=req.min_hit_gap, progress=progress)
+        curate=req.curate_hits, min_gap=req.min_hit_gap, offset=req.offset,
+        stops=[tuple(s) for s in req.stops], progress=progress)
     midi_path = job_dir / "score.mid"
     midi.build().write(str(midi_path))
 
@@ -1794,6 +1795,8 @@ def run_video_score(req, progress, job_id: str) -> dict:
                              style_name=req.genre, lead_patch=req.lead_patch)
     audio, sr = sf.read(str(render.mix_path), always_2d=True)
     audio = fit_to_length(audio.T.astype("float32"), sr, req.duration)
+    if req.stops:
+        audio = gate_stops(audio, sr, [tuple(s) for s in req.stops])
     wav_path = job_dir / "score.wav"
     sf.write(str(wav_path), audio.T, sr, subtype="PCM_24")
     mp3_path: Path | None = job_dir / "score.mp3"

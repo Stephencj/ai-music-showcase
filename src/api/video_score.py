@@ -41,6 +41,9 @@ class Chapter:
     lead: str = "synth_lead"            # lead instrument id ("synth_lead" | "lead_guitar")
     label: str = ""
     intro: Optional[bool] = None        # title-card intro; None = only the first chapter
+    # Explicit sections (a transcribed form): [{"role", "bars", "progression"?, "label"?}].
+    # Used as-is at the base tempo; only for a single-chapter score.
+    sections: Optional[list] = None
 
 
 @dataclass
@@ -160,9 +163,29 @@ def plan_timing(starts: list[float], duration: float, base_tempo: float, *,
     return plan
 
 
+def _explicit_plan(ch: Chapter, tempo: float) -> SegmentPlan:
+    """A single chapter laid out exactly as its explicit sections say."""
+    pos, sections = 0, []
+    for k, sec in enumerate(ch.sections or []):
+        n = int(sec.get("bars", 0))
+        if n <= 0:
+            continue
+        s = {"start_bar": pos, "end_bar": pos + n - 1, "role": sec.get("role", "verse"),
+             "label": sec.get("label") or f"Section {k + 1}"}
+        if sec.get("progression"):
+            s["progression"] = list(sec["progression"])
+        if ch.key:
+            s["key"] = ch.key
+        sections.append(s)
+        pos += n
+    return SegmentPlan(0, 0.0, pos * 240.0 / tempo, tempo, pos, sections)
+
+
 def plan_segments(chapters: list[Chapter], duration: float, base_tempo: float) -> list[SegmentPlan]:
     """Bars and tempo per chapter, and its section list (bar ranges)."""
     chapters = sorted(chapters, key=lambda c: c.start)
+    if len(chapters) == 1 and chapters[0].sections:
+        return [_explicit_plan(chapters[0], base_tempo)]
     timing = plan_timing([c.start for c in chapters], duration, base_tempo)
     plans = []
     for i, ch in enumerate(chapters):
@@ -222,7 +245,11 @@ def compose_score(chapters: list[Chapter], *, duration: float, hits: list[float]
                   genre: str = "funk_fusion_full", seed: int = 52, base_tempo: float = 158.0,
                   band: Optional[list[str]] = None, lead_voice: Optional[str] = None,
                   hit_style: str = "groove", curate: bool = True, min_gap: float = 3.0,
+                  offset: float = 0.0, stops: Optional[list] = None,
                   progress: Optional[Callable[[str, float], None]] = None):
+    """``offset``: where music time 0 sits in the video (negative = the music
+    starts before the video, e.g. a pickup into a downbeat). ``hits`` and
+    ``stops`` are in video time."""
     """Compose every chapter and merge them into one MidiExporter (seconds)."""
     import pretty_midi
     from src.composition.song_composer import compose_song
@@ -232,8 +259,10 @@ def compose_score(chapters: list[Chapter], *, duration: float, hits: list[float]
     preset = STYLES[genre]
     band = list(band or [i for i in preset.default_instruments if i not in ("synth_lead", "lead_guitar", "sax_alto")])
     plans = plan_segments(chapters, duration, base_tempo)
+    hits = [h - offset for h in hits]
+    stops = [(a - offset, b - offset) for a, b in (stops or [])]
     if curate:
-        hits = curate_hits(hits, [p.start for p in plans] + [c.start for c in chapters], min_gap=min_gap)
+        hits = curate_hits(hits, [p.start for p in plans] + [c.start - offset for c in chapters], min_gap=min_gap)
     tracks: dict[tuple[str, int, bool], list] = {}
     ordered = sorted(chapters, key=lambda c: c.start)
     for plan in plans:
@@ -245,6 +274,7 @@ def compose_score(chapters: list[Chapter], *, duration: float, hits: list[float]
                 genre=genre, sections=plan.sections, seed=seed, tempo=plan.tempo,
                 key=ch.key, enabled_instruments=tuple(band + [ch.lead]),
                 hits=[h - plan.start for h in hits if h - plan.start >= 0],
+                stops=[(a - plan.start, b - plan.start) for a, b in stops if b - plan.start > 0],
                 lead_voice=lead_voice, hit_style=hit_style, output_dir=Path(td), skip_audio=True,
             )
             pm = pretty_midi.PrettyMIDI(res["midi_path"])
@@ -254,13 +284,39 @@ def compose_score(chapters: list[Chapter], *, duration: float, hits: list[float]
             for n in inst.notes:
                 if n.start >= plan.end - plan.start + 0.02 and not inst.is_drum:
                     continue
-                bucket.append(NoteEvent(pitch=int(n.pitch), start=float(n.start) + plan.start,
-                                        end=float(n.end) + plan.start, velocity=int(n.velocity)))
+                start = float(n.start) + plan.start + offset
+                end = float(n.end) + plan.start + offset
+                if end <= 0:
+                    continue                        # before the video starts
+                bucket.append(NoteEvent(pitch=int(n.pitch), start=max(0.0, start), end=end,
+                                        velocity=int(n.velocity)))
     midi = MidiExporter(tempo=base_tempo, time_signature=preset.time_signature)
     for (name, program, is_drum), notes in tracks.items():
         if notes:
             midi.add_notes(sorted(notes, key=lambda n: n.start), track_name=name, program=program, is_drum=is_drum)
-    return midi, plans, hits
+    return midi, plans, [h + offset for h in hits]
+
+
+def gate_stops(audio: np.ndarray, sample_rate: int, stops: list[tuple[float, float]], *,
+               fade_out: float = 0.006, fade_in: float = 0.004) -> np.ndarray:
+    """Hard band stops in the finished mix: silence inside each (start, end)
+    window — tails and reverb included, like an edit — with short fades so
+    the cuts don't click."""
+    out = audio.copy()
+    n = out.shape[1]
+    for a, b in stops:
+        i0, i1 = int(round(a * sample_rate)), int(round(b * sample_rate))
+        if i1 <= 0 or i0 >= n or i1 <= i0:
+            continue
+        fo, fi = int(fade_out * sample_rate), int(fade_in * sample_rate)
+        lo = max(0, i0 - fo)
+        if i0 > lo:
+            out[:, lo:i0] *= np.linspace(1.0, 0.0, i0 - lo, dtype=out.dtype)
+        out[:, max(0, i0):min(n, i1)] = 0.0
+        hi = min(n, i1 + fi)
+        if hi > i1:
+            out[:, i1:hi] *= np.linspace(0.0, 1.0, hi - i1, dtype=out.dtype)
+    return out
 
 
 def fit_to_length(audio: np.ndarray, sample_rate: int, length: float, *, fade: float = 0.45) -> np.ndarray:

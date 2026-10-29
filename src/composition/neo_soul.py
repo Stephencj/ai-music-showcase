@@ -37,7 +37,10 @@ LAID_BACK = 0.014          # seconds the backbeat sits behind
 
 def _phrase_stop(ctx: TechniqueContext, bar: int, feel: str) -> bool:
     """The band stops for the last 8th of every 4th bar (not a section's last
-    bar, which belongs to the fill), the way the vibe breathes."""
+    bar, which belongs to the fill), the way the vibe breathes. Explicit
+    ``ctx.stops`` replace these."""
+    if getattr(ctx, "stops", ()):
+        return False
     return feel in ("verse", "chorus", "prechorus") and bar % 4 == 3 and bar != ctx.bar_count - 1
 
 
@@ -46,7 +49,10 @@ def _stop_window(clock: _Clock, bar: int) -> tuple[float, float]:
 
 
 def _apply_stops(notes: list[NoteEvent], ctx: TechniqueContext, clock: _Clock, feel: str) -> list[NoteEvent]:
-    windows = [_stop_window(clock, b) for b in range(ctx.bar_count) if _phrase_stop(ctx, b, feel)]
+    if getattr(ctx, "stops", ()):
+        windows = [(float(a), float(b)) for a, b in ctx.stops]   # explicit band stops (song seconds)
+    else:
+        windows = [_stop_window(clock, b) for b in range(ctx.bar_count) if _phrase_stop(ctx, b, feel)]
     if not windows:
         return notes
     out = []
@@ -141,7 +147,8 @@ def _drums(midi, ctx: TechniqueContext, feel: str) -> None:
 # (step, length in 16ths, degree, velocity): R root, 5 fifth, O octave,
 # 7 seventh, A approach to the next chord.
 _BASS = {
-    "verse": (((0, 5, "R", 96), (6, 2, "5", 80), (10, 3, "R", 86), (14, 2, "A", 78)),
+    # W = a chromatic walk-up into the next chord (three half steps).
+    "verse": (((0, 5, "R", 96), (6, 2, "5", 80), (10, 2, "W3", 80), (12, 2, "W2", 82), (14, 2, "W1", 84)),
               ((0, 3, "R", 96), (3, 3, "R", 70), (8, 2, "O", 84), (10, 2, "7", 80), (14, 2, "A", 78))),
     "high": (((0, 3, "R", 100), (3, 1, "R", 74), (6, 2, "5", 86), (8, 2, "O", 88), (10, 3, "R", 90),
               (14, 2, "A", 84)),
@@ -178,6 +185,10 @@ def _bass(midi, ctx: TechniqueContext, feel: str) -> None:
                 pitch = root + 12
             elif deg == "7":
                 pitch = root + _SEVENTH.get(quality, 10)
+            elif deg.startswith("W"):
+                nxt_pc, _ = harm.at(min(bar + 1.0, bars - 1e-6))
+                target = _fits(nxt_pc + 36, lo, lo + 11)
+                pitch = target - int(deg[1:])
             else:
                 nxt_pc, _ = harm.at(min(bar + 1.0, bars - 1e-6))
                 target = _fits(nxt_pc + 36, lo, lo + 11)
@@ -193,7 +204,9 @@ def _bass(midi, ctx: TechniqueContext, feel: str) -> None:
 # ---------------------------------------------------------------------------
 
 _COMP = {
-    "verse": (((0, 6, 70), (6, 4, 62), (14, 2, 66)), ((0, 8, 70), (10, 3, 60), (14, 2, 64))),
+    # A steady, soft 8th-note pulse alternating with a lazier bar.
+    "verse": (((0, 2, 70), (2, 2, 56), (4, 2, 62), (6, 2, 56), (8, 2, 66), (10, 2, 56), (12, 2, 60), (14, 2, 64)),
+              ((0, 6, 70), (6, 4, 62), (14, 2, 66))),
     "high": (((0, 3, 76), (3, 3, 68), (8, 4, 72), (14, 2, 74)), ((0, 6, 76), (6, 2, 66), (10, 4, 72), (14, 2, 74))),
     "soft": (((0, 16, 64),),),
 }
@@ -248,6 +261,31 @@ _PHRASES = (
 )
 
 
+def _theme(ctx: TechniqueContext):
+    """The song's one hook: a two-bar phrase chosen from the song seed only,
+    so every section that plays it plays the same notes."""
+    rng = np.random.default_rng(zlib.crc32(f"{ctx.song_seed}|neo-soul theme".encode()))
+    return _PHRASES[int(rng.integers(0, len(_PHRASES)))]
+
+
+def _answer(theme):
+    """The hook's answer: same rhythm, the last notes turn back down."""
+    out = list(theme)
+    for k in range(max(0, len(out) - 3), len(out)):
+        step, length, move, slide = out[k]
+        out[k] = (step, length, -abs(move) or -1, slide)
+    return tuple(out)
+
+
+# Where the hook plays within a section, per 2-bar slot: "T" theme, "A" its
+# answer, "-" rest (room for the Rhodes).
+_HOOK_PLAN = {
+    "high": ("T", "A", "T", "A"),
+    "verse": ("T", "-", "A", "-"),
+    "soft": ("A", "-", "-", "-"),
+}
+
+
 def _lead(midi, ctx: TechniqueContext, feel: str) -> None:
     rng = ctx.rng
     clock = _Clock(ctx)
@@ -256,17 +294,18 @@ def _lead(midi, ctx: TechniqueContext, feel: str) -> None:
     notes: list[NoteEvent] = []
     if feel in ("intro",):
         return
-    lo, hi = (64, 81) if feel in HIGH_ROLES else (60, 77)
-    pool = _scale_pitches(harm.tonic, ctx.scale, lo, hi)
-    seed_rng = np.random.default_rng(zlib.crc32(f"{ctx.song_seed}|{ctx.section_label}".encode()))
-    phrase = _PHRASES[int(seed_rng.integers(0, len(_PHRASES)))]
-    every = 2 if feel in HIGH_ROLES else 4                       # verses leave room for the Rhodes
-    centre = 72 if feel in HIGH_ROLES else 67
-    start_idx = min(range(len(pool)), key=lambda i: abs(pool[i] - centre))
-    for n_phrase, p_bar in enumerate(range(0, bars, every)):
-        if feel in SOFT_ROLES and n_phrase % 2:
+    # One pool and one starting note for the whole song, so the hook is the
+    # same notes wherever it returns.
+    pool = _scale_pitches(harm.tonic, ctx.scale, 60, 81)
+    start_idx = min(range(len(pool)), key=lambda i: abs(pool[i] - 69))
+    theme = _theme(ctx)
+    plan = _HOOK_PLAN["high" if feel in HIGH_ROLES else "soft" if feel in SOFT_ROLES else "verse"]
+    for slot, p_bar in enumerate(range(0, bars, 2)):
+        kind = plan[slot % len(plan)]
+        if kind == "-":
             continue
-        i_cur = int(np.clip(start_idx + (2 if n_phrase % 2 else 0), 0, len(pool) - 1))
+        phrase = theme if kind == "T" else _answer(theme)
+        i_cur = start_idx
         for step, length, move, slide in phrase:
             bar = p_bar + step // clock.steps
             if bar >= bars or (feel == "outro" and bar >= bars - 1):
