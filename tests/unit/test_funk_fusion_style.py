@@ -51,7 +51,7 @@ class FunkFusionTest(unittest.TestCase):
         self.assertEqual(set(self.tracks), {"Drum kit", "Electric Bass", "Electric Piano",
                                             "Trumpet", "Trombone", "Synth Lead"})
         ranges = {"Electric Bass": (28, 55), "Trumpet": (55, 84), "Trombone": (40, 72),
-                  "Synth Lead": (58, 86), "Electric Piano": (48, 80)}
+                  "Synth Lead": (69, 92), "Electric Piano": (48, 80)}
         for name, (lo, hi) in ranges.items():
             pitches = [n.pitch for n in self.tracks[name].notes]
             self.assertGreaterEqual(min(pitches), lo, name)
@@ -75,6 +75,20 @@ class FunkFusionTest(unittest.TestCase):
         bass, sax, trumpet = onsets("Electric Bass"), onsets("Synth Lead"), onsets("Trumpet")
         self.assertGreater(len(bass & sax) / len(sax), 0.8)        # bass and sax play it together
         self.assertGreater(len(trumpet & sax) / len(sax), 0.8)
+
+    def test_lead_sits_above_the_trumpet(self):
+        lead = np.median([n.pitch for n in self.tracks["Synth Lead"].notes])
+        tpt = np.median([n.pitch for n in self.tracks["Trumpet"].notes])
+        self.assertGreaterEqual(lead - tpt, 7)
+
+    def test_lead_runs_up_into_the_chorus(self):
+        verse_end = 12 * self.bar                        # intro 4 + verse 8 in the default song
+        run = [n for n in self.tracks["Synth Lead"].notes if verse_end - self.bar - 0.02 <= n.start < verse_end]
+        self.assertGreaterEqual(len(run), 6)
+        pitches = [n.pitch for n in sorted(run, key=lambda n: n.start)]
+        self.assertEqual(pitches, sorted(pitches))
+        self.assertGreater(pitches[-1] - pitches[0], 7)
+        self.assertLess(max(n.start for n in run), verse_end - self.bar / 16 * 2 + 0.02)
 
     def test_synth_lead_plays_short(self):
         step = self.bar / 16

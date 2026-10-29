@@ -559,8 +559,41 @@ _HOOKS = (
 )
 
 
+# Lead registers: (riff doubling), (hook in low sections), (hook in high
+# sections), hook centres, and the final note. A synth lead sits about an
+# octave up, above the trumpet (C5-C6, peaking near G6), where fusion synth
+# leads live; a sax stays in its sweet spot.
+_LEAD_REGISTER = {
+    True:  {"riff": (72, 86), "low": (72, 86), "high": (76, 91), "centre_low": 76, "centre_high": 81, "final": (79, 91)},
+    False: {"riff": (62, 77), "low": (62, 76), "high": (65, 79), "centre_low": 67, "centre_high": 71, "final": (67, 80)},
+}
+RUN_INTO = ("verse", "prechorus", "bridge", "breakdown")
+# The transition run: 8ths speeding into 16ths, ending two 16ths before the
+# next section (the breath before its hit). (step, length in 16ths)
+_RUN = ((4, 2), (6, 2), (8, 1), (9, 1), (10, 1), (11, 1), (12, 1), (13, 1))
+
+
+def _lead_run(ctx: TechniqueContext, clock: "_Clock", harm: "_Harmony", bar: int,
+              reg: dict, rng: np.random.Generator, synth: bool) -> list[NoteEvent]:
+    """A rising scale run in ``bar`` that throws the lead into the next section."""
+    pool = _scale_pitches(harm.tonic, ctx.scale, reg["low"][0] - 7, reg["high"][1])
+    home = {harm.tonic % 12, (harm.tonic + 4) % 12, (harm.tonic + 7) % 12}
+    target = min((p for p in pool if p % 12 in home), key=lambda p: abs(p - reg["centre_high"]))
+    top = pool.index(target)
+    first = max(0, top - (len(_RUN) - 1))
+    notes = []
+    for i, (step, length) in enumerate(_RUN):
+        pitch = pool[min(first + i, top)]
+        start = clock.t(bar, step)
+        s, v = _human(rng, start, 88 + 24 * i / (len(_RUN) - 1), ms=2.5, vel_jitter=3.0)
+        gate = clock.step_len * length * (0.85 if synth else 0.92)
+        notes.append(NoteEvent(pitch=pitch, start=s, end=start + gate, velocity=v))
+    return notes
+
+
 def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
-    """The lead: alto sax or synth lead (a synth sits a little higher)."""
+    """The lead: alto sax or synth lead (a synth sits about an octave higher).
+    Before a chorus it plays a rising run that carries into the section."""
     synth = ctx.instrument == "synth_lead" or getattr(ctx.instrument_obj, "program", 65) in range(80, 88)
     name, program = ("Lead", 81) if synth else ("Melody", 65)
     rng = ctx.rng
@@ -569,27 +602,28 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
     bars = ctx.bar_count
     riff = riff_bars(ctx, feel)
     notes: list[NoteEvent] = []
-    # The lead doubles the riff an octave above the trombone, with the trumpet.
+    reg = _LEAD_REGISTER[bool(synth)]
+    # The lead doubles the riff: a sax with the trumpet, a synth an octave above it.
     for bar, step, length, semis in riff_notes(ctx, riff, feel):
-        p = _fits(harm.tonic + semis + 60, 62, 77)
+        p = _fits(harm.tonic + semis + 60, *reg["riff"])
         s, v = _human(rng, clock.t(bar, step), 104, ms=3.0, vel_jitter=4.0)
         gate = clock.step_len * (min(length, 4) * 0.82 if synth else length * 0.85)
         notes.append(NoteEvent(pitch=p, start=s, end=s + gate, velocity=v))
     if feel == "outro":
         # Resolve on the final hit: the tonic, held, up in the lead's register.
         t0 = clock.t(bars - 1, 0)
-        notes.append(NoteEvent(pitch=_fits(harm.tonic + 72, 67, 80), start=t0, end=t0 + clock.bar_len * 0.9, velocity=112))
+        notes.append(NoteEvent(pitch=_fits(harm.tonic + 72, *reg["final"]), start=t0, end=t0 + clock.bar_len * 0.9, velocity=112))
+    run_bar = bars - 1 if feel in RUN_INTO and bars >= 2 and (bars - 1) not in riff else None
+    if run_bar is not None:
+        notes += _lead_run(ctx, clock, harm, run_bar, reg, rng, synth)
     if feel in ("bridge", "breakdown", "intro", "outro"):
         _emit(midi, ctx, _breathe(notes, ctx, clock), name=name, program=program)
         return
-    if synth:
-        lo, hi = (67, 84) if feel in HIGH_ROLES else (64, 79)
-    else:
-        lo, hi = (65, 79) if feel in HIGH_ROLES else (62, 76)
+    lo, hi = reg["high"] if feel in HIGH_ROLES else reg["low"]
     pool = _scale_pitches(harm.tonic, ctx.scale, lo, hi)
     hook = _HOOKS[int(_shared_rng(ctx).integers(0, len(_HOOKS)))]
     riff_set = set(riff)
-    centre = 71 if feel in HIGH_ROLES else 67
+    centre = reg["centre_high"] if feel in HIGH_ROLES else reg["centre_low"]
     idx = min(range(len(pool)), key=lambda i: abs(pool[i] - centre))
     for n_phrase, p_bar in enumerate(range(0, bars, 2)):
         if p_bar in riff_set or n_phrase % 2 == 1 or (feel == "verse" and n_phrase > 0):
@@ -598,7 +632,7 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
         i_cur = int(np.clip(start_idx, 0, len(pool) - 1))
         for step, length, move in hook:
             bar = p_bar + step // clock.steps
-            if bar >= bars or bar in riff_set:
+            if bar >= bars or bar in riff_set or bar == run_bar:
                 break
             grace = move == "b"
             if move not in (None, "b"):
