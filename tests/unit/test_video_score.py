@@ -25,7 +25,14 @@ class PlanTest(unittest.TestCase):
         for p in self.plans:
             self.assertAlmostEqual(p.bars * 240.0 / p.tempo, p.end - p.start, places=6)
         self.assertEqual([round(p.start, 3) for p in self.plans], [0.0, 13.1, 40.0, 55.3])
-        self.assertAlmostEqual(self.plans[-1].end, 60.0)
+        for a, b in zip(self.plans, self.plans[1:-1]):
+            self.assertAlmostEqual(a.end, b.start)
+        self.assertLessEqual(self.plans[-1].end, 60.0 + 1e-6)              # the tail may ring out
+
+    def test_the_tail_keeps_the_previous_tempo(self):
+        plans = plan_segments([Chapter(0.0), Chapter(20.0), Chapter(40.0, roles=("outro",))], 46.1, 145.0)
+        self.assertAlmostEqual(plans[-1].tempo, plans[-2].tempo)
+        self.assertLessEqual(plans[-1].end, 46.1 + 1e-6)
 
     def test_tempos_stay_near_the_base_and_close_to_each_other(self):
         tempos = [p.tempo for p in self.plans]

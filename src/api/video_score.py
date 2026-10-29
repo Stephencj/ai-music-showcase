@@ -91,7 +91,13 @@ def plan_segments(chapters: list[Chapter], duration: float, base_tempo: float) -
     chapters = sorted(chapters, key=lambda c: c.start)
     bounds = [(0.0 if i == 0 else c.start, chapters[i + 1].start if i + 1 < len(chapters) else duration)
               for i, c in enumerate(chapters)]
-    bar_counts = choose_bars([max(e - s0, 0.1) for s0, e in bounds], base_tempo, MAX_TEMPO_NUDGE)
+    lengths = [max(e - s0, 0.1) for s0, e in bounds]
+    # The last chapter is the tail (an end card): it needn't fill its time —
+    # its final hit can ring out — so it keeps the previous chapter's tempo
+    # instead of jumping to whatever whole number of bars fits.
+    bar_counts = choose_bars(lengths[:-1], base_tempo, MAX_TEMPO_NUDGE) if len(lengths) > 1 else []
+    tail_tempo = (240.0 * bar_counts[-1] / lengths[-2]) if bar_counts else base_tempo
+    bar_counts.append(max(1, int(np.floor(lengths[-1] * tail_tempo / 240.0 + 0.15))))
     plans = []
     for i, ch in enumerate(chapters):
         start = 0.0 if i == 0 else ch.start          # the music starts with the video
@@ -101,6 +107,9 @@ def plan_segments(chapters: list[Chapter], duration: float, base_tempo: float) -
             continue
         bars = bar_counts[i]
         tempo = 240.0 * bars / length
+        if i == len(chapters) - 1 and len(chapters) > 1:
+            tempo = tail_tempo
+            end = min(end, start + bars * 240.0 / tempo)
         bar = 240.0 / tempo
         card_bars = 0
         wants_intro = ch.intro if ch.intro is not None else i == 0
