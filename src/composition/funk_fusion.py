@@ -195,6 +195,10 @@ def _drums(midi, ctx: TechniqueContext, feel: str) -> None:
                 if i % 2 == 0:
                     hits.append((bar, 8 + i, KICK, 92))
 
+    for bar, steps_ in hit_steps(ctx, clock).items():
+        for st in steps_:
+            hits += [(bar, st, CRASH, 112), (bar, st, KICK, 116), (bar, st, SNARE, 104)]
+
     notes = []
     for bar, step, key, vel in hits:
         t, v = _human(rng, clock.t(bar, step), vel, ms=2.5, vel_jitter=4.0 if vel > 50 else 3.0)
@@ -306,10 +310,27 @@ def _bass(midi, ctx: TechniqueContext, feel: str) -> None:
 
 # (step, length, velocity) stab patterns per 2 bars (steps 0-31).
 _STABS = {
-    "verse": ((14, 1, 104), (16, 1, 96), (30, 1, 106)),
-    "high": ((0, 2, 112), (6, 1, 104), (10, 1, 106), (14, 2, 112), (19, 1, 104), (22, 2, 110), (28, 1, 104), (30, 2, 114)),
+    "verse": ((30, 1, 106),),                              # one push every two bars
+    "high": ((0, 2, 112), (14, 1, 104), (30, 2, 112)),
     "bridge": ((0, 4, 104), (16, 4, 108)),
 }
+HIT_CLEAR = 3        # 16ths kept clear of other stabs around a hit point
+
+
+def hit_steps(ctx: TechniqueContext, clock: "_Clock") -> dict[int, set[int]]:
+    """This section's hit points as bar → 16th steps (nearest 16th)."""
+    out: dict[int, set[int]] = {}
+    first = ctx.start_bar * clock.steps
+    for t in ctx.hits:
+        step = int(round(t / clock.step_len)) - first
+        if 0 <= step < ctx.bar_count * clock.steps:
+            out.setdefault(step // clock.steps, set()).add(step % clock.steps)
+    return out
+
+
+def _near_hit(hits: dict[int, set[int]], bar: int, step: int, steps: int) -> bool:
+    at = bar * steps + step
+    return any(abs(at - (b * steps + s)) <= HIT_CLEAR for b, ss in hits.items() for s in ss)
 
 
 def _horn_voicing(root_pc: int, quality: str, top_near: int) -> list[int]:
@@ -356,6 +377,13 @@ def _horns(midi, ctx: TechniqueContext, feel: str) -> None:
             notes.append(NoteEvent(pitch=p, start=s, end=s + clock.step_len * length * 0.8, velocity=v))
     pattern = _STABS["high" if feel in HIGH_ROLES else "bridge" if feel in ("bridge", "breakdown") else "verse"]
     top_near = 74 if feel in HIGH_ROLES else 70
+    hits = hit_steps(ctx, clock)
+    for bar, steps_ in hits.items():
+        for st in steps_:
+            root_pc, quality = harm.at(bar + st / clock.steps)
+            s, v = _human(rng, clock.t(bar, st), 120, ms=1.5, vel_jitter=2.0)
+            for p in _part(_horn_voicing(root_pc, quality, 76), part):
+                notes.append(NoteEvent(pitch=p, start=s, end=s + clock.step_len * 2 * 0.85, velocity=v))
     for pair in range(0, bars, 2):
         for step, length, vel in pattern:
             bar = pair + step // clock.steps
@@ -364,6 +392,8 @@ def _horns(midi, ctx: TechniqueContext, feel: str) -> None:
             if feel == "outro" and bar == bars - 1 and step:
                 continue
             st = step % clock.steps
+            if _near_hit(hits, bar, st, clock.steps):
+                continue
             pos = bar + st / clock.steps
             if st >= clock.steps - 2 and bar + 1 < bars:
                 pos = bar + 1.0                   # stab pushes the next chord
@@ -432,6 +462,9 @@ def _rhodes(midi, ctx: TechniqueContext, feel: str) -> None:
             if step >= clock.steps - 2 and bar + 1 < bars:
                 pos = bar + 1.0
             chord(bar, step, length, vel, pos)
+    for bar, steps_ in hit_steps(ctx, clock).items():
+        for st in steps_:
+            chord(bar, st, 2, 98, bar + st / clock.steps)
     _emit(midi, ctx, notes, name="Chords", program=4)
 
 
@@ -473,8 +506,8 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
     centre = 71 if feel in HIGH_ROLES else 67
     idx = min(range(len(pool)), key=lambda i: abs(pool[i] - centre))
     for n_phrase, p_bar in enumerate(range(0, bars, 2)):
-        if p_bar in riff_set or (feel == "verse" and n_phrase % 2 == 1):
-            continue                               # verses leave room for the horn answers
+        if p_bar in riff_set or n_phrase % 2 == 1 or (feel == "verse" and n_phrase > 0):
+            continue                               # one phrase in, one out; a verse gets one
         start_idx = idx + (2 if n_phrase % 2 else 0)
         i_cur = int(np.clip(start_idx, 0, len(pool) - 1))
         for step, length, move in hook:

@@ -85,6 +85,8 @@ class TechniqueContext:
     lead_fill: bool = False
     # The song's seed, for material every instrument must share (a band riff).
     song_seed: int = 0
+    # Hit points in seconds from the song start (accents the band lands).
+    hits: tuple = ()
 
     @property
     def bar_count(self) -> int:

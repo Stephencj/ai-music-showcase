@@ -115,7 +115,7 @@ _FUNK_FUSION = MixProfile(
     master_preset="loud",
     sidechain_kick_into=(),
     track_overrides={
-        "sax":      {"gain_db": -2.0},                  # lead, centre, just over the stabs
+        "sax":      {"gain_db": -3.5},                  # lead, centre, level with the stabs
         "trumpet":  {"pan": 0.35},
         "trombone": {"pan": 0.15},
     },

@@ -99,6 +99,7 @@ def run_generation(req, progress, job_id: str) -> dict:
         key=req.key, scale=req.scale, tempo=req.tempo,
         bars=req.bars, swing=req.swing,
         progression=(list(req.progression) or None),
+        hits=(list(getattr(req, "hits", None) or []) or None),
         output_dir=job_dir,
         skip_audio=True,            # we render HQ below; skip the low-fi pass
     )

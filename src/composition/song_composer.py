@@ -360,6 +360,7 @@ def compose_song(
     swing: Optional[float] = None,
     progression: Optional[list] = None,
     knobs: Optional[dict] = None,
+    hits: Optional[list] = None,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     output_midi: str = DEFAULT_MIDI_NAME,
     output_wav: str = DEFAULT_WAV_NAME,
@@ -715,6 +716,7 @@ def compose_song(
                 drum_fill=sec_knobs["drum_fill"],
                 lead_fill=(is_lead and lead_is_fill),
                 song_seed=int(seed),
+                hits=tuple(float(h) for h in (hits or ()) if h is not None and float(h) >= 0),
             )
             try:
                 apply_technique(midi, technique, ctx)

@@ -145,15 +145,63 @@ class OneBarRiffTest(unittest.TestCase):
             self.assertTrue(all(abs(n.start - hit) < 0.03 for n in late), name)
 
 
+class HitPointTest(unittest.TestCase):
+    """Accents at given times (e.g. a stab on each caption of a video)."""
+
+    TEMPO = 158
+    HITS = (4.891, 7.94, 13.671, 99.0)          # the last is past the song's end
+
+    @classmethod
+    def setUpClass(cls):
+        cls.td = tempfile.TemporaryDirectory()
+        secs = build_sections(GENRE, ["intro", "verse", "chorus", "outro"], None,
+                              {"intro": {"bars": 3}, "verse": {"bars": 6},
+                               "chorus": {"bars": 8}, "outro": {"bars": 2}})
+        res = compose_song(genre=GENRE, sections=secs, seed=5, tempo=cls.TEMPO, hits=list(cls.HITS),
+                           enabled_instruments=tuple(STYLES[GENRE].default_instruments),
+                           output_dir=Path(cls.td.name), skip_audio=True)
+        cls.tracks = {i.name: i for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments}
+        cls.step = 60.0 / cls.TEMPO / 4
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.td.cleanup()
+
+    def snapped(self, t):
+        return round(t / self.step) * self.step
+
+    def at(self, name, t, tol=0.012):
+        return [n for n in self.tracks[name].notes if abs(n.start - t) <= tol]
+
+    def test_band_lands_each_hit_on_the_nearest_sixteenth(self):
+        for t in self.HITS[:3]:
+            hit = self.snapped(t)
+            self.assertLessEqual(abs(hit - t), self.step / 2)
+            self.assertGreaterEqual(len(self.at("Trumpet", hit)), 2, t)
+            self.assertGreaterEqual(len(self.at("Trombone", hit)), 2, t)
+            self.assertIn(49, {n.pitch for n in self.at("Drum kit", hit)}, t)       # crash
+            self.assertTrue(self.at("Electric Piano", hit), t)
+
+    def test_other_stabs_keep_clear_of_a_hit(self):
+        hit = self.snapped(self.HITS[1])
+        near = [n for n in self.tracks["Trumpet"].notes
+                if 0.012 < abs(n.start - hit) <= 3 * self.step]
+        self.assertFalse(near)
+
+    def test_hits_past_the_end_are_ignored(self):
+        end = max(n.end for t in self.tracks.values() for n in t.notes)
+        self.assertLess(end, 30.0)
+
+
 class FunkMixTest(unittest.TestCase):
-    def test_profile_resolves_and_sax_leads_the_horns(self):
+    def test_profile_resolves_and_sets_the_sax_level(self):
         profile = resolve_profile(GENRE)
         self.assertIs(profile, MIX_PROFILES["funk_fusion"])
         midi = MidiExporter(tempo=140, time_signature=(4, 4))
         for name, prog in (("Alto Sax", 65), ("Trumpet", 56), ("Electric Piano", 4)):
             midi.add_notes([NoteEvent(60, 0, 1, 100)], track_name=name, program=prog)
         mix = _with_profile_tracks({"Trumpet": {"pan": -0.5}}, profile, midi)
-        self.assertEqual(mix["Alto Sax"]["gain_db"], -2.0)
+        self.assertEqual(mix["Alto Sax"]["gain_db"], -3.5)
         self.assertEqual(mix["Trumpet"]["pan"], -0.5)                  # the producer's choice wins
         self.assertNotIn("Electric Piano", mix)
 

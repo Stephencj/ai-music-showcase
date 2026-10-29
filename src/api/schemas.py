@@ -33,6 +33,10 @@ class GenerateRequest(BaseModel):
     # drum_fill); `energy` sets that section's level directly (sparse/big);
     # `feature_lead` forces the lead/solo into that section.
     section_overrides: dict[str, dict] = Field(default_factory=dict)
+    # Hit points, in seconds from the start of the song: the band lands an
+    # accent there (snapped to the nearest 16th), e.g. a stab on each caption
+    # of a video. Honoured by styles that support it (Funk Fusion).
+    hits: list[float] = Field(default_factory=list)
     with_stems: bool = False
     with_pdf: bool = True
     master_preset: Optional[str] = "default"
