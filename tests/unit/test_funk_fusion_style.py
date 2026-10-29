@@ -502,6 +502,45 @@ class CalmTest(unittest.TestCase):
         self.assertTrue({36, 38, 49} <= kit)
 
 
+class CalmPerPartTest(unittest.TestCase):
+    def test_busy_drums_with_calm_bass_and_keys(self):
+        td = tempfile.TemporaryDirectory()
+        try:
+            secs = build_sections(GENRE, ["verse", "chorus"], None, {"verse": {"bars": 4}, "chorus": {"bars": 4}})
+            res = compose_song(genre=GENRE, sections=secs, seed=5, tempo=120, arrangement="hits_only,calm_bass,calm_keys",
+                               enabled_instruments=tuple(STYLES[GENRE].default_instruments),
+                               output_dir=Path(td.name), skip_audio=True)
+            tracks = {i.name: i for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments}
+        finally:
+            td.cleanup()
+        kit = tracks["Drum kit"].notes
+        self.assertTrue([n for n in kit if n.pitch == 38 and n.velocity < 50])     # ghost notes are back
+        hats = sorted(n.start for n in kit if n.pitch in (42, 46))
+        self.assertLess(float(np.median(np.diff(hats))), 0.5 / 2 * 1.1)              # 16th hats at 120 BPM
+        bar = 2.0
+        rh = tracks["Electric Piano"].notes
+        self.assertGreater(float(np.median([n.end - n.start for n in rh])), bar * 0.9)   # keys still sustained
+
+
+class PocketBassTest(unittest.TestCase):
+    def test_bass_locks_to_the_kick(self):
+        td = tempfile.TemporaryDirectory()
+        try:
+            secs = build_sections(GENRE, ["verse", "chorus"], None, {"verse": {"bars": 4}, "chorus": {"bars": 4}})
+            res = compose_song(genre=GENRE, sections=secs, seed=5, tempo=120, arrangement="calm_keys,pocket_bass",
+                               enabled_instruments=tuple(STYLES[GENRE].default_instruments),
+                               output_dir=Path(td.name), skip_audio=True)
+            tracks = {i.name: i for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments}
+        finally:
+            td.cleanup()
+        kicks = [n.start for n in tracks["Drum kit"].notes if n.pitch == 36]
+        bass = [n for n in tracks["Electric Bass"].notes if n.velocity > 60]
+        on_kick = [b for b in bass if any(abs(b.start - k) < 0.03 for k in kicks)]
+        self.assertGreater(len(on_kick) / len(bass), 0.6)                  # mostly with the kick
+        self.assertGreater(len(bass) / 8, 2.5)                              # busier than the plain line
+        self.assertGreater(len({b.pitch for b in bass}), 4)                 # roots, octaves, fifths, walk-ups
+
+
 class FunkMixTest(unittest.TestCase):
     def test_profile_resolves_and_sets_the_sax_level(self):
         profile = resolve_profile(GENRE)

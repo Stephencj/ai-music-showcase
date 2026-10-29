@@ -111,11 +111,13 @@ def _hits_only(ctx: TechniqueContext) -> bool:
     return "hits_only" in _arrangement(ctx)
 
 
-def _calm(ctx: TechniqueContext) -> bool:
-    """"calm": a plainer band for background use — straight 8th hats and a
-    backbeat without ghosts or open hats, a legato finger bass on roots and
-    fifths, sustained Rhodes chords."""
-    return "calm" in _arrangement(ctx)
+def _calm(ctx: TechniqueContext, part: str) -> bool:
+    """"calm" makes the band plainer for background use; "calm_drums",
+    "calm_bass" and "calm_keys" do it per part. Drums: straight 8th hats and a
+    backbeat without ghosts or open hats; bass: legato finger bass on roots
+    and fifths; keys: sustained Rhodes chords."""
+    arr = _arrangement(ctx)
+    return "calm" in arr or f"calm_{part}" in arr
 
 
 def _calm_drums(midi, ctx: TechniqueContext, feel: str) -> None:
@@ -167,6 +169,57 @@ def _calm_bass(midi, ctx: TechniqueContext, feel: str) -> None:
             pitch = root + (6 if quality == "dim" else 7) if fifth else root
             s, v = _human(rng, clock.t(bar, step), vel, ms=4.0, vel_jitter=3.0)
             notes.append(NoteEvent(pitch=pitch, start=s, end=clock.t(bar, step + length) - 0.01, velocity=v))
+    for bar, steps_ in hit_steps(ctx, clock).items():
+        for st in steps_:
+            root_pc, _ = harm.at(bar + st / clock.steps)
+            t0 = clock.t(bar, st)
+            notes = [n for n in notes if not (t0 - 0.02 <= n.start < t0 + clock.step_len * 2)]
+            notes.append(NoteEvent(pitch=_fits(root_pc + 36, _LO, _LO + 11), start=t0, end=t0 + clock.step_len * 3, velocity=112))
+    _emit(midi, ctx, notes, name="Bass", program=33)
+
+
+def _kick_steps(feel: str, bar: int, bars: int) -> tuple[int, ...]:
+    """The steps the kit's kick plays in this bar (mirrors _drums)."""
+    if feel in ("bridge", "breakdown"):
+        return _TOM_KICKS if bar < bars // 2 else _KICKS["bridge"][bar % 2]
+    return _KICKS["high" if feel in HIGH_ROLES else "verse"][bar % 2]
+
+
+def _pocket_bass(midi, ctx: TechniqueContext, feel: str) -> None:
+    """"pocket_bass": a finger bass locked to the kick — a note on every kick
+    (root held on the downbeat, then octave and fifth), a dead note answering
+    the snare now and then, a walk-up into each new chord."""
+    rng, clock, harm, bars = ctx.rng, _Clock(ctx), _Harmony(ctx), ctx.bar_count
+    notes: list[NoteEvent] = []
+    for bar in range(bars):
+        if feel == "intro" and bar < bars - 1:
+            continue
+        if feel == "outro" and bar == bars - 1:
+            p = _fits(harm.tonic + 36, _LO, _LO + 11)
+            notes.append(NoteEvent(pitch=p, start=clock.t(bar, 0), end=clock.t(bar, 0) + clock.bar_len, velocity=100))
+            continue
+        kicks = sorted(_kick_steps(feel, bar, bars))
+        nxt_pc, _ = harm.at(min(bar + 1.0, bars - 1e-6))
+        changes = bar + 1 < bars and harm.at(bar + 0.99)[0] != nxt_pc
+        for i, step in enumerate(kicks):
+            if changes and step >= 14:
+                continue                                       # leave room for the walk-up
+            root_pc, quality = harm.at(bar + step / clock.steps)
+            root = _fits(root_pc + 36, _LO, _LO + 11)
+            pitch = root if i == 0 else (root + 12, root + 7, root)[i % 3]
+            end_step = kicks[i + 1] if i + 1 < len(kicks) else 16
+            length = max(1, end_step - step)
+            s, v = _human(rng, clock.t(bar, step), 104 if i == 0 else 92, ms=3.0, vel_jitter=4.0)
+            notes.append(NoteEvent(pitch=pitch, start=s, end=s + clock.step_len * min(length, 6) * 0.88, velocity=v))
+        if bar % 2 == 1:                                        # a dead note answering the backbeat
+            root_pc, _ = harm.at(bar + 13 / 16)
+            s, v = _human(rng, clock.t(bar, 13), 46, ms=2.0, vel_jitter=3.0)
+            notes.append(NoteEvent(pitch=_fits(root_pc + 36, _LO, _LO + 11), start=s, end=s + clock.step_len * 0.3, velocity=v))
+        if changes:                                             # walk up a whole and half step into the change
+            target = _fits(nxt_pc + 36, _LO, _LO + 11)
+            for k, (step, semis) in enumerate(((14, -2), (15, -1))):
+                s, v = _human(rng, clock.t(bar, step), 86 + 4 * k, ms=2.5, vel_jitter=3.0)
+                notes.append(NoteEvent(pitch=target + semis, start=s, end=s + clock.step_len * 0.85, velocity=v))
     for bar, steps_ in hit_steps(ctx, clock).items():
         for st in steps_:
             root_pc, _ = harm.at(bar + st / clock.steps)
@@ -234,7 +287,7 @@ _KICKS = {
 
 
 def _drums(midi, ctx: TechniqueContext, feel: str) -> None:
-    if _calm(ctx):
+    if _calm(ctx, "drums"):
         return _calm_drums(midi, ctx, feel)
     rng = ctx.rng
     clock = _Clock(ctx)
@@ -378,7 +431,9 @@ _LO, _HI = 31, 55
 
 
 def _bass(midi, ctx: TechniqueContext, feel: str) -> None:
-    if _calm(ctx):
+    if "pocket_bass" in _arrangement(ctx):
+        return _pocket_bass(midi, ctx, feel)
+    if _calm(ctx, "bass"):
         return _calm_bass(midi, ctx, feel)
     rng = ctx.rng
     clock = _Clock(ctx)
@@ -672,7 +727,7 @@ _CHOPS = {
 
 
 def _rhodes(midi, ctx: TechniqueContext, feel: str) -> None:
-    if _calm(ctx):
+    if _calm(ctx, "keys"):
         return _calm_rhodes(midi, ctx, feel)
     rng = ctx.rng
     clock = _Clock(ctx)
