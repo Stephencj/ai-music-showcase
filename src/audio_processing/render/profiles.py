@@ -45,6 +45,9 @@ class MixProfile:
     # a family but play different roles (the sax lead vs. the horn stabs).
     # A producer's own per-track settings win.
     track_overrides: dict = field(default_factory=dict)
+    # Per-family effect chain swaps by name (effects.NAMED_CHAINS), e.g.
+    # {"lead": "tight_lead"} for a dry, punchy lead.
+    family_chains: dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -111,8 +114,9 @@ _FUNK_FUSION = MixProfile(
         "bass":       {"gain_db": -3.0},
         "chords":     {"gain_db": -6.5, "pan": -0.2},   # Rhodes chops sit under the horns
         "brass":      {"gain_db": -3.5, "pan": 0.0},    # short stabs need to punch
-        "lead":       {"gain_db": -4.5, "pan": 0.0},    # the synth lead, centre
+        "lead":       {"gain_db": -9.5, "pan": 0.0},    # the synth lead, centre
     },
+    family_chains={"lead": "tight_lead"},               # dry and punchy like the band
     master_preset="loud",
     sidechain_kick_into=(),
     track_overrides={

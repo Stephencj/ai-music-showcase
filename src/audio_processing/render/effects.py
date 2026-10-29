@@ -189,6 +189,19 @@ def _lead_chain() -> list[pdb.Plugin]:
     ]
 
 
+def _tight_lead_chain() -> list[pdb.Plugin]:
+    """Dry, punchy lead for staccato arrangements: a short slapback and a
+    small room instead of the long delay + plate wash."""
+    return [
+        pdb.HighpassFilter(cutoff_frequency_hz=150.0),
+        pdb.Compressor(threshold_db=-16.0, ratio=3.0,
+                       attack_ms=4.0, release_ms=80.0),
+        pdb.PeakFilter(cutoff_frequency_hz=3200.0, gain_db=1.5, q=0.8),
+        pdb.Delay(delay_seconds=0.085, feedback=0.0, mix=0.06),
+        pdb.Reverb(room_size=0.12, damping=0.6, wet_level=0.07, dry_level=0.93),
+    ]
+
+
 def _brass_chain() -> list[pdb.Plugin]:
     """Brass-section / solo brass — bright presence + medium plate verb."""
     return [
@@ -273,6 +286,11 @@ def _extra_chain() -> list[pdb.Plugin]:
         pdb.Reverb(room_size=0.30, damping=0.5, wet_level=0.10, dry_level=0.90),
     ]
 
+
+# Alternative chains a mix profile can pick per family (MixProfile.family_chains).
+NAMED_CHAINS: dict[str, ChainFactory] = {
+    "tight_lead": _tight_lead_chain,
+}
 
 _FAMILY_FACTORIES: dict[str, ChainFactory] = {
     "drums": _drums_chain,

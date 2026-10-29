@@ -76,6 +76,14 @@ class FunkFusionTest(unittest.TestCase):
         self.assertGreater(len(bass & sax) / len(sax), 0.8)        # bass and sax play it together
         self.assertGreater(len(trumpet & sax) / len(sax), 0.8)
 
+    def test_synth_lead_plays_short(self):
+        step = self.bar / 16
+        lead = self.tracks["Synth Lead"].notes
+        last = max(n.start for n in lead)
+        body = [n for n in lead if n.start < last - 0.01]
+        self.assertTrue(body)
+        self.assertLessEqual(max(n.end - n.start for n in body), 3 * step * 0.7 + 0.015)   # + humanised timing
+
     def test_trumpet_sits_above_trombone(self):
         tpt = np.median([n.pitch for n in self.tracks["Trumpet"].notes])
         tbn = np.median([n.pitch for n in self.tracks["Trombone"].notes])
@@ -224,6 +232,14 @@ class FunkMixTest(unittest.TestCase):
         self.assertEqual(mix["Alto Sax"]["gain_db"], -3.5)
         self.assertEqual(mix["Trumpet"]["pan"], -0.5)                  # the producer's choice wins
         self.assertNotIn("Electric Piano", mix)
+
+    def test_lead_gets_the_tight_chain_only_in_this_profile(self):
+        from src.audio_processing.render.effects import NAMED_CHAINS
+        self.assertEqual(MIX_PROFILES["funk_fusion"].family_chains, {"lead": "tight_lead"})
+        board = NAMED_CHAINS["tight_lead"]()
+        reverb = [p for p in board if type(p).__name__ == "Reverb"][0]
+        self.assertLess(reverb.wet_level, 0.1)
+        self.assertFalse(MIX_PROFILES["pop"].family_chains)
 
     def test_no_overrides_leaves_track_mix_alone(self):
         midi = MidiExporter(tempo=120, time_signature=(4, 4))

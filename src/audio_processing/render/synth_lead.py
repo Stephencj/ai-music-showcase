@@ -24,23 +24,28 @@ from .sfz import Note
 
 @dataclass(frozen=True)
 class LeadPatch:
-    detune_cents: float = 9.0
-    sub_level: float = 0.1            # square, one octave down (body, not pitch)
-    glide: float = 0.045              # seconds to (mostly) reach the new pitch
-    legato_gap: float = 0.03          # notes closer than this slide instead of retriggering
-    attack: float = 0.006
-    decay: float = 0.35
-    sustain: float = 0.78
-    release: float = 0.14
-    cutoff: float = 1100.0            # resting cutoff, Hz
-    cutoff_env: float = 4200.0        # extra cutoff at the attack
-    cutoff_decay: float = 0.22        # seconds for the filter to settle
+    """Defaults are a harsh, punchy, staccato-friendly fusion lead: a fast
+    bright filter "blip" on every note, grit, a pulse edge, little glide."""
+    detune_cents: float = 12.0
+    sub_level: float = 0.08           # square, one octave down (body, not pitch)
+    pulse_level: float = 0.35         # narrow pulse for a nasal, cutting edge
+    pulse_width: float = 0.3
+    glide: float = 0.025              # seconds to (mostly) reach the new pitch
+    legato_gap: float = 0.008         # only truly joined notes slide
+    attack: float = 0.002
+    decay: float = 0.16
+    sustain: float = 0.5
+    release: float = 0.05
+    cutoff: float = 1700.0            # resting cutoff, Hz
+    cutoff_env: float = 6500.0        # extra cutoff at the attack
+    cutoff_decay: float = 0.09        # seconds for the filter to settle
     cutoff_keytrack: float = 0.5      # cutoff follows pitch (0..1)
-    resonance: float = 1.6            # filter Q
-    vibrato_rate: float = 5.6
-    vibrato_cents: float = 14.0
-    vibrato_delay: float = 0.28       # held notes only
-    drive: float = 1.4                # soft saturation after the filter
+    resonance: float = 2.4            # filter Q
+    retrigger_filter: bool = True     # every note re-opens the filter, even legato
+    vibrato_rate: float = 6.0
+    vibrato_cents: float = 8.0
+    vibrato_delay: float = 0.4        # held notes only
+    drive: float = 2.4                # saturation after the filter
 
 
 DEFAULT_PATCH = LeadPatch()
@@ -137,6 +142,9 @@ def render_lead(notes: Iterable[Note], sample_rate: int = 44100, *,
         saw2 = _blep_saw(np.cumsum(dt2) + 0.37, dt2)
         sub_phase = np.cumsum(dt_sub)
         square = _blep_saw(sub_phase, dt_sub) - _blep_saw(sub_phase + 0.5, dt_sub)
+        dt_p = freq / sr
+        p_phase = np.cumsum(dt_p) + 0.13
+        pulse = (_blep_saw(p_phase, dt_p) - _blep_saw(p_phase + patch.pulse_width, dt_p)) * 0.5
 
         # Amp envelope: one attack per phrase (legato notes don't retrigger).
         gate_len = int((phrase[-1].end - phrase[0].start) * sr)
@@ -151,15 +159,18 @@ def render_lead(notes: Iterable[Note], sample_rate: int = 44100, *,
             rel = n - gate_len
             env[gate_len:] = level * np.exp(-6.9 * np.arange(rel) / max(1, int(patch.release * sr)))
 
-        # Filter: opens on the phrase's attack, settles, tracks the pitch.
-        f_env = np.exp(-t / max(patch.cutoff_decay, 1e-3))
+        # Filter: opens on each attack (each note if retrigger_filter), settles,
+        # tracks the pitch.
+        since = note_start if patch.retrigger_filter else t
+        f_env = np.exp(-since / max(patch.cutoff_decay, 1e-3))
         key = (freq / 440.0) ** patch.cutoff_keytrack
         cutoff = (patch.cutoff + patch.cutoff_env * f_env * (0.5 + 0.5 * vel)) * key
 
         amp = env * (0.55 + 0.45 * vel)
-        left = _lowpass_blocks(saw1 * 0.6 + saw2 * 0.4 + patch.sub_level * square, cutoff, patch.resonance, sr)
-        right = _lowpass_blocks(saw1 * 0.4 + saw2 * 0.6 + patch.sub_level * square, cutoff, patch.resonance, sr)
-        out_l[start:end] += np.tanh(patch.drive * left) * amp
-        out_r[start:end] += np.tanh(patch.drive * right) * amp
+        common = patch.sub_level * square + patch.pulse_level * pulse
+        left = _lowpass_blocks(saw1 * 0.6 + saw2 * 0.4 + common, cutoff, patch.resonance, sr, block=32)
+        right = _lowpass_blocks(saw1 * 0.4 + saw2 * 0.6 + common, cutoff, patch.resonance, sr, block=32)
+        out_l[start:end] += np.tanh(patch.drive * left) / math.tanh(patch.drive) * 0.6 * amp
+        out_r[start:end] += np.tanh(patch.drive * right) / math.tanh(patch.drive) * 0.6 * amp
 
     return np.vstack([out_l, out_r]).astype(np.float32)

@@ -22,13 +22,13 @@ def f0(audio, start, end):
 class SynthLeadTest(unittest.TestCase):
     def test_pitch(self):
         out = render_lead([Note(69, 0.0, 0.5, 100)], SR)
-        self.assertAlmostEqual(f0(out, 0.05, 0.25), 440.0, delta=2.0)
+        self.assertAlmostEqual(f0(out, 0.05, 0.25), 440.0, delta=6.0)     # oscillators detuned ±12 cents
         self.assertFalse(np.isnan(out).any())
         self.assertLess(float(np.abs(out).max()), 1.0)
 
     def test_legato_glides_to_the_new_pitch(self):
         out = render_lead([Note(69, 0.0, 0.3, 100), Note(72, 0.3, 0.8, 100)], SR)
-        self.assertAlmostEqual(f0(out, 0.36, 0.56), 523.25, delta=3.0)   # after the glide, before vibrato
+        self.assertAlmostEqual(f0(out, 0.36, 0.56), 523.25, delta=7.0)   # after the glide, before vibrato
 
     def test_legato_does_not_retrigger_the_attack(self):
         legato = render_lead([Note(69, 0.0, 0.3, 100), Note(72, 0.3, 0.8, 100)], SR)
@@ -37,6 +37,17 @@ class SynthLeadTest(unittest.TestCase):
         window = slice(at, at + int(0.0005 * SR))
         # A retriggered note restarts from silence; a legato one keeps sounding.
         self.assertGreater(np.abs(legato[:, window]).mean(), 3 * np.abs(detached[:, window]).mean())
+
+    def test_each_note_reopens_the_filter(self):
+        # The spectral centroid jumps back up at the second (legato) note.
+        out = render_lead([Note(64, 0.0, 0.4, 110), Note(64, 0.4, 0.8, 110)], SR)
+        def centroid(t):
+            a = int(t * SR)
+            seg = out.mean(axis=0)[a:a + int(0.02 * SR)] * np.hanning(int(0.02 * SR))
+            spec = np.abs(np.fft.rfft(seg))
+            freqs = np.fft.rfftfreq(len(seg), 1 / SR)
+            return float((spec * freqs).sum() / spec.sum())
+        self.assertGreater(centroid(0.402), 1.2 * centroid(0.37))
 
     def test_release_and_silence(self):
         out = render_lead([Note(60, 0.0, 0.2, 100)], SR, patch=LeadPatch(release=0.1))

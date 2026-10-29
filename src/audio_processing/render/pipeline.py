@@ -20,7 +20,7 @@ import soundfile as sf
 
 from src.daw_integration.generic.midi_export import MidiExporter, NoteEvent
 
-from .effects import EffectChainLibrary, classify_family
+from .effects import NAMED_CHAINS, EffectChainLibrary, classify_family
 from .mix import Mixer, ProcessedStem, _FAMILY_MIX
 from .profiles import (
     apply_profile_to_family_mix,
@@ -195,6 +195,9 @@ def render_to_audio(
     eff_master = master_preset or profile.master_preset
     family_mix = apply_profile_to_family_mix(profile, _FAMILY_MIX)
     library = library or EffectChainLibrary()
+    for family, chain in (getattr(profile, "family_chains", None) or {}).items():
+        if chain in NAMED_CHAINS:
+            library.family_overrides.setdefault(family, NAMED_CHAINS[chain])
     track_mix = _with_profile_tracks(track_mix, profile, midi_obj)
     mixer = Mixer(
         library=library,
