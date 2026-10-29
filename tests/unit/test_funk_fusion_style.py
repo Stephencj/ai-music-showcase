@@ -49,9 +49,9 @@ class FunkFusionTest(unittest.TestCase):
 
     def test_tracks_and_ranges(self):
         self.assertEqual(set(self.tracks), {"Drum kit", "Electric Bass", "Electric Piano",
-                                            "Trumpet", "Trombone", "Alto Sax"})
+                                            "Trumpet", "Trombone", "Synth Lead"})
         ranges = {"Electric Bass": (28, 55), "Trumpet": (55, 84), "Trombone": (40, 72),
-                  "Alto Sax": (58, 80), "Electric Piano": (48, 80)}
+                  "Synth Lead": (58, 86), "Electric Piano": (48, 80)}
         for name, (lo, hi) in ranges.items():
             pitches = [n.pitch for n in self.tracks[name].notes]
             self.assertGreaterEqual(min(pitches), lo, name)
@@ -72,7 +72,7 @@ class FunkFusionTest(unittest.TestCase):
         def onsets(name):
             return {round(n.start / (self.bar / 16)) for n in self.tracks[name].notes if n.start < intro_end}
 
-        bass, sax, trumpet = onsets("Electric Bass"), onsets("Alto Sax"), onsets("Trumpet")
+        bass, sax, trumpet = onsets("Electric Bass"), onsets("Synth Lead"), onsets("Trumpet")
         self.assertGreater(len(bass & sax) / len(sax), 0.8)        # bass and sax play it together
         self.assertGreater(len(trumpet & sax) / len(sax), 0.8)
 
@@ -84,8 +84,8 @@ class FunkFusionTest(unittest.TestCase):
     def test_seed_changes_the_riff(self):
         td, _, pm2 = _compose(seed=12)
         try:
-            a = [n.pitch for n in self.tracks["Alto Sax"].notes[:12]]
-            b = [n.pitch for n in {i.name: i for i in pm2.instruments}["Alto Sax"].notes[:12]]
+            a = [n.pitch for n in self.tracks["Synth Lead"].notes[:12]]
+            b = [n.pitch for n in {i.name: i for i in pm2.instruments}["Synth Lead"].notes[:12]]
             self.assertNotEqual(a, b)
         finally:
             td.cleanup()
@@ -123,12 +123,23 @@ class OneBarRiffTest(unittest.TestCase):
     def test_riff_moments_are_one_bar_and_resolve(self):
         # Bar 16 (the chorus's last) is the turnaround, bar 17 the outro riff:
         # bass and sax together, the sax ending on the tonic.
-        for bar in (16, 17):
-            sax = self.notes_in("Alto Sax", bar)
-            bass = {round(n.start / (self.bar / 16)) for n in self.notes_in("Electric Bass", bar)}
-            self.assertTrue(sax)
-            self.assertGreater(len({round(n.start / (self.bar / 16)) for n in sax} & bass) / len(sax), 0.8)
-            self.assertEqual(sax[-1].pitch % 12, self.tonic_pc)
+        # Bar 16 (the chorus's last) is the turnaround: bass and lead together,
+        # the lead ending on the tonic.
+        lead = self.notes_in("Synth Lead", 16)
+        bass = {round(n.start / (self.bar / 16)) for n in self.notes_in("Electric Bass", 16)}
+        self.assertTrue(lead)
+        self.assertGreater(len({round(n.start / (self.bar / 16)) for n in lead} & bass) / len(lead), 0.8)
+        self.assertEqual(lead[-1].pitch % 12, self.tonic_pc)
+        # Bar 17, the ending riff, stops before beat 4 (the drums pick up) and
+        # the lead resolves to the tonic on the final hit.
+        riff = self.notes_in("Synth Lead", 17)
+        self.assertTrue(riff)
+        self.assertTrue(all(n.start < 17 * self.bar + 12 * self.bar / 16 - 0.02 for n in riff))
+        pickup = [n for n in self.notes_in("Drum kit", 17) if n.pitch == 38
+                  and n.start >= 17 * self.bar + 12 * self.bar / 16 - 0.02]
+        self.assertGreaterEqual(len(pickup), 4)
+        final = self.notes_in("Synth Lead", 18)
+        self.assertEqual([n.pitch % 12 for n in final], [self.tonic_pc])
         # The trumpet plays the riff as one line but stabs in two-note chords,
         # so only bars 16 and 17 of the chorus/outro are riff bars.
         def stacked(bar):
@@ -188,6 +199,15 @@ class HitPointTest(unittest.TestCase):
                 if 0.012 < abs(n.start - hit) <= 3 * self.step]
         self.assertFalse(near)
 
+    def test_band_breathes_before_a_downbeat_hit(self):
+        hit = self.snapped(self.HITS[2])                      # 13.671 s = bar 9's downbeat
+        for name, track in self.tracks.items():
+            early = [n for n in track.notes if hit - 2 * self.step - 0.004 <= n.start < hit - 0.012]
+            self.assertFalse(early, name)
+            gap = hit - 2 * self.step
+            ringing = [n for n in track.notes if n.start < gap and n.end > gap + 0.002]
+            self.assertFalse(ringing, name)
+
     def test_hits_past_the_end_are_ignored(self):
         end = max(n.end for t in self.tracks.values() for n in t.notes)
         self.assertLess(end, 30.0)
@@ -215,6 +235,8 @@ class BrassMappingTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             for inst in sampled.SAMPLED_INSTRUMENTS:
+                if inst.engine != "sfz":
+                    continue
                 p = root / inst.sfz
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text("")

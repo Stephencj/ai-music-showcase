@@ -102,7 +102,10 @@ class SampledRoutingTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             self.assertIsNone(sampled.sampled_for(4, False, root))     # not installed
+            self.assertEqual(sampled.sampled_for(81, False, root).id, "synth_lead")   # built in
             for inst in sampled.SAMPLED_INSTRUMENTS:
+                if inst.engine != "sfz":
+                    continue
                 p = root / inst.sfz
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text("")

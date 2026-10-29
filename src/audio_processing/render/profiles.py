@@ -111,11 +111,13 @@ _FUNK_FUSION = MixProfile(
         "bass":       {"gain_db": -3.0},
         "chords":     {"gain_db": -6.5, "pan": -0.2},   # Rhodes chops sit under the horns
         "brass":      {"gain_db": -3.5, "pan": 0.0},    # short stabs need to punch
+        "lead":       {"gain_db": -4.5, "pan": 0.0},    # the synth lead, centre
     },
     master_preset="loud",
     sidechain_kick_into=(),
     track_overrides={
         "sax":      {"gain_db": -3.5},                  # lead, centre, level with the stabs
+        "synth":    {"gain_db": 0.0},                   # synth lead (family "lead")
         "trumpet":  {"pan": 0.35},
         "trombone": {"pan": 0.15},
     },

@@ -1017,7 +1017,7 @@ STYLES: dict[str, StylePreset] = {
                 {"start_bar": 32, "end_bar": 33, "label": "Outro"},
             ],
         },
-        default_instruments=['drum_kit', 'electric_bass', 'electric_piano', 'trumpet', 'trombone', 'sax_alto'],
+        default_instruments=['drum_kit', 'electric_bass', 'electric_piano', 'trumpet', 'trombone', 'synth_lead'],
         sound="sampled",
         pacing_options=('uniform_1',),
         bridge_pacing_options=('uniform_1',),

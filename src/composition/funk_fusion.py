@@ -93,6 +93,10 @@ def riff_notes(ctx: TechniqueContext, bars: tuple[int, ...], feel: str = "intro"
     for n, bar in enumerate(bars):
         line = call if (n % 2 == 0) != answer_first else answer
         for (step, length), semis in zip(rhythm, line):
+            # The ending riff stops after beat 3 and the drums pick up into the
+            # final hit, which is the resolution (no early landing on the tonic).
+            if feel == "outro" and bar == bars[-1] and step + length > 12:
+                continue
             out.append((bar, step, length, semis))
     return out
 
@@ -135,9 +139,12 @@ def _drums(midi, ctx: TechniqueContext, feel: str) -> None:
     for bar in range(bars):
         last = bar == bars - 1
         if feel == "outro" and last:
-            hits += [(bar, 0, KICK, 118), (bar, 0, CRASH, 116), (bar, 0, SNARE, 108),
-                     (bar, 0, TOM_LO, 100)]
+            hits += [(bar, 0, KICK, 124), (bar, 0, CRASH, 122), (bar, 0, SNARE, 114),
+                     (bar, 0, TOM_LO, 108)]
             continue
+        if feel == "outro" and bar == bars - 2 and bar in riff_steps:
+            for i, step in enumerate(range(12, 16)):   # snare pickup into the final hit
+                hits.append((bar, step, SNARE, 84 + 9 * i))
         # In the intro the fill is the build in the bar before the riff.
         big_fill = (bar == bars - 2) if feel == "intro" else (last and feel != "outro")
         small_fill = (bar % 4 == 3) and not big_fill and bar not in riff and ctx.drum_fill >= 0.5
@@ -195,16 +202,21 @@ def _drums(midi, ctx: TechniqueContext, feel: str) -> None:
                 if i % 2 == 0:
                     hits.append((bar, 8 + i, KICK, 92))
 
-    for bar, steps_ in hit_steps(ctx, clock).items():
-        for st in steps_:
-            hits += [(bar, st, CRASH, 112), (bar, st, KICK, 116), (bar, st, SNARE, 104)]
+    # Hit points: clear the kit around each one, then everything lands on it.
+    points = hit_steps(ctx, clock)
+    if points:
+        hits = [h for h in hits if not _near_hit(points, h[0], int(h[1]), clock.steps, clear=1)]
+        for bar, steps_ in points.items():
+            for st in steps_:
+                hits += [(bar, st, CRASH, 122), (bar, st, KICK, 124), (bar, st, SNARE, 112),
+                         (bar, st, TOM_LO, 100)]
 
     notes = []
     for bar, step, key, vel in hits:
         t, v = _human(rng, clock.t(bar, step), vel, ms=2.5, vel_jitter=4.0 if vel > 50 else 3.0)
         dur = clock.step_len * (8 if key in (CRASH, RIDE, OPEN_HAT) else 1)
         notes.append(NoteEvent(pitch=key, start=t, end=t + dur, velocity=v))
-    _emit(midi, ctx, notes, name="Drums", program=0, is_drum=True)
+    _emit(midi, ctx, _breathe(notes, ctx, clock), name="Drums", program=0, is_drum=True)
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +313,20 @@ def _bass(midi, ctx: TechniqueContext, feel: str) -> None:
             notes.append(NoteEvent(pitch=pitch, start=s, end=e, velocity=v))
             if deg != "G":
                 prev = pitch
-    _emit(midi, ctx, notes, name="Bass", program=36)
+    points = hit_steps(ctx, clock)
+    if points:
+        step_len = clock.step_len
+        def near(n):
+            return any(-1.5 * step_len <= n.start - clock.t(b, s) <= 2.5 * step_len
+                       for b, ss in points.items() for s in ss)
+        notes = [n for n in notes if not near(n)]
+        for bar, steps_ in points.items():
+            for st in steps_:
+                root_pc, _ = harm.at(bar + st / clock.steps)
+                p = _fits(root_pc + 36, _LO, _LO + 11)
+                t0 = clock.t(bar, st)
+                notes.append(NoteEvent(pitch=p, start=t0, end=t0 + step_len * 3, velocity=124))
+    _emit(midi, ctx, _breathe(notes, ctx, clock), name="Bass", program=36)
 
 
 # ---------------------------------------------------------------------------
@@ -328,12 +353,56 @@ def hit_steps(ctx: TechniqueContext, clock: "_Clock") -> dict[int, set[int]]:
     return out
 
 
-def _near_hit(hits: dict[int, set[int]], bar: int, step: int, steps: int) -> bool:
+BREATH = 2           # 16ths of silence before a hit that lands on a downbeat
+
+
+def _breathe(notes: list[NoteEvent], ctx: TechniqueContext, clock: "_Clock") -> list[NoteEvent]:
+    """Leave an 8th of air before each downbeat hit point (band, breath, hit),
+    which makes the hit land far bigger than more volume would."""
+    gaps = []
+    for t in ctx.hits:
+        step = int(round(t / clock.step_len))
+        if step % clock.steps == 0:
+            h = step * clock.step_len
+            gaps.append((h - BREATH * clock.step_len, h))
+    if not gaps:
+        return notes
+    out = []
+    for n in notes:
+        keep = True
+        for g0, h in gaps:
+            if g0 - 0.004 <= n.start < h - 0.012:
+                keep = False
+                break
+            if n.start < g0 < n.end:
+                if g0 - n.start < 0.03:          # too short to keep: drop it
+                    keep = False
+                    break
+                n = NoteEvent(pitch=n.pitch, start=n.start, end=g0, velocity=n.velocity)
+        if keep:
+            out.append(n)
+    return out
+
+
+def _near_hit(hits: dict[int, set[int]], bar: int, step: int, steps: int, clear: int = HIT_CLEAR) -> bool:
     at = bar * steps + step
-    return any(abs(at - (b * steps + s)) <= HIT_CLEAR for b, ss in hits.items() for s in ss)
+    return any(abs(at - (b * steps + s)) <= clear for b, ss in hits.items() for s in ss)
 
 
 def _horn_voicing(root_pc: int, quality: str, top_near: int) -> list[int]:
+    """Spread "shout" voicing: trombone on the low root and the 7th (the
+    guide tone), trumpet on the 3rd and the 9th up top near ``top_near``."""
+    third = 5 if quality == "sus4" else 3 if quality in ("min7", "min", "dim") else 4
+    seventh = 9 if quality == "maj" else _SEVENTH.get(quality, 10)
+    root = _fits(root_pc + 48, 46, 57)
+    guide = root + seventh
+    top = min((p for p in range(top_near - 6, top_near + 7) if p % 12 == (root_pc + 14) % 12),
+              key=lambda p: abs(p - top_near))
+    mid = max(p for p in range(top - 12, top - 2) if p % 12 == (root_pc + third) % 12)
+    return sorted({root, guide, mid, top})
+
+
+def _close_voicing(root_pc: int, quality: str, top_near: int) -> list[int]:
     """Close-position 4-note brass voicing, top voice near ``top_near``."""
     shape = (0,) + tuple(iv for iv in _VOICINGS.get(quality, _VOICINGS["7"]) if iv % 12 != 0)[:3]
     pcs = sorted({(root_pc + iv) % 12 for iv in shape})
@@ -381,9 +450,12 @@ def _horns(midi, ctx: TechniqueContext, feel: str) -> None:
     for bar, steps_ in hits.items():
         for st in steps_:
             root_pc, quality = harm.at(bar + st / clock.steps)
-            s, v = _human(rng, clock.t(bar, st), 120, ms=1.5, vel_jitter=2.0)
-            for p in _part(_horn_voicing(root_pc, quality, 76), part):
-                notes.append(NoteEvent(pitch=p, start=s, end=s + clock.step_len * 2 * 0.85, velocity=v))
+            s, v = _human(rng, clock.t(bar, st), 126, ms=1.0, vel_jitter=1.0)
+            voicing = _part(_horn_voicing(root_pc, quality, 77), part)
+            if part != "trumpet" and voicing[0] - 12 >= 40:
+                voicing = [voicing[0] - 12] + voicing          # weight under the hit
+            for p in voicing:
+                notes.append(NoteEvent(pitch=p, start=s, end=s + clock.step_len * 3 * 0.9, velocity=v))
     for pair in range(0, bars, 2):
         for step, length, vel in pattern:
             bar = pair + step // clock.steps
@@ -403,9 +475,12 @@ def _horns(midi, ctx: TechniqueContext, feel: str) -> None:
                 notes.append(NoteEvent(pitch=p, start=s, end=s + clock.step_len * length * 0.8, velocity=v))
     if feel == "outro":
         bar = bars - 1
-        for p in _part(_horn_voicing(harm.tonic, "maj", 77), part):
-            notes.append(NoteEvent(pitch=p, start=clock.t(bar, 0), end=clock.t(bar, 0) + 0.35, velocity=118))
-    _emit(midi, ctx, notes, name={"trumpet": "Trumpet", "trombone": "Trombone"}.get(part, "Horns"),
+        voicing = _part(_horn_voicing(harm.tonic, "maj", 77), part)
+        if part != "trumpet" and voicing[0] - 12 >= 40:
+            voicing = [voicing[0] - 12] + voicing
+        for p in voicing:
+            notes.append(NoteEvent(pitch=p, start=clock.t(bar, 0), end=clock.t(bar, 0) + 0.9, velocity=124))
+    _emit(midi, ctx, _breathe(notes, ctx, clock), name={"trumpet": "Trumpet", "trombone": "Trombone"}.get(part, "Horns"),
           program={"trumpet": 56, "trombone": 57}.get(part, 61))
 
 
@@ -465,7 +540,7 @@ def _rhodes(midi, ctx: TechniqueContext, feel: str) -> None:
     for bar, steps_ in hit_steps(ctx, clock).items():
         for st in steps_:
             chord(bar, st, 2, 98, bar + st / clock.steps)
-    _emit(midi, ctx, notes, name="Chords", program=4)
+    _emit(midi, ctx, _breathe(notes, ctx, clock), name="Chords", program=4)
 
 
 # ---------------------------------------------------------------------------
@@ -485,21 +560,31 @@ _HOOKS = (
 
 
 def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
+    """The lead: alto sax or synth lead (a synth sits a little higher)."""
+    synth = ctx.instrument == "synth_lead" or getattr(ctx.instrument_obj, "program", 65) in range(80, 88)
+    name, program = ("Lead", 81) if synth else ("Melody", 65)
     rng = ctx.rng
     clock = _Clock(ctx)
     harm = _Harmony(ctx)
     bars = ctx.bar_count
     riff = riff_bars(ctx, feel)
     notes: list[NoteEvent] = []
-    # The sax doubles the riff an octave above the trombone, with the trumpet.
+    # The lead doubles the riff an octave above the trombone, with the trumpet.
     for bar, step, length, semis in riff_notes(ctx, riff, feel):
         p = _fits(harm.tonic + semis + 60, 62, 77)
         s, v = _human(rng, clock.t(bar, step), 104, ms=3.0, vel_jitter=4.0)
         notes.append(NoteEvent(pitch=p, start=s, end=s + clock.step_len * length * 0.85, velocity=v))
+    if feel == "outro":
+        # Resolve on the final hit: the tonic, held, up in the lead's register.
+        t0 = clock.t(bars - 1, 0)
+        notes.append(NoteEvent(pitch=_fits(harm.tonic + 72, 67, 80), start=t0, end=t0 + clock.bar_len * 0.9, velocity=112))
     if feel in ("bridge", "breakdown", "intro", "outro"):
-        _emit(midi, ctx, notes, name="Melody", program=65)
+        _emit(midi, ctx, _breathe(notes, ctx, clock), name=name, program=program)
         return
-    lo, hi = (65, 79) if feel in HIGH_ROLES else (62, 76)
+    if synth:
+        lo, hi = (67, 84) if feel in HIGH_ROLES else (64, 79)
+    else:
+        lo, hi = (65, 79) if feel in HIGH_ROLES else (62, 76)
     pool = _scale_pitches(harm.tonic, ctx.scale, lo, hi)
     hook = _HOOKS[int(_shared_rng(ctx).integers(0, len(_HOOKS)))]
     riff_set = set(riff)
@@ -531,7 +616,7 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
                 notes.append(NoteEvent(pitch=pitch - 1, start=g, end=start, velocity=gv))
             s, v = _human(rng, start, vel, ms=4.0, vel_jitter=4.0)
             notes.append(NoteEvent(pitch=pitch, start=s, end=start + clock.step_len * length * 0.92, velocity=v))
-    _emit(midi, ctx, notes, name="Melody", program=65)
+    _emit(midi, ctx, _breathe(notes, ctx, clock), name=name, program=program)
 
 
 for _feel in ALL_ROLES:
@@ -554,8 +639,8 @@ for _feel in ALL_ROLES:
               description="Short percussive Rhodes chords on the offbeats, accents with the riff.",
               instruments=("chords",), roles=(_feel,), weight=4, tags=(TAG,),
               apply=lambda midi, ctx, _f=_feel: _rhodes(midi, ctx, _f))
-    _register(name=f"funk_fusion_sax_{_feel}", label=f"Sax hook ({_feel})",
-              description="Hooky alto-sax lead with repeated notes, 16th pickups and blue-note "
-                          "graces; doubles the band riff.",
+    _register(name=f"funk_fusion_sax_{_feel}", label=f"Lead hook ({_feel})",
+              description="Hooky lead (synth or alto sax) with repeated notes, 16th pickups and "
+                          "blue-note graces; doubles the band riff and resolves on the final hit.",
               instruments=("melody",), roles=(_feel,), weight=4, tags=(TAG,),
               apply=lambda midi, ctx, _f=_feel: _sax(midi, ctx, _f))

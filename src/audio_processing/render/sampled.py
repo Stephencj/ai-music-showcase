@@ -29,6 +29,7 @@ import numpy as np
 from src.daw_integration.generic.midi_export import MidiExporter
 
 from .sfz import Note, SampleCache, SfzInstrument, SfzRenderer, load_sfz
+from .synth_lead import render_lead
 from .synth import DEFAULT_SAMPLE_RATE, FluidSynthRenderer, RenderedStems, TrackStem
 
 logger = logging.getLogger(__name__)
@@ -53,9 +54,19 @@ class SampledInstrument:
     # Tone voicing applied to the raw stem before the mixer's family chain:
     # (kind, frequency Hz, gain dB) with kind "low_shelf" / "high_shelf" / "peak".
     eq: tuple[tuple[str, float, float], ...] = ()
+    # "sfz" plays the library at ``sfz``; "synth" renders the built-in synth
+    # lead (render/synth_lead.py), which needs no download.
+    engine: str = "sfz"
 
 
 SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
+    SampledInstrument(
+        id="synth_lead",
+        sfz="",
+        programs=tuple(range(80, 88)),        # GM synth leads
+        engine="synth",
+        eq=(("peak", 2500.0, 1.5),),
+    ),
     # Horns: VSCO 2 CE (CC0) staccato samples, mapped by
     # scripts/setup/make_brass_sfz.py.
     SampledInstrument(
@@ -117,7 +128,7 @@ def sampled_for(program: int, is_drum: bool, root: Optional[Path] = None) -> Opt
             continue
         if not is_drum and program not in inst.programs:
             continue
-        if (root / inst.sfz).exists():
+        if inst.engine == "synth" or (root / inst.sfz).exists():
             return inst
     return None
 
@@ -125,7 +136,7 @@ def sampled_for(program: int, is_drum: bool, root: Optional[Path] = None) -> Opt
 def available() -> list[str]:
     """Ids of the sampled instruments installed on this machine."""
     root = instrument_dir()
-    return [i.id for i in SAMPLED_INSTRUMENTS if (root / i.sfz).exists()]
+    return [i.id for i in SAMPLED_INSTRUMENTS if i.engine == "synth" or (root / i.sfz).exists()]
 
 
 def resolve_sound(sound: Optional[str], style_name: Optional[str] = None) -> str:
@@ -208,13 +219,16 @@ class SampledRenderer:
             if inst is None:
                 fluid_tracks.append(track)
                 continue
-            sfz = self._instrument(inst)
-            for region in sfz.regions:
-                region.seq_counter = 0
             notes = [Note(pitch=int(n.pitch) + inst.key_offset, start=float(n.start),
                           end=float(n.end), velocity=int(n.velocity)) for n in track.notes]
-            audio = SfzRenderer(sfz, self.sample_rate, cache=SampleCache(),
-                                seed=self.seed + index).render(notes)
+            if inst.engine == "synth":
+                audio = render_lead(notes, self.sample_rate)
+            else:
+                sfz = self._instrument(inst)
+                for region in sfz.regions:
+                    region.seq_counter = 0
+                audio = SfzRenderer(sfz, self.sample_rate, cache=SampleCache(),
+                                    seed=self.seed + index).render(notes)
             if inst.eq and audio.size:
                 audio = _voice_eq(audio, inst.eq, self.sample_rate)
             peak = float(np.abs(audio).max()) if audio.size else 0.0
