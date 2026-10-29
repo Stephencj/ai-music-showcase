@@ -801,6 +801,62 @@ def _seventies_hits(ctx, clock, harm, feel, part, rng) -> list[NoteEvent]:
     return out
 
 
+def _horn_bed(ctx, clock, harm, feel, part, rng) -> list[NoteEvent]:
+    """"horn_bed": the horns play through the track so the hits grow out of
+    them. Every hit gets a three-note pickup rising into it; choruses push
+    into every other chord on the "and" of 4 and lean on it; phrase ends get
+    a short answering figure; verses stay softer, bridges and intros rest."""
+    out: list[NoteEvent] = []
+    bars, steps = ctx.bar_count, clock.steps
+    hits = hit_steps(ctx, clock)
+    octaves = {"trumpet": (0,), "trombone": (-12,)}.get(part, (0, -12))
+    high = feel in HIGH_ROLES
+    if feel in ("intro", "bridge", "breakdown"):
+        return out
+    lift = 0 if high else -14
+
+    def unison(at_bar: int, st: float, length: float, pitch: int, vel: int) -> None:
+        s, v = _human(rng, clock.t(at_bar, st), vel + lift, ms=2.5, vel_jitter=3.0)
+        for o in octaves:
+            out.append(NoteEvent(pitch=pitch + o, start=s, end=s + clock.step_len * length * 0.85, velocity=v))
+
+    # Pickups: three 16ths climbing into each hit.
+    for bar, steps_ in hits.items():
+        for st in steps_:
+            at = bar * steps + st
+            if at < 3:
+                continue
+            root_pc, quality = harm.at(bar + st / steps)
+            top = unison_pitch(root_pc, quality)
+            for k, (back, semis) in enumerate(((3, -5), (2, -3), (1, -1))):
+                s, v = _human(rng, clock.t(0, at - back), 84 + 10 * k, ms=1.5, vel_jitter=2.0)
+                for o in octaves:
+                    out.append(NoteEvent(pitch=top + semis + o, start=s, end=s + clock.step_len * 0.8, velocity=v))
+    for bar in range(bars):
+        last = bar == bars - 1
+        if feel == "outro" and last:
+            continue
+        # Chorus pushes: "and" of 4 into the next chord, then lean on it.
+        if high and bar % 2 == 1 and not last and not _near_hit(hits, bar, 14, steps, clear=4) \
+                and not _near_hit(hits, bar + 1, 0, steps, clear=4):
+            root_pc, quality = harm.at(bar + 1.0)
+            voicing = _part(_horn_voicing(root_pc, quality, 74), part)
+            for st, length, vel in ((14, 2, 96), (18, 6, 84)):        # 18 = beat 1 "and" of the next bar
+                s, v = _human(rng, clock.t(bar, st), vel, ms=2.5, vel_jitter=3.0)
+                for p in voicing:
+                    out.append(NoteEvent(pitch=p, start=s, end=s + clock.step_len * length * 0.85, velocity=v))
+        # Phrase-end answers: fifth, seventh, root climbing into the next phrase.
+        if bar % 4 == 3 and not last and not _near_hit(hits, bar, 12, steps, clear=6) \
+                and not (high and bar % 2 == 1):
+            root_pc, quality = harm.at(bar + 0.6)
+            top = unison_pitch(root_pc, quality)
+            root = min((p for p in range(top - 7, top + 6) if p % 12 == root_pc % 12), key=lambda p: abs(p - top))
+            line = (root - 5, root - 2, root)
+            for (st, length, vel), pitch in zip(((10, 1, 84), (12, 1, 90), (14, 2, 98)), line):
+                unison(bar, st, length, pitch, vel)
+    return out
+
+
 def _horns(midi, ctx: TechniqueContext, feel: str) -> None:
     """Brass section stabs. A trumpet plays the top of each voicing and the
     riff's upper octave, a trombone the bottom and lower octave; a composite
@@ -822,6 +878,8 @@ def _horns(midi, ctx: TechniqueContext, feel: str) -> None:
             notes.append(NoteEvent(pitch=p, start=s, end=s + clock.step_len * length * 0.8, velocity=v))
     if _hits_only(ctx):
         notes += _seventies_hits(ctx, clock, harm, feel, part, rng)
+        if "horn_bed" in _arrangement(ctx):
+            notes += _horn_bed(ctx, clock, harm, feel, part, rng)
         _emit(midi, ctx, notes, name={"trumpet": "Trumpet", "trombone": "Trombone"}.get(part, "Horns"),
               program={"trumpet": 56, "trombone": 57}.get(part, 61))
         return

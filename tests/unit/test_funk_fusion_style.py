@@ -653,6 +653,34 @@ class SoarAndBrushesTest(unittest.TestCase):
         self.assertNotIn("String Section", names)
 
 
+class HornBedTest(unittest.TestCase):
+    def _horns(self, arrangement, hits):
+        td = tempfile.TemporaryDirectory()
+        try:
+            secs = build_sections(GENRE, ["verse", "chorus"], None, {"verse": {"bars": 4}, "chorus": {"bars": 4}})
+            res = compose_song(genre=GENRE, sections=secs, seed=5, tempo=120, arrangement=arrangement,
+                               hits=hits, enabled_instruments=tuple(STYLES[GENRE].default_instruments),
+                               output_dir=Path(td.name), skip_audio=True)
+            tracks = {i.name: i for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments}
+        finally:
+            td.cleanup()
+        return tracks["Trumpet"].notes if "Trumpet" in tracks else []
+
+    def test_the_horns_lead_into_each_hit_and_keep_playing(self):
+        hits = [5.0, 13.0]
+        plain = self._horns("hits_only,calm", hits)
+        bed = self._horns("hits_only,calm,horn_bed", hits)
+        self.assertGreater(len(bed), len(plain) * 4)
+        step = 2.0 / 16
+        for h in hits:
+            pickup = sorted((n for n in bed if h - 3.5 * step <= n.start < h - 0.02), key=lambda n: n.start)
+            self.assertGreaterEqual(len(pickup), 3, h)
+            self.assertLess(pickup[0].pitch, pickup[-1].pitch)               # climbing into the hit
+        chorus = [n for n in bed if n.start >= 8.0]
+        verse = [n for n in bed if n.start < 8.0]
+        self.assertGreater(np.mean([n.velocity for n in chorus]), np.mean([n.velocity for n in verse]))
+
+
 class FunkMixTest(unittest.TestCase):
     def test_profile_resolves_and_sets_the_sax_level(self):
         profile = resolve_profile(GENRE)
