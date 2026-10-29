@@ -27,7 +27,15 @@ git clone --depth 1 --filter=blob:none --sparse https://github.com/sgossner/VSCO
 python ../../scripts/setup/make_brass_sfz.py vsco2-ce
 ```
 
-About 2.9 GB on disk in all. A render loads only the samples its notes use.
+Electric guitar (lead voice "guitar"): use the **release zip**, not a git
+clone — the repo's `.gitattributes` converts line endings and corrupts the WAVs:
+
+```bash
+curl -L -o bng.zip https://github.com/sfzinstruments/karoryfer.black-and-green-guitars/releases/download/v1.000/Karoryfer_Black_And_Green_Guitars_1000.zip
+mkdir karoryfer.black-and-green-guitars && unzip -q bng.zip -d karoryfer.black-and-green-guitars && rm bng.zip
+```
+
+About 3.5 GB on disk in all. A render loads only the samples its notes use.
 
 ## Libraries and licences
 
@@ -38,6 +46,7 @@ About 2.9 GB on disk in all. A render loads only the samples its notes use.
 | Drum kit | Virtuosity Drums (Versilian Studios / Karoryfer) | CC0 |
 | Saxes (GM 64-67) | Karoryfer Weresax | CC0 |
 | Trumpet (56, 59), trombone (57), brass section (61) | VSCO 2 CE staccato | CC0 |
+| Guitar lead voice | Karoryfer Black And Green Guitars (Gretsch / Hofner) | CC0 |
 
 Music made with any of them can be used commercially. Don't commit or ship
 the jRhodes samples themselves.

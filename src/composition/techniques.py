@@ -87,6 +87,9 @@ class TechniqueContext:
     song_seed: int = 0
     # Hit points in seconds from the song start (accents the band lands).
     hits: tuple = ()
+    # Named lead voice (render/lead_voices.py); styles place the lead's
+    # register for it.
+    lead_voice: Optional[str] = None
 
     @property
     def bar_count(self) -> int:

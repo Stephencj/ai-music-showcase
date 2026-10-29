@@ -564,9 +564,14 @@ _HOOKS = (
 # octave up, above the trumpet (C5-C6, peaking near G6), where fusion synth
 # leads live; a sax stays in its sweet spot.
 _LEAD_REGISTER = {
-    True:  {"riff": (72, 86), "low": (72, 86), "high": (76, 91), "centre_low": 76, "centre_high": 81, "final": (79, 91)},
-    False: {"riff": (62, 77), "low": (62, 76), "high": (65, 79), "centre_low": 67, "centre_high": 71, "final": (67, 80)},
+    "synth":  {"riff": (72, 86), "low": (72, 86), "high": (76, 91), "centre_low": 76, "centre_high": 81, "final": (79, 91)},
+    "sax":    {"riff": (62, 77), "low": (62, 76), "high": (65, 79), "centre_low": 67, "centre_high": 71, "final": (67, 80)},
+    # Trumpet's singing range (the horn-section and trumpet voices).
+    "horn":   {"riff": (62, 77), "low": (62, 77), "high": (65, 81), "centre_low": 68, "centre_high": 73, "final": (67, 82)},
+    "guitar": {"riff": (60, 76), "low": (60, 76), "high": (64, 81), "centre_low": 67, "centre_high": 72, "final": (64, 79)},
 }
+# Lead voice → register (render/lead_voices.py names); unknown voices are synths.
+_VOICE_REGISTER = {"horns": "horn", "trumpet": "horn", "guitar": "guitar"}
 RUN_INTO = ("verse", "prechorus", "bridge", "breakdown")
 # The transition run: 8ths speeding into 16ths, ending two 16ths before the
 # next section (the breath before its hit). (step, length in 16ths)
@@ -650,12 +655,17 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
     bars = ctx.bar_count
     riff = riff_bars(ctx, feel)
     notes: list[NoteEvent] = []
-    reg = _LEAD_REGISTER[bool(synth)]
+    if synth:
+        reg_name = _VOICE_REGISTER.get(ctx.lead_voice or "", "synth")
+    else:
+        reg_name = "sax"
+    reg = _LEAD_REGISTER[reg_name]
+    synth_gate = synth and reg_name == "synth"     # real-instrument voices phrase longer
     # The lead doubles the riff: a sax with the trumpet, a synth an octave above it.
     for bar, step, length, semis in riff_notes(ctx, riff, feel):
         p = _fits(harm.tonic + semis + 60, *reg["riff"])
         s, v = _human(rng, clock.t(bar, step), 104, ms=3.0, vel_jitter=4.0)
-        gate = clock.step_len * (min(length, 4) * 0.82 if synth else length * 0.85)
+        gate = clock.step_len * (min(length, 4) * 0.82 if synth_gate else length * 0.85)
         notes.append(NoteEvent(pitch=p, start=s, end=s + gate, velocity=v))
     if feel == "outro":
         # Resolve on the final hit: the tonic, held, up in the lead's register.
@@ -663,7 +673,7 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
         notes.append(NoteEvent(pitch=_fits(harm.tonic + 72, *reg["final"]), start=t0, end=t0 + clock.bar_len * 0.9, velocity=112))
     run_bar = bars - 1 if feel in RUN_INTO and bars >= 2 and (bars - 1) not in riff else None
     if run_bar is not None:
-        notes += _lead_run(ctx, clock, harm, run_bar, reg, rng, synth)
+        notes += _lead_run(ctx, clock, harm, run_bar, reg, rng, synth_gate)
     def finish(notes: list[NoteEvent]) -> None:
         # Flares replace whatever the lead was playing under them and run
         # straight through the breath into their hit.
@@ -714,7 +724,7 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
                 notes.append(NoteEvent(pitch=pitch - 1, start=g, end=start, velocity=gv))
             s, v = _human(rng, start, vel, ms=4.0, vel_jitter=4.0)
             # The synth plays it fairly short and punchy; a sax breathes longer.
-            gate = clock.step_len * (min(length, 4) * 0.82 if synth else length * 0.92)
+            gate = clock.step_len * (min(length, 4) * 0.82 if synth_gate else length * 0.92)
             notes.append(NoteEvent(pitch=pitch, start=s, end=start + gate, velocity=v))
     finish(notes)
 

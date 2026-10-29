@@ -29,6 +29,7 @@ import numpy as np
 from src.daw_integration.generic.midi_export import MidiExporter
 
 from .sfz import Note, SampleCache, SfzInstrument, SfzRenderer, load_sfz
+from .lead_voices import LeadLayer, voice
 from .synth_lead import LEAD_PATCHES, render_lead
 from .synth import DEFAULT_SAMPLE_RATE, FluidSynthRenderer, RenderedStems, TrackStem
 
@@ -60,10 +61,18 @@ class SampledInstrument:
 
 
 SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
-    # Sustained trumpet, only used to layer under a synth lead.
+    # Lead-voice layers only (render/lead_voices.py): no GM program maps here.
     SampledInstrument(
         id="trumpet_sus",
         sfz="vsco2-ce/trumpet_sus.sfz",
+    ),
+    SampledInstrument(
+        id="guitar_twang",
+        sfz="karoryfer.black-and-green-guitars/Programs/04-green_twang.sfz",
+    ),
+    SampledInstrument(
+        id="guitar_staccato",
+        sfz="karoryfer.black-and-green-guitars/Programs/05-green_staccato.sfz",
     ),
     SampledInstrument(
         id="synth_lead",
@@ -174,6 +183,19 @@ def _voice_eq(audio: np.ndarray, eq, sample_rate: int) -> np.ndarray:
     return np.ascontiguousarray(np.asarray(out, dtype=np.float32).T)
 
 
+def _amp(audio: np.ndarray, drive_db: float, sample_rate: int) -> np.ndarray:
+    """A small guitar amp: drive, then a speaker-cab roll-off."""
+    import pedalboard as pdb
+    board = pdb.Pedalboard([
+        pdb.HighpassFilter(cutoff_frequency_hz=90.0),
+        pdb.Distortion(drive_db=drive_db),
+        pdb.PeakFilter(cutoff_frequency_hz=1800.0, gain_db=2.0, q=0.9),
+        pdb.LowpassFilter(cutoff_frequency_hz=5200.0),
+    ])
+    out = board(audio.T.copy(), sample_rate=sample_rate)
+    return np.ascontiguousarray(np.asarray(out, dtype=np.float32).T)
+
+
 class SampledRenderer:
     """Per-track stems: SFZ where a library exists, FluidSynth elsewhere."""
 
@@ -212,22 +234,56 @@ class SampledRenderer:
             self._loaded[inst.id] = load_sfz(self.root / inst.sfz, cc_overrides=inst.cc or None)
         return self._loaded[inst.id]
 
+    def _sfz_by_id(self, inst_id: str) -> Optional[SfzInstrument]:
+        inst = next((i for i in SAMPLED_INSTRUMENTS if i.id == inst_id and i.engine == "sfz"), None)
+        if inst is None or not (self.root / inst.sfz).exists():
+            return None
+        return self._instrument(inst)
+
+    def _lead_layer(self, layer: LeadLayer, notes: list[Note], index: int) -> Optional[np.ndarray]:
+        shifted = [Note(n.pitch + 12 * layer.octave, n.start, n.end, n.velocity) for n in notes]
+        if layer.kind == "synth":
+            return render_lead(shifted, self.sample_rate,
+                               patch=LEAD_PATCHES.get(layer.patch, LEAD_PATCHES["punch"]))
+        long_inst = self._sfz_by_id(layer.sfz)
+        short_inst = self._sfz_by_id(layer.sfz_short) if layer.sfz_short else None
+        if long_inst is None and short_inst is None:
+            return None
+        parts = []
+        for inst, chosen in (
+            (short_inst, [n for n in shifted if short_inst is not None and n.end - n.start < layer.short_below]),
+            (long_inst or short_inst, [n for n in shifted if short_inst is None or n.end - n.start >= layer.short_below]),
+        ):
+            if inst is None or not chosen:
+                continue
+            for region in inst.regions:
+                region.seq_counter = 0
+            parts.append(SfzRenderer(inst, self.sample_rate, cache=SampleCache(),
+                                     seed=self.seed + index).render(chosen))
+        if not parts:
+            return None
+        n = max(p.shape[1] for p in parts)
+        audio = np.zeros((2, n), dtype=np.float32)
+        for p in parts:
+            audio[:, :p.shape[1]] += p
+        if layer.drive_db:
+            audio = _amp(audio, layer.drive_db, self.sample_rate)
+        return audio
+
     def _lead(self, notes: list[Note], index: int) -> np.ndarray:
-        """The synth lead, with its sampled layer when the patch has one."""
-        patch = LEAD_PATCHES.get(self.lead_patch or "punch", LEAD_PATCHES["punch"])
-        audio = render_lead(notes, self.sample_rate, patch=patch)
-        layer = next((i for i in SAMPLED_INSTRUMENTS if i.id == patch.layer), None)
-        if layer is None or not (self.root / layer.sfz).exists():
-            return audio
-        shifted = [Note(n.pitch + 12 * patch.layer_octave, n.start, n.end, n.velocity) for n in notes]
-        under = SfzRenderer(self._instrument(layer), self.sample_rate, cache=SampleCache(),
-                            seed=self.seed + index).render(shifted)
-        n = max(audio.shape[1], under.shape[1])
+        """The lead track in its named voice (render/lead_voices.py)."""
+        lead_voice = voice(self.lead_patch)
+        layers = []
+        for layer in lead_voice.layers:
+            audio = self._lead_layer(layer, notes, index)
+            if audio is not None and audio.size and float(np.abs(audio).max()) > 0:
+                layers.append((audio / float(np.abs(audio).max()), 10 ** (layer.db / 20.0)))
+        if not layers:                       # e.g. a sampled voice whose libraries aren't installed
+            return render_lead(notes, self.sample_rate)
+        n = max(a.shape[1] for a, _ in layers)
         mix = np.zeros((2, n), dtype=np.float32)
-        top = float(np.abs(audio).max()) or 1.0
-        bottom = float(np.abs(under).max()) or 1.0
-        mix[:, :audio.shape[1]] += audio / top
-        mix[:, :under.shape[1]] += under / bottom * (10 ** (patch.layer_db / 20.0))
+        for audio, gain in layers:
+            mix[:, :audio.shape[1]] += audio * gain
         return mix
 
     def render_stems(self, midi: MidiExporter) -> RenderedStems:
@@ -262,6 +318,10 @@ class SampledRenderer:
                 fluid_tracks.append(track)
                 continue
             audio /= peak
+            if inst.engine == "synth":
+                # Level-match lead voices after normalising (sampled voices are
+                # peakier, so equal peaks would leave them quieter).
+                audio *= 10 ** (voice(self.lead_patch).gain_db / 20.0)
             stems.append(TrackStem(name=track.name, program=track.program, is_drum=track.is_drum,
                                    audio=audio, sample_rate=self.sample_rate))
             logger.info("sampled: %s → %s (%.1fs)", track.name, inst.id, audio.shape[1] / self.sample_rate)

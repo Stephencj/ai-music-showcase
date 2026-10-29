@@ -290,6 +290,56 @@ class LeadPatchTest(unittest.TestCase):
             self.assertGreater(spec(layered)[band].max(), 3 * spec(plain)[band].max())
 
 
+class LeadVoiceTest(unittest.TestCase):
+    def test_voices(self):
+        from src.audio_processing.render.lead_voices import LEAD_VOICES, voice
+        self.assertTrue({"punch", "sonic", "ewi", "layered", "horns", "trumpet", "guitar"} <= set(LEAD_VOICES))
+        self.assertIs(voice("sonic"), voice("punch"))                # the saved synth
+        self.assertIs(voice(None), voice("punch"))
+        self.assertIs(voice("nope"), voice("punch"))
+
+    def test_horn_voice_plays_lower_than_the_synth(self):
+        def lead_median(voice_name):
+            td = tempfile.TemporaryDirectory()
+            try:
+                res = compose_song(genre=GENRE, sections=build_sections(GENRE, [], None, None), seed=5,
+                                   enabled_instruments=tuple(STYLES[GENRE].default_instruments),
+                                   lead_voice=voice_name, output_dir=Path(td.name), skip_audio=True)
+                pm = pretty_midi.PrettyMIDI(res["midi_path"])
+                return float(np.median([n.pitch for i in pm.instruments if i.name == "Synth Lead" for n in i.notes]))
+            finally:
+                td.cleanup()
+        self.assertGreaterEqual(lead_median(None) - lead_median("horns"), 6)
+        self.assertLessEqual(lead_median("trumpet"), 76)
+
+    def test_sampled_voice_mixes_its_layers_and_short_notes_use_staccato(self):
+        from src.audio_processing.render.sfz import Note as SNote
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "vsco2-ce").mkdir()
+            def tone(name, hz):
+                sf.write(str(root / "vsco2-ce" / name),
+                         (0.5 * np.sin(2 * np.pi * hz * np.arange(44100) / 44100)).astype(np.float32), 44100)
+            tone("long.wav", 440.0)
+            tone("short.wav", 660.0)                                    # tells the two libraries apart
+            (root / "vsco2-ce" / "trumpet_sus.sfz").write_text("<region> sample=long.wav pitch_keycenter=69")
+            (root / "vsco2-ce" / "trumpet_stac.sfz").write_text("<region> sample=short.wav pitch_keycenter=69")
+            r = sampled.SampledRenderer(root=root, lead_patch="trumpet")
+            short = r._lead([SNote(69, 0.0, 0.1, 100)], 0)
+            long = r._lead([SNote(69, 0.0, 0.5, 100)], 0)
+            def peak_hz(x):
+                seg = x.mean(axis=0)[:4000] * np.hanning(4000)
+                return float(np.fft.rfftfreq(1 << 16, 1 / 44100)[np.argmax(np.abs(np.fft.rfft(seg, 1 << 16)))])
+            self.assertAlmostEqual(peak_hz(short), 660.0, delta=15)
+            self.assertAlmostEqual(peak_hz(long), 440.0, delta=15)
+
+    def test_missing_libraries_fall_back_to_the_synth(self):
+        from src.audio_processing.render.sfz import Note as SNote
+        with tempfile.TemporaryDirectory() as td:
+            out = sampled.SampledRenderer(root=Path(td), lead_patch="horns")._lead([SNote(72, 0.0, 0.3, 100)], 0)
+            self.assertGreater(float(np.abs(out).max()), 0.05)
+
+
 class FunkMixTest(unittest.TestCase):
     def test_profile_resolves_and_sets_the_sax_level(self):
         profile = resolve_profile(GENRE)

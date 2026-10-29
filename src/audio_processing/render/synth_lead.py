@@ -48,16 +48,12 @@ class LeadPatch:
     drive: float = 1.7                # saturation after the filter
     noise_level: float = 0.0          # breath noise into the filter (wind-controller leads)
     saw_level: float = 1.0
-    # Layer a sampled instrument under the synth (an id from
-    # render/sampled.py's SAMPLED_INSTRUMENTS), shifted by octaves, at a level.
-    layer: str | None = None
-    layer_octave: int = 0
-    layer_db: float = -6.0
 
 
 DEFAULT_PATCH = LeadPatch()
 
-# Named lead sounds a render can ask for (``lead_patch``).
+# Synth patches. Lead *voices* (render/lead_voices.py) pick one of these and
+# can layer sampled instruments with it.
 LEAD_PATCHES: dict[str, LeadPatch] = {
     # Punchy analog-style lead: bright filter blip on every note, some grit.
     "punch": DEFAULT_PATCH,
@@ -71,10 +67,8 @@ LEAD_PATCHES: dict[str, LeadPatch] = {
         cutoff_keytrack=0.6, resonance=1.1, retrigger_filter=True, vibrato_rate=5.2,
         vibrato_cents=11.0, vibrato_delay=0.22, drive=1.2,
     ),
-    # The punch synth with a real trumpet an octave below it: the synth's edge
-    # on top, a live horn's body underneath, so it belongs with the band.
-    "layered": LeadPatch(layer="trumpet_sus", layer_octave=-1, layer_db=-4.0,
-                         drive=1.4, pulse_level=0.15),
+    # A slightly smoother punch for sitting on top of a real trumpet.
+    "layered": LeadPatch(drive=1.4, pulse_level=0.15),
 }
 
 

@@ -100,6 +100,7 @@ def run_generation(req, progress, job_id: str) -> dict:
         bars=req.bars, swing=req.swing,
         progression=(list(req.progression) or None),
         hits=(list(getattr(req, "hits", None) or []) or None),
+        lead_voice=getattr(req, "lead_patch", None),
         output_dir=job_dir,
         skip_audio=True,            # we render HQ below; skip the low-fi pass
     )
