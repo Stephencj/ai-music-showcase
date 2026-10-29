@@ -190,15 +190,15 @@ def _lead_chain() -> list[pdb.Plugin]:
 
 
 def _tight_lead_chain() -> list[pdb.Plugin]:
-    """Dry, punchy lead for staccato arrangements: a short slapback and a
-    small room instead of the long delay + plate wash."""
+    """Punchy lead for staccato arrangements: a slapback and a small-to-medium
+    room instead of the long delay + plate wash."""
     return [
         pdb.HighpassFilter(cutoff_frequency_hz=150.0),
         pdb.Compressor(threshold_db=-16.0, ratio=3.0,
                        attack_ms=4.0, release_ms=80.0),
         pdb.PeakFilter(cutoff_frequency_hz=3200.0, gain_db=1.5, q=0.8),
-        pdb.Delay(delay_seconds=0.085, feedback=0.0, mix=0.06),
-        pdb.Reverb(room_size=0.12, damping=0.6, wet_level=0.07, dry_level=0.93),
+        pdb.Delay(delay_seconds=0.11, feedback=0.12, mix=0.1),
+        pdb.Reverb(room_size=0.28, damping=0.55, wet_level=0.16, dry_level=0.84),
     ]
 
 

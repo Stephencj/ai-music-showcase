@@ -24,28 +24,28 @@ from .sfz import Note
 
 @dataclass(frozen=True)
 class LeadPatch:
-    """Defaults are a harsh, punchy, staccato-friendly fusion lead: a fast
-    bright filter "blip" on every note, grit, a pulse edge, little glide."""
+    """Defaults are a punchy fusion lead: a bright filter "blip" on every
+    note, some grit and a pulse edge, little glide."""
     detune_cents: float = 12.0
     sub_level: float = 0.08           # square, one octave down (body, not pitch)
-    pulse_level: float = 0.35         # narrow pulse for a nasal, cutting edge
+    pulse_level: float = 0.2          # narrow pulse for a nasal edge
     pulse_width: float = 0.3
     glide: float = 0.025              # seconds to (mostly) reach the new pitch
     legato_gap: float = 0.008         # only truly joined notes slide
     attack: float = 0.002
     decay: float = 0.16
-    sustain: float = 0.5
-    release: float = 0.05
-    cutoff: float = 1700.0            # resting cutoff, Hz
-    cutoff_env: float = 6500.0        # extra cutoff at the attack
-    cutoff_decay: float = 0.09        # seconds for the filter to settle
+    sustain: float = 0.62
+    release: float = 0.09
+    cutoff: float = 1400.0            # resting cutoff, Hz
+    cutoff_env: float = 5000.0        # extra cutoff at the attack
+    cutoff_decay: float = 0.12        # seconds for the filter to settle
     cutoff_keytrack: float = 0.5      # cutoff follows pitch (0..1)
-    resonance: float = 2.4            # filter Q
+    resonance: float = 1.9            # filter Q
     retrigger_filter: bool = True     # every note re-opens the filter, even legato
     vibrato_rate: float = 6.0
     vibrato_cents: float = 8.0
     vibrato_delay: float = 0.4        # held notes only
-    drive: float = 2.4                # saturation after the filter
+    drive: float = 1.7                # saturation after the filter
 
 
 DEFAULT_PATCH = LeadPatch()

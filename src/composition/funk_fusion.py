@@ -573,7 +573,7 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
     for bar, step, length, semis in riff_notes(ctx, riff, feel):
         p = _fits(harm.tonic + semis + 60, 62, 77)
         s, v = _human(rng, clock.t(bar, step), 104, ms=3.0, vel_jitter=4.0)
-        gate = clock.step_len * (min(length, 3) * 0.7 if synth else length * 0.85)
+        gate = clock.step_len * (min(length, 4) * 0.82 if synth else length * 0.85)
         notes.append(NoteEvent(pitch=p, start=s, end=s + gate, velocity=v))
     if feel == "outro":
         # Resolve on the final hit: the tonic, held, up in the lead's register.
@@ -616,8 +616,8 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
                 g, gv = _human(rng, start - clock.step_len * 0.35, vel - 14, ms=1.5, vel_jitter=3.0)
                 notes.append(NoteEvent(pitch=pitch - 1, start=g, end=start, velocity=gv))
             s, v = _human(rng, start, vel, ms=4.0, vel_jitter=4.0)
-            # The synth plays it short and punchy, like the horns; a sax breathes longer.
-            gate = clock.step_len * (min(length, 3) * 0.7 if synth else length * 0.92)
+            # The synth plays it fairly short and punchy; a sax breathes longer.
+            gate = clock.step_len * (min(length, 4) * 0.82 if synth else length * 0.92)
             notes.append(NoteEvent(pitch=pitch, start=s, end=start + gate, velocity=v))
     _emit(midi, ctx, _breathe(notes, ctx, clock), name=name, program=program)
 

@@ -82,7 +82,7 @@ class FunkFusionTest(unittest.TestCase):
         last = max(n.start for n in lead)
         body = [n for n in lead if n.start < last - 0.01]
         self.assertTrue(body)
-        self.assertLessEqual(max(n.end - n.start for n in body), 3 * step * 0.7 + 0.015)   # + humanised timing
+        self.assertLessEqual(max(n.end - n.start for n in body), 4 * step * 0.82 + 0.015)   # + humanised timing
 
     def test_trumpet_sits_above_trombone(self):
         tpt = np.median([n.pitch for n in self.tracks["Trumpet"].notes])
@@ -238,7 +238,7 @@ class FunkMixTest(unittest.TestCase):
         self.assertEqual(MIX_PROFILES["funk_fusion"].family_chains, {"lead": "tight_lead"})
         board = NAMED_CHAINS["tight_lead"]()
         reverb = [p for p in board if type(p).__name__ == "Reverb"][0]
-        self.assertLess(reverb.wet_level, 0.1)
+        self.assertLess(reverb.wet_level, 0.25)
         self.assertFalse(MIX_PROFILES["pop"].family_chains)
 
     def test_no_overrides_leaves_track_mix_alone(self):
