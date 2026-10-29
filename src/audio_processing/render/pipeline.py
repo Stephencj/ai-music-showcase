@@ -150,6 +150,7 @@ def render_to_audio(
     style_name: Optional[str] = None,
     track_mix: Optional[dict] = None,
     sound: Optional[str] = None,
+    lead_patch: Optional[str] = None,
 ) -> RenderResult:
     """Render MIDI to a finished mixed WAV (and optional per-track stems).
 
@@ -169,6 +170,8 @@ def render_to_audio(
         sound: ``"gm"`` (soundfont) or ``"sampled"`` (SFZ libraries where
             installed, soundfont for the rest). ``None`` uses
             ``$AI_MUSIC_SOUND``, then the style's default.
+        lead_patch: synth lead sound for sampled renders ("punch", "ewi",
+            "layered"; see render/synth_lead.py). ``None`` = "punch".
 
     Returns:
         :class:`RenderResult` with paths and metadata.
@@ -178,10 +181,11 @@ def render_to_audio(
 
     midi_obj = _load_midi(midi)
     eff_sound = resolve_sound(sound, style_name)
-    renderer_cls = SampledRenderer if eff_sound == "sampled" else FluidSynthRenderer
-    with renderer_cls(
-        soundfont=soundfont, sample_rate=sample_rate
-    ) as renderer:
+    if eff_sound == "sampled":
+        renderer = SampledRenderer(soundfont=soundfont, sample_rate=sample_rate, lead_patch=lead_patch)
+    else:
+        renderer = FluidSynthRenderer(soundfont=soundfont, sample_rate=sample_rate)
+    with renderer:
         rendered: RenderedStems = renderer.render_stems(midi_obj)
 
     # Resolve the genre-aware mix profile. Priority:

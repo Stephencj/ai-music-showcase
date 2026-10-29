@@ -46,9 +46,36 @@ class LeadPatch:
     vibrato_cents: float = 8.0
     vibrato_delay: float = 0.4        # held notes only
     drive: float = 1.7                # saturation after the filter
+    noise_level: float = 0.0          # breath noise into the filter (wind-controller leads)
+    saw_level: float = 1.0
+    # Layer a sampled instrument under the synth (an id from
+    # render/sampled.py's SAMPLED_INSTRUMENTS), shifted by octaves, at a level.
+    layer: str | None = None
+    layer_octave: int = 0
+    layer_db: float = -6.0
 
 
 DEFAULT_PATCH = LeadPatch()
+
+# Named lead sounds a render can ask for (``lead_patch``).
+LEAD_PATCHES: dict[str, LeadPatch] = {
+    # Punchy analog-style lead: bright filter blip on every note, some grit.
+    "punch": DEFAULT_PATCH,
+    # Wind-controller (EWI / Lyricon) lead, the 80s fusion-band sound: breathy,
+    # softer edge, the filter follows how hard each note is played, and it
+    # slides and swells like a horn so it sits with acoustic instruments.
+    "ewi": LeadPatch(
+        detune_cents=5.0, sub_level=0.05, pulse_level=0.55, pulse_width=0.5, saw_level=0.55,
+        noise_level=0.07, glide=0.05, legato_gap=0.03, attack=0.018, decay=0.3,
+        sustain=0.85, release=0.11, cutoff=900.0, cutoff_env=2600.0, cutoff_decay=0.25,
+        cutoff_keytrack=0.6, resonance=1.1, retrigger_filter=True, vibrato_rate=5.2,
+        vibrato_cents=11.0, vibrato_delay=0.22, drive=1.2,
+    ),
+    # The punch synth with a real trumpet an octave below it: the synth's edge
+    # on top, a live horn's body underneath, so it belongs with the band.
+    "layered": LeadPatch(layer="trumpet_sus", layer_octave=-1, layer_db=-4.0,
+                         drive=1.4, pulse_level=0.15),
+}
 
 
 def _hz(pitch: float) -> np.ndarray | float:
@@ -168,8 +195,11 @@ def render_lead(notes: Iterable[Note], sample_rate: int = 44100, *,
 
         amp = env * (0.55 + 0.45 * vel)
         common = patch.sub_level * square + patch.pulse_level * pulse
-        left = _lowpass_blocks(saw1 * 0.6 + saw2 * 0.4 + common, cutoff, patch.resonance, sr, block=32)
-        right = _lowpass_blocks(saw1 * 0.4 + saw2 * 0.6 + common, cutoff, patch.resonance, sr, block=32)
+        if patch.noise_level:
+            common = common + patch.noise_level * np.random.default_rng(start).standard_normal(n) * (0.4 + 0.6 * vel)
+        sl = patch.saw_level
+        left = _lowpass_blocks(sl * (saw1 * 0.6 + saw2 * 0.4) + common, cutoff, patch.resonance, sr, block=32)
+        right = _lowpass_blocks(sl * (saw1 * 0.4 + saw2 * 0.6) + common, cutoff, patch.resonance, sr, block=32)
         out_l[start:end] += np.tanh(patch.drive * left) / math.tanh(patch.drive) * 0.6 * amp
         out_r[start:end] += np.tanh(patch.drive * right) / math.tanh(patch.drive) * 0.6 * amp
 

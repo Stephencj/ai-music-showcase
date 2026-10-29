@@ -29,7 +29,7 @@ import numpy as np
 from src.daw_integration.generic.midi_export import MidiExporter
 
 from .sfz import Note, SampleCache, SfzInstrument, SfzRenderer, load_sfz
-from .synth_lead import render_lead
+from .synth_lead import LEAD_PATCHES, render_lead
 from .synth import DEFAULT_SAMPLE_RATE, FluidSynthRenderer, RenderedStems, TrackStem
 
 logger = logging.getLogger(__name__)
@@ -60,6 +60,11 @@ class SampledInstrument:
 
 
 SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
+    # Sustained trumpet, only used to layer under a synth lead.
+    SampledInstrument(
+        id="trumpet_sus",
+        sfz="vsco2-ce/trumpet_sus.sfz",
+    ),
     SampledInstrument(
         id="synth_lead",
         sfz="",
@@ -128,7 +133,7 @@ def sampled_for(program: int, is_drum: bool, root: Optional[Path] = None) -> Opt
             continue
         if not is_drum and program not in inst.programs:
             continue
-        if inst.engine == "synth" or (root / inst.sfz).exists():
+        if inst.engine != "sfz" or (root / inst.sfz).exists():
             return inst
     return None
 
@@ -136,7 +141,7 @@ def sampled_for(program: int, is_drum: bool, root: Optional[Path] = None) -> Opt
 def available() -> list[str]:
     """Ids of the sampled instruments installed on this machine."""
     root = instrument_dir()
-    return [i.id for i in SAMPLED_INSTRUMENTS if i.engine == "synth" or (root / i.sfz).exists()]
+    return [i.id for i in SAMPLED_INSTRUMENTS if i.engine != "sfz" or (root / i.sfz).exists()]
 
 
 def resolve_sound(sound: Optional[str], style_name: Optional[str] = None) -> str:
@@ -174,11 +179,13 @@ class SampledRenderer:
 
     def __init__(self, soundfont: Optional[str | Path] = None, *,
                  sample_rate: int = DEFAULT_SAMPLE_RATE,
-                 root: Optional[Path] = None, seed: int = 1) -> None:
+                 root: Optional[Path] = None, seed: int = 1,
+                 lead_patch: Optional[str] = None) -> None:
         self.soundfont = soundfont
         self.sample_rate = sample_rate
         self.root = root or instrument_dir()
         self.seed = seed
+        self.lead_patch = lead_patch
         self._fluid: Optional[FluidSynthRenderer] = None
         self._loaded: dict[str, SfzInstrument] = {}
 
@@ -205,6 +212,24 @@ class SampledRenderer:
             self._loaded[inst.id] = load_sfz(self.root / inst.sfz, cc_overrides=inst.cc or None)
         return self._loaded[inst.id]
 
+    def _lead(self, notes: list[Note], index: int) -> np.ndarray:
+        """The synth lead, with its sampled layer when the patch has one."""
+        patch = LEAD_PATCHES.get(self.lead_patch or "punch", LEAD_PATCHES["punch"])
+        audio = render_lead(notes, self.sample_rate, patch=patch)
+        layer = next((i for i in SAMPLED_INSTRUMENTS if i.id == patch.layer), None)
+        if layer is None or not (self.root / layer.sfz).exists():
+            return audio
+        shifted = [Note(n.pitch + 12 * patch.layer_octave, n.start, n.end, n.velocity) for n in notes]
+        under = SfzRenderer(self._instrument(layer), self.sample_rate, cache=SampleCache(),
+                            seed=self.seed + index).render(shifted)
+        n = max(audio.shape[1], under.shape[1])
+        mix = np.zeros((2, n), dtype=np.float32)
+        top = float(np.abs(audio).max()) or 1.0
+        bottom = float(np.abs(under).max()) or 1.0
+        mix[:, :audio.shape[1]] += audio / top
+        mix[:, :under.shape[1]] += under / bottom * (10 ** (patch.layer_db / 20.0))
+        return mix
+
     def render_stems(self, midi: MidiExporter) -> RenderedStems:
         if not midi.tracks:
             raise ValueError("MidiExporter has no tracks to render.")
@@ -222,7 +247,7 @@ class SampledRenderer:
             notes = [Note(pitch=int(n.pitch) + inst.key_offset, start=float(n.start),
                           end=float(n.end), velocity=int(n.velocity)) for n in track.notes]
             if inst.engine == "synth":
-                audio = render_lead(notes, self.sample_rate)
+                audio = self._lead(notes, index)
             else:
                 sfz = self._instrument(inst)
                 for region in sfz.regions:

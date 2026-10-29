@@ -116,6 +116,7 @@ def run_generation(req, progress, job_id: str) -> dict:
         master_preset=(req.master_preset or "default"),
         style_name=genre,
         sound=req.sound,
+        lead_patch=getattr(req, "lead_patch", None),
     )
     wav_path = Path(render.mix_path)
     mp3_path: Path | None = job_dir / "mix.mp3"

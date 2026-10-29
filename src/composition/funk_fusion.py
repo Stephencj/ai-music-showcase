@@ -591,6 +591,54 @@ def _lead_run(ctx: TechniqueContext, clock: "_Clock", harm: "_Harmony", bar: int
     return notes
 
 
+GLISS_NOTE = 0.03          # seconds per note in a glissando (a hand swipe on the keys)
+
+
+def _gliss(ctx: TechniqueContext, harm: "_Harmony", start: float, end: float,
+           from_pitch: int, to_pitch: int, vel_from: float, vel_to: float) -> list[NoteEvent]:
+    """A keyboard glissando: every scale note between two pitches, swiped
+    fast from ``start`` to ``end`` (separate notes, each re-attacked)."""
+    lo, hi = sorted((from_pitch, to_pitch))
+    pool = _scale_pitches(harm.tonic, ctx.scale, lo, hi)
+    if from_pitch > to_pitch:
+        pool = pool[::-1]
+    span = max(end - start, 0.05)
+    every = max(1, int(np.ceil(len(pool) * GLISS_NOTE / span)))   # skip notes if it's short
+    pool = pool[::every]
+    gap = span / max(1, len(pool))
+    notes = []
+    for i, p in enumerate(pool):
+        t = start + i * gap
+        v = vel_from + (vel_to - vel_from) * i / max(1, len(pool) - 1)
+        notes.append(NoteEvent(pitch=p, start=t, end=t + max(0.012, gap - 0.011), velocity=int(round(v))))
+    return notes
+
+
+def _flares(ctx: TechniqueContext, clock: "_Clock", harm: "_Harmony", feel: str,
+            reg: dict) -> list[tuple[list[NoteEvent], bool]]:
+    """Lead glissandos as (notes, is_rip_down): a rip down off a section's
+    opening hit, a swipe up into a downbeat hit mid-section, and a swipe up
+    into the final hit."""
+    out: list[tuple[list[NoteEvent], bool]] = []
+    home = {harm.tonic % 12, (harm.tonic + 7) % 12}
+    top = min((p for p in _scale_pitches(harm.tonic, ctx.scale, *reg["high"]) if p % 12 in home),
+              key=lambda p: abs(p - (reg["centre_high"] + 3)))
+    for bar, steps_ in hit_steps(ctx, clock).items():
+        for st in steps_:
+            if st:
+                continue
+            if bar == 0 and feel in HIGH_ROLES:
+                out.append((_gliss(ctx, harm, clock.t(0, 2), clock.t(0, 6), top + 2, top - 17, 112, 80), True))
+            elif bar > 0:
+                out.append((_gliss(ctx, harm, clock.t(bar, 0) - 4 * clock.step_len, clock.t(bar, 0) - 0.012,
+                                   top - 15, top, 84, 114), False))
+    if feel == "outro" and ctx.bar_count >= 2:
+        final = clock.t(ctx.bar_count - 1, 0)
+        landing = _fits(harm.tonic + 72, *reg["final"])
+        out.append((_gliss(ctx, harm, final - 4 * clock.step_len, final - 0.012, landing - 17, landing - 1, 86, 116), False))
+    return out
+
+
 def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
     """The lead: alto sax or synth lead (a synth sits about an octave higher).
     Before a chorus it plays a rising run that carries into the section."""
@@ -616,8 +664,23 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
     run_bar = bars - 1 if feel in RUN_INTO and bars >= 2 and (bars - 1) not in riff else None
     if run_bar is not None:
         notes += _lead_run(ctx, clock, harm, run_bar, reg, rng, synth)
+    def finish(notes: list[NoteEvent]) -> None:
+        # Flares replace whatever the lead was playing under them and run
+        # straight through the breath into their hit.
+        groups = _flares(ctx, clock, harm, feel, reg)
+        flares = [n for group, _ in groups for n in group]
+        windows = []
+        for group, rip in groups:
+            if group:
+                # After a rip down, an 8th of room so the line re-enters cleanly;
+                # a swipe up lands on its hit, so nothing after it is touched.
+                tail = 2 * clock.step_len if rip else 0.0
+                windows.append((group[0].start, group[-1].end + tail))
+        notes = [n for n in notes if not any(a - 0.01 <= n.start <= b for a, b in windows)]
+        _emit(midi, ctx, _breathe(notes, ctx, clock) + flares, name=name, program=program)
+
     if feel in ("bridge", "breakdown", "intro", "outro"):
-        _emit(midi, ctx, _breathe(notes, ctx, clock), name=name, program=program)
+        finish(notes)
         return
     lo, hi = reg["high"] if feel in HIGH_ROLES else reg["low"]
     pool = _scale_pitches(harm.tonic, ctx.scale, lo, hi)
@@ -653,7 +716,7 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
             # The synth plays it fairly short and punchy; a sax breathes longer.
             gate = clock.step_len * (min(length, 4) * 0.82 if synth else length * 0.92)
             notes.append(NoteEvent(pitch=pitch, start=s, end=start + gate, velocity=v))
-    _emit(midi, ctx, _breathe(notes, ctx, clock), name=name, program=program)
+    finish(notes)
 
 
 for _feel in ALL_ROLES:

@@ -43,6 +43,8 @@ class GenerateRequest(BaseModel):
     # "gm" (soundfont) or "sampled" (real-instrument SFZ libraries where
     # installed). None → the style's default.
     sound: Optional[str] = None
+    # Synth lead sound for sampled renders: "punch" (default), "ewi", "layered".
+    lead_patch: Optional[str] = None
     # Post-generation conveniences:
     save_as_block: bool = False
     block_name: Optional[str] = None

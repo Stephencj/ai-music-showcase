@@ -156,12 +156,20 @@ class OneBarRiffTest(unittest.TestCase):
         # the lead resolves to the tonic on the final hit.
         riff = self.notes_in("Synth Lead", 17)
         self.assertTrue(riff)
-        self.assertTrue(all(n.start < 17 * self.bar + 12 * self.bar / 16 - 0.02 for n in riff))
+        beat4 = 17 * self.bar + 12 * self.bar / 16 - 0.02
+        self.assertTrue(any(n.start < beat4 for n in riff))
+        self.assertTrue(all(n.end - n.start < 0.06 for n in riff if n.start >= beat4))   # only the swipe
         pickup = [n for n in self.notes_in("Drum kit", 17) if n.pitch == 38
                   and n.start >= 17 * self.bar + 12 * self.bar / 16 - 0.02]
         self.assertGreaterEqual(len(pickup), 4)
         final = self.notes_in("Synth Lead", 18)
         self.assertEqual([n.pitch % 12 for n in final], [self.tonic_pc])
+        # ...after a swipe up the keys over the snare pickup, landing on it.
+        swipe = [n for n in self.notes_in("Synth Lead", 17)
+                 if n.start >= 17 * self.bar + 12 * self.bar / 16 - 0.02]
+        self.assertGreaterEqual(len(swipe), 5)
+        self.assertEqual([n.pitch for n in swipe], sorted(n.pitch for n in swipe))
+        self.assertLess(final[0].pitch - swipe[-1].pitch, 4)
         # The trumpet plays the riff as one line but stabs in two-note chords,
         # so only bars 16 and 17 of the chorus/outro are riff bars.
         def stacked(bar):
@@ -182,7 +190,7 @@ class HitPointTest(unittest.TestCase):
     """Accents at given times (e.g. a stab on each caption of a video)."""
 
     TEMPO = 158
-    HITS = (4.891, 7.94, 13.671, 99.0)          # the last is past the song's end
+    HITS = (4.891, 7.94, 13.671, 19.748, 99.0)  # 13.671 opens the chorus; the last is past the end
 
     @classmethod
     def setUpClass(cls):
@@ -230,9 +238,56 @@ class HitPointTest(unittest.TestCase):
             ringing = [n for n in track.notes if n.start < gap and n.end > gap + 0.002]
             self.assertFalse(ringing, name)
 
+    def lead_between(self, a, b):
+        return sorted((n for n in self.tracks["Synth Lead"].notes if a - 0.005 <= n.start < b),
+                      key=lambda n: n.start)
+
+    def test_lead_swipes_up_into_a_mid_section_downbeat_hit(self):
+        hit = self.snapped(self.HITS[3])
+        gliss = self.lead_between(hit - 4 * self.step, hit - 0.012)   # a note humanised onto the hit is the landing
+        self.assertGreaterEqual(len(gliss), 6)
+        pitches = [n.pitch for n in gliss]
+        self.assertEqual(pitches, sorted(pitches))
+        self.assertLess(max(n.end - n.start for n in gliss), 0.06)      # separate, swiped notes
+
+    def test_lead_rips_down_off_the_sections_opening_hit(self):
+        hit = self.snapped(self.HITS[2])
+        rip = self.lead_between(hit + 2 * self.step, hit + 6 * self.step)
+        self.assertGreaterEqual(len(rip), 6)
+        pitches = [n.pitch for n in rip]
+        self.assertEqual(pitches, sorted(pitches, reverse=True))
+        self.assertGreaterEqual(pitches[0] - pitches[-1], 12)
+
     def test_hits_past_the_end_are_ignored(self):
         end = max(n.end for t in self.tracks.values() for n in t.notes)
         self.assertLess(end, 30.0)
+
+
+class LeadPatchTest(unittest.TestCase):
+    def test_named_patches_render(self):
+        from src.audio_processing.render.sfz import Note as SNote
+        from src.audio_processing.render.synth_lead import LEAD_PATCHES, render_lead
+        self.assertEqual(set(LEAD_PATCHES), {"punch", "ewi", "layered"})
+        for name, patch in LEAD_PATCHES.items():
+            out = render_lead([SNote(72, 0.0, 0.4, 100)], 44100, patch=patch)
+            self.assertGreater(float(np.abs(out).max()), 0.05, name)
+            self.assertFalse(np.isnan(out).any(), name)
+
+    def test_layered_lead_adds_the_trumpet_when_installed(self):
+        from src.audio_processing.render.sfz import Note as SNote
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "vsco2-ce").mkdir()
+            sf.write(str(root / "vsco2-ce" / "t.wav"),
+                     (0.5 * np.sin(2 * np.pi * 220 * np.arange(44100) / 44100)).astype(np.float32), 44100)
+            (root / "vsco2-ce" / "trumpet_sus.sfz").write_text("<region> sample=t.wav pitch_keycenter=57")
+            notes = [SNote(69, 0.0, 0.5, 100)]
+            plain = sampled.SampledRenderer(root=root, lead_patch="punch")._lead(notes, 0)
+            layered = sampled.SampledRenderer(root=root, lead_patch="layered")._lead(notes, 0)
+            spec = lambda x: np.abs(np.fft.rfft(x.mean(axis=0)[2000:20000]))
+            f = np.fft.rfftfreq(18000, 1 / 44100)
+            band = (f > 215) & (f < 225)                        # the trumpet an octave below A4
+            self.assertGreater(spec(layered)[band].max(), 3 * spec(plain)[band].max())
 
 
 class FunkMixTest(unittest.TestCase):
