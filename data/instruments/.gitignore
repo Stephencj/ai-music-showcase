@@ -1,0 +1,4 @@
+# Sample libraries are downloads, not source — exclude from git.
+*
+!.gitignore
+!README.md

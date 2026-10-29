@@ -43,6 +43,7 @@ GENRE_FAMILIES: list[tuple[str, str, list[tuple[str, str, str]]]] = [
     ("Blues & Jazz", "#6366f1", [
         ("Blues",          "blues_12bar_full", "blues_12bar_full"),
         ("Jazz",           "jazz_aaba_full",   "jazz_fusion"),
+        ("Jazz Fusion",    "fusion_full",      "fusion_full"),
         ("Bossa Nova",     "jazz_bossa_full",  "bossa_nova"),
         ("Hard Bop",       "jazz_hard_bop_full", "jazz_fusion"),
         ("Modal Jazz",     "jazz_modal_full",  "jazz_fusion"),

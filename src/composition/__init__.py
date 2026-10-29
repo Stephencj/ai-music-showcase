@@ -32,6 +32,7 @@ from src.composition.techniques import (
 # Importing builtins registers every technique with the BANK singleton.
 # This side-effect is intentional — the module is documentation + registry.
 from src.composition import builtins  # noqa: F401
+from src.composition import fusion  # noqa: F401
 
 __all__ = [
     "BANK",

@@ -179,6 +179,7 @@ _PRESET_TO_PROFILE: dict[str, str] = {
     # Jazz / soul / funk.
     "jazz":                 "jazz",
     "jazz_fusion":          "jazz",
+    "fusion_full":          "jazz",
     "jazz_aaba_full":       "jazz",
     "jazz_hard_bop_full":   "jazz",
     "jazz_modal_full":      "jazz",

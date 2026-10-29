@@ -125,6 +125,10 @@ class StylePreset:
     # the song ``progression`` (so intro/outro can stay on the home loop).
     # Roman-numeral symbols realize in the song key, same as ``progression``.
     section_progressions: dict = field(default_factory=dict)
+    # Default sound for renders of this style: "gm" (the General MIDI
+    # soundfont) or "sampled" (SFZ libraries where installed; see
+    # src/audio_processing/render/sampled.py).
+    sound: str = "gm"
 
     def __post_init__(self):
         # Synthesise a Default entry if no variants were declared so every
@@ -943,6 +947,51 @@ STYLES: dict[str, StylePreset] = {
                 [("v7", 1.0), ("IV7", 1.0), ("i7", 2.0)],
                 [("ii", 1.0), ("v7", 1.0), ("i7", 2.0)],
                 [("IV7", 1.0), ("v7", 1.0), ("i7", 1.0), ("i7", 1.0)],
+            ],
+        },
+    ),
+
+    "fusion_full": StylePreset(
+        name="Jazz Fusion (Full song)", tempo=116, key="F", scale="major",
+        # Bright, straight-16th fusion (Spyro Gyra / Yellowjackets): Rhodes on
+        # major-7th and minor-9th colour, a syncopated electric bass, alto sax
+        # lead. The patterns are the ``fusion``-tagged techniques
+        # (src/composition/fusion.py), picked strictly.
+        progression=[("Imaj7", 1.0), ("vi7", 1.0), ("ii7", 1.0), ("V7", 1.0)] * 14,
+        voicing="ninth", bass_pattern="funk_16ths", drum_pattern="funk",
+        chord_rhythm="funk_comp", melody_style="motif",
+        chord_octave=3, bass_octave=2, swing=0.0, default_bars=56,
+        chord_program=4, melody_program=65,
+        rhythm_variants={
+            "Full song": [
+                {"start_bar": 0,  "end_bar": 3,  "label": "Intro"},
+                {"start_bar": 4,  "end_bar": 11, "label": "Verse 1"},
+                {"start_bar": 12, "end_bar": 19, "label": "Chorus 1"},
+                {"start_bar": 20, "end_bar": 27, "label": "Verse 2"},
+                {"start_bar": 28, "end_bar": 35, "label": "Chorus 2"},
+                {"start_bar": 36, "end_bar": 43, "label": "Bridge"},
+                {"start_bar": 44, "end_bar": 51, "label": "Chorus 3"},
+                {"start_bar": 52, "end_bar": 55, "label": "Outro"},
+            ],
+        },
+        default_instruments=['drum_kit', 'electric_bass', 'electric_piano', 'sax_alto'],
+        sound="sampled",
+        pacing_options=('uniform_1',),
+        bridge_pacing_options=('uniform_1',),
+        section_progressions={
+            "verse": [
+                [("Imaj7", 1.0), ("vi7", 1.0), ("ii7", 1.0), ("V7", 1.0)],
+                [("Imaj7", 1.0), ("iii7", 1.0), ("IVmaj7", 1.0), ("V7", 1.0)],
+                [("vi7", 1.0), ("ii7", 1.0), ("V7", 1.0), ("Imaj7", 1.0)],
+            ],
+            "chorus": [
+                [("IVmaj7", 1.0), ("V7", 1.0), ("iii7", 1.0), ("vi7", 1.0)],
+                [("IVmaj7", 1.0), ("V7", 1.0), ("Imaj7", 1.0), ("vi7", 1.0)],
+                [("ii7", 1.0), ("V7", 1.0), ("Imaj7", 1.0), ("IVmaj7", 1.0)],
+            ],
+            "bridge": [
+                [("vi7", 1.0), ("V7", 1.0), ("IVmaj7", 1.0), ("iii7", 1.0)],
+                [("ii7", 1.0), ("iii7", 1.0), ("IVmaj7", 1.0), ("V7", 1.0)],
             ],
         },
     ),

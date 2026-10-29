@@ -27,6 +27,7 @@ from .profiles import (
     MIX_PROFILES,
     resolve_profile,
 )
+from .sampled import SampledRenderer, resolve_sound
 from .synth import FluidSynthRenderer, RenderedStems
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,23 @@ def _write_wav(path: Path, audio: np.ndarray, sample_rate: int) -> None:
     sf.write(str(path), data, sample_rate, subtype="PCM_16")
 
 
+def _trim_tail(audio: np.ndarray, sample_rate: int, *, floor_db: float = -60.0,
+               keep: float = 0.6, fade: float = 0.4) -> np.ndarray:
+    """Cut trailing near-silence (``(2, N)`` audio), ending in a short fade."""
+    if audio.ndim != 2 or audio.shape[1] == 0:
+        return audio
+    level = np.abs(audio).max(axis=0)
+    loud = np.nonzero(level > 10 ** (floor_db / 20.0))[0]
+    if loud.size == 0:
+        return audio
+    end = min(audio.shape[1], int(loud[-1] + keep * sample_rate))
+    out = audio[:, :end].copy()
+    n = min(int(fade * sample_rate), end)
+    if n > 0:
+        out[:, -n:] *= np.linspace(1.0, 0.0, n, dtype=np.float32)
+    return out
+
+
 def _safe_filename(name: str) -> str:
     keep = "-_."
     return "".join(c if c.isalnum() or c in keep else "_" for c in name).strip("_")
@@ -117,6 +135,7 @@ def render_to_audio(
     mix_profile: Optional[str] = None,
     style_name: Optional[str] = None,
     track_mix: Optional[dict] = None,
+    sound: Optional[str] = None,
 ) -> RenderResult:
     """Render MIDI to a finished mixed WAV (and optional per-track stems).
 
@@ -133,6 +152,9 @@ def render_to_audio(
         library: Optional preconfigured :class:`EffectChainLibrary` (lets
             the caller override per-family chains).
         mix_filename: File name (just the leaf) for the final mix.
+        sound: ``"gm"`` (soundfont) or ``"sampled"`` (SFZ libraries where
+            installed, soundfont for the rest). ``None`` uses
+            ``$AI_MUSIC_SOUND``, then the style's default.
 
     Returns:
         :class:`RenderResult` with paths and metadata.
@@ -141,7 +163,9 @@ def render_to_audio(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     midi_obj = _load_midi(midi)
-    with FluidSynthRenderer(
+    eff_sound = resolve_sound(sound, style_name)
+    renderer_cls = SampledRenderer if eff_sound == "sampled" else FluidSynthRenderer
+    with renderer_cls(
         soundfont=soundfont, sample_rate=sample_rate
     ) as renderer:
         rendered: RenderedStems = renderer.render_stems(midi_obj)
@@ -164,6 +188,10 @@ def render_to_audio(
         track_mix=track_mix,
     )
     mix, processed = mixer.mix(rendered, master_preset=eff_master)
+    if eff_sound == "sampled":
+        # Real cymbals and Rhodes ring for many seconds below audibility;
+        # end the file shortly after the music does.
+        mix = _trim_tail(mix, sample_rate)
 
     mix_path = output_dir / mix_filename
     _write_wav(mix_path, mix, sample_rate)
@@ -188,6 +216,7 @@ def render_to_audio(
         stem_paths=stem_paths,
         master_preset=eff_master,
         duration=duration,
+        sound=eff_sound,
     )
 
     logger.info(
@@ -220,6 +249,7 @@ def _write_manifest(
     stem_paths: dict[str, Path],
     master_preset: str,
     duration: float,
+    sound: str = "gm",
 ) -> Path:
     manifest = {
         "created": datetime.now().isoformat(timespec="seconds"),
@@ -228,6 +258,7 @@ def _write_manifest(
         "sample_rate": rendered.sample_rate,
         "soundfont": str(rendered.soundfont),
         "master_preset": master_preset,
+        "sound": sound,
         "duration_seconds": round(duration, 3),
         "mix": str(mix_path.relative_to(output_dir)),
         "stems": [

@@ -36,6 +36,9 @@ class GenerateRequest(BaseModel):
     with_stems: bool = False
     with_pdf: bool = True
     master_preset: Optional[str] = "default"
+    # "gm" (soundfont) or "sampled" (real-instrument SFZ libraries where
+    # installed). None → the style's default.
+    sound: Optional[str] = None
     # Post-generation conveniences:
     save_as_block: bool = False
     block_name: Optional[str] = None

@@ -59,6 +59,11 @@ _INSTRUMENT_ORDER: tuple[str, ...] = ("chords", "bass", "drums", "melody")
 # the weight of any candidate carrying one of these tags so picking
 # ``rock_anthem_full`` actually pulls rock idioms rather than the
 # cross-genre baseline.
+# Genres whose tagged techniques are the whole idiom: a cell with a tagged
+# technique never falls back to the cross-genre pool (fusion's straight 16ths
+# would be wrecked by a swing walking bass or a country train beat).
+_STRICT_GENRES: frozenset[str] = frozenset({"fusion_full"})
+
 _GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
     # Pop / rock family.
     "pop":               ("pop",),
@@ -73,6 +78,7 @@ _GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
     "funk_dynamic":      ("funk_rock", "funk"),
     # Jazz / blues.
     "jazz":              ("jazz",),
+    "fusion_full":       ("fusion",),
     "jazz_aaba_full":    ("jazz",),
     "jazz_trade_fours":  ("jazz",),
     "blues_12bar_full":  ("blues",),
@@ -660,14 +666,15 @@ def compose_song(
                 # the role bucket for the 193 existing role-tagged
                 # techniques.
                 tags_for_pick = sec_tags
+                strict = sec_genre in _STRICT_GENRES
                 technique = BANK.pick(
                     instrument_token, pick_role, rng,
-                    preferred_tags=tags_for_pick,
+                    preferred_tags=tags_for_pick, strict=strict,
                 )
                 if technique is None and instrument_token != inst_role:
                     technique = BANK.pick(
                         inst_role, pick_role, rng,
-                        preferred_tags=tags_for_pick,
+                        preferred_tags=tags_for_pick, strict=strict,
                     )
             if technique is None:
                 logger.info(

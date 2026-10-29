@@ -32,7 +32,7 @@ GENRE_TAGS = frozenset({
     "blues", "rock", "metal", "punk",
     "funk_rock", "funk", "soul", "motown", "gospel", "disco",
     "pop", "edm", "hip_hop", "reggae", "country", "latin", "afro",
-    "drum_n_bass", "ballad",
+    "drum_n_bass", "ballad", "fusion",
 })
 
 
@@ -172,6 +172,7 @@ class TechniqueBank:
         rng: np.random.Generator,
         *,
         preferred_tags: tuple[str, ...] = (),
+        strict: bool = False,
     ) -> Optional[Technique]:
         """Weighted-random pick of a technique for one cell.
 
@@ -182,6 +183,10 @@ class TechniqueBank:
         candidates = self.list_for(instrument, role)
         if not candidates:
             return None
+        if strict and preferred_tags:
+            # A genre with its own idiom for this cell plays only that idiom.
+            own = [t for t in candidates if any(tag in t.tags for tag in preferred_tags)]
+            candidates = own or candidates
         weights = []
         # Weighting under a genre (``preferred_tags``) has three tiers:
         #   • a candidate carrying a preferred tag is BOOSTED 8× per match
