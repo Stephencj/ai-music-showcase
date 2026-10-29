@@ -6,12 +6,15 @@ around ``base_tempo`` so the chapter spans a whole number of bars: the next
 chapter starts exactly on a downbeat. Segments are merged into one score
 (notes in seconds) and rendered once, so the mix and master are continuous.
 
-A chapter can open on a title card: those bars are an intro (drums build into
-the band riff, the same riff every chapter, so it works like a sonic logo),
-then the demo plays the chapter's roles. Keys and the lead instrument can
-change per chapter. Hit points (captions, card starts) are passed to every
-segment in its own time, so a segment also breathes before the next
-chapter's opening hit.
+Only the first chapter gets an intro (drums build into the band riff over its
+title card); after that each chapter flows straight into its groove on its
+downbeat, and the section change carries the transition. Keys and the lead
+instrument can change per chapter.
+
+Hits are curated to be musical, not one per caption: none right at a chapter
+change (the downbeat already marks it), not the first caption after a
+chapter starts, and at least ``min_gap`` seconds apart. In "groove" style they
+land on the next beat inside the groove rather than stopping the band.
 """
 
 from __future__ import annotations
@@ -37,6 +40,7 @@ class Chapter:
     key: Optional[str] = None
     lead: str = "synth_lead"            # lead instrument id ("synth_lead" | "lead_guitar")
     label: str = ""
+    intro: Optional[bool] = None        # title-card intro; None = only the first chapter
 
 
 @dataclass
@@ -99,7 +103,8 @@ def plan_segments(chapters: list[Chapter], duration: float, base_tempo: float) -
         tempo = 240.0 * bars / length
         bar = 240.0 / tempo
         card_bars = 0
-        if ch.card > 0 and bars >= 2:
+        wants_intro = ch.intro if ch.intro is not None else i == 0
+        if wants_intro and ch.card > 0 and bars >= 2:
             card_bars = int(np.clip(round((ch.card + (ch.start - start)) / bar), 1, bars - 1))
         sections = []
         label = ch.label or f"Chapter {i + 1}"
@@ -124,9 +129,31 @@ def plan_segments(chapters: list[Chapter], duration: float, base_tempo: float) -
     return plans
 
 
+def curate_hits(hits: list[float], chapter_starts: list[float], *, min_gap: float = 3.0,
+                settle: float = 1.6) -> list[float]:
+    """Musical hit points from raw ones (captions, cards): drop any within
+    ``settle`` seconds of a chapter change, the first one after each chapter
+    starts, and any closer than ``min_gap`` to the previous kept hit."""
+    starts = sorted(chapter_starts)
+    kept: list[float] = []
+    first_seen: set[int] = set()
+    for h in sorted(set(hits)):
+        chapter = max((i for i, s in enumerate(starts) if s <= h + 1e-6), default=-1)
+        if any(abs(h - s) < settle for s in starts):
+            continue
+        if chapter not in first_seen:
+            first_seen.add(chapter)                  # let the chapter settle in first
+            continue
+        if kept and h - kept[-1] < min_gap:
+            continue
+        kept.append(h)
+    return kept
+
+
 def compose_score(chapters: list[Chapter], *, duration: float, hits: list[float],
                   genre: str = "funk_fusion_full", seed: int = 52, base_tempo: float = 158.0,
                   band: Optional[list[str]] = None, lead_voice: Optional[str] = None,
+                  hit_style: str = "groove", curate: bool = True, min_gap: float = 3.0,
                   progress: Optional[Callable[[str, float], None]] = None):
     """Compose every chapter and merge them into one MidiExporter (seconds)."""
     import pretty_midi
@@ -137,6 +164,8 @@ def compose_score(chapters: list[Chapter], *, duration: float, hits: list[float]
     preset = STYLES[genre]
     band = list(band or [i for i in preset.default_instruments if i not in ("synth_lead", "lead_guitar", "sax_alto")])
     plans = plan_segments(chapters, duration, base_tempo)
+    if curate:
+        hits = curate_hits(hits, [p.start for p in plans] + [c.start for c in chapters], min_gap=min_gap)
     tracks: dict[tuple[str, int, bool], list] = {}
     ordered = sorted(chapters, key=lambda c: c.start)
     for plan in plans:
@@ -148,7 +177,7 @@ def compose_score(chapters: list[Chapter], *, duration: float, hits: list[float]
                 genre=genre, sections=plan.sections, seed=seed, tempo=plan.tempo,
                 key=ch.key, enabled_instruments=tuple(band + [ch.lead]),
                 hits=[h - plan.start for h in hits if h - plan.start >= 0],
-                lead_voice=lead_voice, output_dir=Path(td), skip_audio=True,
+                lead_voice=lead_voice, hit_style=hit_style, output_dir=Path(td), skip_audio=True,
             )
             pm = pretty_midi.PrettyMIDI(res["midi_path"])
         for inst in pm.instruments:
@@ -163,7 +192,7 @@ def compose_score(chapters: list[Chapter], *, duration: float, hits: list[float]
     for (name, program, is_drum), notes in tracks.items():
         if notes:
             midi.add_notes(sorted(notes, key=lambda n: n.start), track_name=name, program=program, is_drum=is_drum)
-    return midi, plans
+    return midi, plans, hits
 
 
 def fit_to_length(audio: np.ndarray, sample_rate: int, length: float, *, fade: float = 0.45) -> np.ndarray:

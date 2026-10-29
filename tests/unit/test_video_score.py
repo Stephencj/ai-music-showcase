@@ -7,7 +7,8 @@ from pathlib import Path
 import numpy as np
 
 import src.composition  # noqa: F401
-from src.api.video_score import Chapter, choose_bars, compose_score, fit_to_length, plan_segments
+from src.api.video_score import (Chapter, choose_bars, compose_score, curate_hits, fit_to_length,
+                                 plan_segments)
 
 
 class PlanTest(unittest.TestCase):
@@ -33,8 +34,10 @@ class PlanTest(unittest.TestCase):
     def test_sections_cover_the_chapter_title_card_first(self):
         p = self.plans[1]
         roles = [s["role"] for s in p.sections]
-        self.assertEqual(roles, ["intro", "verse", "chorus"])
-        self.assertEqual(p.sections[0]["end_bar"] - p.sections[0]["start_bar"] + 1, 2)   # 3.2 s ≈ 2 bars
+        self.assertEqual(roles, ["verse", "chorus"])                     # later chapters flow straight in
+        first = self.plans[0]
+        self.assertEqual(first.sections[0]["role"], "intro")             # only the opening gets an intro
+        self.assertEqual(first.sections[0]["end_bar"] - first.sections[0]["start_bar"] + 1, 2)   # 3 s ≈ 2 bars
         self.assertEqual(p.sections[-1]["end_bar"], p.bars - 1)
         self.assertTrue(all(s.get("key") == "F" for s in self.plans[2].sections))
 
@@ -45,11 +48,38 @@ class PlanTest(unittest.TestCase):
         self.assertLess(max(abs(a - b) for a, b in zip(tempos, tempos[1:])), 12.0)
 
 
+class CurateTest(unittest.TestCase):
+    def test_curation(self):
+        starts = [0.0, 20.0]
+        hits = [0.0, 3.0, 6.5, 8.0, 12.0, 20.5, 24.0, 27.5]
+        kept = curate_hits(hits, starts, min_gap=3.0)
+        # 0.0/20.5 sit on chapter changes; 3.0 and 24.0 are each chapter's first
+        # popup; 8.0 is too close to 6.5.
+        self.assertEqual(kept, [6.5, 12.0, 27.5])
+
+    def test_explicit_intro(self):
+        plans = plan_segments([Chapter(0.0, card=3.0), Chapter(12.0, card=3.0, intro=True)], 24.0, 158.0)
+        self.assertEqual(plans[1].sections[0]["role"], "intro")
+
+
 class ComposeTest(unittest.TestCase):
+    def test_groove_hits_land_on_the_next_beat_without_stopping_the_band(self):
+        chapters = [Chapter(start=0.0, roles=("verse",)), Chapter(start=10.0, roles=("chorus",))]
+        midi, plans, _ = compose_score(chapters, duration=20.0, hits=[14.2], curate=False)
+        beat = 60.0 / plans[1].tempo
+        hit = 10.0 + np.ceil((14.2 - 10.0 - 0.03) / beat) * beat
+        tracks = {t.name: t for t in midi.tracks}
+        trumpet = [n.start for n in tracks["Trumpet"].notes]
+        self.assertTrue(any(abs(t - hit) < 0.02 for t in trumpet))
+        self.assertGreaterEqual(hit, 14.2 - 0.03)                         # never early
+        drums_before = [n for n in tracks["Drum kit"].notes if hit - 2 * beat / 4 - 0.01 <= n.start < hit - 0.02]
+        self.assertTrue(drums_before)                                     # the groove keeps going into it
+
     def test_merged_score_lands_chapters_and_hits_in_video_time(self):
         chapters = [Chapter(start=0.0, card=3.0, roles=("verse",), lead="synth_lead"),
                     Chapter(start=10.0, card=3.0, roles=("chorus",), lead="lead_guitar")]
-        midi, plans = compose_score(chapters, duration=20.0, hits=[10.0, 14.2])
+        midi, plans, _ = compose_score(chapters, duration=20.0, hits=[10.0, 14.2], hit_style="punch",
+                                       curate=False)
         tracks = {t.name: t for t in midi.tracks}
         self.assertIn("Synth Lead", tracks)
         self.assertIn("Lead Guitar", tracks)

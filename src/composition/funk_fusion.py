@@ -204,7 +204,14 @@ def _drums(midi, ctx: TechniqueContext, feel: str) -> None:
 
     # Hit points: clear the kit around each one, then everything lands on it.
     points = hit_steps(ctx, clock)
-    if points:
+    if points and _groove(ctx):
+        # In the groove: a kick under the stab, a crash only on a bar's first beat.
+        for bar, steps_ in points.items():
+            for st in steps_:
+                hits.append((bar, st, KICK, 112))
+                if st == 0:
+                    hits.append((bar, st, CRASH, 104))
+    elif points:
         hits = [h for h in hits if not _near_hit(points, h[0], int(h[1]), clock.steps, clear=1)]
         for bar, steps_ in points.items():
             for st in steps_:
@@ -313,7 +320,7 @@ def _bass(midi, ctx: TechniqueContext, feel: str) -> None:
             notes.append(NoteEvent(pitch=pitch, start=s, end=e, velocity=v))
             if deg != "G":
                 prev = pitch
-    points = hit_steps(ctx, clock)
+    points = {} if _groove(ctx) else hit_steps(ctx, clock)   # the bass keeps grooving
     if points:
         step_len = clock.step_len
         def near(n):
@@ -342,12 +349,21 @@ _STABS = {
 HIT_CLEAR = 3        # 16ths kept clear of other stabs around a hit point
 
 
+def _groove(ctx: TechniqueContext) -> bool:
+    return getattr(ctx, "hit_style", "punch") == "groove"
+
+
 def hit_steps(ctx: TechniqueContext, clock: "_Clock") -> dict[int, set[int]]:
-    """This section's hit points as bar → 16th steps (nearest 16th)."""
+    """This section's hit points as bar → 16th steps: the nearest 16th, or in
+    "groove" style the next beat (up to a beat late, so it sits in the time)."""
     out: dict[int, set[int]] = {}
     first = ctx.start_bar * clock.steps
+    beat = 4 * clock.step_len
     for t in ctx.hits:
-        step = int(round(t / clock.step_len)) - first
+        if _groove(ctx):
+            step = int(np.ceil((t - 0.03) / beat)) * 4 - first
+        else:
+            step = int(round(t / clock.step_len)) - first
         if 0 <= step < ctx.bar_count * clock.steps:
             out.setdefault(step // clock.steps, set()).add(step % clock.steps)
     return out
@@ -358,7 +374,10 @@ BREATH = 2           # 16ths of silence before a hit that lands on a downbeat
 
 def _breathe(notes: list[NoteEvent], ctx: TechniqueContext, clock: "_Clock") -> list[NoteEvent]:
     """Leave an 8th of air before each downbeat hit point (band, breath, hit),
-    which makes the hit land far bigger than more volume would."""
+    which makes the hit land far bigger than more volume would. "groove"
+    hits don't stop the band."""
+    if _groove(ctx):
+        return notes
     gaps = []
     for t in ctx.hits:
         step = int(round(t / clock.step_len))
@@ -450,9 +469,9 @@ def _horns(midi, ctx: TechniqueContext, feel: str) -> None:
     for bar, steps_ in hits.items():
         for st in steps_:
             root_pc, quality = harm.at(bar + st / clock.steps)
-            s, v = _human(rng, clock.t(bar, st), 126, ms=1.0, vel_jitter=1.0)
+            s, v = _human(rng, clock.t(bar, st), 116 if _groove(ctx) else 126, ms=1.0, vel_jitter=1.0)
             voicing = _part(_horn_voicing(root_pc, quality, 77), part)
-            if part != "trumpet" and voicing[0] - 12 >= 40:
+            if part != "trumpet" and voicing[0] - 12 >= 40 and not _groove(ctx):
                 voicing = [voicing[0] - 12] + voicing          # weight under the hit
             for p in voicing:
                 notes.append(NoteEvent(pitch=p, start=s, end=s + clock.step_len * 3 * 0.9, velocity=v))

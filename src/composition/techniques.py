@@ -90,6 +90,10 @@ class TechniqueContext:
     # Named lead voice (render/lead_voices.py); styles place the lead's
     # register for it.
     lead_voice: Optional[str] = None
+    # How hits land: "punch" (snapped to the 16th, the band breathes and
+    # clears around them: a short spot) or "groove" (on the next beat, inside
+    # the groove: a long piece that should flow).
+    hit_style: str = "punch"
 
     @property
     def bar_count(self) -> int:

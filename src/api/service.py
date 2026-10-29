@@ -101,6 +101,7 @@ def run_generation(req, progress, job_id: str) -> dict:
         progression=(list(req.progression) or None),
         hits=(list(getattr(req, "hits", None) or []) or None),
         lead_voice=getattr(req, "lead_patch", None),
+        hit_style=getattr(req, "hit_style", None) or "punch",
         output_dir=job_dir,
         skip_audio=True,            # we render HQ below; skip the low-fi pass
     )
@@ -1780,10 +1781,11 @@ def run_video_score(req, progress, job_id: str) -> dict:
     job_dir.mkdir(parents=True, exist_ok=True)
     _prune_old_job_dirs()
     chapters = [Chapter(start=c.start, card=c.card, roles=tuple(c.roles or ["verse"]), key=c.key,
-                        lead=c.lead, label=c.label) for c in req.chapters]
-    midi, plans = compose_score(chapters, duration=req.duration, hits=list(req.hits),
-                                genre=req.genre, seed=req.seed, base_tempo=req.base_tempo,
-                                lead_voice=req.lead_patch, progress=progress)
+                        lead=c.lead, label=c.label, intro=c.intro) for c in req.chapters]
+    midi, plans, used_hits = compose_score(
+        chapters, duration=req.duration, hits=list(req.hits), genre=req.genre, seed=req.seed,
+        base_tempo=req.base_tempo, lead_voice=req.lead_patch, hit_style=req.hit_style,
+        curate=req.curate_hits, min_gap=req.min_hit_gap, progress=progress)
     midi_path = job_dir / "score.mid"
     midi.build().write(str(midi_path))
 
@@ -1800,6 +1802,7 @@ def run_video_score(req, progress, job_id: str) -> dict:
     progress("Done.", 1.0)
     return {
         "duration": req.duration,
+        "hits": [round(h, 2) for h in used_hits],
         "chapters": [{"start": round(p.start, 3), "end": round(p.end, 3), "tempo": round(p.tempo, 2),
                       "bars": p.bars, "sections": [(s["label"], s["role"], s["end_bar"] - s["start_bar"] + 1)
                                                    for s in p.sections]} for p in plans],

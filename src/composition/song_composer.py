@@ -362,6 +362,7 @@ def compose_song(
     knobs: Optional[dict] = None,
     hits: Optional[list] = None,
     lead_voice: Optional[str] = None,
+    hit_style: str = "punch",
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     output_midi: str = DEFAULT_MIDI_NAME,
     output_wav: str = DEFAULT_WAV_NAME,
@@ -720,6 +721,7 @@ def compose_song(
                 song_seed=int(seed),
                 hits=tuple(float(h) for h in (hits or ()) if h is not None and float(h) >= 0),
                 lead_voice=lead_voice,
+                hit_style=hit_style,
             )
             try:
                 apply_technique(midi, technique, ctx)

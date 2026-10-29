@@ -47,6 +47,9 @@ class GenerateRequest(BaseModel):
     # (default synth), "ewi", "layered", "horns", "trumpet", "guitar". Also
     # sets where the lead plays (horns and guitar sit lower than a synth).
     lead_patch: Optional[str] = None
+    # How hits land: "punch" (exact, the band breathes around them) or
+    # "groove" (on the next beat, inside the groove).
+    hit_style: Optional[str] = None
     # Post-generation conveniences:
     save_as_block: bool = False
     block_name: Optional[str] = None
@@ -61,6 +64,7 @@ class VideoChapter(BaseModel):
     key: Optional[str] = None
     lead: str = "synth_lead"                       # or "lead_guitar"
     label: str = ""
+    intro: Optional[bool] = None                   # None = only the first chapter
 
 
 class VideoScoreRequest(BaseModel):
@@ -74,6 +78,9 @@ class VideoScoreRequest(BaseModel):
     base_tempo: float = 158.0
     lead_patch: Optional[str] = None
     with_stems: bool = False
+    hit_style: str = "groove"                         # or "punch"
+    curate_hits: bool = True                          # thin hits musically (see video_score)
+    min_hit_gap: float = 3.0
 
 
 class ParsePromptRequest(BaseModel):
