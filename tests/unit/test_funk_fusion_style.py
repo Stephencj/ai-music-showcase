@@ -541,6 +541,24 @@ class PocketBassTest(unittest.TestCase):
         self.assertGreater(len({b.pitch for b in bass}), 4)                 # roots, octaves, fifths, walk-ups
 
 
+class SimpleBassTest(unittest.TestCase):
+    def test_about_three_notes_a_bar_on_its_own_rhythm(self):
+        td = tempfile.TemporaryDirectory()
+        try:
+            secs = build_sections(GENRE, ["verse", "chorus"], None, {"verse": {"bars": 4}, "chorus": {"bars": 4}})
+            res = compose_song(genre=GENRE, sections=secs, seed=5, tempo=120, arrangement="calm_keys,simple_bass",
+                               enabled_instruments=tuple(STYLES[GENRE].default_instruments),
+                               output_dir=Path(td.name), skip_audio=True)
+            tracks = {i.name: i for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments}
+        finally:
+            td.cleanup()
+        bass = tracks["Electric Bass"].notes
+        self.assertTrue(2.8 <= len(bass) / 8 <= 4.0, len(bass) / 8)
+        step = 2.0 / 16
+        positions = {round((n.start % 2.0) / step) % 16 for n in bass}
+        self.assertTrue({0, 6, 10} <= positions, positions)
+
+
 class FunkMixTest(unittest.TestCase):
     def test_profile_resolves_and_sets_the_sax_level(self):
         profile = resolve_profile(GENRE)

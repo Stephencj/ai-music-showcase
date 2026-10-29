@@ -229,6 +229,40 @@ def _pocket_bass(midi, ctx: TechniqueContext, feel: str) -> None:
     _emit(midi, ctx, notes, name="Bass", program=33)
 
 
+def _simple_bass(midi, ctx: TechniqueContext, feel: str) -> None:
+    """"simple_bass": an easy finger line of its own (not tied to the kick) —
+    root held on 1, octave on the "and" of 2, fifth on the "and" of 3, and one
+    passing note into a chord change."""
+    rng, clock, harm, bars = ctx.rng, _Clock(ctx), _Harmony(ctx), ctx.bar_count
+    notes: list[NoteEvent] = []
+    for bar in range(bars):
+        if feel == "intro" and bar < bars - 1:
+            continue
+        if feel == "outro" and bar == bars - 1:
+            p = _fits(harm.tonic + 36, _LO, _LO + 11)
+            notes.append(NoteEvent(pitch=p, start=clock.t(bar, 0), end=clock.t(bar, 0) + clock.bar_len, velocity=98))
+            continue
+        nxt_pc, _ = harm.at(min(bar + 1.0, bars - 1e-6))
+        changes = bar + 1 < bars and harm.at(bar + 0.99)[0] != nxt_pc
+        for step, length, deg, vel in ((0, 5, 0, 98), (6, 2, 12, 84), (10, 4, 7, 88)):
+            root_pc, quality = harm.at(bar + step / clock.steps)
+            root = _fits(root_pc + 36, _LO, _LO + 11)
+            pitch = root + (6 if deg == 7 and quality == "dim" else deg)
+            s, v = _human(rng, clock.t(bar, step), vel, ms=4.0, vel_jitter=3.0)
+            notes.append(NoteEvent(pitch=pitch, start=s, end=s + clock.step_len * length * 0.9, velocity=v))
+        if changes:
+            target = _fits(nxt_pc + 36, _LO, _LO + 11)
+            s, v = _human(rng, clock.t(bar, 15), 84, ms=2.5, vel_jitter=3.0)
+            notes.append(NoteEvent(pitch=target - 1, start=s, end=s + clock.step_len * 0.85, velocity=v))
+    for bar, steps_ in hit_steps(ctx, clock).items():
+        for st in steps_:
+            root_pc, _ = harm.at(bar + st / clock.steps)
+            t0 = clock.t(bar, st)
+            notes = [n for n in notes if not (t0 - 0.02 <= n.start < t0 + clock.step_len * 2)]
+            notes.append(NoteEvent(pitch=_fits(root_pc + 36, _LO, _LO + 11), start=t0, end=t0 + clock.step_len * 3, velocity=110))
+    _emit(midi, ctx, notes, name="Bass", program=33)
+
+
 def _calm_rhodes(midi, ctx: TechniqueContext, feel: str) -> None:
     rng, clock, harm, bars = ctx.rng, _Clock(ctx), _Harmony(ctx), ctx.bar_count
     notes: list[NoteEvent] = []
@@ -433,6 +467,8 @@ _LO, _HI = 31, 55
 def _bass(midi, ctx: TechniqueContext, feel: str) -> None:
     if "pocket_bass" in _arrangement(ctx):
         return _pocket_bass(midi, ctx, feel)
+    if "simple_bass" in _arrangement(ctx):
+        return _simple_bass(midi, ctx, feel)
     if _calm(ctx, "bass"):
         return _calm_bass(midi, ctx, feel)
     rng = ctx.rng
