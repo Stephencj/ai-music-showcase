@@ -83,6 +83,26 @@ class _Harmony:
         return any(abs(ev.start_bar - bar_pos) < 1e-6 for ev in self.events)
 
 
+def chord_tones(root_pc: int, quality: str) -> set[int]:
+    """Pitch classes the comping voices hold: the root and the rootless voicing."""
+    return {root_pc % 12} | {(root_pc + iv) % 12 for iv in _VOICINGS.get(quality, _VOICINGS["min7"])}
+
+
+def fit_to_chord(pitch: int, root_pc: int, quality: str, pool: list[int], prefer_up: bool = True) -> int:
+    """Move a melody note off a half-step rub with the chord underneath.
+
+    A note a semitone from one of the chord's held tones (and not one itself)
+    is the harsh "avoid note"; it moves to the nearest chord tone in ``pool``,
+    breaking ties in the melody's direction. Other notes stay as written.
+    """
+    tones = chord_tones(root_pc, quality)
+    pc = pitch % 12
+    if pc in tones or not any((pc - t) % 12 in (1, 11) for t in tones):
+        return pitch
+    cands = [p for p in pool if p % 12 in tones] or [pitch]
+    return min(cands, key=lambda p: (abs(p - pitch), (p < pitch) if prefer_up else (p > pitch)))
+
+
 def _emit(midi, ctx: TechniqueContext, notes: list[NoteEvent], *,
           name: str, program: int, is_drum: bool = False) -> None:
     """Append notes to the routed instrument's track (or create it)."""

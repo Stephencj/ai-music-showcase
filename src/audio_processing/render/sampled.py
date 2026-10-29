@@ -55,6 +55,8 @@ class SampledInstrument:
     # Tone voicing applied to the raw stem before the mixer's family chain:
     # (kind, frequency Hz, gain dB) with kind "low_shelf" / "high_shelf" / "peak".
     eq: tuple[tuple[str, float, float], ...] = ()
+    # Measure each sample's real pitch and correct it (render/autotune.py).
+    auto_tune: bool = False
     # "sfz" plays the library at ``sfz``; "synth" renders a lead voice
     # (render/lead_voices.py: the built-in synth and/or sampled layers).
     engine: str = "sfz"
@@ -76,14 +78,17 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
     # Lead-voice layers only (render/lead_voices.py): no GM program maps here.
     SampledInstrument(
         id="trumpet_sus",
+        auto_tune=True,
         sfz="vsco2-ce/trumpet_sus.sfz",
     ),
     SampledInstrument(
         id="guitar_twang",
+        auto_tune=True,
         sfz="karoryfer.black-and-green-guitars/Programs/04-green_twang.sfz",
     ),
     SampledInstrument(
         id="guitar_staccato",
+        auto_tune=True,
         sfz="karoryfer.black-and-green-guitars/Programs/05-green_staccato.sfz",
     ),
     SampledInstrument(
@@ -97,17 +102,20 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
     # scripts/setup/make_brass_sfz.py.
     SampledInstrument(
         id="horn_section",
+        auto_tune=True,
         sfz="vsco2-ce/horns_stac.sfz",
         programs=(61,),                       # Brass Section
         eq=(("peak", 300.0, -2.0), ("high_shelf", 4000.0, 2.5)),
     ),
     SampledInstrument(
         id="trumpet",
+        auto_tune=True,
         sfz="vsco2-ce/trumpet_stac.sfz",
         programs=(56, 59),                    # Trumpet, Muted Trumpet
     ),
     SampledInstrument(
         id="trombone",
+        auto_tune=True,
         sfz="vsco2-ce/trombone_stac.sfz",
         programs=(57,),
     ),
@@ -247,6 +255,7 @@ class SampledRenderer:
         self.root = root or instrument_dir()
         self.seed = seed
         self.lead_patch = lead_patch
+        self._sample_tuner = None
         self._fluid: Optional[FluidSynthRenderer] = None
         self._loaded: dict[str, SfzInstrument] = {}
 
@@ -257,11 +266,21 @@ class SampledRenderer:
         self.close()
 
     def close(self) -> None:
+        if self._sample_tuner is not None:
+            self._sample_tuner.save()
         if self._fluid is not None:
             self._fluid.close()
             self._fluid = None
         self._loaded.clear()
         gc.collect()
+
+    def _tuner(self, inst: Optional[SampledInstrument]):
+        if inst is None or not inst.auto_tune:
+            return None
+        if self._sample_tuner is None:
+            from .autotune import SampleTuner
+            self._sample_tuner = SampleTuner(self.root / ".tuning.json")
+        return self._sample_tuner.cents
 
     def _fluid_renderer(self) -> FluidSynthRenderer:
         if self._fluid is None:
@@ -308,8 +327,9 @@ class SampledRenderer:
                 continue
             for region in inst.regions:
                 region.seq_counter = 0
-            parts.append(SfzRenderer(inst, self.sample_rate, cache=SampleCache(),
-                                     seed=self.seed + index).render(chosen))
+            spec = next((i for i in SAMPLED_INSTRUMENTS if i.engine == "sfz" and self._loaded.get(i.id) is inst), None)
+            parts.append(SfzRenderer(inst, self.sample_rate, cache=SampleCache(), seed=self.seed + index,
+                                     sample_tune=self._tuner(spec)).render(chosen))
         if not parts:
             return None
         n = max(p.shape[1] for p in parts)
@@ -366,8 +386,8 @@ class SampledRenderer:
                 sfz = self._instrument(inst)
                 for region in sfz.regions:
                     region.seq_counter = 0
-                audio = SfzRenderer(sfz, self.sample_rate, cache=SampleCache(),
-                                    seed=self.seed + index).render(notes)
+                audio = SfzRenderer(sfz, self.sample_rate, cache=SampleCache(), seed=self.seed + index,
+                                    sample_tune=self._tuner(inst)).render(notes)
             if inst.eq and audio.size:
                 audio = _voice_eq(audio, inst.eq, self.sample_rate)
             peak = float(np.abs(audio).max()) if audio.size else 0.0

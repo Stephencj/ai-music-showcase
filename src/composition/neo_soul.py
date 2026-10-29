@@ -24,6 +24,7 @@ from src.daw_integration.generic.midi_export import NoteEvent
 
 from .builtins import _register
 from .fusion import (
+    chord_tones, fit_to_chord,
     ALL_ROLES, CLOSED_HAT, CRASH, KICK, OPEN_HAT, SNARE, STICK, TOM_HI, TOM_LO, TOM_MID,
     _SEVENTH, _VOICINGS, _Clock, _Harmony, _emit, _fits, _human, _scale_pitches, _voice,
 )
@@ -312,11 +313,13 @@ def _lead(midi, ctx: TechniqueContext, feel: str) -> None:
                 break
             i_cur = int(np.clip(i_cur + move, 0, len(pool) - 1))
             pitch = pool[i_cur]
+            root_pc, quality = harm.at(bar + (step % clock.steps) / clock.steps)
             if length >= 4:
-                root_pc, quality = harm.at(bar + (step % clock.steps) / clock.steps)
-                tones = {root_pc % 12} | {(root_pc + iv) % 12 for iv in _VOICINGS.get(quality, _VOICINGS["min7"])}
+                tones = chord_tones(root_pc, quality)
                 pitch = min((p for p in pool if p % 12 in tones), key=lambda p: abs(p - pitch), default=pitch)
-                i_cur = pool.index(pitch) if pitch in pool else i_cur
+            else:
+                pitch = fit_to_chord(pitch, root_pc, quality, pool, prefer_up=move >= 0)
+            i_cur = pool.index(pitch) if pitch in pool else i_cur
             start = clock.t(p_bar, step) + 0.01                   # a touch behind, relaxed
             vel = 84 + (6 if feel in HIGH_ROLES else 0) - (6 if length == 1 else 0)
             if slide:

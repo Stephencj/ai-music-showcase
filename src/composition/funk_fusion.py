@@ -26,6 +26,7 @@ from src.daw_integration.generic.midi_export import NoteEvent
 
 from .builtins import _register
 from .fusion import (
+    chord_tones, fit_to_chord,
     ALL_ROLES, CLOSED_HAT, CRASH, KICK, OPEN_HAT, PEDAL_HAT, RIDE, SNARE, STICK,
     TOM_HI, TOM_LO, TOM_MID, _SEVENTH, _VOICINGS, _Clock, _Harmony, _emit,
     _fits, _human, _scale_pitches, _voice,
@@ -541,10 +542,10 @@ def _rhodes(midi, ctx: TechniqueContext, feel: str) -> None:
     notes: list[NoteEvent] = []
     previous: Optional[list[int]] = None
 
-    def chord(bar, step, length, vel, pos):
+    def chord(bar, step, length, vel, pos, quality_override=None):
         nonlocal previous
         root_pc, quality = harm.at(pos)
-        voicing = _voice(root_pc, quality, previous)
+        voicing = _voice(root_pc, quality_override or quality, previous)
         previous = voicing
         start = clock.t(bar, step)
         for p in voicing:
@@ -553,7 +554,8 @@ def _rhodes(midi, ctx: TechniqueContext, feel: str) -> None:
 
     for bar in range(bars):
         if feel == "outro" and bar == bars - 1:
-            chord(bar, 0, clock.steps, 96, float(bar))
+            # End on a clean 6/9 tonic: no major 7th rubbing the melody's final note.
+            chord(bar, 0, clock.steps, 96, float(bar), quality_override="maj")
             continue
         if bar in accents:
             for step in accents[bar]:
@@ -629,7 +631,12 @@ def _lead_run(ctx: TechniqueContext, clock: "_Clock", harm: "_Harmony", bar: int
     first = max(0, top - (len(_RUN) - 1))
     notes = []
     for i, (step, length) in enumerate(_RUN):
-        pitch = pool[min(first + i, top)]
+        root_pc, quality = harm.at(bar + step / clock.steps)
+        pitch = fit_to_chord(pool[min(first + i, top)], root_pc, quality, pool)
+        if notes and pitch <= notes[-1].pitch:          # keep the run rising
+            higher = [p for p in pool if p > notes[-1].pitch
+                      and fit_to_chord(p, root_pc, quality, pool) == p]
+            pitch = higher[0] if higher else notes[-1].pitch + 1
         start = clock.t(bar, step)
         s, v = _human(rng, start, 88 + 24 * i / (len(_RUN) - 1), ms=2.5, vel_jitter=3.0)
         gate = clock.step_len * length * (0.85 if synth else 0.92)
@@ -758,11 +765,14 @@ def _sax(midi, ctx: TechniqueContext, feel: str) -> None:
                 i_cur = int(np.clip(i_cur + move, 0, len(pool) - 1))
             pitch = pool[i_cur]
             pos = bar + (step % clock.steps) / clock.steps
+            root_pc, quality = harm.at(pos)
             if length >= 3:
-                root_pc, quality = harm.at(pos)
-                tones = {root_pc % 12} | {(root_pc + iv) % 12 for iv in _VOICINGS.get(quality, _VOICINGS["7"])}
+                tones = chord_tones(root_pc, quality)
                 pitch = min((p for p in pool if p % 12 in tones), key=lambda p: abs(p - pitch), default=pitch)
-                i_cur = pool.index(pitch) if pitch in pool else i_cur
+            else:
+                pitch = fit_to_chord(pitch, root_pc, quality, pool,
+                                     prefer_up=not (isinstance(move, int) and move < 0))
+            i_cur = pool.index(pitch) if pitch in pool else i_cur
             start = clock.t(p_bar, step)
             vel = 96 + (8 if feel in HIGH_ROLES else 0) - (6 if length == 1 else 0)
             if grace:

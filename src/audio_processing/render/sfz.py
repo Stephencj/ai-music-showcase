@@ -453,11 +453,13 @@ class SfzRenderer:
     """Render notes through one SFZ instrument to a stereo buffer."""
 
     def __init__(self, instrument: SfzInstrument, sample_rate: int = 44100, *,
-                 cache: Optional[SampleCache] = None, seed: int = 1) -> None:
+                 cache: Optional[SampleCache] = None, seed: int = 1, sample_tune=None) -> None:
         self.inst = instrument
         self.sr = sample_rate
         self.cache = cache or SampleCache()
         self.rng = np.random.default_rng(seed)
+        # Optional (path, sample, keycenter) -> cents sharp, corrected per note.
+        self.sample_tune = sample_tune
 
     # -- modulation helpers -------------------------------------------------
 
@@ -613,6 +615,8 @@ class SfzRenderer:
         semis = (key - r.keycenter) * r.f("pitch_keytrack", 100.0) / 100.0
         semis += r.f("transpose", 0.0)
         cents = r.f("tune", 0.0) + r.f("pitch", 0.0) + self._cc_sum(r, "tune_cc") + self._cc_sum(r, "pitch_oncc")
+        if self.sample_tune is not None and sample is not None and r.sample_path is not None:
+            cents -= self.sample_tune(r.sample_path, sample, r.keycenter)
         cents += r.f("pitch_veltrack", 0.0) * vel / 127.0
         if "pitch_random" in r.op:
             cents += (float(self.rng.random()) * 2 - 1) * r.f("pitch_random")
