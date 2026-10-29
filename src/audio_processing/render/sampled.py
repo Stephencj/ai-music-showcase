@@ -184,13 +184,25 @@ def _voice_eq(audio: np.ndarray, eq, sample_rate: int) -> np.ndarray:
 
 
 def _amp(audio: np.ndarray, drive_db: float, sample_rate: int) -> np.ndarray:
-    """A small guitar amp: drive, then a speaker-cab roll-off."""
+    """A smooth fusion overdrive, not a rock fuzz: the guitar is brought up to
+    full level first (the samples are quiet, so the drive would barely bite),
+    a mid hump and low cut go in before the clipping (the classic
+    overdrive-pedal voicing that keeps it vocal and tight), a compressor adds
+    sustain, then a speaker roll-off and a touch of chorus."""
     import pedalboard as pdb
+    peak = float(np.abs(audio).max())
+    if peak > 0:
+        audio = audio / peak
     board = pdb.Pedalboard([
-        pdb.HighpassFilter(cutoff_frequency_hz=90.0),
+        pdb.HighpassFilter(cutoff_frequency_hz=140.0),
+        pdb.PeakFilter(cutoff_frequency_hz=850.0, gain_db=6.0, q=0.7),
+        pdb.Compressor(threshold_db=-18.0, ratio=4.0, attack_ms=5.0, release_ms=120.0),
+        pdb.Gain(gain_db=6.0),
         pdb.Distortion(drive_db=drive_db),
-        pdb.PeakFilter(cutoff_frequency_hz=1800.0, gain_db=2.0, q=0.9),
-        pdb.LowpassFilter(cutoff_frequency_hz=5200.0),
+        pdb.PeakFilter(cutoff_frequency_hz=300.0, gain_db=-2.0, q=0.8),
+        pdb.PeakFilter(cutoff_frequency_hz=2400.0, gain_db=2.0, q=1.0),
+        pdb.LowpassFilter(cutoff_frequency_hz=4600.0),
+        pdb.Chorus(rate_hz=0.8, depth=0.12, centre_delay_ms=7.0, feedback=0.0, mix=0.18),
     ])
     out = board(audio.T.copy(), sample_rate=sample_rate)
     return np.ascontiguousarray(np.asarray(out, dtype=np.float32).T)

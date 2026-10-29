@@ -293,10 +293,26 @@ class LeadPatchTest(unittest.TestCase):
 class LeadVoiceTest(unittest.TestCase):
     def test_voices(self):
         from src.audio_processing.render.lead_voices import LEAD_VOICES, voice
-        self.assertTrue({"punch", "sonic", "ewi", "layered", "horns", "trumpet", "guitar"} <= set(LEAD_VOICES))
+        self.assertTrue({"punch", "sonic", "ewi", "layered", "horns", "trumpet", "guitar",
+                         "trumpet_guitar"} <= set(LEAD_VOICES))
+        blend = {(l.sfz, l.drive_db > 0) for l in LEAD_VOICES["trumpet_guitar"].layers}
+        self.assertEqual(blend, {("trumpet_sus", False), ("guitar_twang", True)})
         self.assertIs(voice("sonic"), voice("punch"))                # the saved synth
         self.assertIs(voice(None), voice("punch"))
         self.assertIs(voice("nope"), voice("punch"))
+
+    def test_fusion_overdrive_saturates_without_turning_to_fuzz(self):
+        sr = 44100
+        t = np.arange(sr) / sr
+        quiet = np.vstack([0.1 * np.sin(2 * np.pi * 220 * t) * np.exp(-2 * t)] * 2).astype(np.float32)
+        out = sampled._amp(quiet, 16.0, sr).mean(axis=0)[2000:30000]
+        crest = 20 * np.log10(np.abs(out).max() / np.sqrt((out ** 2).mean()))
+        spec = np.abs(np.fft.rfft(out * np.hanning(len(out))))
+        freqs = np.fft.rfftfreq(len(out), 1 / sr)
+        fund = spec[(freqs > 210) & (freqs < 230)].max()
+        third = spec[(freqs > 650) & (freqs < 670)].max()
+        self.assertGreater(third / fund, 0.05)        # it really distorts, even from a quiet sample
+        self.assertGreater(crest, 4.0)                # but isn't squared off into fuzz
 
     def test_horn_voice_plays_lower_than_the_synth(self):
         def lead_median(voice_name):

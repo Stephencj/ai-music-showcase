@@ -34,6 +34,8 @@ class LeadVoice:
     gain_db: float = 0.0          # level-matches voices (sampled ones are peakier)
 
 
+FUSION_DRIVE = 16.0      # dB into the overdrive (see sampled._amp): singing, not fuzz
+
 _PUNCH = LeadVoice("Punchy synth (the \"Sonic\" synth)", (LeadLayer("synth", "punch"),))
 
 LEAD_VOICES: dict[str, LeadVoice] = {
@@ -54,9 +56,15 @@ LEAD_VOICES: dict[str, LeadVoice] = {
     "trumpet": LeadVoice("Solo trumpet", (
         LeadLayer("sfz", sfz="trumpet_sus", sfz_short="trumpet"),
     ), register="horn", gain_db=6.5),
-    "guitar": LeadVoice("Electric guitar (Gretsch, driven)", (
-        LeadLayer("sfz", sfz="guitar_twang", sfz_short="guitar_staccato", drive_db=14.0),
-    ), register="guitar", gain_db=7.0),
+    "guitar": LeadVoice("Electric guitar (Gretsch, fusion overdrive)", (
+        LeadLayer("sfz", sfz="guitar_twang", sfz_short="guitar_staccato", drive_db=FUSION_DRIVE),
+    ), register="guitar", gain_db=2.5),
+    # Trumpet and overdriven guitar in unison: the horn's attack and body, the
+    # guitar's singing sustain.
+    "trumpet_guitar": LeadVoice("Trumpet + overdriven guitar in unison", (
+        LeadLayer("sfz", sfz="trumpet_sus", sfz_short="trumpet"),
+        LeadLayer("sfz", sfz="guitar_twang", sfz_short="guitar_staccato", drive_db=FUSION_DRIVE, db=-1.5),
+    ), register="horn", gain_db=3.5),
 }
 
 DEFAULT_VOICE = "punch"
