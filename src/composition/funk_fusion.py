@@ -790,7 +790,9 @@ def _seventies_hits(ctx, clock, harm, feel, part, rng) -> list[NoteEvent]:
             s, v = _human(rng, clock.t(bar, st), 122, ms=1.0, vel_jitter=1.0)
             for o in octaves:
                 out.append(NoteEvent(pitch=top + o, start=s, end=s + clock.step_len * 2 * 0.85, velocity=v))
-    if feel == "outro":
+    if feel == "outro" and ctx.hits:
+        # The final hit only when the horns have been hitting all along: with
+        # no hits they're silent everywhere else, so they don't play the end.
         t0 = clock.t(ctx.bar_count - 1, 0)
         top = unison_pitch(harm.tonic, "maj", 72, 79)
         falloff = "no_falloff" not in _arrangement(ctx)

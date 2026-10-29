@@ -682,17 +682,24 @@ class HornBedTest(unittest.TestCase):
 
 
 class NoFalloffTest(unittest.TestCase):
-    def _ending(self, arrangement):
+    def _ending(self, arrangement, hits=(1.0,)):
         td = tempfile.TemporaryDirectory()
         try:
             secs = build_sections(GENRE, ["verse", "outro"], None, {"verse": {"bars": 2}, "outro": {"bars": 2}})
             res = compose_song(genre=GENRE, sections=secs, seed=5, tempo=120, arrangement=arrangement,
-                               enabled_instruments=tuple(STYLES[GENRE].default_instruments),
+                               hits=list(hits), enabled_instruments=tuple(STYLES[GENRE].default_instruments),
                                output_dir=Path(td.name), skip_audio=True)
             tracks = {i.name: i for i in pretty_midi.PrettyMIDI(res["midi_path"]).instruments}
         finally:
             td.cleanup()
-        return [n for n in tracks["Trumpet"].notes if n.start >= 6.0 - 0.05]
+        self.tracks = tracks
+        return [n for n in tracks["Trumpet"].notes if n.start >= 6.0 - 0.05] if "Trumpet" in tracks else []
+
+    def test_without_hits_the_horns_never_play_not_even_the_end(self):
+        self.assertEqual(self._ending("hits_only", hits=()), [])
+        for name in ("Trumpet", "Trombone", "Synth Lead", "Lead", "Horns"):
+            self.assertFalse(self.tracks[name].notes if name in self.tracks else [], name)
+        self.assertTrue(self.tracks["String Section"].notes if "String Section" in self.tracks else True)
 
     def test_the_ending_can_skip_the_fall_off(self):
         self.assertGreater(len(self._ending("hits_only")), 1)          # hold + the fall-off gliss
