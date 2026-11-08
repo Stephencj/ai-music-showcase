@@ -58,15 +58,27 @@ git clone --depth 1 --filter=blob:none --sparse https://github.com/sgossner/VCSL
 python -I ../../scripts/setup/make_christmas_sfz.py .
 ```
 
+Acoustic guitars from FreePats (about 30 MB; the nylon archive is 7z with a
+filter macOS `tar` can't read, so use 7-Zip, e.g. `brew install sevenzip`):
+
+```bash
+mkdir freepats-nylon && curl -L -o freepats-nylon/a.7z \
+    https://freepats.zenvoid.org/Guitar/SpanishClassicalGuitar/SpanishClassicalGuitar-SFZ-20190618.7z \
+    && (cd freepats-nylon && 7zz x a.7z && rm a.7z)
+mkdir freepats-steel && curl -L -o freepats-steel/a.tar.xz \
+    https://freepats.zenvoid.org/Guitar/FSS-SteelStringGuitar/FSS-SteelStringGuitar-SFZ-20200521.tar.xz \
+    && (cd freepats-steel && tar -xJf a.tar.xz && rm a.tar.xz)
+```
+
 `vcsl-extra` (about 160 MB, CC0) holds a real tenor sax (VCSL "Brett" tenor:
 vibrato takes for melodies, two-layer straight sustains for section parts;
 without it the tenor plays the alto samples) and the quiet pipe organ's own
 pedal rank for the choir style's pedal bass.
 
 The muted trumpet uses the trumpet folder already downloaded for the horns
-(`vsco2-ce/Brass/Trumpet/straightM-sus`). Celesta, nylon guitar, acoustic
-guitar and the choir "aahs" have no free recorded library here yet, so they
-play the General MIDI soundfont's patches (MuseScore_General, MIT).
+(`vsco2-ce/Brass/Trumpet/straightM-sus`). Celesta, the choir "aahs" and the
+brush kit have no free recorded library here yet, so they play the General
+MIDI soundfont's patches (MuseScore_General, MIT).
 
 About 4.9 GB on disk in all. A render loads only the samples its notes use.
 
@@ -85,6 +97,8 @@ About 4.9 GB on disk in all. A render loads only the samples its notes use.
 | Flute (73), clarinet (71), oboe (68), church organ (19) | VSCO 2 CE | CC0 |
 | Muted trumpets (59), cello (42) | VSCO 2 CE (straight-mute sustains; cello section) | CC0 |
 | Upright bass (32) | Karoryfer Sneakybass (1958 Otto Rubner double bass, pizzicato) | CC0 |
+| Nylon guitar (24) | FreePats Spanish Classical Guitar | CC0 |
+| Steel-string guitar (25) | FreePats FSS Steel-String (FlameStudios samples) | GPL 3 with FreePats' exception: a composition using the sounds is not covered by the GPL |
 | Tenor sax (66), organ pedal bass (19, tracks named "pedal") | VCSL (Versilian Studios) | CC0 |
 
 Music made with any of them can be used commercially. Don't commit or ship

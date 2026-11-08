@@ -100,6 +100,16 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
     SampledInstrument(id="flute", sfz="vsco2-ce-xmas/flute_sus.sfz", programs=(73,), auto_tune=True),
     SampledInstrument(id="clarinet", sfz="vsco2-ce-xmas/clarinet_sus.sfz", programs=(71,), auto_tune=True),
     SampledInstrument(id="oboe", sfz="vsco2-ce-xmas/oboe_sus.sfz", programs=(68,), auto_tune=True),
+    # Acoustic guitars (FreePats): a Spanish classical guitar (CC0) and the
+    # FSS steel-string (GPL with FreePats' exception: music made with it
+    # isn't covered). Both mapped at sounding pitch.
+    SampledInstrument(id="nylon_guitar",
+                      sfz="freepats-nylon/SpanishClassicalGuitar-SFZ-20190618/SpanishClassicalGuitar-20190618.sfz",
+                      programs=(24,), auto_tune=True),
+    SampledInstrument(id="steel_guitar",
+                      sfz="freepats-steel/FSS-SteelStringGuitar-SFZ-20200521/FSS-SteelStringGuitar-20200521.sfz",
+                      programs=(25,), auto_tune=True,
+                      eq=(("high_shelf", 6000.0, -2.5),)),   # bright strums, kept under the tune
     # The pedal bass plays the same quiet organ's own pedal rank (VCSL).
     SampledInstrument(id="organ_pedal", sfz="vcsl-extra/organ_pedal_quiet.sfz", programs=(19,), names=("pedal",)),
     SampledInstrument(id="church_organ", sfz="vsco2-ce-xmas/organ_quiet.sfz", programs=(19,)),
