@@ -137,7 +137,7 @@ export function prettyChange(c: string): string {
 // Timeline lanes: the band grouped into parts, and what each part plays in a
 // section (from the plan's arrangement variants and section_overrides).
 // ---------------------------------------------------------------------------
-export type LaneId = "drums" | "bass" | "keys" | "lead" | "strings" | "horns" | "vocals";
+export type LaneId = "drums" | "bass" | "keys" | "lead" | "strings" | "horns" | "choir" | "vocals";
 
 export const LANES: { id: LaneId; name: string; hue: string; hueOn: string }[] = [
   { id: "drums", name: "Drums", hue: "#3b3570", hueOn: "#4a3f8c" },
@@ -146,10 +146,13 @@ export const LANES: { id: LaneId; name: string; hue: string; hueOn: string }[] =
   { id: "lead", name: "Lead", hue: "#2f4a3f", hueOn: "#365a4b" },
   { id: "strings", name: "Strings", hue: "#3f4a2a", hueOn: "#4f5e2f" },
   { id: "horns", name: "Horns", hue: "#5e3f1f", hueOn: "#6e4a24" },
+  { id: "choir", name: "Choir", hue: "#2f3f5e", hueOn: "#374a70" },
   { id: "vocals", name: "Vocals", hue: "#4f2f3a", hueOn: "#603846" },
 ];
 
-const LEAD_IDS = new Set(["synth_lead", "lead_guitar"]);
+// Instruments with a lane of their own, whatever their family (the choir
+// "aah" pad is a chord_lead instrument, but it's a part of its own).
+const OWN_LANE: Record<string, LaneId> = { synth_lead: "lead", lead_guitar: "lead", choir: "choir" };
 const FAMILY_LANE: Record<string, LaneId> = {
   rhythm: "drums", bass: "bass", chord_lead: "keys", brass: "horns",
   woodwind: "horns", strings: "strings", vocal: "vocals",
@@ -159,7 +162,7 @@ const FAMILY_LANE: Record<string, LaneId> = {
 export function laneMap(families: Family[]): Record<string, LaneId> {
   const m: Record<string, LaneId> = {};
   for (const f of families) {
-    for (const i of f.instruments) m[i.id] = LEAD_IDS.has(i.id) ? "lead" : (FAMILY_LANE[f.family] ?? "keys");
+    for (const i of f.instruments) m[i.id] = OWN_LANE[i.id] ?? FAMILY_LANE[f.family] ?? "keys";
   }
   return m;
 }
