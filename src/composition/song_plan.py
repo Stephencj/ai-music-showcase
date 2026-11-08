@@ -406,12 +406,39 @@ def describe_changes(old: dict, new: dict) -> list[str]:
             out.append("Band: " + ", ".join([f"+{v}" for v in add] + [f"−{v}" for v in rem]))
         elif k == "hits":
             out.append("No stabs" if b == [] else f"Hits: {len(b or [])}")
+        elif k == "section_overrides":
+            out += _section_changes(a or {}, b or {})
         elif b is None:
             out.append(f"{k}: back to default")
         elif isinstance(b, (dict, list)):
             out.append(f"{k}: {json.dumps(b)}")
         else:
             out.append(f"{k}: {a if a is not None else 'default'} → {b}")
+    return out
+
+
+def _section_changes(old: dict, new: dict) -> list[str]:
+    """One line per section whose override changed, e.g. "Chorus: energy
+    1 → 1.25" or "Chorus arrangement: +soar, −hits_only"."""
+    out: list[str] = []
+    for role in dict.fromkeys([*old, *new]):
+        a, b = old.get(role) or {}, new.get(role) or {}
+        bits = []
+        for k in dict.fromkeys([*a, *b]):
+            if a.get(k) == b.get(k):
+                continue
+            if k == "arrangement":
+                va, vb = split_variants(a.get(k)), split_variants(b.get(k))
+                ch = [f"+{v}" for v in vb if v not in va] + [f"−{v}" for v in va if v not in vb]
+                bits.append("arrangement " + (", ".join(ch) if b.get(k) is not None else "back to the song's"))
+            elif b.get(k) is None:
+                bits.append(f"{k} back to default")
+            elif isinstance(b.get(k), (dict, list)):
+                bits.append(f"{k} {json.dumps(b[k])}")
+            else:
+                bits.append(f"{k} {a.get(k) if a.get(k) is not None else 'default'} → {b[k]}")
+        if bits:
+            out.append(f"{role.capitalize()}: " + "; ".join(bits))
     return out
 
 
@@ -461,6 +488,15 @@ def _faster(plan: dict) -> Optional[str]:
     return None
 
 
+def _bigger_section(role: str) -> Op:
+    def op(plan: dict) -> Optional[str]:
+        so = plan.setdefault("section_overrides", {})
+        o = so.setdefault(role, {})
+        o["energy"] = min(1.5, round(float(o.get("energy") or 1.0) + 0.25, 2))
+        return None
+    return op
+
+
 def _no_stabs(plan: dict) -> Optional[str]:
     plan["hits"] = []
     return _variants(remove=("horn_bed",))(plan)
@@ -480,7 +516,8 @@ def _drop_trumpet(plan: dict) -> Optional[str]:
 # (regex, op, what it means). Order matters only for readability; every match
 # applies. The same phrases are documented in song_plan_guide.md.
 FEEDBACK_RULES: list[tuple[str, Op, str]] = [
-    (r"bass\b.{0,30}\b(too much|too busy|busy|simpler|calm(er)?|less)|(don'?t|not) follow(ing)? the drums",
+    (r"bass\b.{0,30}\b(too much|too busy|busy|simpler|calm(er)?|less)|(don'?t|not) follow(ing)? the drums"
+     r"|\b(simpler|calmer|less busy) bass",
      _bass_down, "simpler bass"),
     (r"bass\b.{0,30}\b(flare|life)|occasional flare", _variants(add=("bass_flare",)), "bass flares"),
     (r"too many fills|fewer fills|drums?\b.{0,20}\b(too busy|busy|too much)|chad smith|ghost notes",
@@ -493,6 +530,8 @@ FEEDBACK_RULES: list[tuple[str, Op, str]] = [
     (r"\bbackground\b|lower (the )?volume|quieter|under (the )?(voice[\s-]?over|narration|video)|bed\b",
      _set(target_lufs=-25.0), "background level"),
     (r"too fast|slower|slow (it|this) down", _slower, "slower"),
+    (r"(bigger|louder|lift the) chorus|chorus\b.{0,20}\b(bigger|lift|more energy)", _bigger_section("chorus"),
+     "bigger chorus"),
     (r"too slow|faster|speed (it|this) up", _faster, "faster"),
     (r"\bsoar|\bstrings?\b|bigger without", _variants(add=("soar",)), "soaring strings"),
     (r"fall[\s-]?off|held (note|ending)|ending\b.{0,20}\b(silly|cute|comic)", _variants(add=("no_falloff",)),

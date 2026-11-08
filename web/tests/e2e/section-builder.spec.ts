@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { openCreateMode } from "./nav";
 
 /**
  * Section-by-section builder (Generate screen): per-section chord progression
@@ -9,14 +10,6 @@ import { test, expect } from "@playwright/test";
 
 type Page = import("@playwright/test").Page;
 
-async function tab(page: Page, name: RegExp) {
-  const btn = page.locator("nav.tabbar").getByRole("button", { name });
-  await expect(btn).toBeVisible();
-  await expect(async () => {
-    await btn.click();
-    await expect(btn).toHaveClass(/on/, { timeout: 1500 });
-  }).toPass({ timeout: 15000 });
-}
 
 /** Open the genre wheel and pick a genre by family + genre name. The wheel only
  *  renders the active family's genre buttons, so activate the family arc first. */
@@ -37,7 +30,7 @@ async function pickGenre(page: Page, family: RegExp, genre: RegExp) {
 
 test("per-section chord progression + instrument subset controls work", async ({ page }) => {
   await page.goto("/app/");
-  await tab(page, /Generate/);
+  await openCreateMode(page, "advanced");
 
   // Choose Rock (rock_anthem_full → has verse/chorus/bridge progression pools).
   await pickGenre(page, /Rock|Metal/, /^Rock$/);

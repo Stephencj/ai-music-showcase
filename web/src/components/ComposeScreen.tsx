@@ -70,9 +70,15 @@ let _currentAudio: HTMLAudioElement | null = null;
 export default function ComposeScreen({
   onEditInGenerate,
   active,
+  requestTimeline,
+  onTimelineConsumed,
 }: {
   onEditInGenerate: (spec: BlockSpec) => void;
   active?: boolean;
+  // A timeline handed over from the Create timeline's "Add block" (the song's
+  // section blocks with the chosen block inserted), loaded once.
+  requestTimeline?: { title: string; blocks: string[] } | null;
+  onTimelineConsumed?: () => void;
 }) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [timeline, setTimeline] = useState<TLItem[]>([]);
@@ -123,6 +129,17 @@ export default function ComposeScreen({
   // Re-pull the library when this tab becomes active so blocks generated/saved
   // in another tab show up (only the list refreshes — timeline/song are kept).
   useEffect(() => { if (active) refresh(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [active]);
+
+  useEffect(() => {
+    if (!requestTimeline) return;
+    counter.current = 0;
+    setSongTitle(requestTimeline.title);
+    setTimeline(requestTimeline.blocks.map((n) => ({ id: `${n}#${counter.current++}`, block_name: n, repeat: 1 })));
+    setRender(null);
+    refresh();
+    onTimelineConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestTimeline]);
 
   // timeline ops
   const add = (name: string) =>

@@ -208,3 +208,30 @@ def test_edit_style_answers():
     plan, _ = sp.normalize_plan(raw)
     assert "sax_tenor" in plan["instruments"] and "piano" not in plan["instruments"]
     assert "drum_kit" in plan["instruments"]
+
+
+# --- the Create screen's quick-change chips ------------------------------------
+@pytest.mark.parametrize("feedback,check", [
+    ("Quieter", lambda p: p["target_lufs"] == -25),
+    ("Simpler bass", lambda p: "simple_bass" in p["arrangement"] and "pocket_bass" not in p["arrangement"]),
+    ("Bigger chorus", lambda p: p["section_overrides"]["chorus"]["energy"] == 1.25),
+    ("Slower", lambda p: p["tempo"] < 120),
+])
+def test_quick_change_chips(feedback, check):
+    raw, fired = sp.rule_revise(BED, feedback)
+    plan, _ = sp.normalize_plan(raw, BED)
+    assert fired and check(plan), (feedback, plan)
+
+
+def test_bigger_chorus_twice_caps_and_reads_back():
+    p1, _ = sp.normalize_plan(sp.rule_revise(BED, "bigger chorus")[0], BED)
+    p2, _ = sp.normalize_plan(sp.rule_revise(p1, "bigger chorus")[0], p1)
+    assert p2["section_overrides"]["chorus"]["energy"] == 1.5
+    assert sp.describe_changes(p1, p2) == ["Chorus: energy 1.25 → 1.5"]
+
+
+def test_describe_changes_per_section_arrangement():
+    old = {"genre": FF, "section_overrides": {"chorus": {"arrangement": "hits_only"}}}
+    new = {"genre": FF, "section_overrides": {"chorus": {"arrangement": "hits_only,soar"},
+                                              "verse": {"energy": 0.7}}}
+    assert sp.describe_changes(old, new) == ["Chorus: arrangement +soar", "Verse: energy default → 0.7"]

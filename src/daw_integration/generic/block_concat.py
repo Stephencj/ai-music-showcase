@@ -385,7 +385,10 @@ def split_into_section_blocks(pm: pretty_midi.PrettyMIDI, sections: Iterable[dic
         base = f"{prefix}{label}".strip() if prefix else label
         name = base
         n = 1
-        while name in existing and not overwrite:
+        # Names can be taken by files the listing skips (a sidecar with no
+        # name, a half-deleted block), so check the files too.
+        while not overwrite and (name in existing or _b._yaml_path(name).exists()
+                                 or _b._midi_path(name).exists()):
             n += 1
             name = f"{base} {n}"
         try:

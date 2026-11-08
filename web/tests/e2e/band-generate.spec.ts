@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { openCreateMode } from "./nav";
 
 /**
  * Band-aware generation on the Generate screen: a quick inline band maker and
@@ -8,18 +9,10 @@ import { test, expect } from "@playwright/test";
 
 type Page = import("@playwright/test").Page;
 
-async function tab(page: Page, name: RegExp) {
-  const btn = page.locator("nav.tabbar").getByRole("button", { name });
-  await expect(btn).toBeVisible();
-  await expect(async () => {
-    await btn.click();
-    await expect(btn).toHaveClass(/on/, { timeout: 1500 });
-  }).toPass({ timeout: 15000 });
-}
 
 test("quick band maker: add members, set genres, band supersedes the Genre card", async ({ page }) => {
   await page.goto("/app/");
-  await tab(page, /Generate/);
+  await openCreateMode(page, "advanced");
 
   // Turn on band mode.
   await page.getByTestId("band-toggle").click();
@@ -58,7 +51,7 @@ test("load a saved band from the Band game populates the roster", async ({ page 
     }));
   });
   await page.goto("/app/");
-  await tab(page, /Generate/);
+  await openCreateMode(page, "advanced");
 
   await page.getByTestId("band-toggle").click();
   await page.getByTestId("band-load").click();

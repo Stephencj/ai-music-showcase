@@ -55,6 +55,30 @@ export const describeSong = (text: string, onMessage?: (m: string) => void) =>
 export const reviseSong = (plan: SongPlan, feedback: string, onMessage?: (m: string) => void) =>
   interpretJob("/api/revise", { plan, feedback }, onMessage);
 
+// A voice note → text (the gateway's speech-to-text, proxied by the server).
+export async function transcribe(blob: Blob): Promise<string> {
+  const ext = blob.type.includes("mp4") || blob.type.includes("aac") ? "m4a"
+    : blob.type.includes("ogg") ? "ogg" : blob.type.includes("wav") ? "wav" : "webm";
+  const fd = new FormData();
+  fd.append("file", blob, `note.${ext}`);
+  const r = await fetch(url("/api/transcribe"), { method: "POST", body: fd });
+  if (!r.ok) throw new Error((await r.text()) || r.statusText);
+  return ((await r.json()) as { text: string }).text;
+}
+
+// The song tools' option catalog (arrangement variants etc.), the same one
+// the MCP server and the local AI read.
+export interface VariantInfo { name: string; description: string; needs_instruments: string[] }
+export interface ArrangementOptions {
+  applies_to: string[];
+  variants: VariantInfo[];
+  exclusive?: string[][];
+  expands?: Record<string, string[]>;
+}
+export const describeOptions = () =>
+  jpost<{ ok: boolean; result: { arrangement_variants: ArrangementOptions } }>("/api/tools/describe_options", {})
+    .then((r) => r.result);
+
 export const generate = (body: GenerateBody) =>
   jpost<{ job_id: string }>("/api/generate", body);
 export const getJob = (id: string) => jget<Job>(`/api/jobs/${id}`);

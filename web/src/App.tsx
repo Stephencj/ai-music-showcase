@@ -1,13 +1,12 @@
 import { useState } from "react";
-import GenerateScreen from "./components/GenerateScreen";
-import ComposeScreen from "./components/ComposeScreen";
+import CreateScreen, { type CreateMode } from "./components/CreateScreen";
 import PracticeScreen from "./components/PracticeScreen";
 import BandScreen from "./components/BandScreen";
 import LibraryScreen from "./components/LibraryScreen";
 import type { BlockSpec } from "./types";
 import DressUpGallery from "./dressup/DressUpGallery";
 
-type Tab = "generate" | "compose" | "practice" | "band" | "library";
+type Tab = "create" | "library" | "practice" | "band";
 
 export default function App() {
   if (typeof location !== "undefined" && new URLSearchParams(location.search).has("dressupgallery")) {
@@ -18,59 +17,58 @@ export default function App() {
   const deepBlock = typeof location !== "undefined"
     ? new URLSearchParams(location.search).get("block")
     : null;
-  const [tab, setTab] = useState<Tab>(deepBlock ? "practice" : "generate");
+  const [tab, setTab] = useState<Tab>(deepBlock ? "practice" : "create");
+  // Create holds the song workspace (Session / Timeline) plus the full
+  // Generate form ("advanced") and the block builder ("blocks", ex-Compose).
+  const [createMode, setCreateMode] = useState<CreateMode>("session");
   const [editSpec, setEditSpec] = useState<BlockSpec | null>(null);
   const [practiceBlock, setPracticeBlock] = useState<string | null>(deepBlock);
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="logo">♪</div>
-        <div>
-          <h1>Music Producer</h1>
-          <div className="sub">Generate · Block · Compose</div>
-        </div>
-      </header>
+    <div className={"app" + (tab === "create" ? " app-create" : "")}>
+      {tab !== "create" && (
+        <header className="topbar">
+          <div className="logo">♪</div>
+          <div>
+            <h1>Music Producer</h1>
+            <div className="sub">Create · Library · Practice · Band</div>
+          </div>
+        </header>
+      )}
 
-      {/* All three screens stay mounted so switching tabs never loses your
+      {/* All screens stay mounted so switching tabs never loses your
           in-progress work; only the active one is shown. */}
-      <div className={"tab-pane" + (tab === "generate" ? "" : " hidden")}>
-        <GenerateScreen initialSpec={editSpec} onSpecConsumed={() => setEditSpec(null)} />
+      <div className={"tab-pane" + (tab === "create" ? "" : " hidden")}>
+        <CreateScreen active={tab === "create"} mode={createMode} setMode={setCreateMode}
+          editSpec={editSpec} onSpecConsumed={() => setEditSpec(null)}
+          onEditInGenerate={(spec) => { setEditSpec(spec); setCreateMode("advanced"); }} />
       </div>
-      <div className={"tab-pane" + (tab === "compose" ? "" : " hidden")}>
-        <ComposeScreen
-          active={tab === "compose"}
-          onEditInGenerate={(spec) => { setEditSpec(spec); setTab("generate"); }}
-        />
+      <div className={"tab-pane" + (tab === "library" ? "" : " hidden")}>
+        <LibraryScreen isActive={tab === "library"}
+          onOpen={(block) => { setPracticeBlock(block); setTab("practice"); }} />
       </div>
       <div className={"tab-pane" + (tab === "practice" ? "" : " hidden")}>
         <PracticeScreen isActive={tab === "practice"} requestBlock={practiceBlock}
           onBlockConsumed={() => setPracticeBlock(null)} />
       </div>
       <div className={"tab-pane" + (tab === "band" ? "" : " hidden")}>
-        <BandScreen isActive={tab === "band"} onWriteSong={() => setTab("generate")}
+        <BandScreen isActive={tab === "band"}
+          onWriteSong={() => { setCreateMode("advanced"); setTab("create"); }}
           onOpenPractice={(block) => { setPracticeBlock(block); setTab("practice"); }} />
-      </div>
-      <div className={"tab-pane" + (tab === "library" ? "" : " hidden")}>
-        <LibraryScreen isActive={tab === "library"}
-          onOpen={(block) => { setPracticeBlock(block); setTab("practice"); }} />
       </div>
 
       <nav className="tabbar">
-        <button className={tab === "generate" ? "on" : ""} onClick={() => setTab("generate")}>
-          <span className="ico">🎲</span>Generate
+        <button className={tab === "create" ? "on" : ""} onClick={() => setTab("create")}>
+          <span className="ico">✨</span>Create
         </button>
-        <button className={tab === "compose" ? "on" : ""} onClick={() => setTab("compose")}>
-          <span className="ico">🎬</span>Compose
+        <button className={tab === "library" ? "on" : ""} onClick={() => setTab("library")}>
+          <span className="ico">📚</span>Library
         </button>
         <button className={tab === "practice" ? "on" : ""} onClick={() => setTab("practice")}>
           <span className="ico">🎹</span>Practice
         </button>
         <button className={tab === "band" ? "on" : ""} onClick={() => setTab("band")}>
           <span className="ico">🎸</span>Band
-        </button>
-        <button className={tab === "library" ? "on" : ""} onClick={() => setTab("library")}>
-          <span className="ico">📚</span>Library
         </button>
       </nav>
     </div>

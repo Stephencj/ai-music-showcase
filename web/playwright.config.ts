@@ -1,4 +1,4 @@
-import { defineConfig } from "@playwright/test";
+import { defineConfig, devices } from "@playwright/test";
 
 /**
  * E2E tests run against the live FastAPI server, which serves the built
@@ -22,8 +22,20 @@ export default defineConfig({
     // controllerchange (PWA auto-update). In tests that reload resets the SPA
     // mid-flow; block the SW so navigation state is deterministic.
     serviceWorkers: "block",
+    actionTimeout: 30_000,    // a missing control fails fast instead of hanging the run
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { browserName: "chromium" } }],
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        browserName: "chromium",
+        // A fake microphone, so the voice-note path can be driven.
+        launchOptions: { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] },
+      },
+    },
+    // iPhone emulation on WebKit (the engine the iOS app's WKWebView runs).
+    { name: "iphone-webkit", use: { ...devices["iPhone 15 Pro"], serviceWorkers: "block" } },
+  ],
 });

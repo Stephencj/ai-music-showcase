@@ -56,3 +56,21 @@ Paste this into a Claude Code session in the repo:
 > then follow `params.system` as your instructions and answer `params.user`.
 > POST /api/ai/requests/{id}/answer with `{"answer": {"plan": {...}, "summary": "..."}}`.
 > Keep going until I say stop.
+
+## In the app: Create
+
+The web app's **Create** tab is built on these two calls. The Session view is
+a thread: your description → "Here's what I understood" + v1; plain-English
+feedback (or the quick chips: Quieter, Simpler bass, Bigger chorus, Slower) →
+"Changed N things" + the next version, always with v1's seed so only what you
+asked for changes. Versions can be compared A/B and saved to the library.
+The Timeline view shows the version's sections across and its parts down
+(what each part plays, from the arrangement variants and
+`section_overrides`); a section's option chips edit
+`section_overrides.<role>.arrangement` and "Regenerate" re-renders with the
+same seed. "Add block" splits the version into section blocks, inserts a
+saved block and opens it in Blocks. A voice note goes through
+`POST /api/transcribe` (the gateway's `/transcribe_upload`). The thread is
+kept in the browser (localStorage `aimusic.create.session`). The full
+Generate form ("Advanced form") and the block builder ("Blocks") are in
+Create's ⋯ menu.

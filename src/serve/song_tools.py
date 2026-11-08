@@ -49,6 +49,7 @@ from src.api.schemas import (
     TagsRequest,
     VideoScoreRequest,
 )
+from src.composition import song_plan
 from src.composition.funk_fusion import ARRANGEMENT_INSTRUMENTS, ARRANGEMENT_VARIANTS
 from src.daw_integration.generic import blocks as block_store
 from src.daw_integration.generic.styles import STYLES
@@ -367,6 +368,9 @@ def describe_options() -> dict:
             "how": "Comma-separated, combine freely, e.g. 'hits_only,calm_keys,simple_bass,brushes'. "
                    "Empty = the full energetic arrangement (slap bass, riffs, lead, stabs).",
             "bass_ladder": "calm_bass (simplest) < simple_bass < pocket_bass < default slap bass (busiest)",
+            # One variant per group (one per part); "calm" stands for its parts.
+            "exclusive": [list(g) for g in song_plan.engine_for("funk_fusion_full").exclusive],
+            "expands": {k: list(v) for k, v in song_plan.engine_for("funk_fusion_full").expands.items()},
             "variants": [{"name": n, "description": d, "needs_instruments": list(ARRANGEMENT_INSTRUMENTS.get(n, ()))}
                          for n, d in ARRANGEMENT_VARIANTS.items()],
         },

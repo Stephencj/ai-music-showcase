@@ -137,14 +137,15 @@ variant x, "−x" = remove it):
 
 | feedback | change |
 |---|---|
-| "bass is doing too much", "bass too busy", "don't follow the drums" | bass one step down the ladder: from pocket_bass (or the default) +`simple_bass` −`pocket_bass`; from simple_bass +`calm_bass` −`simple_bass` |
+| "bass is doing too much", "bass too busy", "simpler bass", "don't follow the drums" | bass one step down the ladder: from pocket_bass (or the default) +`simple_bass` −`pocket_bass`; from simple_bass +`calm_bass` −`simple_bass` |
 | "bass needs a little life", "calm but an occasional flare" | add `bass_flare` |
 | "too many fills", "drums too busy", "Chad Smith but jazzier", "more ghost notes" | +`pocket_drums` −`calm_drums` |
 | "drums too percussive", "softer drums" | `brushes` |
 | "no stabs", "remove the hits", "stabs feel out of place" | `hits: []` (and −`horn_bed`); keep `hits_only` |
 | "simpler", "less complex, more impactful", "just the hits" | `hits_only` |
 | "background", "lower the volume", "under the voiceover" | `target_lufs: -25` |
-| "too fast" | tempo down about 10–15 % |
+| "too fast", "slower" | tempo down about 10–15 % |
+| "bigger chorus" | `section_overrides.chorus.energy` up about 0.25 (max 1.5) |
 | "make it soar", "add strings", "bigger without slowing down" | `soar` |
 | "no fall-off", "ending is silly", "end on a held note" | `no_falloff` |
 | "no trumpet" | remove trumpet everywhere: `remove_instruments: ["trumpet"]`, a non-trumpet `lead_patch` (e.g. `guitar_stack`), +`no_falloff` |

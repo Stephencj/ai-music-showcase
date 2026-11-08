@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../api";
 import type {
-  BlockSpec, DescribeResult, Family, GenerateBody, GenreFamily, Job, JobResult, Preset, SongPlan,
+  BlockSpec, Family, GenerateBody, GenreFamily, Job, JobResult, Preset, SongPlan,
 } from "../types";
 import CircleOfFifths from "./CircleOfFifths";
 import PickerField from "./PickerField";
@@ -59,9 +59,15 @@ function overrideBadges(o: import("../types").SectionOverride | undefined): stri
 export default function GenerateScreen({
   initialSpec,
   onSpecConsumed,
+  initialPlan,
+  onPlanConsumed,
 }: {
   initialSpec?: BlockSpec | null;
   onSpecConsumed?: () => void;
+  // A song plan from the Create session ("Advanced form"): fills the form so
+  // it can be tweaked by hand. Its engine options ride along on Generate.
+  initialPlan?: SongPlan | null;
+  onPlanConsumed?: () => void;
 }) {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [genreFamilies, setGenreFamilies] = useState<GenreFamily[]>([]);   // genre wheel catalog
@@ -102,16 +108,9 @@ export default function GenerateScreen({
   const [jobId, setJobId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // Natural-language "Describe your song" box → a song plan that pre-fills
-  // the form (default), or composes immediately. "What should change?" then
-  // revises that plan from plain-English feedback and regenerates.
-  const [describeText, setDescribeText] = useState("");
-  const [describing, setDescribing] = useState(false);
-  const [described, setDescribed] = useState<DescribeResult | null>(null);
-  const [describeMsg, setDescribeMsg] = useState("");
-  const [describeErr, setDescribeErr] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState("");
-  const composeReq = useRef(false);
+  // The plan the form was filled from (Create → Advanced form), for the
+  // engine options that have no form controls.
+  const [plan, setPlan] = useState<SongPlan | null>(null);
 
   const [blockName, setBlockName] = useState("");
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -288,6 +287,15 @@ export default function GenerateScreen({
     setBandMembers((prev) => prev.filter((m) => m.id !== id));
   }
 
+  // A plan handed over from the Create session, once presets are loaded.
+  useEffect(() => {
+    if (!initialPlan || !presets.length) return;
+    setPlan(initialPlan);
+    applyPlan(initialPlan);
+    onPlanConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPlan, presets]);
+
   // Apply a song plan onto the form: seed the preset's defaults, then layer
   // the plan's explicit settings. A plan's instruments are the whole band.
   function applyPlan(pl: SongPlan) {
@@ -313,72 +321,12 @@ export default function GenerateScreen({
   // The plan's engine options (no form controls) while the form is still on
   // the plan's genre.
   function planExtras(): Partial<SongPlan> {
-    const pl = described?.plan;
+    const pl = plan;
     if (!pl || !preset || pl.genre !== preset.id) return {};
     const { arrangement, lead_patch, hits, hit_style, target_lufs } = pl;
     return Object.fromEntries(Object.entries({ arrangement, lead_patch, hits, hit_style, target_lufs })
       .filter(([, v]) => v !== undefined && v !== null));
   }
-
-  // The form as a plan, so feedback revises what's on screen (including any
-  // hand tweaks since the description).
-  function formPlan(): SongPlan {
-    return {
-      genre: preset?.id || described?.plan.genre || "",
-      key, scale, tempo: Number(tempo),
-      ...(swing != null ? { swing } : {}),
-      ...(seed.trim() ? { seed: Number(seed) } : {}),
-      sections: [...sections],
-      section_presets: sectionPresets,
-      section_overrides: sectionOverrides,
-      instruments: [...instruments],
-      ...planExtras(),
-    };
-  }
-
-  async function runDescribe(compose: boolean) {
-    const text = describeText.trim();
-    if (!text) return;
-    setDescribing(true); setDescribeErr(null); setDescribeMsg("");
-    try {
-      const r = await api.describeSong(text, setDescribeMsg);
-      setDescribed(r);
-      applyPlan(r.plan);
-      // "Compose now": fire generation once the applied state has committed
-      // (the effect below runs after this render flushes the setState calls).
-      if (compose) composeReq.current = true;
-    } catch (e) {
-      setDescribeErr(String(e));
-    } finally {
-      setDescribing(false);
-    }
-  }
-
-  async function runRevise() {
-    const fb = feedback.trim();
-    if (!fb || !described) return;
-    setDescribing(true); setDescribeErr(null); setDescribeMsg("");
-    try {
-      const r = await api.reviseSong(formPlan(), fb, setDescribeMsg);
-      setDescribed(r);
-      applyPlan(r.plan);
-      setFeedback("");
-      if (r.changes?.length) composeReq.current = true;   // regenerate with the change
-    } catch (e) {
-      setDescribeErr(String(e));
-    } finally {
-      setDescribing(false);
-    }
-  }
-
-  // Compose-after-apply: when runDescribe(true) set the flag, the plan's state
-  // is now committed, so kick off generation with the resolved form values.
-  useEffect(() => {
-    if (composeReq.current && preset && !busy) {
-      composeReq.current = false;
-      onGenerate();
-    }
-  });
 
   async function onGenerate() {
     if (!preset) return;
@@ -460,49 +408,6 @@ export default function GenerateScreen({
   return (
     <>
       <div className="gen-row">
-      <div className="card describe-card">
-        <h2>✍️ Describe your song</h2>
-        <div className="meta" style={{ marginBottom: 8 }}>
-          Plain English — genre(s), key, tempo, sections, instruments, how it should feel. We fill the form so you can tweak before generating.
-        </div>
-        <textarea className="describe-input" rows={2} value={describeText} data-testid="describe-input"
-          onChange={(e) => setDescribeText(e.target.value)}
-          placeholder="e.g. a funk fusion background bed for a product video, simple bass, no stabs, 120 bpm" />
-        <div className="describe-actions">
-          <button className="btn" disabled={describing || !describeText.trim()} data-testid="describe-fill"
-            onClick={() => runDescribe(false)}>
-            {describing ? "Reading…" : "✨ Fill the form"}
-          </button>
-          <button className="btn ghost" disabled={describing || !describeText.trim()} data-testid="describe-compose"
-            onClick={() => runDescribe(true)}>⚡ Compose now</button>
-        </div>
-        {describing && describeMsg && <div className="dr-note">{describeMsg}</div>}
-        {describeErr && <div className="error" style={{ marginTop: 6 }}>{describeErr}</div>}
-        {described && (
-          <div className="describe-report" data-testid="describe-report">
-            {described.summary && <div className="dr-note">{described.summary}</div>}
-            <div className="dr-understood">
-              {(described.changes?.length ? described.changes : described.understood)
-                .map((u, i) => <span key={i} className="dr-chip">{u}</span>)}
-            </div>
-            {described.notes.map((n, i) => <div key={i} className="dr-note">ℹ {n}</div>)}
-            <div className="dr-note" data-testid="describe-interpreter">
-              Read by {{ claude: "Claude", local: "the local AI", rules: "the built-in rules" }[described.interpreter]}
-            </div>
-            <textarea className="describe-input" rows={1} value={feedback} data-testid="revise-input"
-              style={{ marginTop: 10 }}
-              onChange={(e) => setFeedback(e.target.value)}
-              placeholder="What should change? e.g. the bass is doing too much" />
-            <div className="describe-actions">
-              <button className="btn" disabled={describing || busy || !feedback.trim()} data-testid="revise-go"
-                onClick={runRevise}>
-                {describing ? "Revising…" : "↻ Revise & regenerate"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
       <div className="card">
         <h2>Output</h2>
         <label className="field"><span>Master preset</span>

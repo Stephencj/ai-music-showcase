@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
+import { openCreateMode, tab } from "./nav";
 
 /**
  * Sheet-music library UI. Runs against the live server; seeds/cleans state
@@ -23,17 +24,6 @@ async function firstBlock(request: APIRequestContext): Promise<string> {
 
 type Page = import("@playwright/test").Page;
 
-/** Click a bottom-tab button, scoped to the tabbar so labels like "Compose"
- *  don't collide with in-screen buttons ("⚡ Compose now"). Re-clicks until the
- *  tab is marked active, which guards against clicking before React hydrates. */
-async function tab(page: Page, name: RegExp) {
-  const btn = page.locator("nav.tabbar").getByRole("button", { name });
-  await expect(btn).toBeVisible();
-  await expect(async () => {
-    await btn.click();
-    await expect(btn).toHaveClass(/on/, { timeout: 1500 });
-  }).toPass({ timeout: 15000 });
-}
 
 async function openLibraryTab(page: Page) {
   await page.goto("/app/");
@@ -123,7 +113,7 @@ test("picking an instrument part updates the View PDF link before opening",
 test("Save to Library from a Compose block surfaces it in the Library tab",
   async ({ page }) => {
     await page.goto("/app/");
-    await tab(page, /Compose/);
+    await openCreateMode(page, "blocks");
 
     // Expand the first block card, then save it to the library. The Compose
     // screen lazy-loads its block list from the live server, which can be slow

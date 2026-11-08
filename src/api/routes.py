@@ -184,6 +184,21 @@ def revise_route(req: ReviseRequest) -> dict:
     return _describe_job(describe.revise, req.plan, req.feedback, wait=req.wait)
 
 
+@router.post("/transcribe")
+async def transcribe_route(file: UploadFile = File(...)) -> dict:
+    """A voice note → text (the gateway's speech-to-text), for the Create
+    screen's describe / feedback box."""
+    from . import describe
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "The recording is empty")
+    try:
+        text = await asyncio.to_thread(describe.transcribe, data, file.filename or "note.webm")
+    except OSError as exc:
+        raise HTTPException(503, f"Speech-to-text is unavailable: {exc}")
+    return {"text": text}
+
+
 @router.post("/generate")
 def generate(req: GenerateRequest) -> dict:
     if req.genre not in STYLES:

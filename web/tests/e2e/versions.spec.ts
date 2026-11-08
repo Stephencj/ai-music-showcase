@@ -1,20 +1,12 @@
 import { test, expect } from "@playwright/test";
+import { openCreateMode } from "./nav";
 
 type Page = import("@playwright/test").Page;
 
-/** Robust bottom-tab click (scoped to the tabbar; re-clicks past hydration). */
-async function tab(page: Page, name: RegExp) {
-  const btn = page.locator("nav.tabbar").getByRole("button", { name });
-  await expect(btn).toBeVisible();
-  await expect(async () => {
-    await btn.click();
-    await expect(btn).toHaveClass(/on/, { timeout: 1500 });
-  }).toPass({ timeout: 15000 });
-}
 
 async function expandFirstBlock(page: Page) {
   await page.goto("/app/");
-  await tab(page, /Compose/);
+  await openCreateMode(page, "blocks");
   const card = page.locator(".tab-pane:not(.hidden) .block-card").first();
   await expect(card).toBeVisible({ timeout: 25000 });
   await card.getByRole("button", { name: "Details" }).click();

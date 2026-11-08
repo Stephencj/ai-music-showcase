@@ -106,6 +106,20 @@ def ask_local(kind: str, system: str, user: str, extra: dict, progress: Progress
 ASKERS: dict[str, Callable[..., Optional[Any]]] = {"claude": ask_claude, "local": ask_local}
 
 
+def transcribe(data: bytes, filename: str = "note.webm") -> str:
+    """A spoken description or piece of feedback → text, by the gateway's
+    speech-to-text (``/transcribe_upload``, the same one the local AI apps
+    use). Raises ``OSError`` when the gateway is unreachable."""
+    boundary = "----aimusic" + os.urandom(8).hex()
+    safe = "".join(c for c in filename if c.isalnum() or c in "._-") or "note.webm"
+    body = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{safe}\"\r\n"
+            "Content-Type: application/octet-stream\r\n\r\n").encode() + data + f"\r\n--{boundary}--\r\n".encode()
+    req = urllib.request.Request(f"{LOCAL_AI_URL}/transcribe_upload", data=body, method="POST",
+                                 headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    with urllib.request.urlopen(req, timeout=LOCAL_TIMEOUT) as r:
+        return str(json.loads(r.read().decode() or "{}").get("text") or "").strip()
+
+
 def disagrees_with_rules(base: dict, plan: dict, feedback: str) -> Optional[str]:
     """When the rules recognise a piece of feedback, does a model's revision
     do what they would — and nothing destructive besides? Returns the problem,
