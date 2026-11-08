@@ -8,5 +8,3 @@ exception for music made with it.
 
 - Salamander Grand Piano by Alexander Holm, CC-BY 3.0
   (https://creativecommons.org/licenses/by/3.0/)
-- Wurlitzer EP200 samples by Greg Sullivan, CC-BY 3.0
-  (https://creativecommons.org/licenses/by/3.0/)

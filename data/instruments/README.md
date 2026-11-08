@@ -95,11 +95,9 @@ mkdir freepats-fsbs-clean && curl -L -o freepats-fsbs-clean/a.7z \
     && (cd freepats-fsbs-clean && 7zz x a.7z && rm a.7z)
 ```
 
-Electric pianos (about 70 MB):
+Electric piano:
 
 ```bash
-git clone --depth 1 --filter=blob:none --sparse https://github.com/sfzinstruments/GregSullivan.E-Pianos.git gregsullivan.e-pianos
-(cd gregsullivan.e-pianos && git sparse-checkout set "Wurlitzer EP200") && rm -rf gregsullivan.e-pianos/.git
 git clone --depth 1 --filter=blob:none --sparse https://github.com/sgossner/VCSL.git vcsl-fm
 (cd vcsl-fm && git sparse-checkout set "Electrophones/TX81Z/FM Piano") && rm -rf vcsl-fm/.git
 python -I ../../scripts/setup/make_christmas_sfz.py .     # writes vcsl-fm/fm_piano.sfz
@@ -116,8 +114,7 @@ table, and on any library folder `sampled.py` plays that isn't listed.
 
 | Part | Library | Folder | Licence |
 |---|---|---|---|
-| Electric piano 1 (GM 4) | Greg Sullivan's Wurlitzer EP200 (sfzinstruments mapping) | gregsullivan.e-pianos | CC BY 3.0: credit "Wurlitzer EP200 samples by Greg Sullivan" |
-| Electric piano 2 (GM 5; GM 4 without the Wurlitzer) | VCSL, Yamaha TX81Z "FM Piano" | vcsl-fm | CC0 |
+| Electric pianos (GM 4, 5) | VCSL, Yamaha TX81Z "FM Piano" | vcsl-fm | CC0 |
 | Electric bass (GM 32-37) | Karoryfer Black And Blue Basses | karoryfer.black-and-blue-basses | CC0 |
 | Drum kit | Virtuosity Drums (Versilian Studios / Karoryfer) | virtuosity_drums | CC0 |
 | Saxes (GM 64-67) | Karoryfer Weresax | karoryfer.weresax | CC0 |
@@ -135,8 +132,8 @@ table, and on any library folder `sampled.py` plays that isn't listed.
 | Steel-string guitar (25) | FreePats FSS Steel-String (FlameStudios samples) | freepats-steel | GPL 3 with FreePats' exception: a composition using the sounds is not covered by the GPL |
 | Tenor sax (66), organ pedal bass (19, tracks named "pedal") | VCSL (Versilian Studios) | vcsl-extra | CC0 |
 
-Music made with any of them can be used commercially; the Wurlitzer and the
-Salamander piano need the credits above (in a track's or video's credits).
+Music made with any of them can be used commercially; the
+Salamander piano needs the credit above (in a track's or video's credits).
 `CREDITS.md` at the repo root lists every credit line in one place.
 
 The jlearman jRhodes3c Rhodes used to play GM 4/5. Its sample licence is
