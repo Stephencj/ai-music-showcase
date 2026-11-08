@@ -1085,12 +1085,15 @@ def save_block_from_job(req: SaveBlockFromJobRequest) -> dict:
     res = job.result
     ts = res.get("time_signature", [4, 4])
     spec = res.get("_spec")
+    # Keep the job's real mix (sampled instruments, mix, loudness) as the
+    # block's audio instead of a General MIDI re-render of the MIDI.
+    audio = paths.get("audio_wav") or paths.get("audio_mp3")
     name = service._save_unique_block(
         block_store, req.name.strip(), pm,
         tempo=res.get("tempo", 120.0),
         time_signature=(int(ts[0]), int(ts[1])),
-        bars=res.get("bars", 0), spec=spec,
-    ) if not req.overwrite else _overwrite_block(req.name.strip(), pm, res, ts, spec)
+        bars=res.get("bars", 0), spec=spec, audio_source=audio,
+    ) if not req.overwrite else _overwrite_block(req.name.strip(), pm, res, ts, spec, audio)
     return {"name": name}
 
 
@@ -1362,10 +1365,10 @@ def _serve(path: Path, media_type: str, *, download: bool = False) -> FileRespon
     return FileResponse(str(path), media_type=media_type, headers=headers)
 
 
-def _overwrite_block(name: str, pm, res: dict, ts, spec: dict | None = None) -> str:
+def _overwrite_block(name: str, pm, res: dict, ts, spec: dict | None = None, audio_source=None) -> str:
     block_store.save_block(
         name, pm, tempo=res.get("tempo", 120.0),
         time_signature=(int(ts[0]), int(ts[1])),
-        bars=res.get("bars", 0), overwrite=True, spec=spec,
+        bars=res.get("bars", 0), overwrite=True, spec=spec, audio_source=audio_source,
     )
     return name

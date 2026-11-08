@@ -226,7 +226,7 @@ def run_generation(req, progress, job_id: str) -> dict:
             saved_block = _save_unique_block(
                 block_store, (req.block_name or preset.name).strip() or preset.name,
                 pm, tempo=eff_tempo, time_signature=ts, bars=total_bars,
-                spec=block_spec,
+                spec=block_spec, audio_source=wav_path,   # this render's real mix
             )
         if req.split_into_blocks:
             progress("Splitting sections into blocks…", 0.96)
@@ -1869,11 +1869,11 @@ def part_options() -> dict:
 
 def _save_unique_block(block_store, base_name: str, pm, *,
                        tempo: float, time_signature, bars: int,
-                       spec: dict | None = None) -> str:
+                       spec: dict | None = None, audio_source=None) -> str:
     name = _unique_block_name(block_store, base_name)
     block_store.save_block(name, pm, tempo=float(tempo),
                            time_signature=time_signature, bars=int(bars),
-                           overwrite=False, spec=spec)
+                           overwrite=False, spec=spec, audio_source=audio_source)
     return name
 
 

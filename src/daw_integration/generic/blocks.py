@@ -161,6 +161,23 @@ def _write_block_wav(
     return _write_block_wav_fallback(pm, wav_path, sample_rate=22050)
 
 
+def _adopt_audio(src: "Path | str", wav_path: Path) -> bool:
+    """Make ``wav_path`` a WAV copy of an already-rendered mix (WAV or MP3).
+    False when the source is missing or can't be converted."""
+    src = Path(src)
+    if not src.exists() or src.stat().st_size == 0:
+        return False
+    try:
+        if src.suffix.lower() == ".wav":
+            shutil.copyfile(src, wav_path)
+        else:
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), str(wav_path)],
+                           check=True, timeout=300)
+        return wav_path.exists() and wav_path.stat().st_size > 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def write_preview_mp3(wav_path: "Path | str", mp3_path: "Path | str",
                       bitrate: str = _PREVIEW_BITRATE) -> bool:
     """Transcode an existing WAV into a small, universally-playable MP3.
@@ -229,7 +246,8 @@ def save_block(name: str,
                write_wav: bool = True,
                wav_sample_rate: int = _DEFAULT_PREVIEW_SR,
                spec: Optional[dict] = None,
-               tags: Optional[list[str]] = None) -> Path:
+               tags: Optional[list[str]] = None,
+               audio_source: "Optional[Path | str]" = None) -> Path:
     """Persist a block. Writes .mid + .yaml (and .wav unless ``write_wav=False``).
 
     Returns the .yaml path. Raises FileExistsError on collision unless
@@ -270,7 +288,12 @@ def save_block(name: str,
     with open(yaml_path, "w") as f:
         yaml.safe_dump(metadata, f, sort_keys=False, default_flow_style=False)
 
-    if write_wav:
+    if write_wav and audio_source and _adopt_audio(audio_source, wav_path):
+        # The generation's own final mix (its sampled instruments, mix and
+        # loudness): keep that rather than re-rendering the MIDI on the
+        # General MIDI soundfont, which sounds nothing like what was made.
+        write_preview_mp3(wav_path, _preview_path(name))
+    elif write_wav:
         # HQ first (44.1 kHz stereo via FluidSynthRenderer + Mixer);
         # graceful fallback to pretty_midi.synthesize on failure.
         if _write_block_wav(pm, wav_path, sample_rate=wav_sample_rate):
