@@ -71,18 +71,32 @@ class SampledInstrument:
     names: tuple[str, ...] = ()
 
 
+# GM drum kit 40, the brush kit.
+BRUSH_KIT_PROGRAM = 40
+
 SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
     # Christmas instruments (all CC0; maps by scripts/setup/make_christmas_sfz.py):
     # VCSL Kawai grand, harp, glockenspiel, sleigh bells and shaker; VSCO 2 CE
     # flute / clarinet / oboe, quiet pipe organ and straight-mute trumpet;
     # Karoryfer Sneakybass (a quiet pizzicato double bass, mapped at written
     # pitch like the bass guitars).
+    # Grand piano: Salamander (Yamaha C5, 16 velocity layers, release
+    # samples; CC BY 3.0, credited in CREDITS.md), else the VCSL Kawai.
     SampledInstrument(
         id="grand_piano",
-        sfz="vcsl/piano_kawai.sfz",
+        sfz="salamander-grand/Salamander Grand Piano V3.sfz",
         programs=(0, 1),                      # Acoustic Grand / Bright Piano
         eq=(("peak", 250.0, -1.5), ("high_shelf", 6000.0, -1.0)),
     ),
+    SampledInstrument(
+        id="grand_piano_kawai",
+        sfz="vcsl/piano_kawai.sfz",
+        programs=(0, 1),
+        eq=(("peak", 250.0, -1.5), ("high_shelf", 6000.0, -1.0)),
+    ),
+    # Orchestral double bass, bowed (Karoryfer Meatbass, CC0; sounding pitch).
+    SampledInstrument(id="contrabass", sfz="karoryfer.meatbass/Meatbass/Programs/03_arco_5vel.sfz",
+                      programs=(43,)),
     SampledInstrument(
         id="upright_bass",
         sfz="karoryfer.sneakybass/Sneakybass/Programs/02-sneakybass_pluck.sfz",
@@ -157,6 +171,13 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
         auto_tune=True,
         sfz="karoryfer.black-and-green-guitars/Programs/04-green_twang.sfz",
     ),
+    # The clean lead guitar (voice "guitar_clean"): FreePats FSBS Fender
+    # through a clean amp (CC0).
+    SampledInstrument(
+        id="guitar_fsbs_clean",
+        auto_tune=True,
+        sfz="freepats-fsbs-clean/EGuitarFSBS-clean SFZ+FLAC-20260807/EGuitarFSBS-clean bridge 20260807.sfz",
+    ),
     SampledInstrument(
         id="guitar_staccato",
         auto_tune=True,
@@ -222,6 +243,14 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
         # tighten the low end so the hats drive the groove.
         eq=(("low_shelf", 70.0, -4.0), ("peak", 400.0, -2.5), ("high_shelf", 5000.0, 6.0)),
     ),
+    # The brush kit (GM drum program 40): Karoryfer Swirly Drums (CC0), every
+    # hit played with brushes, on the GM keys the brush parts write.
+    SampledInstrument(
+        id="brush_kit",
+        sfz="karoryfer.swirly-drums/Programs/Basic_kit.sfz",
+        is_drum=True,
+        programs=(BRUSH_KIT_PROGRAM,),
+    ),
     # Tenor sax (VCSL, CC0): the vibrato takes for a melody, the straight
     # two-layer sustains for section parts. Without it the tenor plays the
     # alto samples below.
@@ -238,9 +267,9 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
 )
 
 
-# GM drum kit 40: the General MIDI soundfont's recorded brush kit (taps on
-# the snare keys). Drum tracks on this program render through FluidSynth.
-BRUSH_KIT = 40
+# GM drum kit 40: Swirly Drums when installed, else the soundfont's
+# recorded brush kit (FluidSynth).
+BRUSH_KIT = BRUSH_KIT_PROGRAM
 
 
 def instrument_dir() -> Path:
@@ -252,12 +281,18 @@ def sampled_for(program: int, is_drum: bool, root: Optional[Path] = None,
                 name: str = "") -> Optional[SampledInstrument]:
     """The sampled library for a track, when it's installed."""
     root = root or instrument_dir()
-    if is_drum and program == BRUSH_KIT:
-        return None                           # the soundfont's recorded brush kit
     for inst in SAMPLED_INSTRUMENTS:
         if inst.is_drum != is_drum:
             continue
-        if not is_drum and program not in inst.programs:
+        if is_drum:
+            # A kit with programs plays only those (the brush kit); the
+            # standard kit plays every other drum program. Without Swirly
+            # Drums the brush kit falls back to the soundfont's.
+            if inst.programs and program not in inst.programs:
+                continue
+            if not inst.programs and program == BRUSH_KIT:
+                continue
+        elif program not in inst.programs:
             continue
         if inst.names and not any(n in name.lower() for n in inst.names):
             continue

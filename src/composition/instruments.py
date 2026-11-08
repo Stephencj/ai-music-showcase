@@ -241,7 +241,10 @@ def expand_selection(selection: list[str]) -> list[Instrument]:
         # Section composite: keep as-is unless any of its members are
         # ALSO selected individually — in which case it's better to
         # drop the composite (the user is curating per-instrument).
-        if inst.is_section and any(m in selection_set for m in inst.members):
+        # A bass member (the contrabass under a string section) plays its own
+        # bass line, not the section's pad, so it doesn't replace the section.
+        if inst.is_section and any(m in selection_set and INSTRUMENT_REGISTRY[m].role != "bass"
+                                   for m in inst.members):
             continue
         seen_ids.add(inst.id)
         out.append(inst)

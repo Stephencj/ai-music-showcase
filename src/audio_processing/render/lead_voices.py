@@ -75,9 +75,11 @@ LEAD_VOICES: dict[str, LeadVoice] = {
                   octave=1, space=HIGH_SPACE, db=-3.0, vibrato=HELD_VIBRATO),
     ), register="guitar", gain_db=2.5),
     # The Gretsch clean: a light chorus and a small, dry room (neo-soul).
-    "guitar_clean": LeadVoice("Clean jazz guitar (Gretsch, light chorus)", (
-        LeadLayer("sfz", sfz="guitar_twang", sfz_short="guitar_staccato", chorus=1.0, space=0.15, vibrato=HELD_VIBRATO),
-    ), register="guitar", gain_db=5.0),
+    # A clean Fender (FreePats FSBS clean, CC0): the Gretsch twang samples
+    # carried a hissy noise band above 8 kHz.
+    "guitar_clean": LeadVoice("Clean electric guitar (Fender, light chorus)", (
+        LeadLayer("sfz", sfz="guitar_fsbs_clean", chorus=1.0, space=0.15, vibrato=HELD_VIBRATO),
+    ), register="guitar", gain_db=3.0),
     # Trumpet and overdriven guitar in unison: the horn's attack and body, the
     # guitar's singing sustain.
     "trumpet_guitar": LeadVoice("Trumpet + overdriven guitar in unison", (

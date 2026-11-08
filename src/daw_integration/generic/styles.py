@@ -1145,7 +1145,7 @@ STYLES: dict[str, StylePreset] = {
                 {"start_bar": 56, "end_bar": 62, "label": "Outro"},
             ],
         },
-        default_instruments=['string_section', 'french_horn', 'flute', 'clarinet', 'harp', 'glockenspiel', 'sleigh_bells'],
+        default_instruments=['string_section', 'contrabass', 'french_horn', 'flute', 'clarinet', 'harp', 'glockenspiel', 'sleigh_bells'],
         sound="sampled",
         pacing_options=('uniform_1',),
         bridge_pacing_options=('uniform_1',),

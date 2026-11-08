@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from src.audio_processing.render.sampled import SAMPLED_INSTRUMENTS
+# CC BY libraries must also have their credit line in CREDITS.md.
 
 README = Path(__file__).resolve().parents[2] / "data" / "instruments" / "README.md"
 # CC "NC"/"ND" elements (BY-NC-SA, BY-ND …) and their spelled-out forms.
@@ -43,6 +44,15 @@ class InstrumentLicenceTest(unittest.TestCase):
         listed = set(licence_rows())
         used = {Path(i.sfz).parts[0] for i in SAMPLED_INSTRUMENTS if i.sfz}
         self.assertEqual(used - listed, set(), "add these folders and their licences to the README table")
+
+    def test_attribution_licences_are_credited(self):
+        credits = (README.parents[2] / "CREDITS.md").read_text()
+        for folder, lic in licence_rows().items():
+            if re.search(r"\bBY\b", lic):
+                quoted = re.findall(r'"([^"]+)"', lic)
+                self.assertTrue(quoted, f"{folder}: give the credit line in quotes")
+                for line in quoted:
+                    self.assertIn(line, credits, f"{folder}: add its credit to CREDITS.md")
 
     def test_pattern(self):
         for lic in ("CC BY-NC-SA 4.0", "CC-BY-NC-4.0", "CC BY-ND 4.0", "Non-commercial use only", "NoDerivatives"):

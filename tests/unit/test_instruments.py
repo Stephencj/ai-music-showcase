@@ -95,6 +95,13 @@ class SectionCompositeTests(unittest.TestCase):
         out = expand_selection(["brass_section", "trumpet"])
         self.assertEqual([i.id for i in out], ["trumpet"])
 
+    def test_a_bass_member_keeps_its_section(self):
+        # The contrabass plays a bass line under the string section's pad.
+        ids = [i.id for i in expand_selection(["string_section", "contrabass"])]
+        self.assertEqual(ids, ["string_section", "contrabass"])
+        ids = [i.id for i in expand_selection(["string_section", "violin"])]
+        self.assertEqual(ids, ["violin"])
+
     def test_expand_ignores_unknown_ids(self):
         out = expand_selection(["piano", "no_such_inst"])
         self.assertEqual([i.id for i in out], ["piano"])

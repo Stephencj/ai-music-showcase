@@ -74,7 +74,7 @@ def note_number(value: str | int | float | None, default: Optional[int] = None) 
 
 _HEADER_OR_OPCODE = re.compile(r"<(\w+)>|([A-Za-z0-9_$]+)=")
 _DEFINE = re.compile(r"^\s*#define\s+(\$\w+)\s+(.*?)\s*$", re.M)
-_INCLUDE = re.compile(r'^\s*#include\s+"([^"]+)"', re.M)
+_INCLUDE = re.compile(r'\s*#include\s+"([^"]+)"')
 _FREE_TEXT_OPCODES = ("sample", "default_path") + tuple(f"label{s}" for s in ("", "_cc", "_key"))
 
 
@@ -90,7 +90,9 @@ def _preprocess(path: Path, root_dir: Path, defines: dict[str, str], depth: int 
     text = _strip_comments(path.read_text(errors="replace"))
     out: list[str] = []
     pos = 0
-    for m in re.finditer(r'^\s*#(define|include)\b[^\n]*', text, re.M):
+    # A #define takes its whole line; an #include can also sit mid-line
+    # (Salamander: ``<group> #include "vel_01.txt" lovel=1 #include "region.txt"``).
+    for m in re.finditer(r'^\s*#define\b[^\n]*|#include\s+"[^"]*"', text, re.M):
         out.append(_substitute(text[pos:m.start()], defines))
         line = m.group(0)
         d = _DEFINE.match(line)
@@ -107,6 +109,14 @@ def _preprocess(path: Path, root_dir: Path, defines: dict[str, str], depth: int 
         pos = m.end()
     out.append(_substitute(text[pos:], defines))
     return "\n".join(out)
+
+
+def _group_id(value: Optional[str]) -> int:
+    """A group / off_by number. Tolerates a library's typo'd define left
+    with trailing text (Swirly Drums writes ``$HTQTRGRPP``, which expands to
+    ``15P``): the leading number counts; no number is group 0."""
+    m = re.match(r"\s*(-?\d+)", str(value or ""))
+    return int(m.group(1)) if m else 0
 
 
 def _substitute(text: str, defines: dict[str, str]) -> str:
@@ -257,7 +267,9 @@ def load_sfz(path: str | Path, cc_overrides: Optional[dict[int, float]] = None) 
             if sample != "*silence":
                 continue  # generators (*sine, *noise …) aren't used by these libraries
         else:
-            sample_path = (path.parent / op.get("__default_path", "") / sample).resolve()
+            # Windows-made maps write "electric\\a4.wav".
+            sample_path = (path.parent / op.get("__default_path", "").replace("\\", "/")
+                           / sample.replace("\\", "/")).resolve()
         key = note_number(op.get("key"))
         lokey = note_number(op.get("lokey"), key if key is not None else 0)
         hikey = note_number(op.get("hikey"), key if key is not None else 127)
@@ -273,8 +285,8 @@ def load_sfz(path: str | Path, cc_overrides: Optional[dict[int, float]] = None) 
             trigger=op.get("trigger", "attack"),
             seq_length=max(1, int(float(op.get("seq_length", 1) or 1))),
             seq_position=max(1, int(float(op.get("seq_position", 1) or 1))),
-            group=int(float(op.get("group", 0) or 0)),
-            off_by=int(float(op.get("off_by", 0) or 0)),
+            group=_group_id(op.get("group")),
+            off_by=_group_id(op.get("off_by")),
         ))
 
     curves: dict[int, np.ndarray] = {}
@@ -561,9 +573,14 @@ class SfzRenderer:
             lo = float(r.op[k])
             hi = float(r.op.get(f"xf{m.group(1)}_hicc{n}", lo))
             v = self._cc(int(n))
-            t = 1.0 if hi <= lo else min(max((v - lo) / (hi - lo), 0.0), 1.0)
-            if m.group(1) == "out":
-                t = 1.0 - t
+            if hi <= lo:
+                # No fade range (only a lo given, e.g. Shinyguitar's
+                # xfout_locc100=0): a step at lo, full gain on its own side.
+                t = float(v >= lo) if m.group(1) == "in" else float(v <= lo)
+            else:
+                t = min(max((v - lo) / (hi - lo), 0.0), 1.0)
+                if m.group(1) == "out":
+                    t = 1.0 - t
             gain *= math.sqrt(t)
         return gain
 

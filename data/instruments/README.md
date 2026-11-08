@@ -76,9 +76,24 @@ without it the tenor plays the alto samples) and the quiet pipe organ's own
 pedal rank for the choir style's pedal bass.
 
 The muted trumpet uses the trumpet folder already downloaded for the horns
-(`vsco2-ce/Brass/Trumpet/straightM-sus`). Celesta, the choir "aahs" and the
-brush kit have no free recorded library here yet, so they play the General
+(`vsco2-ce/Brass/Trumpet/straightM-sus`). Celesta and the choir "aahs" have
+no free recorded library here yet, so they play the General
 MIDI soundfont's patches (MuseScore_General, MIT).
+
+Grand piano, brush kit, double bass and clean lead guitar (about 3 GB):
+
+```bash
+git clone --depth 1 https://github.com/sfzinstruments/SalamanderGrandPiano.git salamander-grand && rm -rf salamander-grand/.git
+mkdir karoryfer.swirly-drums && curl -L -o karoryfer.swirly-drums/a.zip \
+    https://github.com/sfzinstruments/karoryfer.swirly-drums/releases/download/v1.104/Swirly.Drums_1104.zip \
+    && (cd karoryfer.swirly-drums && unzip -q a.zip && rm a.zip)
+mkdir karoryfer.meatbass && curl -L -o karoryfer.meatbass/a.zip \
+    https://github.com/sfzinstruments/karoryfer.meatbass/releases/download/v1.001/Karoryfer.Meatbass.v1.001.zip \
+    && (cd karoryfer.meatbass && unzip -q a.zip && rm a.zip)
+mkdir freepats-fsbs-clean && curl -L -o freepats-fsbs-clean/a.7z \
+    https://github.com/freepats/electric-guitar-FSBS-clean/releases/download/2026-08-07/EGuitarFSBS-clean-SFZ+FLAC-20260807.7z \
+    && (cd freepats-fsbs-clean && 7zz x a.7z && rm a.7z)
+```
 
 Electric pianos (about 70 MB):
 
@@ -109,15 +124,20 @@ table, and on any library folder `sampled.py` plays that isn't listed.
 | Trumpet (56, 59), trombone (57), brass section (61), muted trumpets (59) | VSCO 2 CE | vsco2-ce | CC0 |
 | Strings (48-51), spiccato (45), French horn (60), cello (42) | VSCO 2 CE | vsco2-ce-strings | CC0 |
 | Guitar lead voice | Karoryfer Black And Green Guitars (Gretsch / Hofner) | karoryfer.black-and-green-guitars | CC0 |
-| Grand piano (GM 0-1), harp (46), glockenspiel (9), sleigh bells (112), shaker (113) | VCSL (Versilian Studios) | vcsl | CC0 |
+| Grand piano (GM 0-1) | Salamander Grand Piano V3 (Yamaha C5, Alexander Holm; sfzinstruments mapping) | salamander-grand | CC BY 3.0: credit "Salamander Grand Piano by Alexander Holm, CC-BY 3.0" |
+| Grand piano fallback (GM 0-1), harp (46), glockenspiel (9), sleigh bells (112), shaker (113) | VCSL (Versilian Studios) | vcsl | CC0 |
+| Double bass, bowed (GM 43) | Karoryfer Meatbass (1958 double bass) | karoryfer.meatbass | CC0 |
+| Brush kit (GM drum program 40) | Karoryfer Swirly Drums | karoryfer.swirly-drums | CC0 |
+| Clean lead guitar (voice "guitar_clean") | FreePats FSBS Electric Guitar Clean #1 (Fender) | freepats-fsbs-clean | CC0 |
 | Flute (73), clarinet (71), oboe (68), church organ (19) | VSCO 2 CE | vsco2-ce-xmas | CC0 |
 | Upright bass (32) | Karoryfer Sneakybass (1958 Otto Rubner double bass, pizzicato) | karoryfer.sneakybass | CC0 |
 | Nylon guitar (24) | FreePats Spanish Classical Guitar | freepats-nylon | CC0 |
 | Steel-string guitar (25) | FreePats FSS Steel-String (FlameStudios samples) | freepats-steel | GPL 3 with FreePats' exception: a composition using the sounds is not covered by the GPL |
 | Tenor sax (66), organ pedal bass (19, tracks named "pedal") | VCSL (Versilian Studios) | vcsl-extra | CC0 |
 
-Music made with any of them can be used commercially; the Wurlitzer needs the
-credit above (in a track's or video's credits).
+Music made with any of them can be used commercially; the Wurlitzer and the
+Salamander piano need the credits above (in a track's or video's credits).
+`CREDITS.md` at the repo root lists every credit line in one place.
 
 The jlearman jRhodes3c Rhodes used to play GM 4/5. Its sample licence is
 CC BY-NC-SA 4.0 (non-commercial), so it was removed; delete the
