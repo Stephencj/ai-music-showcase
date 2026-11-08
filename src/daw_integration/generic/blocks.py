@@ -556,13 +556,14 @@ def active_preview_audio(name: str,
 
 
 def delete_block(name: str) -> None:
-    """Remove the .mid, .yaml, .wav, .mp3, .peaks.json, Melody Studio
-    sidecar, and saved vocal takes for a block. Silently ignores missing
+    """Remove the .mid, .yaml, .wav, .mp3, .peaks.json, cached .musicxml,
+    Melody Studio sidecar, and saved vocal takes for a block. Silently ignores missing
     files."""
     safe = _safe_name(name)
     sidecar = BLOCKS_DIR / f"{safe}_melody.yaml"
     for p in (_midi_path(name), _yaml_path(name), _wav_path(name),
-              _preview_path(name), _peaks_path(name), sidecar):
+              _preview_path(name), _peaks_path(name), sidecar,
+              BLOCKS_DIR / f"{safe}.musicxml"):          # the cached score (block_musicxml)
         try:
             if p.exists():
                 p.unlink()
@@ -655,6 +656,31 @@ def set_spec(name: str, spec: dict) -> None:
     meta["spec"] = spec
     with open(yaml_path, "w") as f:
         yaml.safe_dump(meta, f, sort_keys=False, default_flow_style=False)
+
+
+def set_session(name: str, session: Optional[dict]) -> None:
+    """Link a block to the Create session it came from (``{id, version}``),
+    or unlink it (``None``): Library → Open in Timeline reopens that session."""
+    yaml_path = _yaml_path(name)
+    if not yaml_path.exists():
+        raise FileNotFoundError(f"Block not found: {name}")
+    with open(yaml_path, "r") as f:
+        meta = yaml.safe_load(f) or {}
+    if session:
+        meta["session"] = dict(session)
+    else:
+        meta.pop("session", None)
+    with open(yaml_path, "w") as f:
+        yaml.safe_dump(meta, f, sort_keys=False, default_flow_style=False)
+
+
+def read_meta(name: str) -> Optional[dict]:
+    """A block's metadata (its .yaml), or None when there's no such block."""
+    yaml_path = _yaml_path(name)
+    if not yaml_path.exists():
+        return None
+    with open(yaml_path, "r") as f:
+        return yaml.safe_load(f) or {}
 
 
 def _estimate_key(midi_path: Path) -> tuple[str, str]:

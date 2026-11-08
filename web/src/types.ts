@@ -145,7 +145,11 @@ export interface Block {
   vocal_takes?: number;
   has_preview: boolean;
   audio_url: string;
+  timeline?: TimelineStatus;
 }
+
+/** Whether a block opens in Create's Timeline, and if not, why. */
+export interface TimelineStatus { ok: boolean; reason?: string; session_id?: string }
 
 export interface TimelineEntry {
   block_name: string;
@@ -189,6 +193,7 @@ export interface SongPlan {
   remove_sections?: number[];   // arranged-section indices left out (Timeline → Remove section)
   tune?: string;             // Christmas styles: a public-domain carol id or "original"
   length_seconds?: number;
+  section_layout?: { role: string; bars: number; label?: string }[];   // a saved song's own form
 }
 
 // POST /api/describe and /api/revise.
@@ -249,4 +254,5 @@ export interface GenerateBody {
   remove_sections?: number[];
   tune?: string;
   length_seconds?: number;
+  section_layout?: { role: string; bars: number; label?: string }[];
 }

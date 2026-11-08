@@ -23,6 +23,9 @@ export default function App() {
   const [createMode, setCreateMode] = useState<CreateMode>("session");
   const [editSpec, setEditSpec] = useState<BlockSpec | null>(null);
   const [practiceBlock, setPracticeBlock] = useState<string | null>(deepBlock);
+  const [timelineBlock, setTimelineBlock] = useState<string | null>(null);
+  const openInTimeline = (block: string) => { setTimelineBlock(block); setTab("create"); };
+  const openInPractice = (block: string) => { setPracticeBlock(block); setTab("practice"); };
 
   return (
     <div className={"app" + (tab === "create" ? " app-create" : "")}>
@@ -41,20 +44,21 @@ export default function App() {
       <div className={"tab-pane" + (tab === "create" ? "" : " hidden")}>
         <CreateScreen active={tab === "create"} mode={createMode} setMode={setCreateMode}
           editSpec={editSpec} onSpecConsumed={() => setEditSpec(null)}
-          onEditInGenerate={(spec) => { setEditSpec(spec); setCreateMode("advanced"); }} />
+          onEditInGenerate={(spec) => { setEditSpec(spec); setCreateMode("advanced"); }}
+          openBlock={timelineBlock} onOpenBlockConsumed={() => setTimelineBlock(null)}
+          onPractice={openInPractice} />
       </div>
       <div className={"tab-pane" + (tab === "library" ? "" : " hidden")}>
-        <LibraryScreen isActive={tab === "library"}
-          onOpen={(block) => { setPracticeBlock(block); setTab("practice"); }} />
+        <LibraryScreen isActive={tab === "library"} onOpen={openInPractice} onOpenTimeline={openInTimeline} />
       </div>
       <div className={"tab-pane" + (tab === "practice" ? "" : " hidden")}>
         <PracticeScreen isActive={tab === "practice"} requestBlock={practiceBlock}
-          onBlockConsumed={() => setPracticeBlock(null)} />
+          onBlockConsumed={() => setPracticeBlock(null)} onOpenTimeline={openInTimeline} />
       </div>
       <div className={"tab-pane" + (tab === "band" ? "" : " hidden")}>
         <BandScreen isActive={tab === "band"}
           onWriteSong={() => { setCreateMode("advanced"); setTab("create"); }}
-          onOpenPractice={(block) => { setPracticeBlock(block); setTab("practice"); }} />
+          onOpenPractice={openInPractice} />
       </div>
 
       <nav className="tabbar">

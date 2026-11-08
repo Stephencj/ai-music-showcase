@@ -2,25 +2,38 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../api";
 import type { BlockSpec, Family, GenerateBody, Preset, SongPlan } from "../types";
 import {
-  EMPTY_SESSION, type SMsg, type SVersion, type SectionEdit, type Session, laneMap, loadSession, saveSession,
-  titleFrom, withSectionEdit,
+  EMPTY_SESSION, type SMsg, type SVersion, type SectionEdit, type Session, forgetLegacySession, laneMap,
+  loadCurrentId, mergeServer, saveCurrentId, takeLegacySession, titleFrom, withSectionEdit,
 } from "../session";
 import SessionView from "./SessionView";
 import TimelineView from "./TimelineView";
 import GenerateScreen from "./GenerateScreen";
 import ComposeScreen from "./ComposeScreen";
+import HistoryView from "./HistoryView";
 
-export type CreateMode = "session" | "timeline" | "advanced" | "blocks";
+export type CreateMode = "session" | "timeline" | "advanced" | "blocks" | "history";
+
+// What the server keeps of a session: the thread without "Reading…"
+// placeholders, and versions without their moment-to-moment progress.
+function persistable(s: Session) {
+  return {
+    title: s.title, interpreter: s.interpreter,
+    msgs: s.msgs.filter((m) => m.kind !== "pending"),
+    versions: s.versions.map(({ progress: _p, message: _m, ...v }) => v),
+  };
+}
 
 /**
  * Create = one song workspace. You describe the song in a thread (Session),
  * hear v1, say what to change and hear v2…; the Timeline shows the same song
- * section by section. The full Generate form ("Advanced form") and the
- * block builder ("Blocks", the old Compose screen) live here too. Every mode
- * stays mounted so switching never loses work.
+ * section by section. The thread lives on the server: "New song" archives it
+ * into History, where any past song reopens where you left off. The full
+ * Generate form ("Advanced form") and the block builder ("Blocks", the old
+ * Compose screen) live here too. Every mode stays mounted so switching never
+ * loses work.
  */
 export default function CreateScreen({
-  active, mode, setMode, editSpec, onSpecConsumed, onEditInGenerate,
+  active, mode, setMode, editSpec, onSpecConsumed, onEditInGenerate, openBlock, onOpenBlockConsumed, onPractice,
 }: {
   active: boolean;
   mode: CreateMode;
@@ -28,8 +41,14 @@ export default function CreateScreen({
   editSpec: BlockSpec | null;
   onSpecConsumed: () => void;
   onEditInGenerate: (spec: BlockSpec) => void;
+  /** A block to open in the Timeline (Library / Practice → Open in Timeline). */
+  openBlock: string | null;
+  onOpenBlockConsumed: () => void;
+  /** Practice a version's block (switches to the Practice tab). */
+  onPractice: (block: string) => void;
 }) {
-  const [session, setSession] = useState<Session>(loadSession);
+  const [session, setSession] = useState<Session>(EMPTY_SESSION);
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [families, setFamilies] = useState<Family[]>([]);
@@ -40,6 +59,9 @@ export default function CreateScreen({
   const ids = useRef(0);
   const sref = useRef(session);
   sref.current = session;
+  // Which session the screen holds: bumped whenever another one opens, so
+  // work for the previous one (a job finishing, a save) never lands here.
+  const gen = useRef(0);
   const nextN = useRef(0);
   // The next version number (unique even while state updates are in flight).
   function allocN() {
@@ -48,21 +70,96 @@ export default function CreateScreen({
     return nextN.current;
   }
 
-  useEffect(() => { saveSession(session); }, [session]);
+  // ---- the server copy -----------------------------------------------------
+  const sync = useRef<{ timer?: ReturnType<typeof setTimeout>; creating?: Promise<string>; sent?: string }>({});
+  // The open session's server id, creating it on the first message.
+  function ensureId(): Promise<string> {
+    const cur = sref.current;
+    if (cur.id) return Promise.resolve(cur.id);
+    if (!sync.current.creating) {
+      const g = gen.current;
+      const body = persistable(cur);
+      sync.current.creating = api.createSession(body).then((srv) => {
+        if (gen.current === g) {
+          sync.current.sent = JSON.stringify(body);
+          setSession((x) => mergeServer({ ...x, id: srv.id }, srv));
+          sref.current = { ...sref.current, id: srv.id };
+          saveCurrentId(srv.id);
+        }
+        return srv.id as string;
+      }).finally(() => { sync.current.creating = undefined; });
+    }
+    return sync.current.creating;
+  }
+  async function persist() {
+    const g = gen.current;
+    const s = sref.current;
+    if (!s.msgs.length && !s.id) return;
+    const body = persistable(s);
+    const sig = JSON.stringify(body);
+    if (sig === sync.current.sent && s.id) return;
+    try {
+      const id = await ensureId();
+      if (gen.current !== g) return;
+      const srv = await api.updateSession(id, body);
+      sync.current.sent = sig;
+      if (gen.current === g) setSession((x) => mergeServer(x, srv));
+    } catch { /* offline: the next change tries again */ }
+  }
+  async function flush() {
+    clearTimeout(sync.current.timer);
+    sync.current.timer = undefined;
+    await persist();
+  }
+  // Save at most every 0.7 s (a composing version changes it constantly, so
+  // waiting for a pause could wait the whole render).
   useEffect(() => {
+    if (!loaded || sync.current.timer) return;
+    sync.current.timer = setTimeout(() => { sync.current.timer = undefined; void persist(); }, 700);
+  }, [session, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Open the session you had (or bring over a thread this browser kept
+  // before sessions lived on the server).
+  useEffect(() => {
+    (async () => {
+      try {
+        const legacy = takeLegacySession();
+        if (legacy) {
+          const srv = await api.createSession({ ...persistable(legacy) });
+          forgetLegacySession();
+          show(srv);
+        } else {
+          const id = loadCurrentId();
+          if (id) show(await api.getSession(id));
+        }
+      } catch {
+        saveCurrentId(null);
+      } finally {
+        setLoaded(true);
+      }
+    })();
     api.getPresets().then(setPresets).catch(() => {});
     api.getInstruments().then(setFamilies).catch(() => {});
     api.describeOptions().then((o) => setArrOpts(o.arrangement_variants)).catch(() => {});
-  }, []);
-
-  // Versions still generating when the page was closed: pick their jobs back up.
-  useEffect(() => {
-    for (const v of session.versions) {
-      if (v.status === "running" && v.jobId) follow(v.n, v.jobId);
-      else if (v.status === "running") patchVersion(v.n, { status: "error", error: "Interrupted" });
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Put a session on screen and pick up any versions still generating.
+  function show(s: Session, version?: number | null) {
+    gen.current++;
+    clearTimeout(sync.current.timer);
+    sync.current = { sent: JSON.stringify(persistable(s)) };
+    sref.current = s;
+    setSession(s);
+    saveCurrentId(s.id);
+    nextN.current = 0;
+    const last = s.versions[s.versions.length - 1]?.n;
+    setSelected(version != null && version !== last ? version : null);
+    for (const v of s.versions) {
+      if (v.status === "running" && v.jobId) void follow(v.n, v.jobId);
+      else if (v.status === "running") patchVersion(v.n, { status: "error", error: "Interrupted" });
+    }
+  }
 
   const newId = () => `${Date.now().toString(36)}-${ids.current++}`;
   const patchVersion = (n: number, p: Partial<SVersion>) =>
@@ -82,10 +179,16 @@ export default function CreateScreen({
   const defaultBand = (genre: string) => presets.find((p) => p.id === genre)?.default_instruments ?? [];
   const lanes = useMemo(() => laneMap(families), [families]);
 
-  // Follow a generation job into its version.
+  // Follow a generation job into its version; once done the server saves it
+  // as a block (the Practice pool) and caches its render.
   async function follow(n: number, jobId: string) {
+    const g = gen.current;
+    const live = () => gen.current === g;
     try {
-      const job = await api.pollJob(jobId, (j) => patchVersion(n, { progress: j.progress, message: j.message || j.status }));
+      const job = await api.pollJob(jobId, (j) => {
+        if (live()) patchVersion(n, { progress: j.progress, message: j.message || j.status });
+      });
+      if (!live()) return;
       if (job.status === "error" || !job.result) {
         patchVersion(n, { status: "error", error: job.error || "Generation failed" });
         return;
@@ -98,8 +201,24 @@ export default function CreateScreen({
           ? { ...v, status: "done", progress: 1, result, plan: { ...v.plan, seed: v.plan.seed ?? result.seed } }
           : v)),
       }));
+      await finalize(n, g);
     } catch (e) {
-      patchVersion(n, { status: "error", error: String(e).includes("Unknown job") ? "Interrupted (the server restarted)" : String(e) });
+      if (live()) patchVersion(n, { status: "error", error: String(e).includes("Unknown job") ? "Interrupted (the server restarted)" : String(e) });
+    }
+  }
+  async function finalize(n: number, g: number) {
+    for (let tries = 0; tries < 3 && gen.current === g; tries++) {
+      try {
+        await flush();
+        const id = await ensureId();
+        const v = await api.finalizeVersion(id, n);
+        if (gen.current !== g) return;
+        if (v.block) {
+          patchVersion(n, { block: v.block, seed: v.seed, savedAs: v.savedAs, audio: v.audio });
+          return;
+        }
+      } catch { /* the server's own watcher finishes it */ }
+      await new Promise((r) => setTimeout(r, 1500));
     }
   }
 
@@ -181,13 +300,23 @@ export default function CreateScreen({
     editPlan((base) => withSectionEdit(base, role, edit, arrOpts, defaultBand(base.genre)),
       `Regenerate the ${label.toLowerCase()}`, changes);
 
+  // Save to library: the version's block (already in Practice) joins the
+  // library, linked to this session.
   async function saveVersion(v: SVersion): Promise<string> {
-    if (!v.jobId) throw new Error("This version has no audio");
-    const name = `${session.title || "Song"} v${v.n}`;
-    const r = await api.saveBlockFromJob(v.jobId, name);
-    await api.addToLibrary(r.name, { title: name });
-    patchVersion(v.n, { savedAs: r.name });
-    return r.name;
+    const id = await ensureId();
+    await flush();
+    const r = await api.saveVersionToLibrary(id, v.n);
+    patchVersion(v.n, { savedAs: r.version.savedAs, block: r.version.block });
+    return r.entry.block_name;
+  }
+
+  // A version whose audio is gone: render it again from its plan + seed.
+  async function renderAgain(v: SVersion) {
+    const id = await ensureId();
+    const nv = await api.renderVersion(id, v.n);
+    patchVersion(v.n, { jobId: nv.jobId, status: nv.status, progress: 0, message: nv.message, audio: nv.audio,
+      error: undefined });
+    if (nv.status === "running" && nv.jobId) await follow(v.n, nv.jobId);
   }
 
   // Timeline → Add block: the song's sections as blocks, the chosen block
@@ -201,14 +330,41 @@ export default function CreateScreen({
     setMode("blocks");
   }
 
-  function newSession() {
+  // New song: the current thread is already in History; start a fresh one.
+  async function newSession() {
     if (busy) return;
-    if (session.msgs.length && !window.confirm("Start a new song? This thread will be cleared.")) return;
-    setSession(EMPTY_SESSION);
-    nextN.current = 0;
-    setSelected(null);
+    await flush();
+    show(EMPTY_SESSION);
     setMode("session");
   }
+
+  // History → reopen a song exactly where you left off.
+  async function openSession(id: string) {
+    if (busy) return;
+    if (id !== sref.current.id) {
+      await flush();
+      show(await api.getSession(id));
+    }
+    setMode("session");
+  }
+
+  // Library / Practice → Open in Timeline: the block's session (or a new one
+  // whose v1 is the block), on the Timeline.
+  useEffect(() => {
+    if (!openBlock) return;
+    onOpenBlockConsumed();
+    (async () => {
+      try {
+        if (busy) throw new Error("Wait for the version that's composing to finish first.");
+        const r = await api.sessionFromBlock(openBlock);
+        await flush();
+        show(r.session, r.version);
+        setMode("timeline");
+      } catch (e) {
+        window.alert(String(e instanceof Error ? e.message : e).replace(/^\{"detail":"(.*)"\}$/, "$1"));
+      }
+    })();
+  }, [openBlock]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function openAdvanced() {
     const p = basePlan();
@@ -223,9 +379,11 @@ export default function CreateScreen({
     <>
       <div className={"tab-pane" + (mode === "session" ? "" : " hidden")}>
         <SessionView session={session} busy={busy} active={active && mode === "session"}
-          onSend={send} onSave={saveVersion}
+          onSend={send} onSave={saveVersion} onPractice={(v) => v.block && onPractice(v.block)}
+          onRender={renderAgain}
           onOpenTimeline={() => setMode("timeline")} onAdvanced={openAdvanced}
-          onBlocks={() => setMode("blocks")} onNew={newSession} />
+          onBlocks={() => setMode("blocks")} onNew={() => { void newSession(); }}
+          onHistory={() => setMode("history")} />
       </div>
       <div className={"tab-pane" + (mode === "timeline" ? "" : " hidden")}>
         <TimelineView session={session} version={shown} busy={busy} active={active && mode === "timeline"}
@@ -233,6 +391,13 @@ export default function CreateScreen({
           genreName={(g) => presets.find((p) => p.id === g)?.name ?? g}
           onPickVersion={setSelected} onBack={() => setMode("session")} onSend={send}
           onRegenerate={regenerateSection} onEdit={editPlan} onAddBlock={addBlock} />
+      </div>
+      <div className={"tab-pane" + (mode === "history" ? "" : " hidden")}>
+        <SubHeader title="History" onBack={() => setMode("session")} />
+        <HistoryView active={active && mode === "history"} currentId={session.id} busy={busy}
+          onOpen={(id) => { void openSession(id); }}
+          onDeleted={(id) => { if (id === sref.current.id) show(EMPTY_SESSION); }}
+          onRenamed={(id, title) => { if (id === sref.current.id) setSession((s) => ({ ...s, title })); }} />
       </div>
       <div className={"tab-pane" + (mode === "advanced" ? "" : " hidden")}>
         <SubHeader title="Advanced form" onBack={() => setMode("session")} />

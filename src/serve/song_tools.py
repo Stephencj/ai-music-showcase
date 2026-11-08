@@ -1374,6 +1374,81 @@ def export_audio(
             "duration_seconds": round(audio.shape[1] / sr, 2)}
 
 
+# --- Create sessions (the app's song threads) -------------------------------
+
+_SESSION_REF = "A session id from list_sessions (or the id open_block_as_session returned)."
+
+
+def _session_call(fn, *args, **kwargs):
+    from src.api import sessions
+    try:
+        return fn(*args, **kwargs)
+    except sessions.SessionError as exc:
+        raise ToolError(str(exc)) from None
+
+
+def _version_brief(v: dict) -> dict:
+    r = v.get("result") or {}
+    return {"n": v["n"], "status": v.get("status"), "made_from": v.get("from"), "seed": v.get("seed"),
+            "plan": v.get("plan"), "changes": v.get("changes") or [], "interpreter": v.get("interpreter"),
+            "job_id": v.get("jobId"), "block": v.get("block"), "in_library": bool(v.get("savedAs")),
+            "audio": "missing (render again)" if v.get("audio") else ("ok" if v.get("status") == "done" else None),
+            "error": v.get("error"),
+            "sections": [f"{x['label']} ({x['bars']} bars)" for x in r.get("sections") or []],
+            "key": r.get("key"), "tempo": r.get("tempo")}
+
+
+def list_sessions(limit: Annotated[int, Field(description="How many, most recent first (0 = all).")] = 20) -> list[dict]:
+    """Stephen's songs in the app's Create screen (its History): one thread
+    per song, with its style, how many versions and the latest one. Continue
+    one with revise_session."""
+    from src.api import sessions
+    return sessions.list_sessions(limit)
+
+
+def get_session(session: Annotated[str, Field(description=_SESSION_REF)]) -> dict:
+    """One song's whole thread: what was asked and answered, and every
+    version (its plan, seed, what changed, its block in Practice)."""
+    from src.api import sessions
+    s = _session_call(sessions.get, session)
+    return {"id": s["id"], "title": s.get("title"), "created": s.get("created"), "updated": s.get("updated"),
+            "messages": [{k: m[k] for k in ("role", "kind", "text", "changes", "notes", "version") if m.get(k)}
+                         for m in s["msgs"]],
+            "versions": [_version_brief(v) for v in s["versions"]]}
+
+
+def open_block_as_session(
+    block: Annotated[str, Field(description="A block name (list_blocks / list_library).")],
+) -> dict:
+    """Open a saved block as a song thread, the way the app's Library →
+    Open in Timeline does: the block's own session if it came from one,
+    else a new session whose v1 is the block (its audio and seed) planned
+    from its saved settings, ready for revise_session."""
+    from src.api import sessions
+    r = _session_call(sessions.from_block, block)
+    s = r["session"]
+    return {"session_id": s["id"], "title": s.get("title"), "version": r.get("version"),
+            "versions": [_version_brief(v) for v in s["versions"]]}
+
+
+def revise_session(
+    session: Annotated[str, Field(description=_SESSION_REF)],
+    feedback: Annotated[str, Field(description="What to change, in plain English, e.g. 'quieter, simpler "
+                                               "bass, no trumpet stabs'.")],
+    wait: Annotated[bool, Field(description="Wait for the new version's render.")] = True,
+    timeout_s: Annotated[int, Field(description="Longest to wait when wait=true.")] = DEFAULT_TIMEOUT_S,
+) -> dict:
+    """Continue a song's thread in the app: feedback on its latest version →
+    the revised plan (same seed, so only what you asked for changes) → the
+    next version, added to the same session (Stephen sees it in Create and
+    it joins Practice). Returns what changed and the new version."""
+    from src.api import sessions
+    out = _session_call(sessions.revise, session, feedback, wait, timeout_s)
+    if out.get("version"):
+        out["version"] = _version_brief(out["version"])
+    return out
+
+
 def _options_doc() -> str:
     """The option catalog, appended to the generating tools' descriptions so a
     model sees every choice without another call."""
@@ -1408,6 +1483,8 @@ TOOLS = [
     list_blocks, save_block, rename_block, set_block_tags,
     list_block_versions, snapshot_block_version, restore_block_version,
     list_library, add_to_library, list_songs, save_song,
+    # Create sessions (song threads)
+    list_sessions, get_session, open_block_as_session, revise_session,
     # library folders (one per video)
     list_folders, create_folder, rename_folder, delete_folder, get_folder,
     add_to_folder, move_to_folder, remove_from_folder, reorder_folder,

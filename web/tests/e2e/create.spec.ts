@@ -1,5 +1,5 @@
 import { test, expect, type APIRequestContext, type Page, type Request } from "@playwright/test";
-import { openCreateMode, tab } from "./nav";
+import { currentSessionId, deleteSessions, freshCreate, openCreateMode, tab } from "./nav";
 
 /**
  * Create: the song workspace. Describe → v1 → a quick-change chip → v2 →
@@ -7,7 +7,8 @@ import { openCreateMode, tab } from "./nav";
  * just that section (same seed) → "What should change?" from the timeline →
  * Add block (hands the song's sections + the block to Blocks). Works with
  * whichever interpreter answers (Claude, the local AI or the rules). Cleans
- * up the library entry and the blocks it made. Screenshots land in
+ * up the library entry, the blocks it made and its session (with the
+ * versions' auto-saved blocks). Screenshots land in
  * test-screenshots/<project>-*.png.
  */
 
@@ -16,12 +17,6 @@ type Body = Record<string, unknown> & { seed?: number; arrangement?: string; tem
 
 const GEN_TIMEOUT = 300_000;
 
-async function fresh(page: Page) {
-  await page.goto("/app/");
-  await page.evaluate(() => localStorage.removeItem("aimusic.create.session"));
-  await page.reload();
-  await tab(page, /Create/);
-}
 
 function nextGenerate(page: Page) {
   return page.waitForRequest((r) => r.url().endsWith("/api/generate") && r.method() === "POST",
@@ -40,7 +35,7 @@ test("describe → v1 → quick change → v2 → compare → timeline → regen
   test.setTimeout(1_200_000);
   const made: { library: string[]; blocks: string[] } = { library: [], blocks: [] };
   try {
-    await fresh(page);
+    await freshCreate(page);
     await expect(page.getByTestId("session-title")).toHaveText("New song");
     await expect(page.getByTestId("quick-quieter")).toBeDisabled();
     await expect(page.getByTestId("open-timeline")).toBeDisabled();
@@ -177,6 +172,7 @@ test("describe → v1 → quick change → v2 → compare → timeline → regen
   } finally {
     for (const id of made.library) await request.delete(`/api/library/${encodeURIComponent(id)}`);
     for (const b of made.blocks) await request.delete(`/api/blocks/${encodeURIComponent(b)}`);
+    await deleteSessions(request, [await currentSessionId(page)]);
   }
 });
 
@@ -222,7 +218,7 @@ test("Library, Practice and Band tabs, the Advanced form and Blocks still work",
   }
 });
 
-test("Advanced form opens with the session's plan", async ({ page }) => {
+test("Advanced form opens with the session's plan", async ({ page, request }) => {
   await page.addInitScript(() => {
     if (sessionStorage.getItem("seeded")) return;
     sessionStorage.setItem("seeded", "1");
@@ -240,6 +236,11 @@ test("Advanced form opens with the session's plan", async ({ page }) => {
   const adv = page.locator(".tab-pane:not(.hidden) .tab-pane:not(.hidden)");
   await expect(adv.locator('input[type="number"]').first()).toHaveValue("97", { timeout: 15_000 });
   await expect(adv.locator(".keypick").first()).toContainText("D minor");
+  // The browser's old thread moved to the server (and is cleaned up here).
+  const sid = await currentSessionId(page);
+  expect(sid).toBeTruthy();
+  expect((await (await request.get(`/api/sessions/${sid}`)).json()).title).toBe("Seeded song");
+  await deleteSessions(request, [sid]);
 });
 
 test("voice note: the recording is transcribed into the box", async ({ page, browserName }) => {

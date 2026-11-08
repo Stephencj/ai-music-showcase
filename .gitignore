@@ -170,3 +170,4 @@ web/dist-dressup/
 android/app/src/main/assets/dressup/
 android/keystore.properties
 android/*.keystore
+data/sessions/

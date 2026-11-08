@@ -43,8 +43,14 @@ function autoCapo(keyPc: number): number {
   return 0;
 }
 
-export default function PracticeScreen({ isActive, requestBlock, onBlockConsumed }: {
+// Block names are stored filesystem-safe (spaces → "_"); match a requested
+// name back to the listed block either way.
+const normName = (s: string) => s.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+const AUTO_TAG = "auto-saved";
+
+export default function PracticeScreen({ isActive, requestBlock, onBlockConsumed, onOpenTimeline }: {
   isActive?: boolean; requestBlock?: string | null; onBlockConsumed?: () => void;
+  onOpenTimeline?: (block: string) => void;
 }) {
   const [mode, setMode] = useState<Mode>("block");
   const [blocks, setBlocks] = useState<Block[]>([]);
@@ -141,6 +147,21 @@ export default function PracticeScreen({ isActive, requestBlock, onBlockConsumed
     api.getBlocks().then((bs) => setBlocks(bs.filter((b) => b.has_preview))).catch(() => {});
     api.listSongs().then((r) => setSongs(r.songs || [])).catch(() => {});
   }, [isActive]);
+
+  // A requested block listed under its stored name ("Song v2" → "Song_v2").
+  useEffect(() => {
+    if (!selected.startsWith("block:")) return;
+    const nm = selected.slice(6);
+    if (!blocks.length || blocks.some((b) => b.name === nm)) return;
+    const hit = blocks.find((b) => normName(b.name) === normName(nm));
+    if (hit) setSelected(`block:${hit.name}`);
+  }, [blocks, selected]);
+
+  // Versions made in Create (auto-saved) first, newest first; then every other block.
+  const fromCreate = useMemo(() => blocks.filter((b) => b.tags?.includes(AUTO_TAG))
+    .sort((a, b) => (b.created ?? "").localeCompare(a.created ?? "")), [blocks]);
+  const otherBlocks = useMemo(() => blocks.filter((b) => !b.tags?.includes(AUTO_TAG)), [blocks]);
+  const curBlock = selected.startsWith("block:") ? blocks.find((b) => b.name === selected.slice(6)) : undefined;
 
   // External request (e.g. Band → casual jam): focus this block in block mode.
   useEffect(() => {
@@ -631,8 +652,15 @@ export default function PracticeScreen({ isActive, requestBlock, onBlockConsumed
                 {songs.map((s) => <option key={`song:${s}`} value={`song:${s}`}>{s}</option>)}
               </optgroup>
             )}
+            {fromCreate.length > 0 && (
+              <optgroup label="From Create">
+                {fromCreate.map((b) => (
+                  <option key={`block:${b.name}`} value={`block:${b.name}`}>{b.name.replace(/_/g, " ")}</option>
+                ))}
+              </optgroup>
+            )}
             <optgroup label="Blocks">
-              {blocks.map((b) => (
+              {otherBlocks.map((b) => (
                 <option key={`block:${b.name}`} value={`block:${b.name}`}>{b.name}</option>
               ))}
             </optgroup>
@@ -665,6 +693,20 @@ export default function PracticeScreen({ isActive, requestBlock, onBlockConsumed
           ))}
         </div>
       </div>
+
+      {mode === "block" && selected && onOpenTimeline && (
+        <div className="practice-timeline-row">
+          <button className="btn ghost sm" data-testid="practice-open-timeline"
+            disabled={!curBlock || curBlock.timeline?.ok === false}
+            onClick={() => curBlock && onOpenTimeline(curBlock.name)}>Open in Timeline</button>
+          {(!curBlock || curBlock.timeline?.ok === false) && (
+            <span className="te-note" data-testid="practice-timeline-reason">
+              {selected.startsWith("song:") ? "Songs built from blocks have no timeline"
+                : curBlock?.timeline?.reason ?? ""}
+            </span>
+          )}
+        </div>
+      )}
 
       {score && notation !== "chord" && (
         <div className="keymode-row">
