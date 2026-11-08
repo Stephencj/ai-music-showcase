@@ -165,3 +165,22 @@ test("create a folder from the header and file a song from All songs", async ({ 
   expect((await (await request.get("/api/library/folders")).json()).folders
     .filter((x: { path: string }) => x.path.startsWith(PREFIX))).toHaveLength(1);
 });
+
+test("folders: Remove inside a folder only takes the song out of that folder", async ({ page, request }) => {
+  const [block] = await freshBlocks(request, 1);
+  const f = (await (await request.post("/api/library/folders", { data: { name: `${PREFIX} Remove test` } })).json()).folder;
+  made.push(f.id);
+  await request.post(`/api/library/folders/${f.id}/items`, { data: { block_names: [block] } });
+  const [entry] = await folderItems(request, f.id);
+  added.push(entry);
+
+  await openLibrary(page);
+  await row(page, f.id).click();
+  const card = page.locator(`[data-testid=library-card][data-entry="${entry}"]`);
+  await expect(card.getByTestId("remove-entry")).toHaveCount(0);          // no delete inside a folder
+  await card.getByTestId("remove-from-folder").click();
+  await expect(card).toHaveCount(0);
+  expect(await folderItems(request, f.id)).toEqual([]);
+  const { library } = await (await request.get("/api/library")).json();
+  expect(library.map((e: { id: string }) => e.id)).toContain(entry);      // still in the library
+});

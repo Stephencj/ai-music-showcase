@@ -84,9 +84,17 @@ export default function LibraryScreen({ isActive, onOpen }: {
     }
   };
 
+  // Inside a folder, Remove only takes the song out of that folder; deleting
+  // from the whole library is only offered in All songs / Unfiled.
+  const inFolder = current !== ALL && current !== UNFILED;
   const remove = async (e: LibraryEntry) => {
-    if (!window.confirm(`Remove "${e.title}" from the library?`)) return;
     try {
+      if (inFolder) {
+        await api.removeFromFolder(current, e.id);
+        await load();
+        return;
+      }
+      if (!window.confirm(`Delete "${e.title}" from the library? This removes it from every folder.`)) return;
       await api.removeFromLibrary(e.id);
       await load();
     } catch (err) {
@@ -355,9 +363,17 @@ function LibraryCard({ entry, folders, current, sortable, onOpen, onToggleFav, o
           ))}
           {(entry.folders ?? []).length > 0 && <option value={UNFILED}>Unfiled (out of folders)</option>}
         </select>
-        <button className="btn ghost sm danger" onClick={() => onRemove(entry)} data-testid="remove-entry" aria-label="Remove">
-          🗑 Remove
-        </button>
+        {current !== ALL && current !== UNFILED ? (
+          <button className="btn ghost sm" onClick={() => onRemove(entry)} data-testid="remove-from-folder"
+            aria-label="Remove from this folder">
+            Remove from folder
+          </button>
+        ) : (
+          <button className="btn ghost sm danger" onClick={() => onRemove(entry)} data-testid="remove-entry"
+            aria-label="Delete from library">
+            🗑 Delete
+          </button>
+        )}
       </div>
     </div>
   );

@@ -209,6 +209,8 @@ export const deleteFolder = (id: string) =>
   jsend<{ deleted: string; now_unfiled: string[] }>("DELETE", folderPath(id));
 export const reorderFolder = (id: string, entry_ids: string[]) =>
   jsend<{ folder: LibraryFolder }>("PUT", `${folderPath(id)}/order`, { entry_ids });
+export const removeFromFolder = (id: string, entry_id: string) =>
+  jsend<{ folder: LibraryFolder }>("DELETE", `${folderPath(id)}/items/${encodeURIComponent(entry_id)}`);
 export const moveLibraryEntry = (entry_id: string, to_folder: string, from_folder = "") =>
   jpost<{ folders: { id: string; path: string }[] }>("/api/library/move", { entry_id, to_folder, from_folder });
 
