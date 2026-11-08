@@ -149,6 +149,20 @@ class GenerateReviseTests(_Isolated):
         with self.assertRaises(ToolError):                      # no silent overwrite
             song_tools.export_audio(rev["job_id"], dest_dir=str(self.out), name="bed")
 
+    def test_revise_keeps_a_random_seed(self):
+        import time
+        first = self.gen(seed=0, arrangement="hits_only,calm")
+        for _ in range(40):                                  # let the record writer finish...
+            rec = song_tools._load_record(first["job_id"]) or {}
+            if rec.get("result"):
+                break
+            time.sleep(0.1)
+        rec.pop("result", None)                              # ...then revise as if it hadn't yet
+        song_tools._write_record(first["job_id"], rec)
+        rev = song_tools.revise(first["job_id"], {"tempo": 118})
+        self.jobs.append(rev["job_id"])
+        self.assertEqual(rev["seed"], first["seed"])
+
     def test_job_survives_a_restart(self):
         res = self.gen(arrangement="hits_only,calm_keys,simple_bass")
         # Wait for the record writer, then forget the in-memory job.

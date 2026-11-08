@@ -749,7 +749,9 @@ def revise(
     if new_seed:
         params["seed"] = 0 if kind == "generate" else int(time.time()) % 1_000_000
     elif kind == "generate" and not params.get("seed"):
-        params["seed"] = ((rec.get("result") or {}).get("seed")) or params.get("seed") or 0
+        # A random seed: reuse the one the job drew (its record may not have the result yet).
+        job = _job(job_id)
+        params["seed"] = (job.result.get("seed") if job.status == "done" else None) or 0
     if kind == "generate":
         new_id = _submit_generate(params, parent=job_id)
     elif kind == "score_video":
