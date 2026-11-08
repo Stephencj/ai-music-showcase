@@ -51,8 +51,17 @@ git clone --depth 1 --filter=blob:none --sparse https://github.com/sgossner/VSCO
 mkdir karoryfer.sneakybass && curl -L -o sb.zip \
     https://github.com/sfzinstruments/karoryfer.sneakybass/releases/download/v1.000/Sneakybass_v1.000.zip \
     && unzip -q sb.zip -d karoryfer.sneakybass && rm sb.zip
+git clone --depth 1 --filter=blob:none --sparse https://github.com/sgossner/VCSL.git vcsl-extra
+(cd vcsl-extra && git sparse-checkout set "Aerophones/Reed Aerophones/Tenor Saxophone/Vibrato" \
+    "Aerophones/Reed Aerophones/Tenor Saxophone/Non-Vibrato" \
+    "Aerophones/Edge-blown Aerophones/Pipe Organ/Quiet Pedal") && rm -rf vcsl-extra/.git
 python -I ../../scripts/setup/make_christmas_sfz.py .
 ```
+
+`vcsl-extra` (about 160 MB, CC0) holds a real tenor sax (VCSL "Brett" tenor:
+vibrato takes for melodies, two-layer straight sustains for section parts;
+without it the tenor plays the alto samples) and the quiet pipe organ's own
+pedal rank for the choir style's pedal bass.
 
 The muted trumpet uses the trumpet folder already downloaded for the horns
 (`vsco2-ce/Brass/Trumpet/straightM-sus`). Celesta, nylon guitar, acoustic
@@ -76,6 +85,7 @@ About 4.9 GB on disk in all. A render loads only the samples its notes use.
 | Flute (73), clarinet (71), oboe (68), church organ (19) | VSCO 2 CE | CC0 |
 | Muted trumpets (59), cello (42) | VSCO 2 CE (straight-mute sustains; cello section) | CC0 |
 | Upright bass (32) | Karoryfer Sneakybass (1958 Otto Rubner double bass, pizzicato) | CC0 |
+| Tenor sax (66), organ pedal bass (19, tracks named "pedal") | VCSL (Versilian Studios) | CC0 |
 
 Music made with any of them can be used commercially. Don't commit or ship
 the jRhodes samples themselves.

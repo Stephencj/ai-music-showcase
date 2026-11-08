@@ -65,6 +65,15 @@ def _instrumental_only(ids, fallback=None):
     return tuple(fb) or None
 
 
+def _timeline_spec(timeline) -> dict | None:
+    """Blocks of one style render in that style (sampled instruments, lead
+    voice, mix); a mix of styles keeps the plain render."""
+    from src.daw_integration.generic import blocks as block_store
+    genres = {(block_store.block_spec(str(e["block_name"])) or {}).get("genre")
+              for e in timeline if isinstance(e, dict) and e.get("block_name")}
+    return {"genre": genres.pop()} if len(genres) == 1 else None
+
+
 def run_generation(req, progress, job_id: str) -> dict:
     """Compose → HQ render → (optional) PDF → (optional) save/split blocks.
 
@@ -200,6 +209,8 @@ def run_generation(req, progress, job_id: str) -> dict:
         ],
         "progression": out.get("progression") or [],
         "section": None,
+        # The lead voice it was rendered with, so a re-render sounds the same.
+        **({"lead_patch": lead_patch} if lead_patch else {}),
         **({"tune": plan["tune"], "arrangement": getattr(req, "arrangement", None) or ""} if plan else {}),
     }
 
@@ -304,7 +315,7 @@ def run_song_render(timeline: list[dict], with_pdf: bool,
     identically."""
     from src.daw_integration.generic import block_concat
     from src.daw_integration.generic import blocks as block_store
-    from src.audio_processing.render.pipeline import render_to_audio
+    from src.audio_processing.render.pipeline import render_to_audio, style_render_args
     from src.scoring.pdf_export import export_zip
 
     if not timeline:
@@ -322,7 +333,7 @@ def run_song_render(timeline: list[dict], with_pdf: bool,
     progress("Rendering high-quality audio…", 0.45)
     render = render_to_audio(
         midi=midi_path, output_dir=job_dir / "render",
-        with_stems=False, master_preset="default",
+        with_stems=False, **style_render_args(_timeline_spec(timeline)),
     )
     wav_path = Path(render.mix_path)
     mp3_path: Path | None = job_dir / "song.mp3"
@@ -479,12 +490,12 @@ def produce_block(name: str, *, mute=None, regenerate=None,
         try:
             import shutil
             import tempfile
-            from src.audio_processing.render.pipeline import render_to_audio
+            from src.audio_processing.render.pipeline import render_to_audio, style_render_args
             midi = block_store._midi_path(target)
             with tempfile.TemporaryDirectory() as td:
                 r = render_to_audio(midi=midi, output_dir=Path(td) / "r",
-                                    with_stems=False, master_preset=master_preset,
-                                    track_mix=track_mix or None)
+                                    with_stems=False, track_mix=track_mix or None,
+                                    **style_render_args(block_store.block_spec(target), master_preset))
                 wav = block_store._wav_path(target)
                 shutil.move(str(r.mix_path), str(wav))
                 block_store.write_preview_mp3(wav, block_store._preview_path(target))
@@ -522,12 +533,12 @@ def mix_preview(name: str, track_mix=None, master_preset: str = "default") -> st
     import shutil
     import tempfile
     from src.daw_integration.generic import blocks as block_store
-    from src.audio_processing.render.pipeline import render_to_audio
+    from src.audio_processing.render.pipeline import render_to_audio, style_render_args
 
     midi = block_store._midi_path(name)
     if not midi.exists():
         raise FileNotFoundError(f"no MIDI for block {name!r}")
-    sig = json.dumps([name, midi.stat().st_mtime, track_mix or {}, master_preset],
+    sig = json.dumps(["v2-style", name, midi.stat().st_mtime, track_mix or {}, master_preset],
                      sort_keys=True, default=str)
     key = hashlib.blake2b(sig.encode(), digest_size=9).hexdigest()
     _MIX_PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
@@ -537,7 +548,8 @@ def mix_preview(name: str, track_mix=None, master_preset: str = "default") -> st
         return key
     with tempfile.TemporaryDirectory() as td:
         r = render_to_audio(midi=midi, output_dir=Path(td) / "r", with_stems=False,
-                            master_preset=master_preset, track_mix=track_mix or None)
+                            track_mix=track_mix or None,
+                            **style_render_args(block_store.block_spec(name), master_preset))
         if not block_store.write_preview_mp3(Path(r.mix_path), mp3):
             shutil.copy(str(r.mix_path), str(mp3))
     # Keep only the most-recent ~60 previews so the cache doesn't grow forever.
@@ -608,12 +620,12 @@ def live_stems(name: str) -> dict:
     import hashlib
     import json
     from src.daw_integration.generic import blocks as block_store
-    from src.audio_processing.render.pipeline import render_to_audio
+    from src.audio_processing.render.pipeline import render_to_audio, style_render_args
 
     midi = block_store._midi_path(name)
     if not midi.exists():
         raise FileNotFoundError(f"no MIDI for block {name!r}")
-    sig = json.dumps(["v2-mp3", name, midi.stat().st_mtime], sort_keys=True, default=str)
+    sig = json.dumps(["v3-style", name, midi.stat().st_mtime], sort_keys=True, default=str)
     key = hashlib.blake2b(sig.encode(), digest_size=9).hexdigest()
     out = _LIVE_STEMS_DIR / key
     manifest = out / "stems.json"
@@ -622,8 +634,8 @@ def live_stems(name: str) -> dict:
         return json.loads(manifest.read_text())
 
     out.mkdir(parents=True, exist_ok=True)
-    r = render_to_audio(midi=midi, output_dir=out, with_stems=True,
-                        master_preset="default", track_mix=None)
+    r = render_to_audio(midi=midi, output_dir=out, with_stems=True, track_mix=None,
+                        **style_render_args(block_store.block_spec(name)))
     # Transcode each stem WAV → MP3 (~10× smaller for browser load; LAME's
     # constant encoder delay is identical across stems so they stay aligned
     # relative to each other). Fall back to the WAV if transcode fails.
@@ -889,7 +901,7 @@ def block_part_audio(name: str, track_index: int) -> str:
     import tempfile
     import pretty_midi
     from src.daw_integration.generic import blocks as block_store
-    from src.audio_processing.render.pipeline import render_to_audio
+    from src.audio_processing.render.pipeline import render_to_audio, style_render_args
 
     midi_src = block_store._midi_path(name)
     pm, _meta = block_store.load_block(name)
@@ -907,8 +919,8 @@ def block_part_audio(name: str, track_index: int) -> str:
     tmp = Path(tempfile.mkdtemp())
     midi_path = tmp / "part.mid"
     solo.write(str(midi_path))
-    render = render_to_audio(midi=midi_path, output_dir=tmp / "render",
-                             with_stems=False, master_preset="default")
+    render = render_to_audio(midi=midi_path, output_dir=tmp / "render", with_stems=False,
+                             **style_render_args(_meta.get("spec")))
     if not block_store.write_preview_mp3(Path(render.mix_path), cache):
         raise RuntimeError("could not render part preview")
     return str(cache)
@@ -1063,7 +1075,7 @@ def _ensure_song_audio(title: str):
     from src.daw_integration.generic import block_concat
     from src.daw_integration.generic import blocks as block_store
     from src.daw_integration.generic import songs as song_store
-    from src.audio_processing.render.pipeline import render_to_audio
+    from src.audio_processing.render.pipeline import render_to_audio, style_render_args
 
     song_yaml = song_store._path(title)
     safe = song_store._safe_name(title)
@@ -1084,8 +1096,8 @@ def _ensure_song_audio(title: str):
     tmp = Path(tempfile.mkdtemp())
     midi_path = tmp / "song.mid"
     pm.write(str(midi_path))
-    render = render_to_audio(midi=midi_path, output_dir=tmp / "render",
-                             with_stems=False, master_preset="default")
+    render = render_to_audio(midi=midi_path, output_dir=tmp / "render", with_stems=False,
+                             **style_render_args(_timeline_spec(timeline)))
     song_store.SONGS_DIR.mkdir(parents=True, exist_ok=True)
     try:
         shutil.copy(str(render.mix_path), str(wav))
@@ -1450,10 +1462,11 @@ def run_block_vocals(name: str, lyrics: str, voice: str, engine_name: str,
     else:
         pm.instruments = [i for i in pm.instruments if id(i) not in drop]
         if pm.instruments:
-            from src.audio_processing.render.pipeline import render_to_audio
+            from src.audio_processing.render.pipeline import render_to_audio, style_render_args
             inst_mid = job_dir / "instrumental.mid"
             pm.write(str(inst_mid))
-            r = render_to_audio(midi=str(inst_mid), output_dir=job_dir / "inst", with_stems=False)
+            r = render_to_audio(midi=str(inst_mid), output_dir=job_dir / "inst", with_stems=False,
+                                **style_render_args(_meta.get("spec")))
             inst, isr = sf.read(str(r.mix_path), dtype="float32")
         else:
             inst, isr = np.zeros((1, 2), dtype="float32"), sr
@@ -1572,10 +1585,11 @@ def run_autotune(name: str, audio_path: str, progress, job_id: str, *,
     else:
         pm.instruments = [i for i in pm.instruments if id(i) not in drop]
         if pm.instruments:
-            from src.audio_processing.render.pipeline import render_to_audio
+            from src.audio_processing.render.pipeline import render_to_audio, style_render_args
             inst_mid = job_dir / "instrumental.mid"
             pm.write(str(inst_mid))
-            r = render_to_audio(midi=str(inst_mid), output_dir=job_dir / "inst", with_stems=False)
+            r = render_to_audio(midi=str(inst_mid), output_dir=job_dir / "inst", with_stems=False,
+                                **style_render_args(spec))
             inst, isr = sf.read(str(r.mix_path), dtype="float32")
         else:
             inst, isr = np.zeros((1, 2), dtype="float32"), sr
@@ -1726,10 +1740,11 @@ def generate_part(req) -> dict:
     }
     if (req.output or "both") in ("wav", "both"):
         try:
-            from src.audio_processing.render.pipeline import render_to_audio
+            from src.audio_processing.render.pipeline import render_to_audio, style_render_args
             from src.daw_integration.generic import blocks as block_store
             r = render_to_audio(midi=str(part_dir / "part.mid"),
-                                output_dir=part_dir / "render", with_stems=False)
+                                output_dir=part_dir / "render", with_stems=False,
+                                **style_render_args({"genre": req.genre}))
             wav = part_dir / "part.wav"
             shutil.copy2(r.mix_path, wav)
             mp3 = part_dir / "part.mp3"
@@ -1803,10 +1818,11 @@ def generate_arrangement(req) -> dict:
     }
     if (req.output or "both") in ("wav", "both"):
         try:
-            from src.audio_processing.render.pipeline import render_to_audio
+            from src.audio_processing.render.pipeline import render_to_audio, style_render_args
             from src.daw_integration.generic import blocks as block_store
             r = render_to_audio(midi=str(part_dir / "part.mid"),
-                                output_dir=part_dir / "render", with_stems=False)
+                                output_dir=part_dir / "render", with_stems=False,
+                                **style_render_args({"genre": req.genre}))
             wav = part_dir / "part.wav"
             shutil.copy2(r.mix_path, wav)
             mp3 = part_dir / "part.mp3"

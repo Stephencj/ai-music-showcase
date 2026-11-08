@@ -1054,7 +1054,7 @@ def render_stems(
 ) -> dict:
     """Render one WAV per instrument (stems) plus the mix, with the same sound
     and lead voice the song was made with. Returns their paths."""
-    from src.audio_processing.render.pipeline import render_to_audio
+    from src.audio_processing.render.pipeline import render_to_audio, style_render_args
 
     style = lead = None
     if registry.get(source) is not None or _load_record(source) is not None:
@@ -1070,6 +1070,7 @@ def render_stems(
         midi = str(block_store._midi_path(source))
         _, meta = block_store.load_block(source)
         style = (meta.get("spec") or {}).get("genre")
+        lead = style_render_args(meta.get("spec")).get("lead_patch")
         out_dir = service.API_OUT / f"stems_{block_store._safe_name(source)}"
     else:
         raise ToolError(f"{source!r} is not a finished job or a block.")

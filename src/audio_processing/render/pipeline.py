@@ -131,6 +131,49 @@ def _trim_tail(audio: np.ndarray, sample_rate: int, *, floor_db: float = -60.0,
     return out
 
 
+def style_render_args(spec: Optional[dict], master_preset: Optional[str] = "default") -> dict:
+    """``render_to_audio`` keyword arguments that re-render a saved song's
+    MIDI the way it was generated: its style (sampled instruments, mix
+    profile), its lead voice and its master. ``spec`` is the generation spec
+    a block keeps (``genre``, optional ``lead_patch``). Without a genre the
+    render is the plain soundfont one, as before.
+
+    Without this a Christmas block re-rendered on General MIDI: the lead
+    track (GM synth lead 82) played the soundfont's buzzy calliope instead
+    of the clean guitar."""
+    genre = (spec or {}).get("genre")
+    if not genre:
+        return {"master_preset": master_preset}
+    args = {"style_name": genre, "master_preset": master_preset}
+    lead = (spec or {}).get("lead_patch")
+    from src.composition import christmas
+    if genre in christmas.STYLE_IDS:
+        lead = lead or christmas.DEFAULT_LEAD_PATCH
+        if master_preset in (None, "default"):
+            args["master_preset"] = None          # the Christmas profile's gentle master
+    if lead:
+        args["lead_patch"] = lead
+    return args
+
+
+def style_lufs(spec: Optional[dict]) -> Optional[float]:
+    """Delivery loudness a style's songs are levelled to after rendering
+    (Christmas background music), or None to keep the master's level."""
+    genre = (spec or {}).get("genre")
+    from src.composition import christmas
+    return christmas.DEFAULT_LUFS if genre in christmas.STYLE_IDS else None
+
+
+def level_wav(path: str | Path, target_lufs: float) -> None:
+    """Level a rendered WAV to ``target_lufs`` in place (a gentle limiter may
+    shave a peaky mix's transients so it reaches the target)."""
+    from .loudness import level
+    audio, sr = sf.read(str(path), always_2d=True)
+    info = sf.info(str(path))
+    out, _ = level(audio.T.astype("float32"), sr, float(target_lufs))
+    sf.write(str(path), out.T, sr, subtype=info.subtype)
+
+
 def _safe_filename(name: str) -> str:
     keep = "-_."
     return "".join(c if c.isalnum() or c in keep else "_" for c in name).strip("_")

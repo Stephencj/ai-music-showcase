@@ -43,7 +43,7 @@ import numpy as np
 
 NOTES = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11}
 # Note name, then a dynamic layer (v1 / mf1 / p1 …) and an optional round robin.
-NAMED = re.compile(r"_([A-G]#?)(-?\d+)_(?:(v|pp|p|mp|mf|ff|f)(\d+))?(?:_?(?:rr|RR)?(\d+))?(?:_[A-Za-z]+)?\.wav$")
+NAMED = re.compile(r"_([A-G]#?)(-?\d+)_(?:(var|vl|v|pp|p|mp|mf|ff|f)(\d+))?(?:_?(?:rr|RR)?(\d+))?(?:_[A-Za-z]+)?\.wav$")
 # glock_soft_C5_01.wav: the dynamic is a word before the note.
 WORD_DYN = re.compile(r"_(soft|medium|loud)_([A-G]#?)(-?\d+)_(\d+)\.wav$")
 DYN_ORDER = {"pp": 0, "p": 1, "soft": 1, "mp": 2, "medium": 2, "mf": 3, "f": 4, "loud": 4, "ff": 5}
@@ -64,6 +64,15 @@ PITCHED = [
      "amp_veltrack=70"),
     ("vsco2-ce-xmas/cellos_pizz.sfz", "vsco2-ce-xmas/Strings/Cello Section/pizzT", 0.001, 0.5, "one_shot",
      "amp_veltrack=70"),
+    # BrettTenor_Vib_Main_A#1_var2.wav (one take per note) and
+    # BrettTenor_NV_Main_A#1_vl2_rr1.wav (two dynamic layers).
+    ("vcsl-extra/tenor_sax_vib.sfz", "vcsl-extra/Aerophones/Reed Aerophones/Tenor Saxophone/Vibrato", 0.03, 0.25,
+     "no_loop", "amp_veltrack=50"),
+    ("vcsl-extra/tenor_sax_nv.sfz", "vcsl-extra/Aerophones/Reed Aerophones/Tenor Saxophone/Non-Vibrato", 0.03, 0.25,
+     "no_loop", "amp_veltrack=50"),
+    # The quiet organ's own pedal rank, for the choir style's pedal bass.
+    ("vcsl-extra/organ_pedal_quiet.sfz", "vcsl-extra/Aerophones/Edge-blown Aerophones/Pipe Organ/Quiet Pedal",
+     0.08, 0.5, "no_loop", "amp_veltrack=20"),
     ("vsco2-ce/trumpet_muted_sus.sfz", "vsco2-ce/Brass/Trumpet/straightM-sus", 0.05, 0.3, "no_loop",
      "amp_veltrack=50"),
 ]

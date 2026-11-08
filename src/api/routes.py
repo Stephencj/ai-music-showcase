@@ -569,14 +569,14 @@ def block_stems(name: str) -> FileResponse:
     import tempfile
     import zipfile
     from starlette.background import BackgroundTask
-    from src.audio_processing.render.pipeline import render_to_audio
+    from src.audio_processing.render.pipeline import render_to_audio, style_render_args
 
     midi = block_store._midi_path(name)
     if not midi.exists():
         raise HTTPException(404, "No MIDI for block")
     tmp = Path(tempfile.mkdtemp(prefix="blockstems_"))
-    render = render_to_audio(midi=midi, output_dir=tmp / "r",
-                             with_stems=True, master_preset="default")
+    render = render_to_audio(midi=midi, output_dir=tmp / "r", with_stems=True,
+                             **style_render_args(block_store.block_spec(name)))
     safe = block_store._safe_name(name)
     archive = tmp / f"{safe}_stems.zip"
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:

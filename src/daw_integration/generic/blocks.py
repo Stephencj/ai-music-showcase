@@ -97,9 +97,12 @@ def _total_notes(pm: pretty_midi.PrettyMIDI) -> int:
 def _write_block_wav_hq(
     pm: pretty_midi.PrettyMIDI, wav_path: Path,
     sample_rate: int = _DEFAULT_PREVIEW_SR,
+    spec: Optional[dict] = None,
 ) -> bool:
     """Render ``pm`` via the project's HQ pipeline (FluidSynthRenderer
-    + Mixer) and write a stereo WAV to ``wav_path``.
+    + Mixer) and write a stereo WAV to ``wav_path``. ``spec`` (the block's
+    generation spec) renders it in its style: sampled instruments, lead
+    voice, mix and loudness, like the generation itself.
 
     Returns True on success, False on any failure (missing soundfont,
     fluidsynth not installed, OOM mid-mix). The caller decides whether
@@ -109,7 +112,9 @@ def _write_block_wav_hq(
     try:
         # Lazy imports so blocks.py stays useful without dragging in
         # the audio_processing stack on import (keeps test load fast).
-        from src.audio_processing.render.pipeline import render_to_audio
+        from src.audio_processing.render.pipeline import (
+            level_wav, render_to_audio, style_lufs, style_render_args,
+        )
         import tempfile
 
         with tempfile.TemporaryDirectory() as td:
@@ -121,8 +126,10 @@ def _write_block_wav_hq(
                 output_dir=tmp_dir / "render",
                 sample_rate=sample_rate,
                 with_stems=False,
-                master_preset="default",
+                **style_render_args(spec),
             )
+            if style_lufs(spec) is not None:
+                level_wav(result.mix_path, style_lufs(spec))
             # Move the rendered mix.wav onto the block's expected path.
             wav_path.parent.mkdir(parents=True, exist_ok=True)
             # shutil.move is safe across same-filesystem temp dirs.
@@ -152,11 +159,12 @@ def _write_block_wav_fallback(
 def _write_block_wav(
     pm: pretty_midi.PrettyMIDI, wav_path: Path,
     sample_rate: int = _DEFAULT_PREVIEW_SR,
+    spec: Optional[dict] = None,
 ) -> bool:
     """Best-effort preview WAV: try HQ first, fall back to the
     pretty_midi path on any failure. Returns True if SOME audio
     landed at ``wav_path``."""
-    if _write_block_wav_hq(pm, wav_path, sample_rate=sample_rate):
+    if _write_block_wav_hq(pm, wav_path, sample_rate=sample_rate, spec=spec):
         return True
     return _write_block_wav_fallback(pm, wav_path, sample_rate=22050)
 
@@ -296,7 +304,7 @@ def save_block(name: str,
     elif write_wav:
         # HQ first (44.1 kHz stereo via FluidSynthRenderer + Mixer);
         # graceful fallback to pretty_midi.synthesize on failure.
-        if _write_block_wav(pm, wav_path, sample_rate=wav_sample_rate):
+        if _write_block_wav(pm, wav_path, sample_rate=wav_sample_rate, spec=spec):
             # Compact MP3 the UI actually streams (the raw WAV is too big
             # to load in the player for full-length songs).
             write_preview_mp3(wav_path, _preview_path(name))
@@ -358,6 +366,15 @@ def load_block(name: str) -> tuple[pretty_midi.PrettyMIDI, dict]:
     return pm, meta
 
 
+def block_spec(name: str) -> Optional[dict]:
+    """The block's generation spec (its genre, lead voice, …), if it has one."""
+    try:
+        with open(_yaml_path(name), "r") as f:
+            return (yaml.safe_load(f) or {}).get("spec") or None
+    except Exception:
+        return None
+
+
 def ensure_preview_wav(name: str, sample_rate: int = _DEFAULT_PREVIEW_SR) -> Optional[Path]:
     """Lazy-synth a .wav preview if it's missing. Returns the path or None on failure.
 
@@ -374,7 +391,7 @@ def ensure_preview_wav(name: str, sample_rate: int = _DEFAULT_PREVIEW_SR) -> Opt
         pm = pretty_midi.PrettyMIDI(str(midi_path))
     except Exception:
         return None
-    if _write_block_wav(pm, wav_path, sample_rate=sample_rate):
+    if _write_block_wav(pm, wav_path, sample_rate=sample_rate, spec=block_spec(name)):
         return wav_path
     return None
 
@@ -391,7 +408,7 @@ def rerender_block_wav(name: str, sample_rate: int = _DEFAULT_PREVIEW_SR) -> Opt
     except Exception:
         return None
     wav_path = _wav_path(name)
-    if _write_block_wav(pm, wav_path, sample_rate=sample_rate):
+    if _write_block_wav(pm, wav_path, sample_rate=sample_rate, spec=block_spec(name)):
         # Refresh the compact MP3 the UI streams alongside the HQ WAV.
         write_preview_mp3(wav_path, _preview_path(name))
         return wav_path

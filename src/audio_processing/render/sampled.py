@@ -64,6 +64,10 @@ class SampledInstrument:
     engine: str = "sfz"
     # For "synth" tracks: a fixed lead voice; empty = the render's lead_patch.
     voice: str = ""
+    # Only tracks whose name contains one of these (lowercase) take this
+    # library; empty = any track on ``programs``. Lets one GM program pick
+    # different libraries by role (the organ's pedal bass, a sax melody).
+    names: tuple[str, ...] = ()
 
 
 SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
@@ -96,6 +100,8 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
     SampledInstrument(id="flute", sfz="vsco2-ce-xmas/flute_sus.sfz", programs=(73,), auto_tune=True),
     SampledInstrument(id="clarinet", sfz="vsco2-ce-xmas/clarinet_sus.sfz", programs=(71,), auto_tune=True),
     SampledInstrument(id="oboe", sfz="vsco2-ce-xmas/oboe_sus.sfz", programs=(68,), auto_tune=True),
+    # The pedal bass plays the same quiet organ's own pedal rank (VCSL).
+    SampledInstrument(id="organ_pedal", sfz="vcsl-extra/organ_pedal_quiet.sfz", programs=(19,), names=("pedal",)),
     SampledInstrument(id="church_organ", sfz="vsco2-ce-xmas/organ_quiet.sfz", programs=(19,)),
     SampledInstrument(id="cello", sfz="vsco2-ce-strings/cellos_sus.sfz", programs=(42,), auto_tune=True),
     SampledInstrument(id="muted_trumpet", sfz="vsco2-ce/trumpet_muted_sus.sfz", programs=(59,), auto_tune=True,
@@ -194,6 +200,13 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
         # tighten the low end so the hats drive the groove.
         eq=(("low_shelf", 70.0, -4.0), ("peak", 400.0, -2.5), ("high_shelf", 5000.0, 6.0)),
     ),
+    # Tenor sax (VCSL, CC0): the vibrato takes for a melody, the straight
+    # two-layer sustains for section parts. Without it the tenor plays the
+    # alto samples below.
+    SampledInstrument(id="tenor_sax_melody", sfz="vcsl-extra/tenor_sax_vib.sfz", programs=(66,),
+                      names=("melody",), eq=(("peak", 250.0, -1.5),)),
+    SampledInstrument(id="tenor_sax", sfz="vcsl-extra/tenor_sax_nv.sfz", programs=(66,),
+                      eq=(("peak", 250.0, -1.5),)),
     SampledInstrument(
         id="alto_sax",
         sfz="karoryfer.weresax/Programs/Sax.sfz",
@@ -213,7 +226,8 @@ def instrument_dir() -> Path:
     return Path(env) if env else DEFAULT_INSTRUMENT_DIR
 
 
-def sampled_for(program: int, is_drum: bool, root: Optional[Path] = None) -> Optional[SampledInstrument]:
+def sampled_for(program: int, is_drum: bool, root: Optional[Path] = None,
+                name: str = "") -> Optional[SampledInstrument]:
     """The sampled library for a track, when it's installed."""
     root = root or instrument_dir()
     if is_drum and program == BRUSH_KIT:
@@ -222,6 +236,8 @@ def sampled_for(program: int, is_drum: bool, root: Optional[Path] = None) -> Opt
         if inst.is_drum != is_drum:
             continue
         if not is_drum and program not in inst.programs:
+            continue
+        if inst.names and not any(n in name.lower() for n in inst.names):
             continue
         if inst.engine != "sfz" or (root / inst.sfz).exists():
             return inst
@@ -248,6 +264,27 @@ def resolve_sound(sound: Optional[str], style_name: Optional[str] = None) -> str
         except Exception:
             logger.debug("resolve_sound: style lookup failed", exc_info=True)
     return "gm"
+
+
+def fold_into_range(notes: list[Note], *instruments: SfzInstrument) -> list[Note]:
+    """Move notes outside the instruments' sampled range by octaves until
+    they're inside, rather than letting them go silent (an SFZ plays nothing
+    where no region is mapped: a melody written above the alto sax's top
+    lost every high note)."""
+    keys = [(r.lokey, r.hikey) for i in instruments for r in i.regions
+            if r.trigger not in ("release", "release_key") and r.sample_path is not None]
+    if not keys:
+        return notes
+    bottom, top = min(k[0] for k in keys), max(k[1] for k in keys)
+    out = []
+    for n in notes:
+        p = n.pitch
+        while p > top and p - 12 >= bottom:
+            p -= 12
+        while p < bottom and p + 12 <= top:
+            p += 12
+        out.append(n if p == n.pitch else Note(p, n.start, n.end, n.velocity))
+    return out
 
 
 def _voice_eq(audio: np.ndarray, eq, sample_rate: int) -> np.ndarray:
@@ -370,15 +407,7 @@ class SampledRenderer:
             return None
         # Notes an octave shift pushes past the instrument's top fold back
         # down an octave rather than going silent.
-        top = max((r.hikey for i in (long_inst, short_inst) if i for r in i.regions), default=127)
-        bottom = min((r.lokey for i in (long_inst, short_inst) if i for r in i.regions), default=0)
-        folded = []
-        for n in shifted:
-            p = n.pitch
-            while p > top and p - 12 >= bottom:
-                p -= 12
-            folded.append(Note(p, n.start, n.end, n.velocity))
-        shifted = folded
+        shifted = fold_into_range(shifted, *(i for i in (long_inst, short_inst) if i))
         parts = []
         for inst, chosen in (
             (short_inst, [n for n in shifted if short_inst is not None and n.end - n.start < layer.short_below]),
@@ -436,7 +465,7 @@ class SampledRenderer:
             if not track.notes:
                 continue
             order.append(track.name)
-            inst = sampled_for(track.program, track.is_drum, self.root)
+            inst = sampled_for(track.program, track.is_drum, self.root, track.name)
             if inst is None:
                 fluid_tracks.append(track)
                 continue
@@ -446,6 +475,8 @@ class SampledRenderer:
                 audio = self._lead(notes, index, inst.voice or self.lead_patch)
             else:
                 sfz = self._instrument(inst)
+                if not inst.is_drum:
+                    notes = fold_into_range(notes, sfz)
                 for region in sfz.regions:
                     region.seq_counter = 0
                 audio = SfzRenderer(sfz, self.sample_rate, cache=SampleCache(), seed=self.seed + index,
