@@ -141,7 +141,8 @@ def _bass_chain() -> list[pdb.Plugin]:
 
 def _chords_chain() -> list[pdb.Plugin]:
     return [
-        pdb.HighpassFilter(cutoff_frequency_hz=120.0),
+        # Rumble only: a piano's left hand is the bass in a ballad or trio.
+        pdb.HighpassFilter(cutoff_frequency_hz=50.0),
         # Cut the 200-400 Hz mud zone so the comp doesn't fight the bass /
         # vocal body.
         pdb.PeakFilter(cutoff_frequency_hz=250.0, gain_db=-2.0, q=0.9),
@@ -232,7 +233,8 @@ def _woodwind_chain() -> list[pdb.Plugin]:
 def _strings_chain() -> list[pdb.Plugin]:
     """Orchestral strings — gentle comp + long hall, gentle mud cut."""
     return [
-        pdb.HighpassFilter(cutoff_frequency_hz=120.0),
+        # Rumble only: the family includes cellos and contrabasses.
+        pdb.HighpassFilter(cutoff_frequency_hz=50.0),
         pdb.PeakFilter(cutoff_frequency_hz=300.0, gain_db=-2.0, q=0.9),
         pdb.PeakFilter(cutoff_frequency_hz=3500.0, gain_db=-0.5, q=0.7),
         pdb.Compressor(threshold_db=-20.0, ratio=2.0,

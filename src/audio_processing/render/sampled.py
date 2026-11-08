@@ -110,7 +110,8 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
                       eq=(("high_shelf", 6000.0, -3.0),)),
     SampledInstrument(id="sleigh_bells", sfz="vcsl/sleigh_bells.sfz", programs=(112,),
                       eq=(("high_shelf", 7000.0, -3.0),)),
-    SampledInstrument(id="shaker", sfz="vcsl/shaker.sfz", programs=(113,)),
+    SampledInstrument(id="shaker", sfz="vcsl/shaker.sfz", programs=(113,),
+                      eq=(("low_shelf", 250.0, -12.0),)),     # handling rumble; a shaker has no lows
     SampledInstrument(id="flute", sfz="vsco2-ce-xmas/flute_sus.sfz", programs=(73,), auto_tune=True),
     SampledInstrument(id="clarinet", sfz="vsco2-ce-xmas/clarinet_sus.sfz", programs=(71,), auto_tune=True),
     SampledInstrument(id="oboe", sfz="vsco2-ce-xmas/oboe_sus.sfz", programs=(68,), auto_tune=True),
@@ -119,15 +120,22 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
     # isn't covered). Both mapped at sounding pitch.
     SampledInstrument(id="nylon_guitar",
                       sfz="freepats-nylon/SpanishClassicalGuitar-SFZ-20190618/SpanishClassicalGuitar-20190618.sfz",
-                      programs=(24,), auto_tune=True),
+                      programs=(24,), auto_tune=True,
+                      eq=(("peak", 250.0, -2.0),)),           # body boom that clouds the low-mids
     SampledInstrument(id="steel_guitar",
                       sfz="freepats-steel/FSS-SteelStringGuitar-SFZ-20200521/FSS-SteelStringGuitar-20200521.sfz",
                       programs=(25,), auto_tune=True,
                       eq=(("high_shelf", 6000.0, -2.5),)),   # bright strums, kept under the tune
-    # The pedal bass plays the same quiet organ's own pedal rank (VCSL).
-    SampledInstrument(id="organ_pedal", sfz="vcsl-extra/organ_pedal_quiet.sfz", programs=(19,), names=("pedal",)),
-    SampledInstrument(id="church_organ", sfz="vsco2-ce-xmas/organ_quiet.sfz", programs=(19,)),
-    SampledInstrument(id="cello", sfz="vsco2-ce-strings/cellos_sus.sfz", programs=(42,), auto_tune=True),
+    # The pedal bass plays the same quiet organ's own pedal rank (VCSL). Its
+    # recorded fundamental sits 12-20 dB under the octave above, so the pedal
+    # sounded an octave up and the choir style had no bass; restore it.
+    SampledInstrument(id="organ_pedal", sfz="vcsl-extra/organ_pedal_quiet.sfz", programs=(19,), names=("pedal",),
+                      eq=(("peak", 60.0, 12.0), ("peak", 130.0, -4.0))),
+    SampledInstrument(id="church_organ", sfz="vsco2-ce-xmas/organ_quiet.sfz", programs=(19,),
+                      eq=(("peak", 250.0, -2.0),)),           # the manual under the choir, not over it
+    # Often the bass line (fireside, orchestral): lift the low strings' weak fundamentals.
+    SampledInstrument(id="cello", sfz="vsco2-ce-strings/cellos_sus.sfz", programs=(42,), auto_tune=True,
+                      eq=(("low_shelf", 100.0, 5.0),)),
     SampledInstrument(id="muted_trumpet", sfz="vsco2-ce/trumpet_muted_sus.sfz", programs=(59,), auto_tune=True,
                       eq=(("high_shelf", 5000.0, -2.0),)),
     # Strings and French horn: VSCO 2 CE sustains (scripts/setup/make_vsco_sfz.py).
@@ -241,6 +249,7 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
         sfz="karoryfer.swirly-drums/Programs/Basic_kit.sfz",
         is_drum=True,
         programs=(BRUSH_KIT_PROGRAM,),
+        eq=(("low_shelf", 50.0, -8.0),),      # kick and room rumble below the bass
     ),
     # Tenor sax (VCSL, CC0): the vibrato takes for a melody, the straight
     # two-layer sustains for section parts. Without it the tenor plays the

@@ -189,7 +189,8 @@ _CHRISTMAS = MixProfile(
         "harp":         -25.0,
         "brushes":      -27.0,
         "drum":         -27.0,
-        "pedal":        -26.0,
+        "pedal":        -21.0,     # the organ's bass line, under the choir style
+        "contrabass":   -24.0,     # the orchestra's bass (the bowed bass is softer than a pluck)
         "bass":         -25.0,
         "french horn":  -25.0,
         "muted":        -26.0,
@@ -197,7 +198,7 @@ _CHRISTMAS = MixProfile(
         "flute":        -27.0,
         "clarinet":     -26.0,
         "oboe":         -27.0,
-        "cello":        -24.0,
+        "cello":        -23.0,
         "choir":        -24.0,
         "organ":        -24.0,
         "string":       -23.0,
