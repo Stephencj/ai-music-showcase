@@ -109,7 +109,8 @@ class SampledRoutingTest(unittest.TestCase):
                 p = root / inst.sfz
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text("")
-            self.assertEqual(sampled.sampled_for(4, False, root).id, "rhodes")
+            self.assertEqual(sampled.sampled_for(4, False, root).id, "electric_piano")
+            self.assertEqual(sampled.sampled_for(5, False, root).id, "fm_piano")
             self.assertEqual(sampled.sampled_for(33, False, root).id, "electric_bass")
             self.assertIsNone(sampled.sampled_for(38, False, root))    # synth bass stays GM
             self.assertEqual(sampled.sampled_for(0, True, root).id, "drum_kit")

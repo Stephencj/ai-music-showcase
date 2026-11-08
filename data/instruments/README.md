@@ -13,7 +13,7 @@ Override the folder with `$AI_MUSIC_INSTRUMENTS`.
 From this folder:
 
 ```bash
-for r in jlearman.jRhodes3c karoryfer.black-and-blue-basses virtuosity_drums karoryfer.weresax; do
+for r in karoryfer.black-and-blue-basses virtuosity_drums karoryfer.weresax; do
   git clone --depth 1 https://github.com/sfzinstruments/$r.git && rm -rf $r/.git
 done
 ```
@@ -80,26 +80,46 @@ The muted trumpet uses the trumpet folder already downloaded for the horns
 brush kit have no free recorded library here yet, so they play the General
 MIDI soundfont's patches (MuseScore_General, MIT).
 
+Electric pianos (about 70 MB):
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/sfzinstruments/GregSullivan.E-Pianos.git gregsullivan.e-pianos
+(cd gregsullivan.e-pianos && git sparse-checkout set "Wurlitzer EP200") && rm -rf gregsullivan.e-pianos/.git
+git clone --depth 1 --filter=blob:none --sparse https://github.com/sgossner/VCSL.git vcsl-fm
+(cd vcsl-fm && git sparse-checkout set "Electrophones/TX81Z/FM Piano") && rm -rf vcsl-fm/.git
+python -I ../../scripts/setup/make_christmas_sfz.py .     # writes vcsl-fm/fm_piano.sfz
+```
+
 About 4.9 GB on disk in all. A render loads only the samples its notes use.
 
 ## Libraries and licences
 
-| Part | Library | Licence |
-|---|---|---|
-| Rhodes (EP 1/2) | jlearman jRhodes3c, 1977 Rhodes Mark I | Free to use in your music; redistributing the samples is CC BY-NC-SA 4.0 |
-| Electric bass (GM 32-37) | Karoryfer Black And Blue Basses | CC0 |
-| Drum kit | Virtuosity Drums (Versilian Studios / Karoryfer) | CC0 |
-| Saxes (GM 64-67) | Karoryfer Weresax | CC0 |
-| Trumpet (56, 59), trombone (57), brass section (61) | VSCO 2 CE staccato | CC0 |
-| Guitar lead voice | Karoryfer Black And Green Guitars (Gretsch / Hofner) | CC0 |
-| Grand piano (GM 0-1) | VCSL, Kawai grand (Versilian Studios) | CC0 |
-| Harp (46), glockenspiel (9), sleigh bells (112), shaker (113) | VCSL | CC0 |
-| Flute (73), clarinet (71), oboe (68), church organ (19) | VSCO 2 CE | CC0 |
-| Muted trumpets (59), cello (42) | VSCO 2 CE (straight-mute sustains; cello section) | CC0 |
-| Upright bass (32) | Karoryfer Sneakybass (1958 Otto Rubner double bass, pizzicato) | CC0 |
-| Nylon guitar (24) | FreePats Spanish Classical Guitar | CC0 |
-| Steel-string guitar (25) | FreePats FSS Steel-String (FlameStudios samples) | GPL 3 with FreePats' exception: a composition using the sounds is not covered by the GPL |
-| Tenor sax (66), organ pedal bass (19, tracks named "pedal") | VCSL (Versilian Studios) | CC0 |
+Only libraries whose licence allows selling and monetising the music made
+with them belong here: no NonCommercial (NC) or NoDerivatives (ND) terms.
+`tests/unit/test_instrument_licenses.py` fails on an NC/ND licence in this
+table, and on any library folder `sampled.py` plays that isn't listed.
 
-Music made with any of them can be used commercially. Don't commit or ship
-the jRhodes samples themselves.
+| Part | Library | Folder | Licence |
+|---|---|---|---|
+| Electric piano 1 (GM 4) | Greg Sullivan's Wurlitzer EP200 (sfzinstruments mapping) | gregsullivan.e-pianos | CC BY 3.0: credit "Wurlitzer EP200 samples by Greg Sullivan" |
+| Electric piano 2 (GM 5; GM 4 without the Wurlitzer) | VCSL, Yamaha TX81Z "FM Piano" | vcsl-fm | CC0 |
+| Electric bass (GM 32-37) | Karoryfer Black And Blue Basses | karoryfer.black-and-blue-basses | CC0 |
+| Drum kit | Virtuosity Drums (Versilian Studios / Karoryfer) | virtuosity_drums | CC0 |
+| Saxes (GM 64-67) | Karoryfer Weresax | karoryfer.weresax | CC0 |
+| Trumpet (56, 59), trombone (57), brass section (61), muted trumpets (59) | VSCO 2 CE | vsco2-ce | CC0 |
+| Strings (48-51), spiccato (45), French horn (60), cello (42) | VSCO 2 CE | vsco2-ce-strings | CC0 |
+| Guitar lead voice | Karoryfer Black And Green Guitars (Gretsch / Hofner) | karoryfer.black-and-green-guitars | CC0 |
+| Grand piano (GM 0-1), harp (46), glockenspiel (9), sleigh bells (112), shaker (113) | VCSL (Versilian Studios) | vcsl | CC0 |
+| Flute (73), clarinet (71), oboe (68), church organ (19) | VSCO 2 CE | vsco2-ce-xmas | CC0 |
+| Upright bass (32) | Karoryfer Sneakybass (1958 Otto Rubner double bass, pizzicato) | karoryfer.sneakybass | CC0 |
+| Nylon guitar (24) | FreePats Spanish Classical Guitar | freepats-nylon | CC0 |
+| Steel-string guitar (25) | FreePats FSS Steel-String (FlameStudios samples) | freepats-steel | GPL 3 with FreePats' exception: a composition using the sounds is not covered by the GPL |
+| Tenor sax (66), organ pedal bass (19, tracks named "pedal") | VCSL (Versilian Studios) | vcsl-extra | CC0 |
+
+Music made with any of them can be used commercially; the Wurlitzer needs the
+credit above (in a track's or video's credits).
+
+The jlearman jRhodes3c Rhodes used to play GM 4/5. Its sample licence is
+CC BY-NC-SA 4.0 (non-commercial), so it was removed; delete the
+`jlearman.jRhodes3c` folder if it's still here. Its author offers a
+commercial licence on request (jjlearman@gmail.com).

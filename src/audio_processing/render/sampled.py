@@ -9,7 +9,8 @@ mixer's gain staging is unchanged.
 The libraries are free downloads, not committed (see
 ``data/instruments/README.md``):
 
-- Rhodes: jlearman jRhodes3c (1977 Rhodes Mark I; free to use in your music).
+- Electric pianos: Greg Sullivan's Wurlitzer EP200 (CC BY 3.0) and the VCSL
+  TX81Z FM piano (CC0).
 - Electric bass: Karoryfer Black And Blue Basses (CC0).
 - Drums: Virtuosity Drums, a contemporary jazz kit (CC0).
 - Alto sax: Karoryfer Weresax (CC0).
@@ -189,12 +190,23 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
         sfz="vsco2-ce/trombone_stac.sfz",
         programs=(57,),
     ),
+    # Electric pianos. Only samples whose licence allows commercial music
+    # (tests/unit/test_instrument_licenses.py): Greg Sullivan's Wurlitzer
+    # EP200 (CC BY 3.0, credit him) for electric piano 1, the VCSL Yamaha
+    # TX81Z FM piano (CC0) for electric piano 2 and as the fallback.
     SampledInstrument(
-        id="rhodes",
-        sfz="jlearman.jRhodes3c/jRhodes3c-looped-flac-sfz/_jRhodes-stereo-looped.sfz",
-        programs=(4, 5),                      # Electric Piano 1 / 2
-        # A brighter, barkier tine like the fusion records.
+        id="electric_piano",
+        sfz="gregsullivan.e-pianos/Wurlitzer EP200/Wurlitzer EP200.sfz",
+        programs=(4,),                        # Electric Piano 1
+        # A brighter, barkier voicing like the fusion records.
         eq=(("high_shelf", 2500.0, 4.0), ("peak", 300.0, -2.0)),
+    ),
+    SampledInstrument(
+        id="fm_piano",
+        sfz="vcsl-fm/fm_piano.sfz",
+        programs=(4, 5),                      # Electric Piano 2 (and 1 without the Wurlitzer)
+        auto_tune=True,
+        eq=(("high_shelf", 5000.0, -4.0),),   # the FM tine is far brighter than a Rhodes
     ),
     SampledInstrument(
         id="electric_bass",

@@ -70,6 +70,8 @@ PITCHED = [
      "no_loop", "amp_veltrack=50"),
     ("vcsl-extra/tenor_sax_nv.sfz", "vcsl-extra/Aerophones/Reed Aerophones/Tenor Saxophone/Non-Vibrato", 0.03, 0.25,
      "no_loop", "amp_veltrack=50"),
+    # Yamaha TX81Z "FM Piano" (FMPiano_C3_vl2.wav): the electric piano 2 (GM 5).
+    ("vcsl-fm/fm_piano.sfz", "vcsl-fm/Electrophones/TX81Z/FM Piano", 0.001, 0.5, "no_loop", "amp_veltrack=75"),
     # The quiet organ's own pedal rank, for the choir style's pedal bass.
     ("vcsl-extra/organ_pedal_quiet.sfz", "vcsl-extra/Aerophones/Edge-blown Aerophones/Pipe Organ/Quiet Pedal",
      0.08, 0.5, "no_loop", "amp_veltrack=20"),
