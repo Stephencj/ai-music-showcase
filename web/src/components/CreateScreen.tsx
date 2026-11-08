@@ -178,6 +178,8 @@ export default function CreateScreen({
 
   const defaultBand = (genre: string) => presets.find((p) => p.id === genre)?.default_instruments ?? [];
   const lanes = useMemo(() => laneMap(families), [families]);
+  const instNames = useMemo(() => Object.fromEntries(families.flatMap((f) => f.instruments.map((i) => [i.id, i.label]))),
+    [families]);
 
   // Follow a generation job into its version; once done the server saves it
   // as a block (the Practice pool) and caches its render.
@@ -387,7 +389,7 @@ export default function CreateScreen({
       </div>
       <div className={"tab-pane" + (mode === "timeline" ? "" : " hidden")}>
         <TimelineView session={session} version={shown} busy={busy} active={active && mode === "timeline"}
-          lanes={lanes} arrOpts={arrOpts} defaultBand={defaultBand}
+          lanes={lanes} instNames={instNames} arrOpts={arrOpts} defaultBand={defaultBand}
           genreName={(g) => presets.find((p) => p.id === g)?.name ?? g}
           onPickVersion={setSelected} onBack={() => setMode("session")} onSend={send}
           onRegenerate={regenerateSection} onEdit={editPlan} onAddBlock={addBlock} />

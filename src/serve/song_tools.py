@@ -435,6 +435,9 @@ def describe_options() -> dict:
                 "tempo": "This section's tempo (40-260).",
                 "progression": "Roman numerals, one per bar, e.g. ['ii7','V7','Imaj7','VI7'].",
                 "instruments": "Instrument ids that play in this section (a subset of the band).",
+                "lead": "Christmas styles: the instrument id that carries the tune in this section (a band member "
+                        "that can play it, e.g. move it off a silenced choir to 'organ_church'). A finished "
+                        "song's sections list who has it (melody) and who could (melody_options).",
                 "knobs": "Engine knobs, e.g. {'drum_fill': 0.2}.",
             },
         },

@@ -526,7 +526,12 @@ def compose_song(
     realized_progression: list[dict] = []
 
     pacing_picks: dict[str, object] = {}
+    # Who actually played in each section (instrument ids whose technique
+    # wrote notes there): the Timeline shows the rest as resting.
+    section_plays: list[list[str]] = []
+    _note_count = lambda: sum(len(t.notes) for t in midi.tracks)  # noqa: E731
     for sec_idx, section in enumerate(sections):
+        section_plays.append([])
         s, e = int(section["start_bar"]), int(section["end_bar"])
         label = section.get("label", f"Section {sec_idx + 1}")
         role = section.get("role") or role_for_label(label)
@@ -745,6 +750,7 @@ def compose_song(
                              else arrangement) or "",
                 section_info=dict(section.get("info") or {}),
             )
+            _before = _note_count()
             try:
                 apply_technique(midi, technique, ctx)
             except Exception:
@@ -754,6 +760,9 @@ def compose_song(
                     technique.name, instrument_token, role,
                 )
 
+            _id = getattr(inst_obj, "id", None) or instrument_token
+            if _note_count() > _before and _id not in section_plays[-1]:
+                section_plays[-1].append(_id)
             selections.append({
                 "section_label": label,
                 "section_role":  role,
@@ -906,4 +915,5 @@ def compose_song(
         "bars": eff_bars,
         "progression": realized_progression,
         "section_tempos": section_tempos,
+        "section_plays": section_plays,
     }

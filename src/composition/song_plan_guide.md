@@ -67,7 +67,7 @@ Example. Feedback "it's background, lower the volume" →
 | `tempo` | number | BPM (40–260). |
 | `swing` | number | 0 = straight, 0.33 = shuffle. |
 | `sections` | list | Roles to include: `intro`, `verse`, `prechorus`, `chorus`, `bridge`, `outro`. Empty = the genre's full song. |
-| `section_overrides` | object | role → `{energy, bars, arrangement, feature_lead, key, scale, tempo}`. `energy` 0.4 (sparse) – 1.5 (big). `arrangement` overrides the song's arrangement for that role only. |
+| `section_overrides` | object | role → `{energy, bars, arrangement, feature_lead, key, scale, tempo}`. `energy` 0.4 (sparse) – 1.5 (big). `arrangement` overrides the song's arrangement for that role only. Christmas styles: `lead` (an instrument id in the band) moves that role's tune to another player. |
 | `instruments` | list | The WHOLE band (replaces the genre's). Prefer `add_instruments` / `remove_instruments`. |
 | `arrangement` | string | Comma-separated arrangement variants (engine-specific, below). |
 | `lead_patch` | string | Lead voice (engine-specific, below). |
