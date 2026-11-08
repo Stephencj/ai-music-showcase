@@ -16,7 +16,7 @@ import { currentSessionId, deleteSessions, freshCreate, tab } from "./nav";
 const GEN_TIMEOUT = 300_000;
 
 type Block = { name: string; tags?: string[]; created?: string; has_preview: boolean;
-  spec?: { genre: string; seed: number; tune?: string; sections?: { role: string }[] } | null;
+  spec?: { genre?: string; seed: number; tune?: string; sections?: { role: string }[] } | null;
   timeline?: { ok: boolean; reason?: string; session_id?: string } };
 type Entry = { id: string; block_name: string };
 
@@ -26,10 +26,14 @@ const blocksOf = async (request: APIRequestContext) => (await (await request.get
 const libraryOf = async (request: APIRequestContext) =>
   ((await (await request.get("/api/library")).json()) as { library: Entry[] }).library;
 
+// Library entries may name a block with spaces ("Xmas Original (Pop)"); blocks
+// are stored with underscores. Compare the stored names.
+const stored = (n: string) => n.trim().replace(/[/\\ ]/g, "_");
+
 /** Put a block in the library unless it's there; returns the entry id to
  *  remove afterwards (null when it was already there: not ours to remove). */
 async function ensureInLibrary(request: APIRequestContext, block: string): Promise<string | null> {
-  if ((await libraryOf(request)).some((e) => e.block_name === block)) return null;
+  if ((await libraryOf(request)).some((e) => stored(e.block_name) === stored(block))) return null;
   const r = await request.post("/api/library", { data: { block_name: block } });
   expect(r.ok()).toBeTruthy();
   return ((await r.json()) as { saved: string }).saved;
@@ -148,7 +152,7 @@ test("Library → Open in Timeline: a Christmas sample, edited into v2 with the 
   try {
     // A Christmas sample that isn't already one of your songs.
     const all = await blocksOf(request);
-    const xmas = all.filter((b) => b.has_preview && b.spec?.genre.startsWith("christmas_") && b.spec.tune
+    const xmas = all.filter((b) => b.has_preview && b.spec?.genre?.startsWith("christmas_") && b.spec.tune
       && b.timeline?.ok && !b.timeline.session_id);
     const block = xmas.find((b) => b.name === "Xmas_Original_(Pop)") ?? xmas[0];
     expect(block, "a Christmas sample block").toBeTruthy();
@@ -160,10 +164,13 @@ test("Library → Open in Timeline: a Christmas sample, edited into v2 with the 
 
     await page.goto("/app/");
     await tab(page, /Library/);
-    const card = page.locator(`[data-testid="library-card"][data-block="${block.name}"]`);
+    // The card carries the entry's own block name (may be spelled with spaces).
+    const entryName = (await libraryOf(request)).find((e) => stored(e.block_name) === block.name)!.block_name;
+    const card = page.locator(`[data-testid="library-card"][data-block="${entryName}"]`);
     await expect(card).toBeVisible({ timeout: 15_000 });
     if (plain) {
-      const pc = page.locator(`[data-testid="library-card"][data-block="${plain.name}"]`);
+      const pn = (await libraryOf(request)).find((e) => stored(e.block_name) === plain.name)!.block_name;
+      const pc = page.locator(`[data-testid="library-card"][data-block="${pn}"]`);
       await expect(pc.getByTestId("open-timeline")).toBeDisabled();
       await expect(pc.getByTestId("timeline-reason")).toContainText(/saved|guessed|available/);
     }

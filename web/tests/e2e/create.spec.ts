@@ -179,8 +179,10 @@ test("describe → v1 → quick change → v2 → compare → timeline → regen
 test("Library, Practice and Band tabs, the Advanced form and Blocks still work", async ({ page, request }) => {
   // A library entry to open in Practice (removed again at the end).
   const blocks = (await (await request.get("/api/blocks")).json()) as { name: string }[];
+  // Only a block that isn't in the library yet (the entry is deleted at the end).
+  const inLib = new Set(((await (await request.get("/api/library")).json()).library as { id: string }[]).map((e) => e.id));
   let added: { id: string; block_name: string } | undefined;
-  for (const b of blocks) {
+  for (const b of blocks.filter((x) => !inLib.has(x.name))) {
     const r = await request.post("/api/library", { data: { block_name: b.name } });
     if (r.ok()) { added = (await r.json()).entry; break; }
   }
