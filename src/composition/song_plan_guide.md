@@ -103,6 +103,40 @@ sax + trombone section), `trumpet`, `guitar` (fusion overdrive),
 `guitar_high`, `guitar_stack` (guitar + an octave up in reverb), `guitar_clean`
 (clean jazz guitar), `trumpet_guitar` (trumpet + overdriven guitar unison).
 
+### Christmas (`genre: "christmas_*_full"`)
+
+Use it for anything Christmas / holiday / carol, cozy winter background
+music, and any request that names a carol. Six styles (one line each under
+"Christmas styles" in the catalog): `christmas_swing_full` (big-band
+crooner swing), `christmas_jazz_trio_full` (cozy piano trio, brushes),
+`christmas_orchestral_full` (warm film orchestra, harp, glockenspiel, sleigh
+bells; ends on strings), `christmas_fireside_full` (nylon guitar, soft piano,
+cello), `christmas_choir_full` (choir chorale, quiet organ, strings; reverent),
+`christmas_pop_full` (light pop anthem). Pick by the request's words: big band /
+swing / crooner → swing; trio / jazz / lounge → trio; orchestra / film / strings
+→ orchestral; acoustic / fireside / guitar → fireside; choir / hymn / church /
+reverent → choir; pop / rock / anthem → pop; "Christmas" alone → orchestral.
+
+`tune`: a public-domain carol id from "Christmas tunes" in the catalog (e.g.
+`silent_night`, `jingle_bells`, `the_first_noel`), or `"original"` (or leave
+it out) for an original Christmas-feel tune. NEVER a copyrighted song: if the
+user names one (White Christmas, Let It Snow, Have Yourself a Merry Little
+Christmas, Rudolph, Frosty, Sleigh Ride, All I Want for Christmas, Christmas
+Time Is Here, ...) use `"original"` and say why in the summary.
+
+`length_seconds`: how long (120-300 typical; the plan picks whole passes of
+the tune). Key and tempo vary by seed unless asked. Christmas songs are
+delivered at −16 LUFS (background-ready) unless `target_lufs` is set;
+"background" for Christmas ambience means −16, not −25 (the music IS the
+video's sound). Arrangement variants are under "Christmas arrangement
+variants" in the catalog. No `lead_patch` or `hits`.
+
+Example. "cozy jazz trio Christmas, Silent Night, background" →
+`{"plan": {"genre": "christmas_jazz_trio_full", "tune": "silent_night", "target_lufs": -16}, "summary": "Cozy Christmas jazz trio playing Silent Night, mixed for background listening (−16 LUFS)."}`
+
+Example. "big band christmas, something original, about 3 minutes" →
+`{"plan": {"genre": "christmas_swing_full", "tune": "original", "length_seconds": 180}, "summary": "Big-band Christmas swing on an original tune, about 3 minutes."}`
+
 ### Every other genre (`compose_song`)
 
 Other genre ids use the general composer. They honor genre, key, scale,
@@ -155,3 +189,21 @@ variant x, "−x" = remove it):
 | "the keys are too busy" | `calm_keys` |
 | "sounds like preschool", "too plain" | swap `calm`/`calm_drums` for `pocket_drums`, add `bass_flare` |
 | "harsh lead", "lead doesn't fit the band" | a different `lead_patch` (e.g. `guitar_stack`, `horns`) |
+
+Christmas styles:
+
+| feedback | change |
+|---|---|
+| "add sleigh bells", "needs bells" | +`sleigh_bells` |
+| "warmer", "cozier", "darker", "softer" | +`warmer` |
+| "less busy", "simpler", "too much going on" | +`less_busy` |
+| "end on the celesta", "end on the bells" | +`celesta_ending` (−`strings_ending`) |
+| "end on the strings" | +`strings_ending` (−`celesta_ending`) |
+| "no key change", "stay in one key" | +`no_key_change` (−`key_change`) |
+| "add a key change", "lift the last chorus" | +`key_change` (−`no_key_change`) |
+| "add a choir", "voices" | +`choir_pad` |
+| "jazzier chords", "richer harmony" | +`rich_harmony` (−`plain_harmony`) |
+| "simpler chords", "traditional harmony" | +`plain_harmony` (−`rich_harmony`) |
+| "brushes", "softer drums" | +`brushes` |
+| "make it orchestral / a trio / big band / acoustic / choir / pop" | the matching `christmas_*_full` genre (keep the tune) |
+| "play Jingle Bells instead" | `tune: "jingle_bells"` |

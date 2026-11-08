@@ -114,7 +114,9 @@ class SampledRoutingTest(unittest.TestCase):
             self.assertIsNone(sampled.sampled_for(38, False, root))    # synth bass stays GM
             self.assertEqual(sampled.sampled_for(0, True, root).id, "drum_kit")
             self.assertEqual(sampled.sampled_for(65, False, root).id, "alto_sax")
-            self.assertIsNone(sampled.sampled_for(0, False, root))     # piano stays GM
+            self.assertEqual(sampled.sampled_for(0, False, root).id, "grand_piano")
+            self.assertEqual(sampled.sampled_for(32, False, root).id, "upright_bass")
+            self.assertIsNone(sampled.sampled_for(24, False, root))    # nylon guitar stays GM
 
     def test_missing_libraries_fall_back_to_the_soundfont(self):
         from src.daw_integration.generic.midi_export import MidiExporter, NoteEvent

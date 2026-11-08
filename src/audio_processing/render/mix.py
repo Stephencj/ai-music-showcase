@@ -113,8 +113,13 @@ class Mixer:
         family_mix: Optional[dict[str, MixDefaults]] = None,
         sidechain_kick_into: tuple[str, ...] = (),
         track_mix: Optional[dict[str, dict]] = None,
+        stem_targets: Optional[dict[str, float]] = None,
     ):
         self.library = library or EffectChainLibrary()
+        # Loudness targets per stem (MixProfile.stem_targets): the first key
+        # that is a substring of the track name (or "family:<name>") sets the
+        # stem's integrated LUFS before the producer's own track settings.
+        self.stem_targets = stem_targets or {}
         self.family_mix = family_mix or _FAMILY_MIX
         # Families ducked by the kick's envelope before they reach the
         # master bus. Empty tuple = no ducking. Driven by MixProfile.
@@ -145,6 +150,10 @@ class Mixer:
         if widen > 0:
             stereo = _apply_haas_widen(stereo, stem.sample_rate, widen)
 
+        target = self._stem_target(stem.name, family)
+        if target is not None:
+            stereo = _level_to(stereo, stem.sample_rate, target)
+
         # Per-track producer adjustments, layered on the family baseline.
         ts = self.track_mix.get(stem.name)
         if ts:
@@ -169,6 +178,16 @@ class Mixer:
             audio=stereo.astype(np.float32, copy=False),
             sample_rate=stem.sample_rate,
         )
+
+    def _stem_target(self, name: str, family: str) -> Optional[float]:
+        low = name.lower()
+        for key, lufs in self.stem_targets.items():
+            if key.startswith("family:"):
+                if key[7:] == family:
+                    return float(lufs)
+            elif key in low:
+                return float(lufs)
+        return None
 
     # -- full mix ----------------------------------------------------------
 
@@ -236,6 +255,20 @@ class Mixer:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _level_to(stereo: np.ndarray, sample_rate: int, target_lufs: float, max_db: float = 24.0) -> np.ndarray:
+    """Scale a stem to ``target_lufs`` integrated (gated, so a part that plays
+    only some sections is levelled by what it plays). Silent stems pass."""
+    from .loudness import integrated_lufs
+    try:
+        lufs = integrated_lufs(stereo, sample_rate)
+    except Exception:  # noqa: BLE001 — a stem too short to measure keeps its level
+        return stereo
+    if not np.isfinite(lufs) or lufs < -70:
+        return stereo
+    gain = float(np.clip(target_lufs - lufs, -max_db, max_db))
+    return _apply_gain_db(stereo, gain)
+
 
 def _mono_to_stereo(mono: np.ndarray) -> np.ndarray:
     return np.stack([mono, mono], axis=0)

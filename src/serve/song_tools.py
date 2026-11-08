@@ -50,6 +50,8 @@ from src.api.schemas import (
     VideoScoreRequest,
 )
 from src.composition import song_plan
+from src.composition import christmas
+from src.composition.carols import carol_catalog
 from src.composition.funk_fusion import ARRANGEMENT_INSTRUMENTS, ARRANGEMENT_VARIANTS
 from src.daw_integration.generic import blocks as block_store
 from src.daw_integration.generic.styles import STYLES
@@ -60,7 +62,8 @@ RECORDS_DIR = service.PROJECT_ROOT / "data" / "outputs" / "song_tools"
 DEFAULT_TIMEOUT_S = 900
 
 # Styles whose techniques read each option (others ignore it).
-ARRANGEMENT_STYLES = ("funk_fusion_full",)
+CHRISTMAS_STYLES = tuple(christmas.STYLE_IDS)
+ARRANGEMENT_STYLES = ("funk_fusion_full",) + CHRISTMAS_STYLES
 HIT_STYLES = ("funk_fusion_full", "neo_soul_full")
 SAMPLED_LEAD_STYLES = ("funk_fusion_full", "fusion_full", "neo_soul_full")
 
@@ -130,16 +133,24 @@ def _check_genre(genre: str) -> None:
         raise ToolError(f"Unknown genre {genre!r}.{_suggest(genre, STYLES)} Call list_styles for the ids.")
 
 
-def _variants(arrangement: str) -> list[str]:
+def _catalog(genre: str) -> tuple[dict, dict]:
+    """(variant descriptions, variant -> instruments) for a style."""
+    if genre in CHRISTMAS_STYLES:
+        return christmas.ARRANGEMENT_VARIANTS, christmas.ARRANGEMENT_INSTRUMENTS
+    return ARRANGEMENT_VARIANTS, ARRANGEMENT_INSTRUMENTS
+
+
+def _variants(arrangement: str, genre: str = "funk_fusion_full") -> list[str]:
     """Split and validate a comma-separated arrangement string."""
+    catalog, _ = _catalog(genre)
     names = [a.strip() for a in (arrangement or "").replace("+", ",").split(",") if a.strip()]
-    bad = [n for n in names if n not in ARRANGEMENT_VARIANTS]
+    bad = [n for n in names if n not in catalog]
     if bad:
         from src.audio_processing.render.lead_voices import LEAD_VOICES
         hints = "".join(f" {b!r} is a lead voice: set lead_patch={b!r}." if b in LEAD_VOICES
-                        else _suggest(b, ARRANGEMENT_VARIANTS) for b in bad)
-        raise ToolError(f"Unknown arrangement variant(s) {bad}.{hints} "
-                        f"Valid: {', '.join(ARRANGEMENT_VARIANTS)}.")
+                        else _suggest(b, catalog) for b in bad)
+        raise ToolError(f"Unknown arrangement variant(s) {bad} for {genre}.{hints} "
+                        f"Valid: {', '.join(catalog)}.")
     return names
 
 
@@ -158,11 +169,31 @@ def _check_hit_style(hit_style: str) -> None:
         raise ToolError(f"hit_style must be one of {list(HIT_STYLE_OPTIONS)}, not {hit_style!r}.")
 
 
-def _needed_instruments(variants: list[str]) -> list[str]:
+def _needed_instruments(variants: list[str], genre: str = "funk_fusion_full") -> list[str]:
+    needs = _catalog(genre)[1]
     out: list[str] = []
     for v in variants:
-        out += [i for i in ARRANGEMENT_INSTRUMENTS.get(v, ()) if i not in out]
+        out += [i for i in needs.get(v, ()) if i not in out]
     return out
+
+
+def _check_tune(genre: str, tune: str) -> str:
+    """A valid tune id for Christmas styles ("" for other styles)."""
+    if not tune:
+        return ""
+    if genre not in CHRISTMAS_STYLES:
+        raise ToolError(f"tune only works with the Christmas styles ({', '.join(CHRISTMAS_STYLES)}), not {genre!r}.")
+    if christmas.denied_song(tune):
+        raise ToolError(f"{tune!r} is a copyrighted song and can't be arranged. Use a public-domain carol "
+                        f"({', '.join(carol_catalog())}) or 'original'.")
+    if tune == "original":
+        return tune
+    from src.composition.carols import carol
+    t = carol(tune)
+    if t is None:
+        raise ToolError(f"Unknown carol {tune!r}.{_suggest(tune, carol_catalog())} "
+                        f"Carols: {', '.join(carol_catalog())}, or 'original'.")
+    return t.id
 
 
 def _record_path(job_id: str) -> Path:
@@ -315,8 +346,10 @@ def list_styles(
     """List the song styles (the `genre` ids generate_song and score_video take).
 
     Ids ending in `_full` / `_full_song` are complete multi-section songs.
-    `funk_fusion_full` is the flagship: the only style with arrangement
-    variants, hit points and the full lead-voice set (see describe_options).
+    `funk_fusion_full` is the flagship: arrangement variants, hit points and
+    the full lead-voice set. The `christmas_*_full` styles (swing, jazz trio,
+    orchestral, fireside, choir, pop) play public-domain carols or original
+    tunes with their own variants (see describe_options).
     """
     out: list[dict] = []
     q = query.strip().lower()
@@ -409,8 +442,81 @@ def describe_options() -> dict:
             "arrangement": "Overrides the score's arrangement for this chapter.",
             "label": "Free text.",
         },
+        "christmas": {
+            "styles": dict(christmas.STYLE_INFO),
+            "tunes": {"carols": carol_catalog(),
+                      "original": "An original Christmas-feel tune written from the seed (AABA: ii-V turnarounds, "
+                                  "secondary dominants, diminished passing chords, IV-iv-I, suspensions).",
+                      "not_allowed": "Copyrighted songs (White Christmas, Let It Snow, Rudolph, Sleigh Ride, "
+                                     "...) are refused; only public-domain carols or originals."},
+            "arrangement_variants": [{"name": n, "description": d,
+                                      "needs_instruments": list(christmas.ARRANGEMENT_INSTRUMENTS.get(n, ()))}
+                                     for n, d in christmas.ARRANGEMENT_VARIANTS.items()],
+            "form": "Intro (the tune's last phrase), a soft first pass, fuller passes (countermelody, sparkle), an "
+                    "interlude, a last pass that may lift a half step, a tag and a held, slowing ending.",
+            "length": "length_seconds 120-300 picks the number of passes of the tune.",
+            "loudness": f"Delivered at {christmas.DEFAULT_LUFS:g} LUFS by default (background-ready; YouTube plays "
+                        "at about -14). Pass target_lufs to change it.",
+            "playlist": "christmas_mix renders N songs (styles, keys, tempos, tunes and seeds varied) crossfaded "
+                        "into one WAV/MP3 with a tracklist, e.g. total_minutes=60 for an hour of ambience.",
+            "recipes": [
+                {"name": "Cozy jazz trio, Silent Night", "tool": "generate_song",
+                 "args": {"genre": "christmas_jazz_trio_full", "tune": "silent_night", "length_seconds": 180}},
+                {"name": "Warm orchestral Jingle Bells with sleigh bells", "tool": "generate_song",
+                 "args": {"genre": "christmas_orchestral_full", "tune": "jingle_bells",
+                          "arrangement": "strings_ending"}},
+                {"name": "An hour of Christmas ambience", "tool": "christmas_mix",
+                 "args": {"total_minutes": 60, "target_lufs": -16}},
+            ],
+        },
         "recipes": RECIPES,
     }
+
+
+def christmas_mix(
+    total_minutes: Annotated[float, Field(description="Length of the mix in minutes (e.g. 60 for an hour of "
+                                                      "ambience). Or give count.")] = 0,
+    count: Annotated[int, Field(description="Number of songs (0 = from total_minutes).")] = 0,
+    styles: Annotated[list[str], Field(description="Christmas style ids to rotate (empty = all six): "
+                                                   + ", ".join(christmas.STYLE_IDS))] = [],  # noqa: B006
+    tunes: Annotated[list[str], Field(description="Carol ids to draw from (empty = every carol); each plays once "
+                                                  "before any repeats.")] = [],  # noqa: B006
+    originals: Annotated[float, Field(description="Share of original tunes (0-1).")] = 0.4,
+    min_track_seconds: Annotated[float, Field(description="Shortest song.")] = 150,
+    max_track_seconds: Annotated[float, Field(description="Longest song.")] = 240,
+    crossfade: Annotated[float, Field(description="Seconds of equal-power crossfade between songs.")] = 4.0,
+    target_lufs: Annotated[float, Field(description="Loudness of the whole mix (YouTube plays at about -14; "
+                                                     "-16 suits background listening).")] = -16.0,
+    arrangement: Annotated[str, Field(description="Christmas variants for every song, e.g. 'less_busy,warmer'.")] = "",
+    seed: Annotated[int, Field(description="Same seed = the same running order and songs.")] = 1,
+    name: Annotated[str, Field(description="File name for the mix (in data/outputs/playlists).")] = "christmas-mix",
+    formats: Annotated[list[str], Field(description="'mp3' (320 kbps) and/or 'wav' (24-bit; about 150 MB per "
+                                                    "15 minutes).")] = ["mp3"],  # noqa: B006
+    wait: Annotated[bool, Field(description="Wait for the whole mix (about 10-20 s of rendering per song).")] = True,
+    timeout_s: int = 3600,
+) -> dict:
+    """Render one seamless Christmas playlist: songs generated in varied
+    styles, keys, tempos and tunes (carols and originals), each levelled to
+    the same loudness and joined with gentle crossfades into one file.
+    Returns the files, the tracklist (with start times) and YouTube-style
+    chapter lines."""
+    params = {k: v for k, v in locals().items() if k not in ("wait", "timeout_s")}
+    from src.api.schemas import ChristmasMixRequest
+    bad = [f for f in formats if f not in ("mp3", "wav")]
+    if bad or not formats:
+        raise ToolError("formats must be a list of 'mp3' and/or 'wav'.")
+    if count <= 0 and total_minutes <= 0:
+        raise ToolError("Give total_minutes (e.g. 60) or count.")
+    for t in tunes:
+        _check_tune(styles[0] if styles else CHRISTMAS_STYLES[0], t)
+    _variants(arrangement, CHRISTMAS_STYLES[0])
+    req = ChristmasMixRequest(total_minutes=total_minutes, count=count, styles=list(styles), tunes=list(tunes),
+                              originals=originals, min_track_seconds=min_track_seconds,
+                              max_track_seconds=max_track_seconds, crossfade=crossfade, target_lufs=target_lufs,
+                              arrangement=arrangement, seed=seed, name=name, formats=list(formats))
+    job_id = _call(routes.christmas_mix, req)["job_id"]
+    _start_record(job_id, "christmas_mix", params)
+    return _wait(job_id, timeout_s) if wait else {"job_id": job_id, "status": "running"}
 
 
 def list_techniques(
@@ -488,39 +594,32 @@ def _check_sections(sections: list[str], overrides: dict) -> None:
 
 def _fit_length(genre: str, params: dict) -> dict:
     """Section bar overrides that bring the song to about ``length_seconds``
-    (every role scaled by the same factor, so the form keeps its shape)."""
+    (Christmas styles plan their own length from the tune instead)."""
     overrides = {r: dict(o) for r, o in (params.get("section_overrides") or {}).items()}
     seconds = float(params.get("length_seconds") or 0)
-    if seconds <= 0:
+    if seconds <= 0 or genre in CHRISTMAS_STYLES:
         return overrides
     tempo = float(params.get("tempo") or STYLES[genre].tempo)
-    secs = arrangement_mod.build_sections(genre, list(params.get("sections") or []), None, overrides)
-    bars = {}
-    for s in secs:
-        bars.setdefault(s["role"], []).append(s["end_bar"] - s["start_bar"] + 1)
-    total = sum(sum(v) for v in bars.values())
-    factor = (seconds * tempo / 240.0) / max(1, total)
-    for role, lengths in bars.items():
-        if "bars" not in overrides.get(role, {}):
-            overrides.setdefault(role, {})["bars"] = max(1, min(64, round(max(lengths) * factor)))
-    return overrides
+    return arrangement_mod.fit_length(genre, list(params.get("sections") or []), overrides, tempo, seconds)
 
 
 def _submit_generate(params: dict, parent: Optional[str] = None) -> str:
     genre = params.get("genre") or "funk_fusion_full"
     _check_genre(genre)
-    variants = _variants(params.get("arrangement", ""))
+    variants = _variants(params.get("arrangement", ""), genre)
     _check_style_supports(genre, params)
+    tune = _check_tune(genre, params.get("tune") or "")
     _check_lead(params.get("lead_patch", ""))
     _check_hit_style(params.get("hit_style", ""))
     _check_sections(params.get("sections") or [], params.get("section_overrides") or {})
     preset = STYLES[genre]
     instruments = list(params.get("instruments") or [])
-    extras = list(params.get("extra_instruments") or []) + _needed_instruments(variants)
+    extras = list(params.get("extra_instruments") or []) + _needed_instruments(variants, genre)
     if extras:
         base = instruments or list(preset.default_instruments or [])
         instruments = base + [i for i in extras if i not in base]
     name = (params.get("save_as_block") or "").strip()
+    xmas = genre in CHRISTMAS_STYLES
     req = GenerateRequest(
         genre=genre,
         key=params.get("key") or None,
@@ -541,6 +640,9 @@ def _submit_generate(params: dict, parent: Optional[str] = None) -> str:
         lead_patch=params.get("lead_patch") or None,
         hit_style=params.get("hit_style") or None,
         arrangement=",".join(variants) or None,
+        target_lufs=params.get("target_lufs"),
+        tune=tune or None,
+        length_seconds=(float(params["length_seconds"]) if xmas and params.get("length_seconds") else None),
         save_as_block=bool(name),
         block_name=name or None,
     )
@@ -553,7 +655,7 @@ def _check_style_supports(genre: str, params: dict) -> None:
     """Options a style would silently ignore are errors, so a model notices."""
     if params.get("arrangement") and genre not in ARRANGEMENT_STYLES:
         raise ToolError(f"Arrangement variants only work with genre {' / '.join(ARRANGEMENT_STYLES)}, not "
-                        f"{genre!r}. Use genre 'funk_fusion_full' or drop arrangement.")
+                        f"{genre!r}. Use genre 'funk_fusion_full' (or a Christmas style) or drop arrangement.")
     if params.get("hits") and genre not in HIT_STYLES:
         raise ToolError(f"hits only land in {' / '.join(HIT_STYLES)}, not {genre!r}. Change genre or drop hits.")
 
@@ -562,8 +664,15 @@ def generate_song(
     genre: Annotated[str, Field(description="Style id from list_styles. 'funk_fusion_full' is the flagship.")] = "funk_fusion_full",
     seed: Annotated[int, Field(description="0 = random (the result reports the seed used). Same seed + same options = "
                                            "the same song; a new seed = a new song in the same style.")] = 0,
-    arrangement: Annotated[str, Field(description="Funk Fusion arrangement variants, comma-separated, e.g. "
-                                                  "'hits_only,calm_keys,simple_bass'. See describe_options.")] = "",
+    arrangement: Annotated[str, Field(description="Arrangement variants for the style, comma-separated: Funk "
+                                                  "Fusion e.g. 'hits_only,calm_keys,simple_bass'; Christmas e.g. "
+                                                  "'sleigh_bells,warmer'. See describe_options.")] = "",
+    tune: Annotated[str, Field(description="Christmas styles only: a public-domain carol id (silent_night, "
+                                           "jingle_bells, deck_the_halls, ...; see describe_options) or "
+                                           "'original' / empty for an original Christmas-feel tune.")] = "",
+    target_lufs: Annotated[Optional[float], Field(description="Delivered loudness (integrated LUFS). None = as "
+                                                              "mastered (Christmas styles: -16, background-"
+                                                              "ready; YouTube plays at about -14).")] = None,
     hits: Annotated[list[float], Field(description="Hit points in seconds from the start: the band lands an accent "
                                                    "there (Funk Fusion, neo-soul).")] = [],  # noqa: B006
     hit_style: Annotated[str, Field(description="'punch' (exact, dramatic) or 'groove' (next beat, inside the "
@@ -572,9 +681,10 @@ def generate_song(
                                                  "guitar, guitar_high, guitar_stack, guitar_clean, trumpet_guitar.")] = "",
     tempo: Annotated[float, Field(description="BPM; 0 = the style's tempo (funk_fusion_full: 140).")] = 0,
     length_seconds: Annotated[float, Field(description="About how long the song should be, in seconds (sections "
-                                                       "are scaled to fit; a ring-out of a few seconds follows). "
+                                                       "are scaled to fit; Christmas styles plan whole passes of "
+                                                       "the tune, so 120-300 s lands within about a pass). "
                                                        "0 = the style's natural length (~1 min for "
-                                                       "funk_fusion_full).")] = 0,
+                                                       "funk_fusion_full, ~2.5 min for Christmas).")] = 0,
     key: Annotated[str, Field(description="e.g. 'Eb', 'F#'; empty = the style's key.")] = "",
     scale: Annotated[str, Field(description="major / minor / dorian ...; empty = the style's.")] = "",
     sections: Annotated[list[str], Field(description="Section roles to include, e.g. ['intro','verse','chorus',"
@@ -624,8 +734,9 @@ def generate_song(
 def _submit_score(params: dict, parent: Optional[str] = None) -> str:
     genre = params.get("genre") or "funk_fusion_full"
     _check_genre(genre)
-    variants = _variants(params.get("arrangement", ""))
+    variants = _variants(params.get("arrangement", ""), genre)
     _check_style_supports(genre, params)
+    tune = _check_tune(genre, params.get("tune") or "")
     for ch in params.get("chapters") or []:
         if isinstance(ch, dict) and ch.get("arrangement"):
             variants += [v for v in _variants(ch["arrangement"]) if v not in variants]
@@ -746,8 +857,10 @@ def revise(
         remove = [remove]
     params.update(changes)
     if add or remove:
-        current = _variants(params.get("arrangement", ""))
-        current = [v for v in current if v not in remove] + [v for v in _variants(",".join(add)) if v not in current]
+        g = params.get("genre") or "funk_fusion_full"
+        current = _variants(params.get("arrangement", ""), g)
+        current = [v for v in current if v not in remove] + \
+            [v for v in _variants(",".join(add), g) if v not in current]
         params["arrangement"] = ",".join(current)
     kind = rec.get("kind")
     if new_seed:
@@ -1063,8 +1176,11 @@ def _options_doc() -> str:
     """The option catalog, appended to the generating tools' descriptions so a
     model sees every choice without another call."""
     from src.audio_processing.render.lead_voices import LEAD_VOICES
-    lines = ["", "", "Arrangement variants (funk_fusion_full only; combine with commas):"]
+    lines = ["", "", "Arrangement variants (funk_fusion_full; combine with commas):"]
     lines += [f"- {n}: {d}" for n, d in ARRANGEMENT_VARIANTS.items()]
+    lines += ["", "Christmas arrangement variants (christmas_* styles):"]
+    lines += [f"- {n}: {d}" for n, d in christmas.ARRANGEMENT_VARIANTS.items()]
+    lines += ["", "Christmas tunes (tune): " + ", ".join(carol_catalog()) + ", original"]
     lines += ["", "Lead voices (lead_patch):"]
     lines += [f"- {n}: {v.label}" for n, v in LEAD_VOICES.items()]
     lines += ["", "hit_style:"] + [f"- {k}: {v}" for k, v in HIT_STYLE_OPTIONS.items()]
@@ -1083,7 +1199,7 @@ TOOLS = [
     # discover
     describe_options, list_styles, list_genres, list_instruments,
     # generate + iterate
-    generate_song, score_video, revise, job_status, wait_for_job, get_job_files, list_jobs,
+    generate_song, christmas_mix, score_video, revise, job_status, wait_for_job, get_job_files, list_jobs,
     # render + loudness
     render_song, measure_loudness, render_stems,
     # library

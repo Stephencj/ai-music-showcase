@@ -19,14 +19,16 @@ API_OUT = PROJECT_ROOT / "data" / "outputs" / "api"
 _KEEP_RECENT_JOBS = 30
 
 
-def _normalize_wav(wav_path: Path, target_lufs: float) -> float:
+def _normalize_wav(wav_path: Path, target_lufs: float, limit: bool = False) -> float:
     """Set a rendered mix to ``target_lufs`` (integrated, −1 dBFS ceiling) in
-    place; returns the measured loudness. Same leveller as video scores."""
+    place; returns the measured loudness. Same leveller as video scores.
+    ``limit`` lets a gentle limiter shave a peaky mix's transients so it
+    still reaches the target (Christmas background deliveries)."""
     import soundfile as sf
-    from src.audio_processing.render.loudness import integrated_lufs, normalize
+    from src.audio_processing.render.loudness import integrated_lufs, level, normalize
     audio, sr = sf.read(str(wav_path), always_2d=True)
     info = sf.info(str(wav_path))
-    out, _ = normalize(audio.T.astype("float32"), sr, target_lufs)
+    out, _ = (level if limit else normalize)(audio.T.astype("float32"), sr, target_lufs)
     sf.write(str(wav_path), out.T, sr, subtype=info.subtype)
     return round(integrated_lufs(out, sr), 1)
 
@@ -78,7 +80,7 @@ def run_generation(req, progress, job_id: str) -> dict:
     from src.scoring.pdf_export import export_zip
     from src.daw_integration.generic import blocks as block_store
     from src.daw_integration.generic import block_concat
-    from .arrangement import build_sections
+    from .arrangement import build_sections, fit_length
 
     genre = req.genre
     preset = STYLES.get(genre)
@@ -94,8 +96,32 @@ def run_generation(req, progress, job_id: str) -> dict:
     # Always a concrete section list so split-into-blocks uses the exact
     # boundaries compose_song laid the song down with. Per-role preset overrides
     # (multi-preset songs) are attached here as section["preset_id"].
-    secs = build_sections(genre, req.sections, getattr(req, "section_presets", None),
-                          getattr(req, "section_overrides", None))
+    from src.composition import christmas
+    plan = None
+    lead_patch = getattr(req, "lead_patch", None)
+    target_lufs = getattr(req, "target_lufs", None)
+    master_preset = req.master_preset or "default"
+    if genre in christmas.STYLE_IDS:
+        # Christmas songs plan their own form from the tune (a carol or an
+        # original): meter, key, tempo and length come from the plan.
+        band = christmas.band_for(list(_instrumental_only(req.instruments, preset.default_instruments) or []),
+                                  getattr(req, "arrangement", None) or "")
+        plan = christmas.plan_song(
+            genre, seed=seed, tune=getattr(req, "tune", None), key=req.key, tempo=req.tempo,
+            length_seconds=getattr(req, "length_seconds", None), arrangement=getattr(req, "arrangement", None) or "",
+            instruments=band)
+        secs = christmas.apply_overrides(plan["sections"], getattr(req, "section_overrides", None))
+        eff_key, eff_scale, eff_tempo = plan["key"], plan["scale"], float(plan["tempo"])
+        ts = tuple(plan["time_signature"])
+        lead_patch = lead_patch or christmas.DEFAULT_LEAD_PATCH
+        target_lufs = christmas.DEFAULT_LUFS if target_lufs is None else target_lufs
+        if master_preset == "default":
+            master_preset = None                     # the Christmas profile's gentle master
+    else:
+        overrides = getattr(req, "section_overrides", None)
+        if getattr(req, "length_seconds", None):
+            overrides = fit_length(genre, req.sections, overrides, eff_tempo, float(req.length_seconds))
+        secs = build_sections(genre, req.sections, getattr(req, "section_presets", None), overrides)
 
     job_dir = API_OUT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -107,14 +133,16 @@ def run_generation(req, progress, job_id: str) -> dict:
         sections=secs,
         seed=seed,
         # instrumental-first: never bake in a vocal track (added later from lyrics)
-        enabled_instruments=_instrumental_only(req.instruments, preset.default_instruments),
-        key=req.key, scale=req.scale, tempo=req.tempo,
+        enabled_instruments=(tuple(band) if plan else _instrumental_only(req.instruments, preset.default_instruments)),
+        key=(eff_key if plan else req.key), scale=(eff_scale if plan else req.scale),
+        tempo=(eff_tempo if plan else req.tempo),
         bars=req.bars, swing=req.swing,
         progression=(list(req.progression) or None),
         hits=(list(getattr(req, "hits", None) or []) or None),
-        lead_voice=getattr(req, "lead_patch", None),
+        lead_voice=lead_patch,
         hit_style=getattr(req, "hit_style", None) or "punch",
         arrangement=getattr(req, "arrangement", None) or "",
+        time_signature=(ts if plan else None),
         output_dir=job_dir,
         skip_audio=True,            # we render HQ below; skip the low-fi pass
     )
@@ -128,15 +156,15 @@ def run_generation(req, progress, job_id: str) -> dict:
         midi=midi_path,
         output_dir=job_dir / "render",
         with_stems=bool(req.with_stems),
-        master_preset=(req.master_preset or "default"),
+        master_preset=master_preset,
         style_name=genre,
         sound=req.sound,
-        lead_patch=getattr(req, "lead_patch", None),
+        lead_patch=lead_patch,
     )
     wav_path = Path(render.mix_path)
     loudness = None
-    if getattr(req, "target_lufs", None) is not None:
-        loudness = _normalize_wav(wav_path, float(req.target_lufs))
+    if target_lufs is not None:
+        loudness = _normalize_wav(wav_path, float(target_lufs), limit=plan is not None)
     mp3_path: Path | None = job_dir / "mix.mp3"
     if not block_store.write_preview_mp3(wav_path, mp3_path):
         mp3_path = None
@@ -170,6 +198,7 @@ def run_generation(req, progress, job_id: str) -> dict:
         ],
         "progression": out.get("progression") or [],
         "section": None,
+        **({"tune": plan["tune"], "arrangement": getattr(req, "arrangement", None) or ""} if plan else {}),
     }
 
     pdf_path: Path | None = None
@@ -221,6 +250,8 @@ def run_generation(req, progress, job_id: str) -> dict:
         "saved_block": saved_block,
         "section_blocks": section_blocks,
         "loudness_lufs": loudness,
+        **({"tune": plan["tune"], "tune_title": plan["tune_title"],
+            "seconds": plan["seconds"]} if plan else {}),
         "_paths": {
             "midi": str(midi_path),
             "audio_mp3": str(mp3_path) if mp3_path else None,
@@ -242,6 +273,23 @@ def run_generation(req, progress, job_id: str) -> dict:
         # per-instrument regenerate, "Edit in Generate", and the realized
         # chord progression for the Practice chart.
         "_spec": block_spec,
+    }
+
+
+def run_christmas_mix(req, progress, job_id: str) -> dict:
+    """Generate a varied running order of Christmas songs and join them into
+    one seamless file (render/playlist.py)."""
+    from src.audio_processing.render import playlist
+    tracks = playlist.plan_mix(
+        total_minutes=req.total_minutes, count=req.count, styles=list(req.styles), tunes=list(req.tunes),
+        originals=req.originals, track_seconds=(req.min_track_seconds, req.max_track_seconds), seed=req.seed,
+        arrangement=req.arrangement)
+    res = playlist.render_mix(tracks, name=req.name, crossfade=req.crossfade, target_lufs=req.target_lufs,
+                              formats=tuple(req.formats or ("mp3",)), progress=progress)
+    return {
+        "tracks": res.tracks, "seconds": res.seconds, "loudness_lufs": res.lufs,
+        "chapters": playlist.chapters(res.tracks), "files": res.files,
+        "_paths": {"audio_mp3": res.files.get("mp3"), "audio_wav": res.files.get("wav")},
     }
 
 

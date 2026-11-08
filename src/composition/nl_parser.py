@@ -255,7 +255,9 @@ def mentions_genre(text: str) -> bool:
     """Does ``text`` name a genre the lexicon knows (vs. falling back to the
     default)? Lets a revision ("make it jazz") change genre only when asked."""
     from src.daw_integration.generic.styles import STYLES
-    return any(v in STYLES for (_, _, v) in _all_matches(text or "", _GENRE_LEXICON))
+    from src.composition.christmas import christmas_genre
+    return any(v in STYLES for (_, _, v) in _all_matches(text or "", _GENRE_LEXICON)) \
+        or christmas_genre(text) is not None
 
 
 def parse_prompt(text: str) -> dict:
@@ -312,8 +314,25 @@ def parse_prompt(text: str) -> dict:
     else:
         genre = DEFAULT_GENRE
     section_presets = {r: g for r, g in section_presets.items() if g != genre}
+    # Christmas requests ("cozy jazz trio Christmas, Silent Night") go to the
+    # Christmas styles whatever other genre words they use; a named carol
+    # becomes the tune.
+    from src.composition import christmas
+    xmas = christmas.christmas_genre(raw)
+    tune = christmas.tune_from_text(raw) if xmas else None
+    if xmas:
+        genre, section_presets = xmas, {}
+        denied = christmas.denied_song(raw)
+        if denied:
+            notes.append(f"“{denied.title()}” is a copyrighted song, so it can't be arranged; "
+                         "using a public-domain carol or an original tune instead.")
+            if tune is None:
+                tune = "original"
 
     understood.append(f"Genre: {label(genre)}")
+    if tune:
+        understood.append("Tune: " + ("an original tune" if tune == "original"
+                                      else christmas.carol_title(tune)))
     for role in ("intro", "verse", "chorus", "bridge", "outro"):
         if role in section_presets:
             understood.append(f"{role.capitalize()} → {label(section_presets[role])}")
@@ -453,6 +472,7 @@ def parse_prompt(text: str) -> dict:
         "section_overrides": section_overrides,
         "instruments": instruments,
         "removed_instruments": removed,
+        "tune": tune,
         "understood": understood,
         "notes": notes,
     }

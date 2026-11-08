@@ -48,6 +48,12 @@ class MixProfile:
     # Per-family effect chain swaps by name (effects.NAMED_CHAINS), e.g.
     # {"lead": "tight_lead"} for a dry, punchy lead.
     family_chains: dict = field(default_factory=dict)
+    # Loudness targets (integrated LUFS) per stem, matched like
+    # track_overrides (first lowercase substring of the track name, or
+    # "family:<family>"). A stem is levelled to its target after its family
+    # chain, so the balance holds whatever the part's density or the
+    # sample's level. Empty = family gains only.
+    stem_targets: dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +149,59 @@ _NEO_SOUL = MixProfile(
     family_chains={"lead": "tight_lead"},
 )
 
+_CHRISTMAS = MixProfile(
+    name="christmas",
+    label="Christmas (warm, gentle, background-friendly)",
+    # Balance by loudness target rather than fader: the tune forward, the
+    # warm bed under it, percussion and sparkle well under that.
+    family_overrides={
+        "strings":    {"stereo_widen": 0.35},
+        "bvocal":     {"stereo_widen": 0.3},
+    },
+    master_preset="transparent",
+    sidechain_kick_into=(),
+    track_overrides={
+        "sleigh":       {"pan": 0.3},
+        "shaker":       {"pan": -0.3},
+        "glockenspiel": {"pan": 0.25},
+        "celesta":      {"pan": 0.2},
+        "harp":         {"pan": -0.3},
+        "muted":        {"pan": 0.25},
+        "french horn":  {"pan": -0.25},
+        "tenor sax":    {"pan": -0.15},
+        "alto sax":     {"pan": 0.15},
+        "cello":        {"pan": -0.2},
+        "nylon":        {"pan": -0.15},
+        "acoustic":     {"pan": 0.35},
+        "melody":       {"pan": 0.0},
+    },
+    stem_targets={
+        "melody":       -18.0,     # the tune (every "<instrument> Melody" track)
+        "sleigh":       -31.0,
+        "shaker":       -33.0,
+        "glockenspiel": -29.0,
+        "celesta":      -28.0,
+        "harp":         -25.0,
+        "brushes":      -27.0,
+        "drum":         -27.0,
+        "pedal":        -26.0,
+        "bass":         -25.0,
+        "french horn":  -25.0,
+        "muted":        -26.0,
+        "sax":          -26.0,
+        "flute":        -27.0,
+        "clarinet":     -26.0,
+        "oboe":         -27.0,
+        "cello":        -24.0,
+        "choir":        -24.0,
+        "organ":        -24.0,
+        "string":       -23.0,
+        "piano":        -23.0,
+        "guitar":       -23.0,
+        "family:lead":  -18.0,
+    },
+)
+
 _BALLAD = MixProfile(
     name="ballad",
     label="Ballad (vocal + strings forward)",
@@ -193,7 +252,7 @@ _CINEMATIC = MixProfile(
 
 
 MIX_PROFILES: dict[str, MixProfile] = {
-    p.name: p for p in (_POP, _ROCK, _JAZZ, _BALLAD, _EDM, _CINEMATIC, _FUNK_FUSION, _NEO_SOUL)
+    p.name: p for p in (_POP, _ROCK, _JAZZ, _BALLAD, _EDM, _CINEMATIC, _FUNK_FUSION, _NEO_SOUL, _CHRISTMAS)
 }
 
 
@@ -227,6 +286,12 @@ _PRESET_TO_PROFILE: dict[str, str] = {
     "fusion_full":          "jazz",
     "funk_fusion_full":     "funk_fusion",
     "neo_soul_full":        "neo_soul",
+    "christmas_swing_full":      "christmas",
+    "christmas_jazz_trio_full":  "christmas",
+    "christmas_orchestral_full": "christmas",
+    "christmas_fireside_full":   "christmas",
+    "christmas_choir_full":      "christmas",
+    "christmas_pop_full":        "christmas",
     "jazz_aaba_full":       "jazz",
     "jazz_hard_bop_full":   "jazz",
     "jazz_modal_full":      "jazz",

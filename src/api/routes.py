@@ -34,6 +34,7 @@ from .schemas import (
     EditBlockRequest,
     MixPreviewRequest,
     ProduceBlockRequest,
+    ChristmasMixRequest,
     GenerateRequest,
     VideoScoreRequest,
     GeneratePartRequest,
@@ -205,6 +206,21 @@ def generate(req: GenerateRequest) -> dict:
         raise HTTPException(404, f"Unknown genre {req.genre!r}")
     job = registry.create()
     registry.run(job, lambda progress: service.run_generation(req, progress, job.id))
+    return {"job_id": job.id}
+
+
+@router.post("/christmas-mix")
+def christmas_mix(req: ChristmasMixRequest) -> dict:
+    """Render a seamless mix of generated Christmas songs (one WAV/MP3 at a
+    target loudness, with gentle crossfades and a tracklist)."""
+    from src.composition import christmas
+    bad = [s for s in req.styles if s not in christmas.STYLE_IDS]
+    if bad:
+        raise HTTPException(422, f"Unknown Christmas style(s) {bad}; use {list(christmas.STYLE_IDS)}")
+    if req.count <= 0 and req.total_minutes <= 0:
+        raise HTTPException(422, "Give count or total_minutes")
+    job = registry.create()
+    registry.run(job, lambda progress: service.run_christmas_mix(req, progress, job.id))
     return {"job_id": job.id}
 
 

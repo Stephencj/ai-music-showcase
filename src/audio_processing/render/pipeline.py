@@ -208,6 +208,7 @@ def render_to_audio(
         family_mix=family_mix,
         sidechain_kick_into=profile.sidechain_kick_into,
         track_mix=track_mix,
+        stem_targets=getattr(profile, "stem_targets", None),
     )
     mix, processed = mixer.mix(rendered, master_preset=eff_master)
     if eff_sound == "sampled":

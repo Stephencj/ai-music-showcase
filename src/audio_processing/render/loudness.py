@@ -57,3 +57,22 @@ def normalize(audio: np.ndarray, sample_rate: int, target_lufs: float, *, peak_c
     max_gain_db = peak_ceiling_db - 20 * math.log10(peak)
     gain_db = min(gain_db, max_gain_db)
     return (audio * (10 ** (gain_db / 20))).astype(audio.dtype), gain_db
+
+
+def level(audio: np.ndarray, sample_rate: int, target_lufs: float, *, peak_ceiling_db: float = -1.0,
+          max_limit_db: float = 4.0) -> tuple[np.ndarray, float]:
+    """Like :func:`normalize`, but when the peaks would stop the mix short of
+    ``target_lufs`` (a peaky piano), a gentle look-ahead-free limiter takes up
+    to ``max_limit_db`` off the loudest transients so the mix still reaches
+    the target. Returns (audio, gain dB)."""
+    out, gain = normalize(audio, sample_rate, target_lufs, peak_ceiling_db=peak_ceiling_db)
+    short = target_lufs - integrated_lufs(out, sample_rate)
+    if short <= 0.2:
+        return out, gain
+    import pedalboard as pdb
+    push = min(short + 0.3, max_limit_db)
+    board = pdb.Pedalboard([pdb.Gain(gain_db=push),
+                            pdb.Limiter(threshold_db=peak_ceiling_db - 0.3, release_ms=150.0)])
+    limited = np.asarray(board(out.astype(np.float32), sample_rate=sample_rate), dtype=np.float32)
+    final, extra = normalize(limited, sample_rate, target_lufs, peak_ceiling_db=peak_ceiling_db)
+    return final.astype(audio.dtype), gain + push + extra

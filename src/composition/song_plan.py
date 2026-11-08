@@ -34,7 +34,7 @@ _NOTE_RE = re.compile(r"^([A-Ga-g])([#b♯♭]?)$")
 # conveniences — stems, PDF, save-as-block — stay the form's business).
 PLAN_FIELDS = ("genre", "key", "scale", "tempo", "swing", "seed", "sections",
                "section_presets", "section_overrides", "instruments", "arrangement",
-               "lead_patch", "hits", "hit_style", "target_lufs")
+               "lead_patch", "hits", "hit_style", "target_lufs", "tune", "length_seconds")
 # Edits an answer may give instead of restating a list: add/remove
 # arrangement variants or band members. Small models revise far more reliably
 # this way (restating the arrangement, they drop variants nobody asked about).
@@ -57,6 +57,9 @@ class EngineSpec:
     exclusive: tuple = ()
     # Shorthand variant → the per-part variants it stands for.
     expands: dict = field(default_factory=dict)
+    tunes: bool = False                   # honors tune (a public-domain carol or "original")
+    # Loudness a "background" request means for this engine's music.
+    background_lufs: float = -25.0
 
 
 def _funk_fusion() -> EngineSpec:
@@ -73,6 +76,21 @@ def _funk_fusion() -> EngineSpec:
     )
 
 
+def _christmas() -> EngineSpec:
+    from src.composition.christmas import ARRANGEMENT_INSTRUMENTS, ARRANGEMENT_VARIANTS, STYLE_IDS
+    return EngineSpec(
+        id="christmas", label="Christmas", genres=frozenset(STYLE_IDS),
+        arrangement_variants=tuple(ARRANGEMENT_VARIANTS),
+        variant_instruments=dict(ARRANGEMENT_INSTRUMENTS),
+        exclusive=(("key_change", "no_key_change"), ("plain_harmony", "rich_harmony"),
+                   ("strings_ending", "celesta_ending")),
+        tunes=True,
+        # Christmas ambience IS the video's sound (no voice over it): about
+        # -16 LUFS, a little under YouTube's -14.
+        background_lufs=-16.0,
+    )
+
+
 COMPOSE_SONG = EngineSpec(id="compose_song", label="General composer")
 _ENGINES: Optional[list[EngineSpec]] = None
 
@@ -80,7 +98,7 @@ _ENGINES: Optional[list[EngineSpec]] = None
 def engines() -> list[EngineSpec]:
     global _ENGINES
     if _ENGINES is None:
-        _ENGINES = [_funk_fusion(), COMPOSE_SONG]
+        _ENGINES = [_funk_fusion(), _christmas(), COMPOSE_SONG]
     return _ENGINES
 
 
@@ -139,7 +157,29 @@ def _genre(v) -> Optional[str]:
             return k
     if "fusion" in low:
         return "funk_fusion_full"
-    return None
+    from src.composition.christmas import christmas_genre
+    return christmas_genre(low)
+
+
+def _tune(v, eng: EngineSpec, notes: list[str]) -> Optional[str]:
+    """A carol id (or "original") for engines that play tunes."""
+    from src.composition.carols import carol
+    from src.composition.christmas import denied_song, tune_from_text
+    text = str(v or "").strip()
+    if not eng.tunes:
+        notes.append(f"{eng.label} doesn't play carols; ignored tune {text!r}.")
+        return None
+    if text.lower() in ("original", "new", ""):
+        return "original"
+    if denied_song(text):
+        notes.append(f"{text!r} is a copyrighted song, so it can't be arranged; using an original tune.")
+        return "original"
+    t = carol(text)
+    tid = t.id if t else tune_from_text(text)
+    if not tid:
+        notes.append(f"Unknown carol {text!r}; using an original tune.")
+        return "original"
+    return tid
 
 
 def split_variants(arr) -> list[str]:
@@ -344,6 +384,12 @@ def normalize_plan(raw: Any, previous: Optional[dict] = None,
             plan["hit_style"] = hst
     if (lu := _num(merged.get("target_lufs"), -40, -6)) is not None:
         plan["target_lufs"] = round(lu, 1)
+    if merged.get("tune") is not None:
+        plan_tune = _tune(merged["tune"], eng, notes)
+        if plan_tune:
+            plan["tune"] = plan_tune
+    if (ls := _num(merged.get("length_seconds"), 30, 600)) is not None:
+        plan["length_seconds"] = round(ls)
 
     GenerateRequest.model_validate(plan)        # the contract: always a valid /generate body
     return plan, notes
@@ -450,9 +496,12 @@ Op = Callable[[dict], Optional[str]]
 
 
 def _variants(add: tuple = (), remove: tuple = ()) -> Op:
+    """Add/remove arrangement variants; variants the plan's engine doesn't
+    have are left out (each engine names its own options)."""
     def op(plan: dict) -> Optional[str]:
+        known = engine_for(plan.get("genre", "")).arrangement_variants
         vs = [v for v in split_variants(plan.get("arrangement")) if v not in remove]
-        vs += [v for v in add if v not in vs]
+        vs += [v for v in add if v not in vs and v in known]
         plan["arrangement"] = ",".join(vs)
         return None
     return op
@@ -498,6 +547,17 @@ def _bigger_section(role: str) -> Op:
     return op
 
 
+def _background(plan: dict) -> Optional[str]:
+    plan["target_lufs"] = engine_for(plan.get("genre", "")).background_lufs
+    return None
+
+
+def _choir_pad(plan: dict) -> Optional[str]:
+    if plan.get("genre") != "christmas_choir_full":      # the choir style already sings
+        _variants(add=("choir_pad",))(plan)
+    return None
+
+
 def _no_stabs(plan: dict) -> Optional[str]:
     plan["hits"] = []
     return _variants(remove=("horn_bed",))(plan)
@@ -528,8 +588,8 @@ FEEDBACK_RULES: list[tuple[str, Op, str]] = [
      _no_stabs, "no stabs"),
     (r"\bhits[\s_-]?only\b|just the hits|less complex|more impactful|70s (funk )?horns",
      _variants(add=("hits_only",)), "hits only"),
-    (r"\bbackground\b|lower (the )?volume|quieter|under (the )?(voice[\s-]?over|narration|video)|bed\b",
-     _set(target_lufs=-25.0), "background level"),
+    (r"under (the )?(voice[\s-]?over|narration)|voice[\s-]?over", _set(target_lufs=-25.0), "under a voice-over"),
+    (r"\bbackground\b|lower (the )?volume|quieter|under (the )?video|bed\b", _background, "background level"),
     (r"too fast|slower|slow (it|this) down", _slower, "slower"),
     (r"(bigger|louder|lift the) chorus|chorus\b.{0,20}\b(bigger|lift|more energy)", _bigger_section("chorus"),
      "bigger chorus"),
@@ -545,6 +605,22 @@ FEEDBACK_RULES: list[tuple[str, Op, str]] = [
      "more life"),
     (r"\bcalmer\b|more calm|calm (it|this|things) down|laid[\s-]?back|\bchill", _variants(add=("calm_keys", "simple_bass")),
      "calmer"),
+    # Christmas
+    (r"less busy|too busy|simpler|calmer|more calm|too much going on", _variants(add=("less_busy",)), "less busy"),
+    (r"\bwarm(er)?\b|cozier|\bcosy|\bcozy|darker|softer", _variants(add=("warmer",)), "warmer"),
+    (r"sleigh[\s-]?bells?", _variants(add=("sleigh_bells",)), "sleigh bells"),
+    (r"end(ing)? on (the )?(celesta|glock\w*|bells)", _variants(add=("celesta_ending",), remove=("strings_ending",)),
+     "celesta ending"),
+    (r"end(ing)? on (the )?strings", _variants(add=("strings_ending",), remove=("celesta_ending",)), "strings ending"),
+    (r"\bno key change|stay in (one|the same) key|don'?t (change|modulate)", _variants(add=("no_key_change",),
+     remove=("key_change",)), "no key change"),
+    (r"(?<!no )(?<!without a )\bkey change\b|(?<!don't )(?<!dont )\bmodulate\b|lift (it|the last)",
+     _variants(add=("key_change",), remove=("no_key_change",)), "key change"),
+    (r"\b(add (a )?)?choir\b|voices", _choir_pad, "choir pad"),
+    (r"jazz(ier)? (chords|harmony)|richer (chords|harmony)|reharm", _variants(add=("rich_harmony",),
+     remove=("plain_harmony",)), "richer harmony"),
+    (r"simple (chords|harmony)|as written|traditional (chords|harmony)", _variants(add=("plain_harmony",),
+     remove=("rich_harmony",)), "plain harmony"),
 ]
 
 
@@ -567,7 +643,8 @@ def apply_feedback_rules(plan: dict, text: str, describing: bool = False) -> lis
     for pattern, op, label in FEEDBACK_RULES:
         if re.search(pattern, low):
             op(plan)
-            fired.append(label)
+            if label not in fired and label.replace(" ", "_") not in [f.replace(" ", "_") for f in fired]:
+                fired.append(label)
     return fired
 
 
@@ -576,8 +653,11 @@ def rule_describe(text: str) -> tuple[dict, list[str], list[str]]:
     from src.composition.nl_parser import parse_prompt
     parsed = parse_prompt(text)
     raw = {k: parsed[k] for k in ("genre", "key", "scale", "tempo", "swing",
-                                  "section_presets", "section_overrides", "instruments")
+                                  "section_presets", "section_overrides", "instruments", "tune")
            if parsed.get(k) not in (None, [], {})}
+    if (m := re.search(r"(\d+(?:\.\d+)?)\s*(min(?:ute)?s?|sec(?:ond)?s?|s)\b", (text or "").lower())):
+        n = float(m.group(1))
+        raw["length_seconds"] = n * 60 if m.group(2).startswith("m") else n
     if raw.get("instruments"):
         # The parser lists only the instruments the text named; a plan's list
         # REPLACES the band, so add them to the genre's defaults (and leave it
@@ -607,13 +687,24 @@ def _remove_instruments(plan: dict, removed: list[str]) -> None:
 def rule_revise(plan: dict, feedback: str) -> tuple[dict, list[str]]:
     """Plan + feedback → (raw revised plan, labels of what fired)."""
     from src.composition.nl_parser import _AT_BPM_RE, _BPM_RE, mentions_genre, parse_prompt
+    from src.composition import christmas
     new = json.loads(json.dumps(plan))
     parsed = parse_prompt(feedback)
-    if mentions_genre(feedback) and parsed["genre"] != plan.get("genre"):
+    if plan.get("genre") in christmas.STYLE_IDS:
+        # A Christmas song stays Christmas: "make it orchestral" picks the
+        # Christmas orchestral style; "add sleigh bells" changes no style.
+        to = christmas.style_word(feedback)
+        if to and to != plan.get("genre"):
+            new["genre"] = to
+        elif mentions_genre(feedback) and parsed["genre"] not in christmas.STYLE_IDS:
+            new["genre"] = parsed["genre"]
+    elif mentions_genre(feedback) and parsed["genre"] != plan.get("genre"):
         new["genre"] = parsed["genre"]
     for k in ("key", "scale"):
         if parsed.get(k) is not None:
             new[k] = parsed[k]
+    if parsed.get("tune") and parsed["tune"] != plan.get("tune"):
+        new["tune"] = parsed["tune"]
     # Only an explicit BPM; tempo words ("fast") are relative in feedback and
     # handled by the rules ("too fast" → slower).
     if parsed.get("tempo") is not None and (_BPM_RE.search(feedback) or _AT_BPM_RE.search(feedback)):
@@ -648,9 +739,17 @@ def catalog_text() -> str:
 
 
 def _variant_catalog() -> str:
+    from src.composition import christmas
+    from src.composition.carols import carol_catalog
     from src.composition.funk_fusion import ARRANGEMENT_VARIANTS
-    return "\nFunk Fusion arrangement variants:\n" + "\n".join(
-        f"- `{k}`: {v}" for k, v in ARRANGEMENT_VARIANTS.items()) + "\n"
+    return ("\nFunk Fusion arrangement variants:\n"
+            + "\n".join(f"- `{k}`: {v}" for k, v in ARRANGEMENT_VARIANTS.items())
+            + "\n\nChristmas styles:\n"
+            + "\n".join(f"- `{k}`: {v}" for k, v in christmas.STYLE_INFO.items())
+            + "\n\nChristmas arrangement variants:\n"
+            + "\n".join(f"- `{k}`: {v}" for k, v in christmas.ARRANGEMENT_VARIANTS.items())
+            + "\n\nChristmas tunes (`tune`; public-domain carols, or \"original\"):\n"
+            + "\n".join(f"- `{k}`: {v['title']} ({v['meter']})" for k, v in carol_catalog().items()) + "\n")
 
 
 def system_prompt() -> str:

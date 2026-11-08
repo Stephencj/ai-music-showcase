@@ -32,8 +32,12 @@ GENRE_TAGS = frozenset({
     "blues", "rock", "metal", "punk",
     "funk_rock", "funk", "soul", "motown", "gospel", "disco",
     "pop", "edm", "hip_hop", "reggae", "country", "latin", "afro",
-    "drum_n_bass", "ballad", "fusion", "funk_fusion", "neo_soul",
+    "drum_n_bass", "ballad", "fusion", "funk_fusion", "neo_soul", "christmas",
 })
+# Tags whose techniques only ever play for a genre that prefers them: they
+# read a song plan the other genres don't have (Christmas parts are routed to
+# common instrument ids like "piano", which must not leak into a pop song).
+EXCLUSIVE_TAGS = frozenset({"christmas"})
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +104,10 @@ class TechniqueContext:
     # Arrangement variant a style may honour, e.g. Funk Fusion "hits_only":
     # no lead, no riffs — the band grooves and everyone lands the hit points.
     arrangement: str = ""
+    # The section's own plan data from the song planner (e.g. which bars of
+    # a carol this section plays and which instrument has the melody); styles
+    # that plan their own form read it, everything else ignores it.
+    section_info: dict = field(default_factory=dict)
 
     @property
     def bar_count(self) -> int:
@@ -197,7 +205,8 @@ class TechniqueBank:
         genre — e.g. ``preferred_tags=("funk_rock",)`` doubles the
         weight of techniques carrying that tag.
         """
-        candidates = self.list_for(instrument, role)
+        candidates = [t for t in self.list_for(instrument, role)
+                      if not any(tag in EXCLUSIVE_TAGS and tag not in preferred_tags for tag in t.tags)]
         if not candidates:
             return None
         if strict and preferred_tags:

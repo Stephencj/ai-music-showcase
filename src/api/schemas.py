@@ -56,10 +56,33 @@ class GenerateRequest(BaseModel):
     # Loudness of the delivered mix (integrated LUFS). None = as mastered
     # (about −12); background beds under a video sit around −23 to −28.
     target_lufs: Optional[float] = None
+    # Christmas styles: a public-domain carol id (src/composition/carols.py,
+    # e.g. "silent_night") or "original" / None for an original tune.
+    tune: Optional[str] = None
+    # About how long the song should be, in seconds (sections are planned or
+    # scaled to fit). None = the style's natural length.
+    length_seconds: Optional[float] = None
     # Post-generation conveniences:
     save_as_block: bool = False
     block_name: Optional[str] = None
     split_into_blocks: bool = False        # one block per section (mix & match)
+
+
+class ChristmasMixRequest(BaseModel):
+    """A seamless playlist of generated Christmas songs (render/playlist.py)."""
+    total_minutes: float = 0.0                  # mix length; or give count
+    count: int = 0                              # number of songs (0 = from total_minutes)
+    styles: list[str] = Field(default_factory=list)    # christmas_* style ids (empty = all six)
+    tunes: list[str] = Field(default_factory=list)     # carol ids (empty = every carol)
+    originals: float = 0.4                      # share of original tunes
+    min_track_seconds: float = 150.0
+    max_track_seconds: float = 240.0
+    crossfade: float = 4.0                      # seconds
+    target_lufs: float = -16.0                  # YouTube normalises to about -14
+    arrangement: str = ""                       # Christmas variants for every song
+    seed: int = 1
+    name: str = "christmas-mix"
+    formats: list[str] = Field(default_factory=lambda: ["mp3"])   # "mp3" and/or "wav"
 
 
 class VideoChapter(BaseModel):

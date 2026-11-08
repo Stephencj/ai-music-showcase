@@ -62,7 +62,11 @@ _INSTRUMENT_ORDER: tuple[str, ...] = ("chords", "bass", "drums", "melody")
 # Genres whose tagged techniques are the whole idiom: a cell with a tagged
 # technique never falls back to the cross-genre pool (fusion's straight 16ths
 # would be wrecked by a swing walking bass or a country train beat).
-_STRICT_GENRES: frozenset[str] = frozenset({"fusion_full", "funk_fusion_full", "neo_soul_full"})
+_STRICT_GENRES: frozenset[str] = frozenset({
+    "fusion_full", "funk_fusion_full", "neo_soul_full",
+    "christmas_swing_full", "christmas_jazz_trio_full", "christmas_orchestral_full",
+    "christmas_fireside_full", "christmas_choir_full", "christmas_pop_full",
+})
 
 _GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
     # Pop / rock family.
@@ -81,6 +85,12 @@ _GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
     "fusion_full":       ("fusion",),
     "funk_fusion_full":  ("funk_fusion",),
     "neo_soul_full":     ("neo_soul",),
+    "christmas_swing_full":      ("christmas",),
+    "christmas_jazz_trio_full":  ("christmas",),
+    "christmas_orchestral_full": ("christmas",),
+    "christmas_fireside_full":   ("christmas",),
+    "christmas_choir_full":      ("christmas",),
+    "christmas_pop_full":        ("christmas",),
     "jazz_aaba_full":    ("jazz",),
     "jazz_trade_fours":  ("jazz",),
     "blues_12bar_full":  ("blues",),
@@ -366,6 +376,7 @@ def compose_song(
     hit_style: str = "punch",
     stops: Optional[list] = None,
     arrangement: str = "",
+    time_signature: Optional[tuple] = None,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     output_midi: str = DEFAULT_MIDI_NAME,
     output_wav: str = DEFAULT_WAV_NAME,
@@ -415,10 +426,11 @@ def compose_song(
     if sections is None:
         sections = _default_sections_for(genre)
 
-    # Build exporter.
+    # Build exporter. A planned song (e.g. a carol in 3/4) may set its own meter.
+    eff_ts = tuple(time_signature) if time_signature else tuple(preset.time_signature)
     midi = MidiExporter(
         tempo=eff_tempo,
-        time_signature=preset.time_signature,
+        time_signature=eff_ts,
     )
 
     # Resolve enabled_instruments into a list of (label, role,
@@ -596,7 +608,10 @@ def compose_song(
                              reharm=_hprof.reharm,
                              reharm_prob=sec_knobs["reharm_prob"])
         pacing_picks[label] = pacing
-        paced_progression = apply_pacing(
+        # A planned section whose chords are the tune's own (a carol's
+        # harmony) plays them exactly: no pacing, no modal recolouring.
+        exact = bool(section.get("progression_exact") and section.get("progression"))
+        paced_progression = sec_progression if exact else apply_pacing(
             sec_progression, pacing, sec_key, sec_scale,
         )
         section_prog = _slice_progression(
@@ -604,7 +619,7 @@ def compose_song(
         )
         # Lean the progression into its mode (modal colour chord + soften the
         # functional dominant toward the modal v). No-op for major/blues forms.
-        if "blues" not in sec_genre:
+        if "blues" not in sec_genre and not exact:
             section_prog = modal_color(
                 section_prog, sec_scale,
                 np.random.default_rng(_sub_seed(seed, label, "modal")),
@@ -709,7 +724,7 @@ def compose_song(
                 instrument=instrument_token,
                 key=sec_key, scale=sec_scale,
                 tempo=eff_tempo, genre=sec_genre,
-                time_signature=preset.time_signature,
+                time_signature=eff_ts,
                 progression=section_prog,
                 swing=eff_swing,
                 rng=np.random.default_rng(_sub_seed(
@@ -728,6 +743,7 @@ def compose_song(
                 stops=tuple((float(a), float(b)) for a, b in (stops or ()) if float(b) > 0),
                 arrangement=(section["arrangement"] if section.get("arrangement") is not None
                              else arrangement) or "",
+                section_info=dict(section.get("info") or {}),
             )
             try:
                 apply_technique(midi, technique, ctx)
@@ -829,6 +845,11 @@ def compose_song(
         if prev_t is None or abs(st - prev_t) > 1e-6:
             tempo_changes.append((int(sec["start_bar"]) * qpb, st))
             prev_t = st
+        # Tempo points inside a section (bar offset, BPM): a ritardando into
+        # a planned ending.
+        for off, bpm in sec.get("tempo_points") or ():
+            tempo_changes.append(((int(sec["start_bar"]) + float(off)) * qpb, float(bpm)))
+            prev_t = float(bpm)
     try:
         inject_tempo_changes(midi_path, tempo_changes)
     except Exception:  # noqa: BLE001 — tempo map is an enhancement, not critical

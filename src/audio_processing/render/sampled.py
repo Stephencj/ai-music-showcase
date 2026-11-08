@@ -13,6 +13,8 @@ The libraries are free downloads, not committed (see
 - Electric bass: Karoryfer Black And Blue Basses (CC0).
 - Drums: Virtuosity Drums, a contemporary jazz kit (CC0).
 - Alto sax: Karoryfer Weresax (CC0).
+- Christmas: VCSL grand piano / harp / glockenspiel / sleigh bells / shaker,
+  VSCO 2 CE woodwinds / organ / muted trumpet, Karoryfer Sneakybass (all CC0).
 """
 
 from __future__ import annotations
@@ -65,6 +67,39 @@ class SampledInstrument:
 
 
 SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
+    # Christmas instruments (all CC0; maps by scripts/setup/make_christmas_sfz.py):
+    # VCSL Kawai grand, harp, glockenspiel, sleigh bells and shaker; VSCO 2 CE
+    # flute / clarinet / oboe, quiet pipe organ and straight-mute trumpet;
+    # Karoryfer Sneakybass (a quiet pizzicato double bass, mapped at written
+    # pitch like the bass guitars).
+    SampledInstrument(
+        id="grand_piano",
+        sfz="vcsl/piano_kawai.sfz",
+        programs=(0, 1),                      # Acoustic Grand / Bright Piano
+        eq=(("peak", 250.0, -1.5), ("high_shelf", 6000.0, -1.0)),
+    ),
+    SampledInstrument(
+        id="upright_bass",
+        sfz="karoryfer.sneakybass/Sneakybass/Programs/02-sneakybass_pluck.sfz",
+        programs=(32,),                       # Acoustic Bass
+        key_offset=12,
+        # The close, quiet pizzicato is boomy below 100 Hz; lift the note's
+        # body and finger so it walks clearly under a trio.
+        eq=(("low_shelf", 90.0, -4.0), ("peak", 220.0, 1.5), ("peak", 1200.0, 2.0)),
+    ),
+    SampledInstrument(id="harp", sfz="vcsl/harp.sfz", programs=(46,), auto_tune=True),
+    SampledInstrument(id="glockenspiel", sfz="vcsl/glockenspiel.sfz", programs=(9,),
+                      eq=(("high_shelf", 6000.0, -3.0),)),
+    SampledInstrument(id="sleigh_bells", sfz="vcsl/sleigh_bells.sfz", programs=(112,),
+                      eq=(("high_shelf", 7000.0, -3.0),)),
+    SampledInstrument(id="shaker", sfz="vcsl/shaker.sfz", programs=(113,)),
+    SampledInstrument(id="flute", sfz="vsco2-ce-xmas/flute_sus.sfz", programs=(73,), auto_tune=True),
+    SampledInstrument(id="clarinet", sfz="vsco2-ce-xmas/clarinet_sus.sfz", programs=(71,), auto_tune=True),
+    SampledInstrument(id="oboe", sfz="vsco2-ce-xmas/oboe_sus.sfz", programs=(68,), auto_tune=True),
+    SampledInstrument(id="church_organ", sfz="vsco2-ce-xmas/organ_quiet.sfz", programs=(19,)),
+    SampledInstrument(id="cello", sfz="vsco2-ce-strings/cellos_sus.sfz", programs=(42,), auto_tune=True),
+    SampledInstrument(id="muted_trumpet", sfz="vsco2-ce/trumpet_muted_sus.sfz", programs=(59,), auto_tune=True,
+                      eq=(("high_shelf", 5000.0, -2.0),)),
     # Strings and French horn: VSCO 2 CE sustains (scripts/setup/make_vsco_sfz.py).
     SampledInstrument(
         id="string_section",
@@ -130,7 +165,7 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
         id="trumpet",
         auto_tune=True,
         sfz="vsco2-ce/trumpet_stac.sfz",
-        programs=(56, 59),                    # Trumpet, Muted Trumpet
+        programs=(56, 59),                    # Trumpet (Muted Trumpet: the straight-mute sustains above)
     ),
     SampledInstrument(
         id="trombone",
@@ -148,7 +183,7 @@ SAMPLED_INSTRUMENTS: tuple[SampledInstrument, ...] = (
     SampledInstrument(
         id="electric_bass",
         sfz="karoryfer.black-and-blue-basses/Programs/05-darkblack_pluck.sfz",
-        programs=(32, 33, 34, 35, 36, 37),    # acoustic … slap basses (not synth bass)
+        programs=(32, 33, 34, 35, 36, 37),    # finger … slap basses (acoustic: the upright above)
         key_offset=12,
     ),
     SampledInstrument(

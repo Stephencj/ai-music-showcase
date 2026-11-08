@@ -73,6 +73,29 @@ def available_progressions(genre: str) -> dict:
     return out
 
 
+def fit_length(genre: str, roles: list[str], overrides: dict[str, dict] | None,
+               tempo: float, seconds: float) -> dict[str, dict]:
+    """Section bar overrides that bring the song to about ``seconds`` (every
+    role scaled by the same factor, so the form keeps its shape). Roles the
+    caller already sized keep their bars."""
+    overrides = {r: dict(o) for r, o in (overrides or {}).items()}
+    if seconds <= 0:
+        return overrides
+    from src.daw_integration.generic.styles import STYLES
+    num, den = STYLES[genre].time_signature
+    bar_quarters = num * 4.0 / den
+    secs = build_sections(genre, list(roles or []), None, overrides)
+    bars: dict[str, list[int]] = {}
+    for s in secs:
+        bars.setdefault(s["role"], []).append(s["end_bar"] - s["start_bar"] + 1)
+    total = sum(sum(v) for v in bars.values())
+    factor = (seconds * tempo / (60.0 * bar_quarters)) / max(1, total)
+    for role, lengths in bars.items():
+        if "bars" not in overrides.get(role, {}):
+            overrides.setdefault(role, {})["bars"] = max(1, min(64, round(max(lengths) * factor)))
+    return overrides
+
+
 def build_sections(genre: str, roles: list[str],
                    section_presets: dict[str, str] | None = None,
                    section_overrides: dict[str, dict] | None = None) -> list[dict]:

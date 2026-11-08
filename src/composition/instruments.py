@@ -184,6 +184,20 @@ _add(Instrument("viola",      "Viola",      "strings", "chords", 41, default_oct
 _add(Instrument("cello",      "Cello",      "strings", "bass",   42, default_octave=3))
 _add(Instrument("contrabass", "Contrabass", "strings", "bass",   43, default_octave=2))
 
+# Christmas colours (src/composition/christmas.py): recorded sleigh bells and
+# shaker, glockenspiel / celesta / harp, a muted trumpet section for big-band
+# pads, a nylon-string guitar and a choir "aah" pad. The choir is a pad
+# instrument (not the vocal family), so instrumental songs keep it.
+_add(Instrument("sleigh_bells", "Sleigh Bells", "rhythm", "drums", 112, default_octave=4))
+_add(Instrument("shaker", "Shaker", "rhythm", "drums", 113, default_octave=4))
+_add(Instrument("glockenspiel", "Glockenspiel", "chord_lead", "melody", 9, default_octave=6))
+_add(Instrument("celesta", "Celesta", "chord_lead", "melody", 8, default_octave=5))
+_add(Instrument("harp", "Harp", "strings", "chords", 46, default_octave=4))
+_add(Instrument("nylon_guitar", "Nylon Guitar", "chord_lead", "chords", 24, default_octave=3))
+_add(Instrument("muted_trumpet", "Muted Trumpets", "brass", "chords", 59, default_octave=4,
+                voicing_role="pad", max_voices=4))
+_add(Instrument("choir", "Choir", "chord_lead", "chords", 52, default_octave=4, voicing_role="pad"))
+
 # Vocals — lead is GM 53 Voice Oohs; backing is GM 52 Choir Aahs pinned
 # to the "pad" voicing slot so backing layers behind whatever else is
 # in the chord stack.

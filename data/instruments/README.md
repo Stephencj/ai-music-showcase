@@ -35,7 +35,31 @@ curl -L -o bng.zip https://github.com/sfzinstruments/karoryfer.black-and-green-g
 mkdir karoryfer.black-and-green-guitars && unzip -q bng.zip -d karoryfer.black-and-green-guitars && rm bng.zip
 ```
 
-About 3.5 GB on disk in all. A render loads only the samples its notes use.
+Christmas instruments (all CC0, about 1.4 GB): a grand piano, harp,
+glockenspiel, sleigh bells and shaker from VCSL; flute, clarinet, oboe and a
+quiet pipe organ from VSCO 2 CE; Karoryfer Sneakybass (a quiet pizzicato
+double bass). Each goes into a fresh folder, then the maps are generated:
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/sgossner/VCSL.git vcsl
+(cd vcsl && git sparse-checkout set "Idiophones/Struck Idiophones/Sleigh Bells" \
+    "Idiophones/Struck Idiophones/Glockenspiel" "Chordophones/Composite Chordophones/Concert Harp" \
+    "Idiophones/Struck Idiophones/Shaker, Small" "Chordophones/Zithers/Grand Piano, Kawai/Sustains") && rm -rf vcsl/.git
+git clone --depth 1 --filter=blob:none --sparse https://github.com/sgossner/VSCO-2-CE.git vsco2-ce-xmas
+(cd vsco2-ce-xmas && git sparse-checkout set "Woodwinds/Flute/susvib" "Woodwinds/Clarinet/susLong" \
+    "Woodwinds/Oboe/Vib" "Keys/Organ/Quiet") && rm -rf vsco2-ce-xmas/.git
+mkdir karoryfer.sneakybass && curl -L -o sb.zip \
+    https://github.com/sfzinstruments/karoryfer.sneakybass/releases/download/v1.000/Sneakybass_v1.000.zip \
+    && unzip -q sb.zip -d karoryfer.sneakybass && rm sb.zip
+python -I ../../scripts/setup/make_christmas_sfz.py .
+```
+
+The muted trumpet uses the trumpet folder already downloaded for the horns
+(`vsco2-ce/Brass/Trumpet/straightM-sus`). Celesta, nylon guitar, acoustic
+guitar and the choir "aahs" have no free recorded library here yet, so they
+play the General MIDI soundfont's patches (MuseScore_General, MIT).
+
+About 4.9 GB on disk in all. A render loads only the samples its notes use.
 
 ## Libraries and licences
 
@@ -47,6 +71,11 @@ About 3.5 GB on disk in all. A render loads only the samples its notes use.
 | Saxes (GM 64-67) | Karoryfer Weresax | CC0 |
 | Trumpet (56, 59), trombone (57), brass section (61) | VSCO 2 CE staccato | CC0 |
 | Guitar lead voice | Karoryfer Black And Green Guitars (Gretsch / Hofner) | CC0 |
+| Grand piano (GM 0-1) | VCSL, Kawai grand (Versilian Studios) | CC0 |
+| Harp (46), glockenspiel (9), sleigh bells (112), shaker (113) | VCSL | CC0 |
+| Flute (73), clarinet (71), oboe (68), church organ (19) | VSCO 2 CE | CC0 |
+| Muted trumpets (59), cello (42) | VSCO 2 CE (straight-mute sustains; cello section) | CC0 |
+| Upright bass (32) | Karoryfer Sneakybass (1958 Otto Rubner double bass, pizzicato) | CC0 |
 
 Music made with any of them can be used commercially. Don't commit or ship
 the jRhodes samples themselves.

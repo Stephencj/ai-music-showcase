@@ -94,6 +94,14 @@ GENRE_FAMILIES: list[tuple[str, str, list[tuple[str, str, str]]]] = [
         ("JRPG",           "game_jrpg",        "game_jrpg"),
         ("Adventure 6/8",  "game_adventure_6_8", "game_adventure_6_8"),
     ]),
+    ("Christmas", "#b91c1c", [
+        ("Christmas Orchestral", "christmas_orchestral_full", "christmas_orchestral_full"),
+        ("Christmas Jazz Trio",  "christmas_jazz_trio_full",  "christmas_jazz_trio_full"),
+        ("Christmas Big Band",   "christmas_swing_full",      "christmas_swing_full"),
+        ("Christmas Fireside",   "christmas_fireside_full",   "christmas_fireside_full"),
+        ("Christmas Choir",      "christmas_choir_full",      "christmas_choir_full"),
+        ("Christmas Pop",        "christmas_pop_full",        "christmas_pop_full"),
+    ]),
 ]
 
 # Presets intentionally NOT surfaced on the wheel (feature demos + a
