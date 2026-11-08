@@ -125,7 +125,9 @@ ARRANGEMENT_VARIANTS: dict[str, str] = {
             "a horn pad, a held ending. Needs string_section and french_horn in the band.",
     "horn_bed": "With hits_only: the horns play through the track so the hits grow out of them (pickups rising into "
                 "each hit, chorus pushes on the 'and' of 4, phrase-end answers; verses softer, intros/bridges rest).",
-    "no_falloff": "End on a held note instead of the trumpet fall-off (the fall-off can sound comic).",
+    "no_falloff": "End on a held note (the default now; kept so older plans still read).",
+    "falloff": "The classic trumpet fall-off on the last note. Off by default because it can sound comic; "
+               "only when asked for.",
     "string_intro": "An attention-grabbing opening: a big string chord + kick/crash on the first downbeat, then "
                     "spiccato strings climbing two octaves into the band. Needs string_section and "
                     "string_spiccato in the band.",
@@ -841,7 +843,8 @@ def _seventies_hits(ctx, clock, harm, feel, part, rng) -> list[NoteEvent]:
         # no hits they're silent everywhere else, so they don't play the end.
         t0 = clock.t(ctx.bar_count - 1, 0)
         top = unison_pitch(harm.tonic, "maj", 72, 79)
-        falloff = "no_falloff" not in _arrangement(ctx)
+        # The fall-off is off unless asked for; "no_falloff" (older plans) still wins.
+        falloff = "falloff" in _arrangement(ctx) and "no_falloff" not in _arrangement(ctx)
         hold = 0.55 if falloff else clock.bar_len      # without the fall-off, the last note rings out
         for o in octaves:
             out.append(NoteEvent(pitch=top + o, start=t0, end=t0 + hold, velocity=124))

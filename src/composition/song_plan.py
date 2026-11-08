@@ -67,7 +67,8 @@ def _funk_fusion() -> EngineSpec:
         variant_instruments=dict(ARRANGEMENT_INSTRUMENTS),
         # In engine precedence order; the variant the latest revision ADDED wins.
         exclusive=(("pocket_bass", "simple_bass", "calm_bass"),
-                   ("calm_drums", "pocket_drums")),
+                   ("calm_drums", "pocket_drums"),
+                   ("falloff", "no_falloff")),
         expands={"calm": ("calm_drums", "calm_bass", "calm_keys")},
     )
 

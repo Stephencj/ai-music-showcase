@@ -447,11 +447,11 @@ class HitsOnlyTest(unittest.TestCase):
             self.assertTrue({36, 38, 49} <= kit, kit)
             self.assertTrue([n for n in self.tracks["Electric Bass"].notes if abs(n.start - hit) < 0.02])
 
-    def test_the_final_hit_falls_off(self):
+    def test_the_final_hit_is_held_not_fallen_off(self):
+        # The fall-off is opt-in ("falloff"); by default the last hit rings out.
         final = 11 * self.bar
-        tail = sorted((n for n in self.tracks["Trumpet"].notes if n.start > final + 0.3), key=lambda n: n.start)
-        self.assertGreaterEqual(len(tail), 4)
-        self.assertEqual([n.pitch for n in tail], sorted((n.pitch for n in tail), reverse=True))
+        tail = [n for n in self.tracks["Trumpet"].notes if n.start > final + 0.3]
+        self.assertEqual(tail, [])
 
 
 class CalmTest(unittest.TestCase):
@@ -705,11 +705,14 @@ class NoFalloffTest(unittest.TestCase):
             self.assertFalse(self.tracks[name].notes if name in self.tracks else [], name)
         self.assertTrue(self.tracks["String Section"].notes if "String Section" in self.tracks else True)
 
-    def test_the_ending_can_skip_the_fall_off(self):
-        self.assertGreater(len(self._ending("hits_only")), 1)          # hold + the fall-off gliss
-        plain = self._ending("hits_only,no_falloff")
-        self.assertEqual(len({n.pitch for n in plain}), 1)              # just the held note
-        self.assertGreater(plain[0].end - plain[0].start, 1.5)          # ringing out
+    def test_the_ending_is_held_unless_the_fall_off_is_asked_for(self):
+        for arrangement in ("hits_only", "hits_only,no_falloff"):         # default + legacy flag
+            plain = self._ending(arrangement)
+            self.assertEqual(len({n.pitch for n in plain}), 1, arrangement)   # just the held note
+            self.assertGreater(plain[0].end - plain[0].start, 1.5)            # ringing out
+        self.assertGreater(len(self._ending("hits_only,falloff")), 1)     # hold + the fall-off gliss
+        plain = self._ending("hits_only,falloff,no_falloff")              # no_falloff still wins
+        self.assertEqual(len({n.pitch for n in plain}), 1)
 
 
 class StringIntroTest(unittest.TestCase):

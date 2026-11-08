@@ -25,7 +25,7 @@ struct RootView: View {
     @EnvironmentObject private var settings: AppSettings
 
     var body: some View {
-        if settings.hasUsableURL {
+        if settings.hasUsableURL || MainView.jsPanelTest {
             MainView()
         } else {
             ConnectionView()

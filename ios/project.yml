@@ -57,11 +57,28 @@ targets:
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         ENABLE_PREVIEWS: YES
 
+  AiMusicUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: AiMusicUITests
+    dependencies:
+      - target: AiMusic
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.stephencjuliano.aimusic.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: AiMusic
+
 schemes:
   AiMusic:
     build:
       targets:
         AiMusic: all
+    test:
+      targets:
+        - AiMusicUITests
     run:
       config: Debug
     archive:

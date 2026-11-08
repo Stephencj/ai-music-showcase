@@ -61,10 +61,18 @@ struct MainView: View {
         }
     }
 
+    #if DEBUG
+    static let jsPanelTest = ProcessInfo.processInfo.arguments.contains("-js-panel-test")
+    #else
+    static let jsPanelTest = false
+    #endif
+
     var body: some View {
         NavigationStack {
             Group {
-                if candidates().isEmpty {
+                if Self.jsPanelTest {
+                    StudioWebView(url: URL(string: "about:blank")!, token: "", reloadToken: reloadToken)
+                } else if candidates().isEmpty {
                     ContentUnavailableView {
                         Label("No server configured", systemImage: "wifi.exclamationmark")
                     } description: {
@@ -231,10 +239,29 @@ struct StudioWebView: UIViewRepresentable {
     }
 
     private func load(webView: WKWebView) {
+        #if DEBUG
+        // UI-test hook: a local page that exercises alert / confirm / prompt.
+        if ProcessInfo.processInfo.arguments.contains("-js-panel-test") {
+            webView.loadHTMLString(Self.jsPanelTestPage, baseURL: nil)
+            return
+        }
+        #endif
         var request = URLRequest(url: url)
         request = NetworkManager.shared.authorized(request, token: token)
         webView.load(request)
     }
+
+    #if DEBUG
+    static let jsPanelTestPage = """
+    <html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+    <body style="font: 20px -apple-system; padding: 40px">
+    <button id="c" style="font-size: 24px; padding: 16px" onclick="document.getElementById('out').textContent = 'confirm:' + confirm('Start a new song?')">Confirm</button>
+    <button id="p" style="font-size: 24px; padding: 16px" onclick="document.getElementById('out').textContent = 'prompt:' + prompt('Block name', 'Verse edit')">Prompt</button>
+    <button id="a" style="font-size: 24px; padding: 16px" onclick="alert('Saved'); document.getElementById('out').textContent = 'alert:done'">Alert</button>
+    <p id="out">ready</p>
+    </body></html>
+    """
+    #endif
 
     private func makeRefreshControl(webView: WKWebView, coordinator: Coordinator) -> UIRefreshControl {
         let rc = UIRefreshControl()
@@ -270,6 +297,50 @@ struct StudioWebView: UIViewRepresentable {
                      decidePolicyFor navigationAction: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             decisionHandler(.allow)
+        }
+
+        // window.alert / confirm / prompt. Without these WKWebView silently
+        // answers "no" (confirm → false, prompt → null), so every web button
+        // guarded by a confirm (New song, delete block, remove from library)
+        // did nothing in the app.
+        func webView(_ webView: WKWebView,
+                     runJavaScriptAlertPanelWithMessage message: String,
+                     initiatedByFrame frame: WKFrameInfo,
+                     completionHandler: @escaping () -> Void) {
+            let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler() })
+            Coordinator.presentPanel(alert) { completionHandler() }
+        }
+
+        func webView(_ webView: WKWebView,
+                     runJavaScriptConfirmPanelWithMessage message: String,
+                     initiatedByFrame frame: WKFrameInfo,
+                     completionHandler: @escaping (Bool) -> Void) {
+            let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in completionHandler(false) })
+            alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in completionHandler(true) })
+            Coordinator.presentPanel(alert) { completionHandler(false) }
+        }
+
+        func webView(_ webView: WKWebView,
+                     runJavaScriptTextInputPanelWithPrompt prompt: String,
+                     defaultText: String?,
+                     initiatedByFrame frame: WKFrameInfo,
+                     completionHandler: @escaping (String?) -> Void) {
+            let alert = UIAlertController(title: nil, message: prompt, preferredStyle: .alert)
+            alert.addTextField { $0.text = defaultText }
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in completionHandler(nil) })
+            alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak alert] _ in
+                completionHandler(alert?.textFields?.first?.text ?? "")
+            })
+            Coordinator.presentPanel(alert) { completionHandler(nil) }
+        }
+
+        /// Present a JS panel; if nothing can present it, answer at once so
+        /// the page never hangs waiting.
+        static func presentPanel(_ alert: UIAlertController, fallback: () -> Void) {
+            guard let presenter = topMostViewController() else { fallback(); return }
+            presenter.present(alert, animated: true)
         }
 
         // File-download interception: Gradio surfaces "Download MIDI"

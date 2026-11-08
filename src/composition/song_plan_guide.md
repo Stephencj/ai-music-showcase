@@ -114,7 +114,8 @@ if the user asked for them.
 ## The producer's taste (follow it)
 
 - Serious, musically intentional, not cute. Never comic gestures: no trumpet
-  fall-offs, no cartoon flourishes. On a serious video add `no_falloff`.
+  fall-offs, no cartoon flourishes. The ending is held by default; add
+  `falloff` only when the user explicitly asks for a fall-off.
 - Never synthesized drum sounds; real kits and the recorded brushes only.
 - Background beds under a video: `target_lufs` about −25, and simpler parts.
   The proven background bed is

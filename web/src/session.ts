@@ -122,6 +122,7 @@ export const VARIANT_UI: Record<string, { label: string; lane: LaneId }> = {
   bass_flare: { label: "Bass flare", lane: "bass" },
   horn_bed: { label: "Horn bed", lane: "horns" },
   no_falloff: { label: "Held ending", lane: "horns" },
+  falloff: { label: "Trumpet fall-off", lane: "horns" },
   string_intro: { label: "String intro", lane: "strings" },
 };
 
@@ -203,7 +204,7 @@ export function cellLabel(lane: LaneId, role: string, vs: string[], plan: SongPl
     case "keys": return has("calm_keys") ? "calm" : "chops";
     case "lead": return has("hits_only") ? "" : ov?.feature_lead ? "solo" : "lead";
     case "horns":
-      if (role === "outro") return has("no_falloff") ? "held" : "fall-off";
+      if (role === "outro") return has("falloff") && !has("no_falloff") ? "fall-off" : "held";
       if (has("hits_only")) return has("horn_bed") ? "bed" : plan.hits && plan.hits.length === 0 ? "" : "hits";
       return "riffs";
     case "strings":
