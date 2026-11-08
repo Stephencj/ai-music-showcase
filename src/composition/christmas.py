@@ -796,9 +796,23 @@ def band_for(band: list[str], arrangement: str) -> list[str]:
     return out
 
 
+def melody_options(info: dict) -> list[str]:
+    """Band members that can carry a section's tune: they have a melody
+    register and can play its whole range (an octave shift is fine)."""
+    lo, hi = info.get("tune_range") or [60, 76]
+    out = []
+    for inst in info.get("band") or ():
+        pl, ph = PLAYABLE.get(inst, (0, -1))
+        if inst in _RANGE and ph - pl >= hi - lo:
+            out.append(inst)
+    return out
+
+
 def apply_overrides(sections: list[dict], overrides: Optional[dict]) -> list[dict]:
-    """Per-role overrides from a request (energy, arrangement, instruments)
-    on planned sections. Bars, keys and chords stay the plan's."""
+    """Per-role overrides from a request (energy, arrangement, instruments,
+    lead) on planned sections. Bars, keys and chords stay the plan's.
+    ``lead`` hands a section's tune to another band member that can play it
+    (Timeline: silence the choir, move the tune to the organ)."""
     out = []
     for sec in sections:
         o = (overrides or {}).get(sec["role"]) or {}
@@ -809,8 +823,38 @@ def apply_overrides(sections: list[dict], overrides: Optional[dict]) -> list[dic
             sec["arrangement"] = o["arrangement"]
         if o.get("instruments"):
             sec["instruments"] = list(o["instruments"])
+        info = sec.get("info") or {}
+        if o.get("lead") and info.get("lead") and info.get("melody") and o["lead"] in melody_options(info):
+            sec["info"] = {**info, "lead": o["lead"], "planned_lead": info.get("planned_lead") or info["lead"]}
         out.append(sec)
+    # The next section's pickup sounds on whoever now has its tune.
+    for a, b in zip(out, out[1:]):
+        if a.get("info", {}).get("tail_lead") and a["info"]["tail_lead"] != b["info"].get("lead"):
+            a["info"] = {**a["info"], "tail_lead": b["info"].get("lead")}
     return out
+
+
+def section_melody(sec: dict) -> Optional[str]:
+    """Who sounds the tune in a planned section (None: nobody, e.g. the
+    interlude or a backing track without a guide melody)."""
+    info = sec.get("info") or {}
+    if not info.get("lead") or not info.get("melody"):
+        return None
+    if info.get("backing") and not info.get("guide"):
+        return None
+    mask = sec.get("instruments")
+    return None if mask and info["lead"] not in mask else info["lead"]
+
+
+def section_tune(sec: dict) -> dict:
+    """A planned section's tune for a client: who has it (``melody``), who
+    the plan gave it to before any ``lead`` override (``melody_default``)
+    and who else could carry it (``melody_options``)."""
+    info = sec.get("info") or {}
+    has = bool(info.get("lead") and info.get("melody"))
+    return {"melody": section_melody(sec),
+            "melody_default": (info.get("planned_lead") or info["lead"]) if has else None,
+            "melody_options": melody_options(info) if has else []}
 
 
 # ---------------------------------------------------------------------------
@@ -1657,6 +1701,8 @@ def _plays(sec: _Sec, inst: str) -> bool:
     k = sec.kind
     if k == "count_in":
         return inst == sec.info.get("count_in_by")
+    if inst == sec.info.get("lead"):
+        return True                                       # whoever has the tune plays it
     if k == "intro":
         intro = {"swing": ("piano",), "trio": ("piano",), "orchestral": ("string_section", "harp", sec.info["lead"]),
                  "fireside": ("nylon_guitar", "acoustic_guitar"), "choir": ("organ_church", sec.info["lead"]),

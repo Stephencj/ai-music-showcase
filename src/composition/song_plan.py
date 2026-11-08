@@ -260,6 +260,10 @@ def _clean_override(o: Any, eng: EngineSpec, prev: Any, notes: list[str]) -> dic
         ids = [str(i) for i in o["instruments"] if str(i) in INSTRUMENT_REGISTRY]
         if ids:
             out["instruments"] = ids
+    if isinstance(o.get("lead"), str) and o["lead"]:
+        from src.composition.instruments import INSTRUMENT_REGISTRY
+        if o["lead"] in INSTRUMENT_REGISTRY:
+            out["lead"] = o["lead"]
     if o.get("arrangement") is not None:
         out["arrangement"] = _clean_variants(o["arrangement"], eng,
                                              (prev or {}).get("arrangement"), notes)

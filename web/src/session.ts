@@ -273,6 +273,7 @@ export function withoutInstruments(plan: SongPlan, ids: string[], opts: Arrangem
       c.instruments = c.instruments.filter((i) => !gone.has(i));
       if (!c.instruments.length) delete c.instruments;
     }
+    if (c.lead && gone.has(c.lead)) delete c.lead;
     if (Object.keys(c).length) so[role] = c;
   }
   next.section_overrides = so;
@@ -301,6 +302,23 @@ export function withSectionSilence(plan: SongPlan, role: string, ids: string[], 
   return { ...plan, section_overrides: so };
 }
 
+/** Hand a role's tune to another instrument (null: back to the
+ *  arrangement's own choice). Christmas styles honour it. */
+export function withSectionLead(plan: SongPlan, role: string, lead: string | null): SongPlan {
+  const o: SectionOverride = { ...(plan.section_overrides?.[role] || {}) };
+  if (lead) o.lead = lead; else delete o.lead;
+  const so = { ...(plan.section_overrides || {}) };
+  if (Object.keys(o).length) so[role] = o; else delete so[role];
+  return { ...plan, section_overrides: so };
+}
+
+/** The plan with no section handing its tune to another instrument. */
+export function withoutLeads(plan: SongPlan): SongPlan {
+  let next = plan;
+  for (const role of Object.keys(plan.section_overrides || {})) next = withSectionLead(next, role, null);
+  return next;
+}
+
 /** The plan with one more section removed. ``shown`` is its index in the
  *  version's section list, which already leaves out earlier removals. */
 export function withoutSection(plan: SongPlan, shown: number): SongPlan {
@@ -323,12 +341,16 @@ export function sectionStarts(bars: number[], tempo: number, timeSig: number[] |
   return bars.reduce<number[]>((acc, _b, i) => [...acc, i ? acc[i - 1] + bars[i - 1] * barSec : 0], []);
 }
 
+/** Styles whose cells name their parts in Funk Fusion's words (groove,
+ *  slap, chops, riffs…). Others (Christmas too) just say "on". */
+export const funkWords = (genre: string) => genre === "funk_fusion_full";
+
 /** What a part plays in a section, as a short cell label ("" = sits out). */
 export function cellLabel(lane: LaneId, role: string, vs: string[], plan: SongPlan,
   laneHas: (lane: LaneId) => boolean, funk: boolean): string {
   if (!laneHas(lane)) return "";
   const ov = plan.section_overrides?.[role];
-  if (!funk) {
+  if (!funk || !funkWords(plan.genre)) {
     if (lane === "lead" && ov?.feature_lead) return "solo";
     if (ov?.energy != null) return ov.energy < 0.85 ? "sparse" : ov.energy > 1.1 ? "big" : "on";
     return "on";

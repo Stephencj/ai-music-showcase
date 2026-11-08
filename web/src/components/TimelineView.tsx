@@ -4,7 +4,7 @@ import type { Block, SongPlan } from "../types";
 import {
   LANES, type LaneId, SECTION_NAME, SECTION_SHORT, type SVersion, type SectionEdit, type Session, VARIANT_UI,
   bandOf, cellLabel, fmtTime, sectionStarts, sectionVariants, splitVariants, toggleVariant, variantLabel,
-  withInstruments, withSectionSilence, withoutInstruments, withoutSection,
+  withInstruments, withSectionLead, withSectionSilence, withoutInstruments, withoutLeads, withoutSection,
 } from "../session";
 import Composer from "./Composer";
 import PickerField from "./PickerField";
@@ -22,7 +22,7 @@ const chipRank = (v: string) => (CHIP_ORDER.includes(v) ? CHIP_ORDER.indexOf(v) 
 
 /** Create → Timeline: the song's sections across, its parts down. */
 export default function TimelineView({
-  session, version, busy, active, lanes, arrOpts, defaultBand, genreName,
+  session, version, busy, active, lanes, instNames, arrOpts, defaultBand, genreName,
   onPickVersion, onBack, onSend, onRegenerate, onEdit, onAddBlock,
 }: {
   session: Session;
@@ -30,6 +30,7 @@ export default function TimelineView({
   busy: boolean;
   active: boolean;
   lanes: Record<string, LaneId>;
+  instNames: Record<string, string>;
   arrOpts: api.ArrangementOptions | null;
   defaultBand: (genre: string) => string[];
   genreName: (genre: string) => string;
@@ -48,6 +49,8 @@ export default function TimelineView({
   const [more, setMore] = useState(false);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [addMsg, setAddMsg] = useState<string | null>(null);
+  // Silencing / removing a part that has the tune: where to move it first.
+  const [moving, setMoving] = useState<LaneId | null>(null);
 
   const plan = version?.plan;
   const result = version?.status === "done" ? version.result : undefined;
@@ -75,6 +78,7 @@ export default function TimelineView({
   const curOv = (plan && secRole && plan.section_overrides?.[secRole]) || {};
 
   useEffect(() => { setDraft(null); setMore(false); }, [sel, version?.n]);
+  useEffect(() => { setMoving(null); }, [sel, lane, laneSel, version?.n]);
   useEffect(() => { if (sel != null) setLaneSel(null); }, [sel]);
   const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -239,30 +243,92 @@ export default function TimelineView({
     const m = maskOf(role);
     return !!m?.length && laneHas(l) && !m.some((id) => lanes[id] === l);
   };
+  // Where the arrangement itself leaves a part out (the render says who
+  // played in each section; null = not known, e.g. still composing).
+  const playsIn = (l: LaneId, i: number): boolean | null => {
+    const p = result?.sections?.[i]?.plays;
+    return p ? laneIds(l).some((id) => p.includes(id)) : null;
+  };
+  const idleIn = (l: LaneId, i: number) => laneHas(l) && playsIn(l, i) === false;
+  const idleEvery = (l: LaneId, role: string) => {
+    const at = sections.map((s, i) => (s.role === role ? i : -1)).filter((i) => i >= 0);
+    return at.length > 0 && at.every((i) => idleIn(l, i));
+  };
+  // Sections (of a role, or all) where a part has the tune, and who else in
+  // the band could carry it there (playing in that role, in its range).
+  const tuneIn = (l: LaneId, role?: string) => (result?.sections ?? [])
+    .filter((s) => (!role || s.role === role) && s.melody && laneIds(l).includes(s.melody));
+  const moveTargets = (l: LaneId, role?: string) => {
+    const secs = tuneIn(l, role);
+    if (!secs.length) return [];
+    return band.filter((id) => lanes[id] !== l
+      && secs.every((s) => (s.melody_options ?? []).includes(id) && (!maskOf(s.role)?.length || maskOf(s.role)!.includes(id))));
+  };
+  const instName = (id: string) => instNames[id] ?? id.replace(/_/g, " ");
+  const roleNames = (secs: { role: string }[]) => [...new Set(secs.map((s) => (SECTION_NAME[s.role] ?? s.role).toLowerCase()))]
+    .join(" and ");
   const editable = !busy && done;
   const soundingLanes = shownLanes.filter((l) => laneHas(l.id)).length;
-  async function removeLane(l: LaneId) {
+  /** Remove a part; ``moveTo``: who takes the tune where it had it
+   *  (undefined: ask first when it has the tune; null: the arrangement picks). */
+  async function removeLane(l: LaneId, moveTo?: string | null) {
     if (!plan) return;
     const ids = laneIds(l), name = laneName(l);
+    const tuned = tuneIn(l);
+    if (moveTo === undefined && tuned.length && moveTargets(l).length) { setMoving(l); return; }
+    const roles = [...new Set(tuned.map((s) => s.role))];
     const dropped = withoutInstruments(plan, ids, arrOpts, defaultBand(plan.genre)).dropped;
     setLaneSel(null);
-    await onEdit((p) => withoutInstruments(p, ids, arrOpts, defaultBand(p.genre)).plan,
-      `Remove the ${name.toLowerCase()} from the song`,
-      [`${name}: removed from the song`, ...dropped.map((v) => `Arrangement: −${variantLabel(v)} (needs ${name.toLowerCase()})`)]);
+    await onEdit((p) => roles.reduce((q, r) => withSectionLead(q, r, moveTo ?? null),
+      withoutInstruments(p, ids, arrOpts, defaultBand(p.genre)).plan),
+    `Remove the ${name.toLowerCase()} from the song` + (moveTo ? `; the ${instName(moveTo).toLowerCase()} takes the tune` : ""),
+    [`${name}: removed from the song`, ...dropped.map((v) => `Arrangement: −${variantLabel(v)} (needs ${name.toLowerCase()})`),
+      ...(moveTo ? [`Tune (${roleNames(tuned)}): ${name.toLowerCase()} → ${instName(moveTo).toLowerCase()}`] : [])]);
   }
   async function restoreLane(l: LaneId) {
     const ids = removedIds(l), name = laneName(l);
+    const moved = Object.values(plan?.section_overrides || {}).some((o) => o.lead);
     setLaneSel(null);
-    await onEdit((p) => withInstruments(p, ids, defaultBand(p.genre)),
-      `Bring the ${name.toLowerCase()} back`, [`${name}: back in the song`]);
+    // The tune goes back to whoever the arrangement gives it.
+    await onEdit((p) => withoutLeads(withInstruments(p, ids, defaultBand(p.genre))),
+      `Bring the ${name.toLowerCase()} back`, [`${name}: back in the song`, ...(moved ? ["Tune: back to its own parts"] : [])]);
   }
-  async function silenceHere(l: LaneId, silent: boolean) {
+  /** Silence (or bring back) a part in this section's role; ``moveTo`` as
+   *  for removeLane. */
+  async function silenceHere(l: LaneId, silent: boolean, moveTo?: string | null) {
     if (!secRole) return;
-    const ids = laneIds(l), name = laneName(l).toLowerCase();
-    await onEdit((p) => withSectionSilence(p, secRole, ids, silent, defaultBand(p.genre)),
-      silent ? `Silence the ${name} in the ${secName.toLowerCase()}` : `Bring the ${name} back in the ${secName.toLowerCase()}`,
-      [`${secName}: ${name} ${silent ? "rests" : "plays again"}`]);
+    const ids = laneIds(l), name = laneName(l).toLowerCase(), sec = secName.toLowerCase();
+    if (silent && moveTo === undefined && tuneIn(l, secRole).length && moveTargets(l, secRole).length) {
+      setMoving(l);
+      return;
+    }
+    // Bringing back the part the tune was moved off gives it the tune back.
+    const back = !silent && !!curOv.lead && (result?.sections ?? [])
+      .some((s) => s.role === secRole && !!s.melody_default && ids.includes(s.melody_default));
+    await onEdit((p) => {
+      const q = withSectionSilence(p, secRole, ids, silent, defaultBand(p.genre));
+      return moveTo !== undefined || back ? withSectionLead(q, secRole, moveTo ?? null) : q;
+    },
+    silent ? `Silence the ${name} in the ${sec}` + (moveTo ? `; the ${instName(moveTo).toLowerCase()} takes the tune` : "")
+      : `Bring the ${name} back in the ${sec}`,
+    [`${secName}: ${name} ${silent ? "rests" : "plays again"}`,
+      ...(moveTo ? [`${secName}: tune ${name} → ${instName(moveTo).toLowerCase()}`] : back ? [`${secName}: tune back to its own part`] : [])]);
   }
+  /** Who should take the tune: a chip per band member that can, or none. */
+  const moveRow = (l: LaneId, targets: string[], where: string, pick: (to: string | null) => void, none: string) => (
+    <div className="ws-move" data-testid="move-tune">
+      <div className="ws-panel-note">The {laneName(l).toLowerCase()} has the tune {where}. Move it to:</div>
+      <div className="ws-opts">
+        {targets.map((id) => (
+          <button key={id} type="button" className="ws-opt" data-testid={`move-tune-${id}`} disabled={!editable}
+            onClick={() => pick(id)}>{instName(id)}</button>
+        ))}
+        <button type="button" className="ws-opt" data-testid="move-tune-none" disabled={!editable}
+          onClick={() => pick(null)}>{none}</button>
+        <button type="button" className="ws-link" data-testid="move-tune-cancel" onClick={() => setMoving(null)}>Cancel</button>
+      </div>
+    </div>
+  );
   async function removeSection(i: number) {
     const s = sections[i];
     if (!s) return;
@@ -380,16 +446,16 @@ export default function TimelineView({
                   </button>
                   {sections.map((s, i) => {
                     const vs = plan ? sectionVariants(plan, s.role, arrOpts) : [];
-                    const rests = restsIn(l.id, s.role);
+                    const rests = restsIn(l.id, s.role) || idleIn(l.id, i);
                     const label = plan && !rests ? cellLabel(l.id, s.role, vs, plan, laneHas, funk) : "";
                     const on = sel === i;
                     return (
                       <button key={i} type="button" data-testid={`cell-${l.id}-${i}`}
-                        className={"ws-cell" + (label ? "" : " off") + (rests ? " rest" : "") + (on ? " sel" : "") + (on && lane === l.id ? " lane" : "")}
-                        style={label ? { background: on ? l.hueOn : l.hue } : undefined}
+                        className={"ws-cell" + (label || rests ? "" : " off") + (rests ? " rest" : "") + (on ? " sel" : "") + (on && lane === l.id ? " lane" : "")}
+                        style={label || rests ? { background: on ? l.hueOn : l.hue } : undefined}
                         aria-label={`${l.name}, ${s.label}: ${label || (rests ? "rests" : "sits out")}`}
                         onClick={() => { setSel(i); setLane(lane === l.id && sel === i ? null : l.id); }}>
-                        {rests ? "rest" : label}
+                        {rests ? "rests" : label}
                       </button>
                     );
                   })}
@@ -447,15 +513,22 @@ export default function TimelineView({
               <div className="ws-actions">
                 <button type="button" className="ws-act" data-testid="play-from-section" disabled={!audioUrl || !length}
                   onClick={() => seekTo(secTime(sel), true)}>▶ From here</button>
-                {lane && laneHas(lane) && (
-                  <button type="button" className="ws-act" data-testid="silence-here" disabled={!editable}
-                    onClick={() => silenceHere(lane, !restsIn(lane, secRole))}>
+                {lane && laneHas(lane) && (restsIn(lane, secRole) || !idleEvery(lane, secRole) ? (
+                  <button type="button" className={"ws-act" + (moving === lane ? " on" : "")} data-testid="silence-here"
+                    disabled={!editable} onClick={() => silenceHere(lane, !restsIn(lane, secRole))}>
                     {restsIn(lane, secRole) ? `Bring ${laneName(lane).toLowerCase()} back here` : `Silence ${laneName(lane).toLowerCase()} here`}
                   </button>
-                )}
+                ) : (
+                  // The arrangement already leaves it out here: nothing to silence.
+                  <button type="button" className="ws-act" data-testid="silence-here" disabled>
+                    {laneName(lane)} rests here
+                  </button>
+                ))}
                 <button type="button" className="ws-act" data-testid="remove-section"
                   disabled={!editable || sections.length < 2} onClick={() => removeSection(sel)}>Remove section</button>
               </div>
+              {moving && moving === lane && moveRow(moving, moveTargets(moving, secRole), `in the ${secName.toLowerCase()}`,
+                (to) => silenceHere(moving, true, to), "Leave it out")}
               {addMsg && <div className={addMsg.startsWith("Error") ? "error" : "meta"}>{addMsg}</div>}
             </div>
           )}
@@ -469,7 +542,7 @@ export default function TimelineView({
               <div className="ws-panel-btns">
                 {laneHas(laneSel) ? (
                   <button type="button" className="ws-primary" data-testid="lane-remove"
-                    disabled={!editable || soundingLanes < 2} onClick={() => removeLane(laneSel)}>
+                    disabled={!editable || soundingLanes < 2 || moving === laneSel} onClick={() => removeLane(laneSel)}>
                     Remove {laneName(laneSel).toLowerCase()} from the song
                   </button>
                 ) : (
@@ -479,6 +552,8 @@ export default function TimelineView({
                   </button>
                 )}
               </div>
+              {moving && moving === laneSel && moveRow(moving, moveTargets(moving), `in the ${roleNames(tuneIn(moving))}`,
+                (to) => removeLane(moving, to), "Let the band choose")}
             </div>
           )}
         </>

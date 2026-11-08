@@ -73,6 +73,10 @@ export interface SectionInfo {
   label: string;
   role: string;
   bars: number;
+  plays?: string[];             // instrument ids that played in it (the rest of the band rests)
+  melody?: string | null;       // planned tunes (Christmas): who has the melody
+  melody_default?: string | null; // … who the arrangement gave it to (before a moved tune)
+  melody_options?: string[];    // … and who in the band could carry it
 }
 
 export interface SectionVoice {
@@ -218,6 +222,7 @@ export interface SectionOverride {
   progression?: string[];    // per-section chord progression (roman numerals)
   instruments?: string[];    // per-section instrument subset (ids); empty = all
   arrangement?: string;      // per-section arrangement variant (Funk Fusion)
+  lead?: string;             // Christmas: the instrument that carries the tune here
 }
 
 // Progression choices for the section builder (from GET /presets).

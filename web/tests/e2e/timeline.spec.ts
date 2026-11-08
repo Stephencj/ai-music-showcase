@@ -131,9 +131,9 @@ test("timeline: scrub the waveform, play from a section, silence a part / a cell
     expect(mask).not.toContain("electric_bass");
     expect(mask).toContain("drum_kit");
     await versionDone(page, 2);
-    await expect(page.getByTestId(`cell-bass-${verse}`)).toHaveText("rest");
-    await expect(page.getByTestId(`cell-bass-${chorus}`)).not.toHaveText("rest");
-    await expect(page.getByTestId(`cell-drums-${verse}`)).not.toHaveText(/^(rest)?$/);
+    await expect(page.getByTestId(`cell-bass-${verse}`)).toHaveText("rests");
+    await expect(page.getByTestId(`cell-bass-${chorus}`)).not.toHaveText("rests");
+    await expect(page.getByTestId(`cell-drums-${verse}`)).not.toHaveText(/^(rests)?$/);
     // (The cell stays selected across the regeneration.)
     await expect(page.getByTestId("silence-here")).toHaveText("Bring bass back here");
     await shot(page, "silenced-cell");
@@ -172,7 +172,7 @@ test("timeline: scrub the waveform, play from a section, silence a part / a cell
     const after = await secs.allTextContents();
     expect(after.filter((t) => /brdg/i.test(t))).toHaveLength(0);
     expect(after.filter((t) => /chorus/i.test(t))).toHaveLength(names.filter((t) => /chorus/i.test(t)).length);
-    await expect(page.getByTestId(`cell-bass-${verse}`)).toHaveText("rest");
+    await expect(page.getByTestId(`cell-bass-${verse}`)).toHaveText("rests");
     await expect(page.getByTestId("lane-keys")).toHaveClass(/muted/);
     await shot(page, "removed-section");
 
@@ -183,7 +183,7 @@ test("timeline: scrub the waveform, play from a section, silence a part / a cell
     await page.getByTestId("timeline-undo").click();
     await expect(page.locator(".ws-vpick")).toContainText("v2");
     await expect(page.getByTestId("lane-keys")).not.toHaveClass(/muted/);
-    await expect(page.getByTestId(`cell-bass-${verse}`)).toHaveText("rest");
+    await expect(page.getByTestId(`cell-bass-${verse}`)).toHaveText("rests");
     // The thread has a message per edit.
     await page.getByTestId("timeline-back").click();
     await expect(page.getByTestId("msg-section")).toHaveCount(3);
@@ -193,8 +193,8 @@ test("timeline: scrub the waveform, play from a section, silence a part / a cell
   }
 });
 
-test("timeline: a choir carol has a Choir lane that can be silenced in a section and removed", async ({ page }) => {
-  test.setTimeout(1_200_000);
+test("timeline: a choir carol — Choir lane, \"on\" labels, rests where the form leaves a part out, move the tune when silencing", async ({ page }) => {
+  test.setTimeout(1_500_000);
   await freshCreate(page);
   try {
     let gen = nextGenerate(page);
@@ -208,9 +208,12 @@ test("timeline: a choir carol has a Choir lane that can be silenced in a section
     await page.getByTestId("open-timeline").click();
     const tl = page.getByTestId("timeline");
     await expect(tl).toBeVisible();
+    await expect(page.getByTestId("timeline-info")).toContainText("BPM", { timeout: GEN_TIMEOUT });
     const names = await tl.locator(".ws-sec").allTextContents();
     const chorus = names.findIndex((t) => /chorus/i.test(t));
+    const intro = names.findIndex((t) => /intro/i.test(t));
     expect(chorus).toBeGreaterThanOrEqual(0);
+    expect(intro).toBe(0);
 
     // The choir is its own lane (not folded into Keys with the organ).
     const choir = page.getByTestId("lane-choir");
@@ -219,40 +222,96 @@ test("timeline: a choir carol has a Choir lane that can be silenced in a section
     await expect(page.getByTestId("lane-name-choir")).toHaveText("Choir");
     await expect(page.getByTestId(`cell-choir-${chorus}`)).toHaveText("on");
     await expect(page.getByTestId("lane-keys")).toBeVisible();
-    await shot(page, "choir-lane");
+    // Christmas cells say "on", never Funk Fusion's part names.
+    await expect(page.getByTestId(`cell-keys-${chorus}`)).toHaveText("on");
+    const labels = await tl.locator(".ws-cell").allTextContents();
+    expect(labels.filter((t) => /chops|groove|slap|riffs|pad|hits|lead/.test(t))).toEqual([]);
+    // The choir doesn't sing the intro (the organ has it): a resting cell,
+    // dimmer, in the lane's colour.
+    const introChoir = page.getByTestId(`cell-choir-${intro}`);
+    await expect(introChoir).toHaveText("rests");
+    await expect(introChoir).toHaveClass(/rest/);
+    await expect(introChoir).not.toHaveClass(/\boff\b/);
+    expect(Number(await introChoir.evaluate((e) => getComputedStyle(e).opacity))).toBeLessThan(0.7);
+    await expect(page.getByTestId(`cell-keys-${intro}`)).toHaveText("on");
+    // Nothing to silence where it already rests.
+    await introChoir.click();
+    await expect(page.getByTestId("silence-here")).toHaveText("Choir rests here");
+    await expect(page.getByTestId("silence-here")).toBeDisabled();
+    await shot(page, "christmas-rests");
 
-    // ---- silence the choir in the chorus ----------------------------------
+    // ---- silence the choir in the chorus: it has the tune → move it ---------
     await page.getByTestId(`cell-choir-${chorus}`).click();
     await expect(page.getByTestId("silence-here")).toHaveText("Silence choir here");
-    gen = nextGenerate(page);
     await page.getByTestId("silence-here").click();
-    const b2 = bodyOf(await gen);
+    const move = page.getByTestId("move-tune");
+    await expect(move).toContainText("The choir has the tune in the chorus. Move it to:");
+    await expect(page.getByTestId("move-tune-organ_church")).toHaveText("Organ (Church)");
+    await expect(page.getByTestId("move-tune-string_section")).toBeVisible();
+    await expect(page.getByTestId("move-tune-choir")).toHaveCount(0);
+    await expect(page.getByTestId("move-tune-none")).toHaveText("Leave it out");
+    await move.scrollIntoViewIfNeeded();
+    await shot(page, "move-tune");
+    // Cancel leaves the song alone.
+    await page.getByTestId("move-tune-cancel").click();
+    await expect(move).toHaveCount(0);
+    await page.getByTestId("silence-here").click();
+    gen = nextGenerate(page);
+    await page.getByTestId("move-tune-organ_church").click();
+    const r2 = await gen;
+    const b2 = bodyOf(r2) as Body & { section_overrides?: Record<string, { instruments?: string[]; lead?: string }> };
     const mask = b2.section_overrides?.chorus?.instruments ?? [];
     expect(mask).not.toContain("choir");
     expect(mask).toContain("organ_church");
+    expect(b2.section_overrides?.chorus?.lead).toBe("organ_church");
     await versionDone(page, 2);
-    await expect(page.getByTestId(`cell-choir-${chorus}`)).toHaveText("rest");
-    await expect(page.getByTestId(`cell-keys-${chorus}`)).not.toHaveText(/^(rest)?$/);
+    await expect(page.getByTestId(`cell-choir-${chorus}`)).toHaveText("rests");
+    await expect(page.getByTestId(`cell-keys-${chorus}`)).toHaveText("on");
     await expect(page.getByTestId("silence-here")).toHaveText("Bring choir back here");
+    // The render: the organ has the chorus tune, the choir sits it out.
+    type Sec = { role: string; plays?: string[]; melody?: string | null; melody_default?: string | null };
+    const res2 = (await (await page.request.get(`/api/jobs/${await jobOf(r2)}`)).json()) as { result: { sections: Sec[] } };
+    for (const s of res2.result.sections.filter((x) => x.role === "chorus")) {
+      expect(s.melody).toBe("organ_church");
+      expect(s.melody_default).toBe("choir");
+      expect(s.plays).toContain("organ_church");
+      expect(s.plays).not.toContain("choir");
+    }
     await shot(page, "choir-silenced");
 
-    // ---- remove the choir from the whole song, then bring it back ---------
+    // ---- bring it back here: the tune goes back to the choir ---------------
+    gen = nextGenerate(page);
+    await page.getByTestId("silence-here").click();
+    const b3 = bodyOf(await gen) as Body & { section_overrides?: Record<string, { lead?: string }> };
+    expect(b3.section_overrides?.chorus?.lead).toBeUndefined();
+    expect(b3.section_overrides?.chorus?.instruments).toBeUndefined();
+    await versionDone(page, 3);
+    await expect(page.getByTestId(`cell-choir-${chorus}`)).toHaveText("on");
+
+    // ---- remove the choir from the whole song: move its tune too ----------
     await page.getByTestId("lane-name-choir").click();
     await expect(page.getByTestId("lane-panel")).toContainText("Choir · whole song");
-    gen = nextGenerate(page);
     await page.getByTestId("lane-remove").click();
-    const b3 = bodyOf(await gen);
-    expect(b3.instruments).not.toContain("choir");
-    expect(b3.instruments).toContain("organ_church");
-    await versionDone(page, 3);
+    await expect(page.getByTestId("move-tune")).toContainText("The choir has the tune in the chorus and outro");
+    await expect(page.getByTestId("move-tune-none")).toHaveText("Let the band choose");
+    gen = nextGenerate(page);
+    await page.getByTestId("move-tune-organ_church").click();
+    const b4 = bodyOf(await gen) as Body & { section_overrides?: Record<string, { lead?: string }> };
+    expect(b4.instruments).not.toContain("choir");
+    expect(b4.instruments).toContain("organ_church");
+    expect(b4.section_overrides?.chorus?.lead).toBe("organ_church");
+    expect(b4.section_overrides?.outro?.lead).toBe("organ_church");
+    await versionDone(page, 4);
     await expect(choir).toHaveClass(/muted/);
     await expect(choir.locator(".ws-cell:not(.off)")).toHaveCount(0);
     await page.getByTestId("lane-name-choir").click();
     await expect(page.getByTestId("lane-restore")).toHaveText("Bring choir back");
     gen = nextGenerate(page);
     await page.getByTestId("lane-restore").click();
-    expect(bodyOf(await gen).instruments).toContain("choir");
-    await versionDone(page, 4);
+    const b5 = bodyOf(await gen) as Body & { section_overrides?: Record<string, { lead?: string }> };
+    expect(b5.instruments).toContain("choir");
+    expect(Object.values(b5.section_overrides ?? {}).filter((o) => o.lead)).toEqual([]);
+    await versionDone(page, 5);
     await expect(choir).not.toHaveClass(/muted/);
   } finally {
     await deleteSessions(page.request, [await currentSessionId(page)]);

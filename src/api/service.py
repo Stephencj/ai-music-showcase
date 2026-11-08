@@ -158,6 +158,7 @@ def run_generation(req, progress, job_id: str) -> dict:
         skip_audio=True,            # we render HQ below; skip the low-fi pass
     )
     midi_path = Path(out["midi_path"])
+    plays = list(out.get("section_plays") or [])
     # The section list we passed is authoritative for length — compose_song's
     # returned "bars" reflects the preset default, not the actual arrangement.
     total_bars = sum(s["end_bar"] - s["start_bar"] + 1 for s in secs)
@@ -272,10 +273,15 @@ def run_generation(req, progress, job_id: str) -> dict:
         "tempo": eff_tempo,
         "time_signature": list(ts),
         "summary": out.get("summary", ""),
+        # Per section: who played in it (instrument ids; the Timeline shows
+        # the rest of the band as resting) and, for a planned tune, who has
+        # the melody and who else could carry it.
         "sections": [
             {"label": s["label"], "role": s["role"],
-             "bars": s["end_bar"] - s["start_bar"] + 1}
-            for s in secs
+             "bars": s["end_bar"] - s["start_bar"] + 1,
+             **({"plays": plays[i]} if i < len(plays) else {}),
+             **(christmas.section_tune(s) if plan and s.get("info") else {})}
+            for i, s in enumerate(secs)
         ],
         "saved_block": saved_block,
         "section_blocks": section_blocks,

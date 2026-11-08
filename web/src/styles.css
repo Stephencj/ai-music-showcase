@@ -1792,7 +1792,9 @@ input.ws-input:focus { outline: none; border-color: var(--accent); }
 }
 .ws-lane.on { color: var(--text); background: #2a2552; padding-left: 4px; }
 .ws-row.muted .ws-lane { color: var(--muted); text-decoration: line-through; opacity: 0.7; }
-.ws-cell.rest { color: var(--muted); border-style: dashed; font-style: italic; }
+.ws-cell.rest { opacity: 0.45; border-style: dashed; border-color: rgba(255,255,255,0.22); font-style: italic; }
+.ws-move { display: flex; flex-direction: column; gap: 6px; }
+.ws-move .ws-link { padding: 0 8px; min-height: 44px; }
 .ws-wave { touch-action: pan-y; cursor: pointer; user-select: none; -webkit-user-select: none; }
 .ws-wave-sec { position: relative; height: 34px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,0.03); }
 .ws-wave-sec canvas { display: block; width: 100%; height: 100%; }

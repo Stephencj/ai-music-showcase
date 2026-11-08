@@ -31,7 +31,8 @@ class GenerateRequest(BaseModel):
     # Per-section playing-style overrides: role → {knobs?: {...}, energy?: float,
     # feature_lead?: bool}. `knobs` merge over the section's knobs (e.g.
     # drum_fill); `energy` sets that section's level directly (sparse/big);
-    # `feature_lead` forces the lead/solo into that section.
+    # `feature_lead` forces the lead/solo into that section. Christmas styles:
+    # `lead` (an instrument id) hands that section's tune to another player.
     section_overrides: dict[str, dict] = Field(default_factory=dict)
     # Sections to leave out, as indices into the arranged section list (the
     # one ``sections`` builds, repeats included), e.g. [3] drops the bridge of
