@@ -1,161 +1,60 @@
-"""MCP server exposing the song-composition pipeline to LLMs.
+"""MCP server exposing the studio's song tools to LLMs.
 
-Two transports ship side-by-side:
+The tools themselves live in :mod:`src.serve.song_tools` (shared with the
+local AI's HTTP tool endpoint, ``/api/tools``); this module only registers
+them with FastMCP. Two transports ship side-by-side:
 
 - **stdio** — the standard MCP pattern for local LLM clients. Launch
-  with ``python scripts/run_mcp.py``; register with
-  ``claude mcp add ai-music -- <venv>/bin/python <path>/scripts/run_mcp.py``.
+  with ``python scripts/run_mcp.py``; registered with Claude Code as
+  ``claude mcp add --scope user ai-music -- <venv>/bin/python <repo>/scripts/run_mcp.py``.
 
 - **SSE** — mounted at ``/mcp`` on the existing FastAPI launcher so a
   remote LLM (or a session on a different machine) can hit the same
   tools. Inherits ``IPAwareAuthMiddleware`` for off-LAN auth.
-
-Tools wrap the bank + composer; they intentionally return plain JSON-
-friendly dicts so any MCP client can introspect without needing custom
-parsers.
 """
 
 from __future__ import annotations
 
+import functools
+import inspect
 import logging
-from typing import Any, Optional
 
+import anyio
 from mcp.server.fastmcp import FastMCP
 
-from src.composition import BANK
-from src.composition.song_composer import compose_song as _compose_song
-from src.daw_integration.generic.styles import STYLES
+from src.serve import song_tools
+from src.serve.song_tools import (  # noqa: F401 — re-exported for callers and tests
+    TOOLS,
+    compose_song,
+    describe_options,
+    inspect_technique,
+    list_styles,
+    list_techniques,
+)
 
 
 logger = logging.getLogger(__name__)
 
 
-mcp = FastMCP("ai-music-studio")
+INSTRUCTIONS = """\
+AI Music Studio: compose, render, revise and deliver songs.
+Start with describe_options (every option explained, plus proven recipes) and
+list_styles. generate_song makes a song; score_video scores a whole video by
+chapter. Iterate with revise(job_id, changes) — it keeps the seed so only the
+changed options differ. export_audio delivers files (target loudness, or onto a
+video). Results carry absolute file paths."""
+
+mcp = FastMCP("ai-music-studio", instructions=INSTRUCTIONS)
 
 
-# ---------------------------------------------------------------------------
-# Introspection
-# ---------------------------------------------------------------------------
-
-@mcp.tool()
-def list_styles() -> list[dict]:
-    """All available genre presets with their default bar counts.
-
-    Returns one dict per style: ``name``, ``label``, ``default_bars``,
-    ``has_rhythm_variants`` (whether ``compose_song`` can fill section
-    overrides automatically).
-    """
-    out: list[dict] = []
-    for key, preset in STYLES.items():
-        out.append({
-            "name":               key,
-            "label":              preset.name,
-            "default_bars":       int(preset.default_bars),
-            "key":                preset.key,
-            "scale":              preset.scale,
-            "tempo":              float(preset.tempo),
-            "has_rhythm_variants": bool(preset.rhythm_variants),
-            "rhythm_variants":    list((preset.rhythm_variants or {}).keys()),
-        })
-    return sorted(out, key=lambda d: d["name"])
+def _threaded(fn):
+    """Run a (blocking) tool on a worker thread so the server stays responsive
+    while a song renders. The signature and docstring stay the tool's own."""
+    @functools.wraps(fn)
+    async def runner(**kwargs):
+        return await anyio.to_thread.run_sync(functools.partial(fn, **kwargs))
+    return runner
 
 
-@mcp.tool()
-def list_techniques(
-    instrument: str = "",
-    role: str = "",
-    tag: str = "",
-) -> list[dict]:
-    """Techniques registered in the bank.
-
-    Filters (all optional): ``instrument`` ("chords" / "bass" /
-    "melody" / "drums"), ``role`` ("intro" / "verse" / "chorus" /
-    "bridge" / "outro"), ``tag`` (e.g. ``"funk_rock"``).
-    """
-    out = BANK.all_techniques()
-    if instrument:
-        out = [t for t in out if instrument in t.instruments]
-    if role:
-        out = [t for t in out if role in t.section_roles]
-    if tag:
-        out = [t for t in out if tag in t.tags]
-    return [t.to_dict() for t in out]
-
-
-@mcp.tool()
-def inspect_technique(name: str) -> dict:
-    """Full metadata for one technique by name."""
-    t = BANK.get(name)
-    if t is None:
-        return {"error": f"unknown technique {name!r}"}
-    return t.to_dict()
-
-
-# ---------------------------------------------------------------------------
-# Generation
-# ---------------------------------------------------------------------------
-
-@mcp.tool()
-def compose_song(
-    genre: str = "pop",
-    seed: int = 0,
-    technique_overrides: Optional[dict[str, str]] = None,
-    enabled_instruments: Optional[list[str]] = None,
-    key: str = "",
-    scale: str = "",
-    tempo: float = 0.0,
-    bars: int = 0,
-    swing: float = -1.0,
-) -> dict:
-    """Generate a full song using the TechniqueBank.
-
-    Same ``seed`` produces the same song; bump by 1 for variation.
-    ``technique_overrides`` pins specific cells, keys shaped
-    ``"{role}:{instrument}"`` (e.g. ``{"verse:bass": "funk_walk"}``).
-    ``enabled_instruments`` lets a caller disable parts entirely —
-    e.g. ``["chords", "bass", "drums"]`` to omit melody.
-
-    Returns ``midi_path`` + ``wav_path`` (paths Gradio's allowlist
-    already exposes via ``/gradio_api/file=…``), ``summary`` (human-
-    readable list of picks), ``selections`` (machine-readable
-    per-cell choices).
-    """
-    kwargs: dict[str, Any] = {
-        "genre": genre, "seed": int(seed),
-        "technique_overrides": technique_overrides or None,
-    }
-    if enabled_instruments:
-        kwargs["enabled_instruments"] = tuple(enabled_instruments)
-    if key:
-        kwargs["key"] = key
-    if scale:
-        kwargs["scale"] = scale
-    if tempo and tempo > 0:
-        kwargs["tempo"] = float(tempo)
-    if bars and bars > 0:
-        kwargs["bars"] = int(bars)
-    if swing >= 0:
-        kwargs["swing"] = float(swing)
-    return _compose_song(**kwargs)
-
-
-@mcp.tool()
-def get_last_compose() -> dict:
-    """Path + summary of the most recent compose. Empty when nothing
-    has been composed yet this session.
-
-    Reads directly from the conventional output directory rather than
-    keeping in-memory state; an LLM that lost its conversation can
-    still find the last file.
-    """
-    from pathlib import Path
-    midi = Path("data/outputs/app/last_composition.mid")
-    wav = Path("data/outputs/app/last_composition.wav")
-    if not midi.exists():
-        return {"midi_path": "", "wav_path": "", "exists": False}
-    return {
-        "midi_path": str(midi.resolve()),
-        "wav_path": str(wav.resolve()) if wav.exists() else "",
-        "exists": True,
-        "size_bytes": midi.stat().st_size,
-    }
+for _fn in TOOLS:
+    mcp.add_tool(_threaded(_fn), name=_fn.__name__, description=inspect.cleandoc(_fn.__doc__ or ""))

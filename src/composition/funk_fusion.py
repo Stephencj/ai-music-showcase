@@ -102,6 +102,42 @@ def riff_notes(ctx: TechniqueContext, bars: tuple[int, ...], feel: str = "intro"
     return out
 
 
+# Every arrangement variant, with what it does in plain English. This is the
+# catalog tools and UIs offer (and validate against); a test keeps it in step
+# with the variants the code below reads.
+ARRANGEMENT_VARIANTS: dict[str, str] = {
+    "hits_only": "No lead, riffs, runs or flares: the band grooves and only lands the hit points together "
+                 "(unison 70s horn punches on root/5th, kick + snare + crash + bass on each hit). The least busy "
+                 "texture and the base of every background cut. With no hits, the horns stay out entirely.",
+    "calm": "All three calm parts at once (calm_drums + calm_bass + calm_keys): plainer, for background use.",
+    "calm_drums": "Straight 8th hats, a plain backbeat with soft ghost notes, no open hats, a fill only at section ends.",
+    "calm_bass": "Legato finger bass on roots with a fifth on beat 4 (about 2 notes a bar). The simplest bass.",
+    "calm_keys": "Sustained Rhodes chords on each chord change instead of funky chops.",
+    "simple_bass": "An easy finger line of its own: root on 1, octave on the 'and' of 2, fifth on the 'and' of 3, "
+                   "one passing note into chord changes (about 3 a bar). Busier than calm_bass, calmer than pocket_bass.",
+    "pocket_bass": "Finger bass locked to the kick: a note on every kick, dead notes answering the snare, walk-ups "
+                   "into chord changes. Busier than simple_bass; the default (no bass variant) is full slap bass.",
+    "bass_flare": "Adds a 7th-octave-5th pickup every 4th bar to a calm or simple bass, so it stays interesting.",
+    "pocket_drums": "A deep funk-rock pocket with a jazzier touch: steady 8th hats, ghost notes around the backbeat, "
+                    "one open hat per phrase end, a crash only where a chorus starts, almost no fills.",
+    "brushes": "Drums played with brushes on the soundfont's recorded brush kit: softer and warmer than sticks.",
+    "soar": "Strings + French horn make it soar: a string pad in verses, violins open up and swell in choruses, "
+            "a horn pad, a held ending. Needs string_section and french_horn in the band.",
+    "horn_bed": "With hits_only: the horns play through the track so the hits grow out of them (pickups rising into "
+                "each hit, chorus pushes on the 'and' of 4, phrase-end answers; verses softer, intros/bridges rest).",
+    "no_falloff": "End on a held note instead of the trumpet fall-off (the fall-off can sound comic).",
+    "string_intro": "An attention-grabbing opening: a big string chord + kick/crash on the first downbeat, then "
+                    "spiccato strings climbing two octaves into the band. Needs string_section and "
+                    "string_spiccato in the band.",
+}
+
+# Variants that need instruments beyond the style's default band.
+ARRANGEMENT_INSTRUMENTS: dict[str, tuple[str, ...]] = {
+    "soar": ("string_section", "french_horn"),
+    "string_intro": ("string_section", "string_spiccato"),
+}
+
+
 def _arrangement(ctx: TechniqueContext) -> set[str]:
     """Arrangement variants, comma separated (e.g. "hits_only,calm")."""
     return {a.strip() for a in (getattr(ctx, "arrangement", "") or "").replace("+", ",").split(",") if a.strip()}

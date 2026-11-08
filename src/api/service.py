@@ -126,20 +126,6 @@ def run_generation(req, progress, job_id: str) -> dict:
     if not block_store.write_preview_mp3(wav_path, mp3_path):
         mp3_path = None
 
-    pdf_path: Path | None = None
-    if req.with_pdf:
-        progress("Engraving PDF score…", 0.80)
-        try:
-            pdf_path = export_zip(
-                midi_path, job_dir / "score.zip",
-                key=eff_key, scale=eff_scale, tempo=eff_tempo,
-                title=f"{preset.name} ({seed})", bars=total_bars,
-                sections=block_spec.get("sections"),
-            )
-        except Exception as exc:  # noqa: BLE001 — LilyPond optional
-            logger.warning("PDF export failed for job %s: %s", job_id, exc)
-            pdf_path = None
-
     # Generation provenance (also persisted on the saved block) → per-instrument
     # regenerate, "Edit in Generate", and the exact realized chord progression
     # for the Practice chart.
@@ -169,6 +155,20 @@ def run_generation(req, progress, job_id: str) -> dict:
         "progression": out.get("progression") or [],
         "section": None,
     }
+
+    pdf_path: Path | None = None
+    if req.with_pdf:
+        progress("Engraving PDF score…", 0.80)
+        try:
+            pdf_path = export_zip(
+                midi_path, job_dir / "score.zip",
+                key=eff_key, scale=eff_scale, tempo=eff_tempo,
+                title=f"{preset.name} ({seed})", bars=total_bars,
+                sections=block_spec.get("sections"),
+            )
+        except Exception as exc:  # noqa: BLE001 — LilyPond optional
+            logger.warning("PDF export failed for job %s: %s", job_id, exc)
+            pdf_path = None
 
     saved_block: str | None = None
     section_blocks: list[str] = []

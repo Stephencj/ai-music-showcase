@@ -41,6 +41,16 @@ class JobRegistry:
         with self._lock:
             return self._jobs.get(job_id)
 
+    def adopt(self, job_id: str, result: dict) -> Job:
+        """Register an already-finished job from a saved result (e.g. one made
+        before a restart), so the job routes can serve its files again."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                job = Job(id=job_id, status="done", progress=1.0, message="done", result=dict(result))
+                self._jobs[job_id] = job
+            return job
+
     def run(self, job: Job, target: Callable[[Callable[[str, float], None]], dict]) -> None:
         """Run ``target(progress_cb)`` on a daemon thread, recording its
         return dict as ``job.result`` (or the exception as ``job.error``)."""

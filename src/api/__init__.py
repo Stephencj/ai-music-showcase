@@ -11,5 +11,9 @@ reuses the token auth middleware, mDNS discovery, and health endpoints.
 """
 
 from .routes import router  # noqa: F401
+from .tools_routes import router as _tools_router
+
+# The song tools over HTTP (/api/tools) for non-MCP clients such as the local AI.
+router.include_router(_tools_router)
 
 __all__ = ["router"]
