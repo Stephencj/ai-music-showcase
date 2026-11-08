@@ -56,6 +56,7 @@ from src.api.schemas import (
 )
 from src.composition import song_plan
 from src.composition import christmas
+from src.composition import lyrics as _lyrics
 from src.composition.carols import carol_catalog
 from src.composition.funk_fusion import ARRANGEMENT_INSTRUMENTS, ARRANGEMENT_VARIANTS
 from src.daw_integration.generic import blocks as block_store
@@ -267,7 +268,7 @@ def _audio_seconds(path: Optional[str]) -> Optional[float]:
 def _files(result: dict) -> dict:
     paths = result.get("_paths", {}) or {}
     files = {"audio_wav": paths.get("audio_wav"), "audio_mp3": paths.get("audio_mp3"),
-             "midi": paths.get("midi"), "pdf_zip": paths.get("pdf")}
+             "midi": paths.get("midi"), "pdf_zip": paths.get("pdf"), "timing": paths.get("timing")}
     if paths.get("audio_wav"):
         here = Path(paths["audio_wav"]).parent
         for stems in (here / "stems", here / "render" / "stems"):
@@ -464,6 +465,13 @@ def describe_options() -> dict:
                         "at about -14). Pass target_lufs to change it.",
             "playlist": "christmas_mix renders N songs (styles, keys, tempos, tunes and seeds varied) crossfaded "
                         "into one WAV/MP3 with a tracklist, e.g. total_minutes=60 for an hour of ambience.",
+            "backing_tracks": "Sing-along backing tracks: arrangement 'backing_track' (no melody) or "
+                              "'guide_melody' (melody very quiet), with a one-bar recorded hi-hat count-in and "
+                              "one verse per pass. Each render saves a timing JSON (files.timing: bars, beats, "
+                              "chords in the rendered key, sections, phrases, lyric line and syllable times; "
+                              "docs/backing_tracks.md). backing_tracks renders one carol in several keys at "
+                              "once (default C D F G Bb + low/high voice presets) into data/outputs/backing/.",
+            "lyrics": {tid: bool(_lyrics.load(tid)) for tid in carol_catalog()},
             "recipes": [
                 {"name": "Cozy jazz trio, Silent Night", "tool": "generate_song",
                  "args": {"genre": "christmas_jazz_trio_full", "tune": "silent_night", "length_seconds": 180}},
@@ -472,6 +480,11 @@ def describe_options() -> dict:
                           "arrangement": "strings_ending"}},
                 {"name": "An hour of Christmas ambience", "tool": "christmas_mix",
                  "args": {"total_minutes": 60, "target_lufs": -16}},
+                {"name": "Silent Night backing track in G (sing along)", "tool": "generate_song",
+                 "args": {"genre": "christmas_jazz_trio_full", "tune": "silent_night", "key": "G",
+                          "arrangement": "backing_track"}},
+                {"name": "Silent Night backing tracks in every key, with and without a guide", "tool": "backing_tracks",
+                 "args": {"tune": "silent_night", "genre": "christmas_orchestral_full", "both": True}},
             ],
         },
         "recipes": RECIPES,
@@ -521,6 +534,56 @@ def christmas_mix(
                               arrangement=arrangement, seed=seed, name=name, formats=list(formats))
     job_id = _call(routes.christmas_mix, req)["job_id"]
     _start_record(job_id, "christmas_mix", params)
+    return _wait(job_id, timeout_s) if wait else {"job_id": job_id, "status": "running"}
+
+
+def backing_tracks(
+    tune: Annotated[str, Field(description="Carol id (silent_night, jingle_bells, ...; see describe_options).")],
+    genre: Annotated[str, Field(description="Christmas style id: " + ", ".join(christmas.STYLE_IDS))]
+    = "christmas_orchestral_full",
+    keys: Annotated[list[str], Field(description="Keys to render, e.g. ['C','G','Bb'], plus 'low' / 'high' for "
+                                                 "the voice presets (the melody in a comfortable low or high "
+                                                 "range). Empty = C, D, F, G, Bb, low, high (a minor carol uses "
+                                                 "the relative minors).")] = [],  # noqa: B006
+    tempo: Annotated[float, Field(description="BPM; 0 = the style's pick for the carol (the same for every "
+                                              "key).")] = 0,
+    seed: Annotated[int, Field(description="Same seed = the same arrangement in every key.")] = 1,
+    guide_melody: Annotated[bool, Field(description="Keep the melody very quiet as a guide.")] = False,
+    both: Annotated[bool, Field(description="Render each key twice: plain and with the guide melody.")] = False,
+    length_seconds: Annotated[float, Field(description="0 = one pass per verse of the carol (up to four).")] = 0,
+    arrangement: Annotated[str, Field(description="Other Christmas variants, e.g. 'less_busy,warmer'.")] = "",
+    target_lufs: Annotated[float, Field(description="Delivered loudness.")] = -16.0,
+    wait: Annotated[bool, Field(description="Wait for every key (about 20-60 s of rendering each).")] = True,
+    timeout_s: int = 3600,
+) -> dict:
+    """Render one carol as a sing-along backing track in several keys at
+    once: no melody (or a very quiet guide), a one-bar count-in on a recorded
+    hi-hat, a clear intro and held ending, one verse per pass. Each key gets
+    an MP3 and a timing JSON (bars, beats, chords in that key, sections,
+    lyric line/syllable times) in data/outputs/backing/<carol>/, plus an
+    index of every key and voice preset."""
+    params = {k: v for k, v in locals().items() if k not in ("wait", "timeout_s")}
+    from src.api.schemas import BackingTracksRequest
+    from src.composition import backing as backing_mod
+    from src.composition.carols import carol
+    _check_genre(genre)
+    if genre not in CHRISTMAS_STYLES:
+        raise ToolError(f"Backing tracks are Christmas styles only ({', '.join(CHRISTMAS_STYLES)}).")
+    tid = _check_tune(genre, tune)
+    if tid in ("", "original") or carol(tid) is None:
+        raise ToolError(f"Backing tracks need a carol ({', '.join(carol_catalog())}).")
+    for k in keys:
+        if str(k).lower() not in backing_mod.VOICE_PRESETS:
+            try:
+                backing_mod.key_pc(k)
+            except ValueError as exc:
+                raise ToolError(str(exc)) from None
+    _variants(arrangement, genre)
+    req = BackingTracksRequest(tune=tid, genre=genre, keys=list(keys), tempo=tempo or None, seed=seed,
+                               guide_melody=guide_melody, both=both, length_seconds=length_seconds or None,
+                               arrangement=arrangement, target_lufs=target_lufs)
+    job_id = _call(routes.backing_tracks, req)["job_id"]
+    _start_record(job_id, "backing_tracks", params)
     return _wait(job_id, timeout_s) if wait else {"job_id": job_id, "status": "running"}
 
 
@@ -1338,7 +1401,7 @@ TOOLS = [
     # discover
     describe_options, list_styles, list_genres, list_instruments,
     # generate + iterate
-    generate_song, christmas_mix, score_video, revise, job_status, wait_for_job, get_job_files, list_jobs,
+    generate_song, christmas_mix, backing_tracks, score_video, revise, job_status, wait_for_job, get_job_files, list_jobs,
     # render + loudness
     render_song, measure_loudness, render_stems,
     # library

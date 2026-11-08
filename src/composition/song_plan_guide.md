@@ -131,6 +131,18 @@ delivered at −16 LUFS (background-ready) unless `target_lufs` is set;
 video's sound). Arrangement variants are under "Christmas arrangement
 variants" in the catalog. No `lead_patch` or `hits`.
 
+Backing tracks (to sing or play along with a carol): add the variant
+`backing_track` (no lead or melody instrument; a one-bar count-in; one verse
+per pass; no key change unless asked) or `guide_melody` (the same with the
+melody kept very quiet). Words: "backing track", "karaoke", "sing-along",
+"no melody" → `backing_track`; "with a guide melody" → `guide_melody`. A key
+("in G") goes in `key`; for a minor carol the key names the minor tonic.
+"For a low voice" / "high voice" → the carol's comfortable key (leave `key`
+out and say so in the summary if unsure).
+
+Example. "Silent Night backing track in G, no melody" →
+`{"plan": {"genre": "christmas_orchestral_full", "tune": "silent_night", "key": "G", "arrangement": "backing_track"}, "summary": "Silent Night as an orchestral backing track in G, no melody, with a count-in."}`
+
 Example. "cozy jazz trio Christmas, Silent Night, background" →
 `{"plan": {"genre": "christmas_jazz_trio_full", "tune": "silent_night", "target_lufs": -16}, "summary": "Cozy Christmas jazz trio playing Silent Night, mixed for background listening (−16 LUFS)."}`
 
@@ -207,3 +219,8 @@ Christmas styles:
 | "brushes", "softer drums" | +`brushes` |
 | "make it orchestral / a trio / big band / acoustic / choir / pop" | the matching `christmas_*_full` genre (keep the tune) |
 | "play Jingle Bells instead" | `tune: "jingle_bells"` |
+| "make it a backing track", "no melody", "karaoke" | +`backing_track` (−`guide_melody`) |
+| "with a guide melody", "keep the melody quiet" | +`guide_melody` (−`backing_track`) |
+| "lower key" / "higher key" | `key` down / up a whole step (no key yet: the carol's low / high voice key) |
+| "for a low voice" / "high voice" | `key`: the carol's low / high voice key |
+| "in G" | `key: "G"` |

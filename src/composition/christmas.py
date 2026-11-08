@@ -26,6 +26,13 @@ with a ritardando) as ``compose_song`` sections; each section carries its
 chords, its slice of the melody and which instrument has the melody in
 ``section["info"]``, and the techniques below read it.
 
+Backing tracks (``backing_track`` / ``guide_melody``): the same arrangement
+with the tune taken out (or kept very quiet as a guide) for people to sing or
+play along: a one-bar count-in on a recorded hi-hat, one verse per pass of
+the carol (as many passes as its lyric file has verses, up to four), and no
+key change unless asked. src/composition/backing.py turns the plan into the
+timing JSON a video renderer reads (bars, chords, sections, lyric lines).
+
 Taste (from the producer's notes): background first, so gentle dynamics and
 no harsh transients; no busy fills, no comic gestures, no fall-offs; strong,
 held endings; never synthesised percussion (recorded kits, brushes, sleigh
@@ -83,6 +90,10 @@ ARRANGEMENT_VARIANTS: dict[str, str] = {
     "plain_harmony": "Play the carol's chords as written (no jazz reharmonisation).",
     "rich_harmony": "Richer jazz harmony: ii-V approaches, secondary dominants, passing diminished chords, IV-iv-I.",
     "choir_pad": "Add a soft choir 'aah' pad under the last pass and the ending.",
+    "backing_track": "A sing-along backing track: the full arrangement with no lead or melody instrument, a one-bar "
+                     "count-in on a recorded hi-hat, a clear intro and held ending, one verse of the carol per pass "
+                     "and no key change unless asked. Saves a timing JSON (bars, chords, sections, lyric lines).",
+    "guide_melody": "A backing track (as backing_track) with the melody kept very quiet as a guide.",
 }
 # Variants that need instruments beyond the style's band.
 ARRANGEMENT_INSTRUMENTS: dict[str, tuple[str, ...]] = {
@@ -610,6 +621,11 @@ def plan_song(genre: str, *, seed: int, tune: Optional[str] = None, key: Optiona
     var = variants(arrangement)
     band = list(instruments or preset.default_instruments)
     t = resolve_tune(tune, seed, style)
+    backing = "backing_track" in var or "guide_melody" in var
+    # A backing track sings one verse per pass: as many passes as the carol
+    # has verses (up to four) unless a length is asked for.
+    from .lyrics import verse_count
+    verses = verse_count(t.id) if backing and t.id != "original" else 0
     defaults = STYLE_DEFAULTS[style]
     # Key and tempo: explicit wins; otherwise vary between the style's keys
     # (a minor tune picks the relative minor) and a tempo that suits the tune.
@@ -631,7 +647,7 @@ def plan_song(genre: str, *, seed: int, tune: Optional[str] = None, key: Optiona
     rich = "rich_harmony" in var or (style in JAZZ and "plain_harmony" not in var)
     chords = reharmonize(t, style, rich="rich_harmony" in var, plain="plain_harmony" in var or not rich)
     # One pass = the tune once (twice when the tune is short).
-    times = 2 if t.bars * bar_s < 36 else 1
+    times = 2 if (t.bars * bar_s < 36 and not verses) else 1
     pass_bars = t.bars * times
     notes = list(t.melody)
     if times == 2:
@@ -648,8 +664,13 @@ def plan_song(genre: str, *, seed: int, tune: Optional[str] = None, key: Optiona
     if interlude:
         n_pass_left = target - fixed - 4 * bar_s
         n_pass = int(np.clip(round(n_pass_left / (pass_bars * bar_s)), 2, 8))
+    if verses and not length_seconds:
+        n_pass = min(verses, 4)
+        interlude = n_pass >= 3
     lift_p = defaults["lift"] if "key_change" not in var else 1.0
     lift = "no_key_change" not in var and n_pass >= 2 and rng.random() < lift_p
+    if backing and "key_change" not in var:
+        lift = False                                # singers keep one key unless asked
     final_key = ((_MINOR_NAMES if "minor" in t.scale else _FLAT_NAMES)[(_tonic_pc(song_key) + 1) % 12]
                  if lift else song_key)
 
@@ -673,7 +694,15 @@ def plan_song(genre: str, *, seed: int, tune: Optional[str] = None, key: Optiona
     common = {"style": style, "tune": t.id, "tune_title": t.title, "tune_tonic": t.tonic_pc, "scale": t.scale,
               "tune_range": [min(n.pitch for n in t.melody), max(n.pitch for n in t.melody)],
               "phrase_beats": t.phrase_bars * beats, "beats": beats, "lively": t.lively,
-              "passes": n_pass, "band": band}
+              "passes": n_pass, "band": band, "times": times,
+              **({"backing": True, "guide": "guide_melody" in var} if backing else {})}
+    if backing:
+        # A one-bar count-in on a recorded hi-hat (played by the band's first
+        # member's part, so every style has one).
+        tonic = "i" if "minor" in t.scale else "I"
+        add("Count-in", "intro", 1, {**common, "kind": "count_in", "lead": "", "melody": [],
+                                     "chords": [[tonic, 0, beats]], "count_in_by": band[0] if band else "piano",
+                                     "next_pickup": 0.0}, 0.5)
     # Intro: the tune's last phrase.
     mel, ch = _slice(notes, chords, tail - 4 * beats, tail, pickup_into=t.pickup)
     lead = _first_available(LEADS[style]["intro"], band)
@@ -742,6 +771,7 @@ def plan_song(genre: str, *, seed: int, tune: Optional[str] = None, key: Optiona
     return {
         "sections": sections, "key": song_key, "final_key": final_key, "scale": t.scale, "tempo": bpm,
         "time_signature": (beats, 4), "tune": t.id, "tune_title": t.title, "style": style,
+        "backing": backing, "guide": backing and "guide_melody" in var, "times": times,
         "bars": bar, "seconds": round(sum((s["end_bar"] - s["start_bar"] + 1) for s in sections) * bar_s, 1),
     }
 
@@ -1548,12 +1578,16 @@ _MELODY_STYLE = {
 }
 
 
-def _emit_melody(midi, ctx: TechniqueContext, sec: _Sec, inst: str) -> None:
+def _emit_melody(midi, ctx: TechniqueContext, sec: _Sec, inst: str, guide: bool = False) -> None:
     """The tune, on its own "<instrument> Melody" track (so the mix can sit
-    it forward of the instrument's own accompaniment)."""
+    it forward of the instrument's own accompaniment). ``guide``: a backing
+    track's very quiet guide ("Guide Melody (<instrument>)", levelled well
+    under the band by the Christmas mix profile)."""
     vel, legato, _emb = _MELODY_STYLE.get(inst, (72, 0.96, False))
     if sec.kind == "final":
         vel += 4
+    if guide:
+        vel = vel * 0.7
     notes = _melody(sec, inst, vel=vel, legato=legato,
                     double_8vb=(inst == "string_section" and sec.final and not sec.warm))
     label = getattr(ctx.instrument_obj, "label", None) or inst.replace("_", " ").title()
@@ -1561,13 +1595,30 @@ def _emit_melody(midi, ctx: TechniqueContext, sec: _Sec, inst: str) -> None:
     if sec.strings_end and sec.kind == "outro" and inst != "string_section" and sec.hold_from:
         cut = sec.t(sec.hold_from)
         notes = [NoteEvent(n.pitch, n.start, min(n.end, cut + 0.3), n.velocity) for n in notes if n.start < cut - 0.05]
-    _emit_named(midi, notes, f"{label} Melody", program)
+    _emit_named(midi, notes, f"Guide Melody ({label})" if guide else f"{label} Melody", program)
+
+
+COUNT_IN_TRACK = "Count-in"
+COUNT_IN_KEY = CLOSED_HAT                  # a recorded closed hi-hat (GM key 42), never a synth click
+
+
+def _count_in(sec: _Sec) -> list[NoteEvent]:
+    """One bar of closed hi-hat on every beat, the first a little louder,
+    exactly on the beat (no humanising: it's the singers' cue)."""
+    out = []
+    for b in range(sec.beats):
+        s = sec.t(float(b))
+        out.append(NoteEvent(pitch=COUNT_IN_KEY, start=max(0.0, s), end=max(0.0, s) + 0.12,
+                             velocity=84 if b == 0 else 70))
+    return out
 
 
 def _plays(sec: _Sec, inst: str) -> bool:
     """Who sits out where: drums and bass wait for the first pass, colour
     instruments come in for fuller passes; the interlude is quiet."""
     k = sec.kind
+    if k == "count_in":
+        return inst == sec.info.get("count_in_by")
     if k == "intro":
         intro = {"swing": ("piano",), "trio": ("piano",), "orchestral": ("string_section", "harp", sec.info["lead"]),
                  "fireside": ("nylon_guitar", "acoustic_guitar"), "choir": ("organ_church", sec.info["lead"]),
@@ -1594,8 +1645,16 @@ def play(midi, ctx: TechniqueContext, inst: str) -> None:
     lead = sec.info.get("lead") == inst
     style = sec.style
     k = sec.kind
+    if k == "count_in":
+        _emit_named(midi, _count_in(sec), COUNT_IN_TRACK, 0, is_drum=True)
+        return
     if lead:
-        _emit_melody(midi, ctx, sec, inst)
+        if not sec.info.get("backing"):
+            _emit_melody(midi, ctx, sec, inst)
+        elif sec.info.get("guide"):
+            _emit_melody(midi, ctx, sec, inst, guide=True)
+        # A backing track has no lead: the instrument plays its part instead.
+        lead = not sec.info.get("backing")
     notes: list[NoteEvent] = []
     if inst == "piano":
         notes = _piano_trio(sec, lead) if style in JAZZ else _piano_ballad(sec, lead)

@@ -174,8 +174,13 @@ _CHRISTMAS = MixProfile(
         "nylon":        {"pan": -0.15},
         "acoustic":     {"pan": 0.35},
         "melody":       {"pan": 0.0},
+        "count-in":     {"pan": 0.0},
     },
     stem_targets={
+        # Backing tracks: the count-in clear but under the band (its few hits read loud for their LUFS), the guide melody
+        # very quiet, under the band (first match wins, so these come first).
+        "count-in":     -40.0,
+        "guide":        -32.0,
         "melody":       -18.0,     # the tune (every "<instrument> Melody" track)
         "sleigh":       -31.0,
         "shaker":       -33.0,

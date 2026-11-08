@@ -35,6 +35,7 @@ from .schemas import (
     EditBlockRequest,
     MixPreviewRequest,
     ProduceBlockRequest,
+    BackingTracksRequest,
     ChristmasMixRequest,
     GenerateRequest,
     VideoScoreRequest,
@@ -230,6 +231,21 @@ def christmas_mix(req: ChristmasMixRequest) -> dict:
     return {"job_id": job.id}
 
 
+@router.post("/backing-tracks")
+def backing_tracks(req: BackingTracksRequest) -> dict:
+    """Render one carol as a backing track in several keys (MP3 + timing JSON
+    per key, in data/outputs/backing/<carol>/)."""
+    from src.composition import christmas
+    from src.composition.carols import carol
+    if req.genre not in christmas.STYLE_IDS:
+        raise HTTPException(422, f"Unknown Christmas style {req.genre!r}; use {list(christmas.STYLE_IDS)}")
+    if carol(req.tune) is None:
+        raise HTTPException(422, f"Unknown carol {req.tune!r}")
+    job = registry.create()
+    registry.run(job, lambda progress: service.run_backing_tracks(req, progress, job.id))
+    return {"job_id": job.id}
+
+
 @router.post("/score-video")
 def score_video(req: VideoScoreRequest) -> dict:
     """Score a video chapter by chapter (src/api/video_score.py)."""
@@ -266,6 +282,7 @@ def job_status(job_id: str) -> dict:
             "audio_hifi": f"{base}/audio.wav" if paths.get("audio_wav") else None,
             "pdf": f"{base}/pdf" if paths.get("pdf") else None,
             "vocal": f"{base}/vocal" if paths.get("vocal_mp3") else None,
+            "timing": f"{base}/timing.json" if paths.get("timing") else None,
         }
         payload["result"] = res
     return payload
@@ -291,6 +308,12 @@ async def job_events(job_id: str) -> StreamingResponse:
 @router.get("/jobs/{job_id}/midi")
 def job_midi(job_id: str) -> FileResponse:
     return _serve(_job_path(job_id, "midi"), "audio/midi", download=True)
+
+
+@router.get("/jobs/{job_id}/timing.json")
+def job_timing(job_id: str) -> FileResponse:
+    """A backing track's timing JSON (docs/backing_tracks.md)."""
+    return _serve(_job_path(job_id, "timing"), "application/json")
 
 
 @router.get("/jobs/{job_id}/audio")

@@ -323,8 +323,8 @@ export default function GenerateScreen({
   function planExtras(): Partial<SongPlan> {
     const pl = plan;
     if (!pl || !preset || pl.genre !== preset.id) return {};
-    const { arrangement, lead_patch, hits, hit_style, target_lufs } = pl;
-    return Object.fromEntries(Object.entries({ arrangement, lead_patch, hits, hit_style, target_lufs })
+    const { arrangement, lead_patch, hits, hit_style, target_lufs, tune, length_seconds } = pl;
+    return Object.fromEntries(Object.entries({ arrangement, lead_patch, hits, hit_style, target_lufs, tune, length_seconds })
       .filter(([, v]) => v !== undefined && v !== null));
   }
 

@@ -115,10 +115,10 @@ def run_generation(req, progress, job_id: str) -> dict:
         # original): meter, key, tempo and length come from the plan.
         band = christmas.band_for(list(_instrumental_only(req.instruments, preset.default_instruments) or []),
                                   getattr(req, "arrangement", None) or "")
-        plan = christmas.plan_song(
-            genre, seed=seed, tune=getattr(req, "tune", None), key=req.key, tempo=req.tempo,
-            length_seconds=getattr(req, "length_seconds", None), arrangement=getattr(req, "arrangement", None) or "",
-            instruments=band)
+        plan_args = {"genre": genre, "seed": seed, "tune": getattr(req, "tune", None), "key": req.key,
+                     "tempo": req.tempo, "length_seconds": getattr(req, "length_seconds", None),
+                     "arrangement": getattr(req, "arrangement", None) or "", "instruments": band}
+        plan = christmas.plan_song(**plan_args)
         secs = christmas.apply_overrides(plan["sections"], getattr(req, "section_overrides", None))
         secs = drop_sections(secs, getattr(req, "remove_sections", None))
         eff_key, eff_scale, eff_tempo = plan["key"], plan["scale"], float(plan["tempo"])
@@ -179,6 +179,16 @@ def run_generation(req, progress, job_id: str) -> dict:
     mp3_path: Path | None = job_dir / "mix.mp3"
     if not block_store.write_preview_mp3(wav_path, mp3_path):
         mp3_path = None
+    # A backing track's timing (bars, chords, sections, lyric lines) for a
+    # video renderer: src/composition/backing.py, docs/backing_tracks.md.
+    timing_path: Path | None = None
+    if plan and plan.get("backing"):
+        from src.composition import backing
+        import soundfile as sf
+        timing_path = backing.write_timing(
+            backing.build_timing({**plan, "sections": secs}, midi_path, audio=mp3_path.name if mp3_path else wav_path.name,
+                                 duration=sf.info(str(wav_path)).duration),
+            job_dir / "timing.json")
 
     # Generation provenance (also persisted on the saved block) → per-instrument
     # regenerate, "Edit in Generate", and the exact realized chord progression
@@ -211,7 +221,10 @@ def run_generation(req, progress, job_id: str) -> dict:
         "section": None,
         # The lead voice it was rendered with, so a re-render sounds the same.
         **({"lead_patch": lead_patch} if lead_patch else {}),
-        **({"tune": plan["tune"], "arrangement": getattr(req, "arrangement", None) or ""} if plan else {}),
+        **({"tune": plan["tune"], "arrangement": getattr(req, "arrangement", None) or "",
+            "length_seconds": getattr(req, "length_seconds", None),
+            "plan_args": {**plan_args, "remove_sections": list(getattr(req, "remove_sections", None) or [])}}
+           if plan else {}),
     }
 
     pdf_path: Path | None = None
@@ -265,11 +278,13 @@ def run_generation(req, progress, job_id: str) -> dict:
         "loudness_lufs": loudness,
         **({"tune": plan["tune"], "tune_title": plan["tune_title"],
             "seconds": plan["seconds"]} if plan else {}),
+        **({"backing": True, "guide_melody": bool(plan.get("guide"))} if plan and plan.get("backing") else {}),
         "_paths": {
             "midi": str(midi_path),
             "audio_mp3": str(mp3_path) if mp3_path else None,
             "audio_wav": str(wav_path),
             "pdf": str(pdf_path) if pdf_path else None,
+            "timing": str(timing_path) if timing_path else None,
         },
         # Context for post-hoc "save as block" / "split into sections" so the
         # UI can let the user decide after listening.
@@ -304,6 +319,17 @@ def run_christmas_mix(req, progress, job_id: str) -> dict:
         "chapters": playlist.chapters(res.tracks), "files": res.files,
         "_paths": {"audio_mp3": res.files.get("mp3"), "audio_wav": res.files.get("wav")},
     }
+
+
+def run_backing_tracks(req, progress, job_id: str) -> dict:
+    """Render one carol as a backing track in several keys (render/backing.py)."""
+    from src.audio_processing.render import backing as backing_render
+    res = backing_render.render_keys(
+        req.tune, genre=req.genre, keys=list(req.keys), tempo=req.tempo, seed=req.seed,
+        guide_melody=req.guide_melody, both=req.both, length_seconds=req.length_seconds,
+        arrangement=req.arrangement, target_lufs=req.target_lufs, progress=progress)
+    first = res["renders"][0] if res["renders"] else {}
+    return {**res, "_paths": {"audio_mp3": first.get("mp3"), "timing": first.get("timing")}}
 
 
 def run_song_render(timeline: list[dict], with_pdf: bool,
@@ -937,6 +963,12 @@ def karaoke_data(name: str) -> dict:
 
     pm, meta = block_store.load_block(name)
     spec = meta.get("spec") or {}
+    # A carol backing track: the tune's melody and its lyric file, timed
+    # from the plan (src/composition/backing.py).
+    from src.composition import backing
+    timing = backing.timing_for_spec(spec, pm)
+    if timing is not None:
+        return backing.karaoke_payload(timing)
     lead, _harms = select_vocal_tracks(pm)
     notes = monophonic_line(lead)
     note_list = [[int(p), round(s, 4), round(e, 4)] for (p, s, e) in notes]
@@ -978,7 +1010,8 @@ def vocal_guide_audio(name: str) -> str:
     idx = None
     for i, inst in enumerate(pm.instruments):
         nm = (inst.name or "").lower()
-        if "lead vocal" in nm or (not inst.is_drum and inst.program in (52, 53, 54)):
+        if "lead vocal" in nm or nm.startswith("guide melody") \
+                or (not inst.is_drum and inst.program in (52, 53, 54)):
             idx = i
             break
     if idx is None:

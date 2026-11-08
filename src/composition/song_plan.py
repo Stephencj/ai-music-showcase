@@ -84,7 +84,7 @@ def _christmas() -> EngineSpec:
         arrangement_variants=tuple(ARRANGEMENT_VARIANTS),
         variant_instruments=dict(ARRANGEMENT_INSTRUMENTS),
         exclusive=(("key_change", "no_key_change"), ("plain_harmony", "rich_harmony"),
-                   ("strings_ending", "celesta_ending")),
+                   ("strings_ending", "celesta_ending"), ("backing_track", "guide_melody")),
         tunes=True,
         # Christmas ambience IS the video's sound (no voice over it): about
         # -16 LUFS, a little under YouTube's -14.
@@ -411,6 +411,13 @@ def plan_chips(plan: dict) -> list[str]:
     from src.daw_integration.generic.styles import STYLES
     p = STYLES.get(plan.get("genre", ""))
     chips = [p.name if p else plan.get("genre", "?")]
+    if plan.get("tune"):
+        from src.composition.carols import carol
+        t = carol(plan["tune"]) if plan["tune"] != "original" else None
+        chips.append(t.title if t else "Original tune")
+    if plan.get("length_seconds"):
+        sec = int(plan["length_seconds"])
+        chips.append(f"About {sec // 60}:{sec % 60:02d}")
     if plan.get("tempo"):
         chips.append(f"{plan['tempo']:g} BPM")
     if plan.get("key") or plan.get("scale"):
@@ -568,6 +575,45 @@ def _choir_pad(plan: dict) -> Optional[str]:
     return None
 
 
+def _key_of(plan: dict, voice: str) -> Optional[str]:
+    """The plan's key, or (none set) a carol's voice-preset key / the style's."""
+    if plan.get("key"):
+        return plan["key"]
+    from src.composition.carols import carol
+    t = carol(plan.get("tune") or "") if plan.get("tune") not in (None, "", "original") else None
+    if t is not None:
+        from src.composition.backing import voice_key
+        return voice_key(t, voice)
+    from src.daw_integration.generic.styles import STYLES
+    p = STYLES.get(plan.get("genre", ""))
+    return p.key if p else None
+
+
+def _shift_key(semis: int) -> Op:
+    """"Lower key" / "higher key": a whole step from the plan's key (a carol
+    with no key set goes to its low / high voice key instead)."""
+    def op(plan: dict) -> Optional[str]:
+        from src.composition.backing import key_pc, spell
+        had = bool(plan.get("key"))
+        k = _key_of(plan, "low" if semis < 0 else "high")
+        if not k:
+            return None
+        plan["key"] = spell(key_pc(k) + (semis if had else 0), plan.get("scale") == "minor")
+        return None
+    return op
+
+
+def _voice(voice: str) -> Op:
+    def op(plan: dict) -> Optional[str]:
+        from src.composition.carols import carol
+        t = carol(plan.get("tune") or "") if plan.get("tune") not in (None, "", "original") else None
+        if t is not None:
+            from src.composition.backing import voice_key
+            plan["key"] = voice_key(t, voice)
+        return None
+    return op
+
+
 def _no_stabs(plan: dict) -> Optional[str]:
     plan["hits"] = []
     return _variants(remove=("horn_bed",))(plan)
@@ -631,6 +677,18 @@ FEEDBACK_RULES: list[tuple[str, Op, str]] = [
      remove=("plain_harmony",)), "richer harmony"),
     (r"simple (chords|harmony)|as written|traditional (chords|harmony)", _variants(add=("plain_harmony",),
      remove=("rich_harmony",)), "plain harmony"),
+    # Backing tracks (sing / play along)
+    (r"backing[\s-]?track|karaoke|sing[\s-]?along|play[\s-]?along|minus[\s-]?one|accompaniment only"
+     r"|\bno (melody|lead|tune)\b|without (the |a )?(melody|lead|tune)|(drop|remove|lose|mute) the (melody|lead|tune)",
+     _variants(add=("backing_track",), remove=("guide_melody",)), "backing track"),
+    (r"guide[\s-]?melody|with a guide|(quiet|soft|faint) (guide|melody)|melody (very |really )?(quiet|soft)",
+     _variants(add=("guide_melody",), remove=("backing_track",)), "guide melody"),
+    (r"\blower (the )?key|key (down|lower)|in a lower key|drop the key|transpose (it )?down",
+     _shift_key(-2), "lower key"),
+    (r"\bhigher (the )?key|key (up|higher)|in a higher key|raise the key|transpose (it )?up",
+     _shift_key(2), "higher key"),
+    (r"\blow(er)? voice|\balto\b|\bbaritone\b|deep voice", _voice("low"), "low voice"),
+    (r"\bhigh(er)? voice|\bsoprano\b", _voice("high"), "high voice"),
 ]
 
 

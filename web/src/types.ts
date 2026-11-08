@@ -187,6 +187,8 @@ export interface SongPlan {
   hit_style?: string;
   target_lufs?: number;
   remove_sections?: number[];   // arranged-section indices left out (Timeline → Remove section)
+  tune?: string;             // Christmas styles: a public-domain carol id or "original"
+  length_seconds?: number;
 }
 
 // POST /api/describe and /api/revise.
@@ -245,4 +247,6 @@ export interface GenerateBody {
   hit_style?: string;
   target_lufs?: number;
   remove_sections?: number[];
+  tune?: string;
+  length_seconds?: number;
 }

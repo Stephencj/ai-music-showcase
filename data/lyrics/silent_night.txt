@@ -1,0 +1,38 @@
+# silent_night: public-domain text, fetched by scripts/setup/fetch_carol_lyrics.py
+# source: https://en.wikisource.org/wiki/The_Army_and_Navy_Hymnal/Hymns/Silent_Night,_Holy_Night
+# public domain: Joseph Mohr's carol in English as printed in The Army and Navy Hymnal (1920), whose notes credit verse 1 to John Freeman Young's 1859 translation. Published before 1929, so public domain in the US.
+
+Silent night, holy night,
+All is calm, all is bright
+'Round yon Virgin Mother and Child.
+Holy Infant so tender and mild,
+Sleep in heavenly peace,
+Sleep in heavenly peace,
+
+Silent night, holy night,
+Darkness, flies and all is light;
+Shepherds hear the angels sing:
+'Alleluia! hail the King!
+Jesus the Saviour is here,
+Jesus the Saviour is here.'
+
+Holy night, peaceful night,
+Child of heaven, O how bright
+Thou didst smile when thou wast born;
+Blessed was that happy morn,
+Full of heavenly joy,
+Full of heavenly joy.
+
+Silent night, holy night,
+Guiding Star, O lend thy light;
+See the eastern wise men bring
+Gifts and homage to our King!
+Jesus the Saviour is here,
+Jesus the Saviour is here.
+
+Silent night, holy night,
+Wondrous Star, O lend thy light!
+With the angels let us sing
+Alleluia to our King!
+Jesus our Saviour is here,
+Jesus our Saviour is here.

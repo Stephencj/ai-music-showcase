@@ -42,13 +42,17 @@ style).
 
 `arrangement` (comma-separated): `sleigh_bells`, `brushes`, `less_busy`,
 `warmer`, `celesta_ending`, `strings_ending`, `key_change`,
-`no_key_change`, `plain_harmony`, `rich_harmony`, `choir_pad`.
+`no_key_change`, `plain_harmony`, `rich_harmony`, `choir_pad`,
+`backing_track`, `guide_melody` (sing-along backing tracks: no melody or a
+very quiet one, a count-in, one verse per pass and a timing JSON; see
+[backing_tracks.md](backing_tracks.md)).
 Christmas songs are delivered at **−16 LUFS** unless `target_lufs` says
 otherwise (a gentle limiter shaves peaky piano transients so they reach it).
 
 Describe / revise understand e.g. "cozy jazz trio Christmas, Silent Night,
 background", "add sleigh bells", "warmer", "less busy", "end on the celesta",
-"make it orchestral".
+"make it orchestral", "Silent Night backing track in G", "with a guide
+melody", "lower key".
 
 ## Playlist mixes (hour-long videos)
 

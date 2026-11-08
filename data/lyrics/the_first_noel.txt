@@ -1,0 +1,37 @@
+# the_first_noel: public-domain text, fetched by scripts/setup/fetch_carol_lyrics.py
+# source: https://en.wikisource.org/wiki/The_First_Nowell
+# public domain: Traditional English carol, as published by William Sandys (1833). Public domain.
+
+The first Nowell the angels did say
+Was to certain poor shepherds in fields as they lay;
+In fields where they lay, keeping their sheep,
+On a cold winter's night that was so deep:
+
+They lookèd up and saw a star,
+Shining in the east, beyond them far:
+And to the earth it gave great light,
+And so it continued both day and night:
+
+And by the light of that same star,
+Three Wise Men came from country far;
+To seek for a King was their intent,
+And to follow the star whersoever it went:
+
+This star drew nigh to the north-west;
+O'er Bethlehem it took its rest;
+And there it did both stop and stay
+Right over the place where Jesus lay:
+
+Then entered in those Wise Men three,
+Fell reverently upon their knee,
+And offered there in his presence,
+Their gold and myrrh and frankincense:
+
+Then let us all with one accord
+Sing praises to our heavenly Lord
+That hath made heaven and earth of nought,
+And with his blood mankind hath bought:
+
+[refrain]
+Nowell, Nowell, Nowell, Nowell,
+Born is the King of Israel.

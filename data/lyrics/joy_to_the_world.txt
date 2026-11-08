@@ -1,0 +1,25 @@
+# joy_to_the_world: public-domain text, fetched by scripts/setup/fetch_carol_lyrics.py
+# source: https://en.wikisource.org/wiki/The_Army_and_Navy_Hymnal/Hymns/Joy_to_the_World!_the_Lord_Is_Come
+# public domain: Isaac Watts (1719); this printing is The Army and Navy Hymnal (1920). Public domain.
+
+Joy to the world! the lord is come;
+Let earth re-ceive her King;
+Let ev-ery heart pre-pare him room,
+And heaven and na-ture sing,
+And heaven and na-ture sing,
+And heaven and na-ture sing.
+
+Joy to the world! the Sav-iour reigns;
+Let men their songs em-ploy
+While fields and floods,
+rocks, hills and plains
+Re-peat the sound-ing joy,
+Re-peat the sound-ing joy,
+Re-peat, re-peat the sound-ing joy.
+
+He rules the world with truth and grace,
+And makes the nations prove
+The glo-ries of his right-eous-ness,
+And won-ders of his love,
+And won-ders of his love
+And won-ders, and won-ders of his love.

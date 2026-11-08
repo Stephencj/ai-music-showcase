@@ -72,6 +72,21 @@ class GenerateRequest(BaseModel):
     split_into_blocks: bool = False        # one block per section (mix & match)
 
 
+class BackingTracksRequest(BaseModel):
+    """One carol rendered as a sing-along backing track in several keys
+    (render/backing.py): an MP3 and a timing JSON per key."""
+    tune: str                                           # carol id (src/composition/carols.py)
+    genre: str = "christmas_orchestral_full"            # a christmas_* style id
+    keys: list[str] = Field(default_factory=list)       # e.g. ["C", "G", "low"]; empty = C D F G Bb low high
+    tempo: Optional[float] = None                       # BPM; None = the style's pick for the carol
+    seed: int = 1
+    guide_melody: bool = False                          # the melody kept very quiet as a guide
+    both: bool = False                                  # render the plain AND the guide version
+    length_seconds: Optional[float] = None              # None = one pass per verse (up to four)
+    arrangement: str = ""                               # other Christmas variants, e.g. "less_busy,warmer"
+    target_lufs: float = -16.0
+
+
 class ChristmasMixRequest(BaseModel):
     """A seamless playlist of generated Christmas songs (render/playlist.py)."""
     total_minutes: float = 0.0                  # mix length; or give count
