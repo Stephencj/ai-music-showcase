@@ -132,7 +132,7 @@ def run_generation(req, progress, job_id: str) -> dict:
         if getattr(req, "length_seconds", None):
             overrides = fit_length(genre, req.sections, overrides, eff_tempo, float(req.length_seconds))
         secs = build_sections(genre, req.sections, getattr(req, "section_presets", None), overrides,
-                              getattr(req, "remove_sections", None))
+                              getattr(req, "remove_sections", None), getattr(req, "section_layout", None))
 
     job_dir = API_OUT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -225,6 +225,10 @@ def run_generation(req, progress, job_id: str) -> dict:
             "length_seconds": getattr(req, "length_seconds", None),
             "plan_args": {**plan_args, "remove_sections": list(getattr(req, "remove_sections", None) or [])}}
            if plan else {}),
+        # The plan's engine options, so the block can be re-made exactly
+        # (Library → Open in Timeline).
+        **{k: v for k in ("arrangement", "hits", "hit_style", "target_lufs")
+           if not plan and (v := getattr(req, k, None)) not in (None, "", [])},
     }
 
     pdf_path: Path | None = None
@@ -602,10 +606,12 @@ def job_peaks(result: dict, buckets: int = 400) -> dict | None:
     from src.daw_integration.generic import blocks as block_store
 
     paths = result.get("_paths") or {}
-    wav = paths.get("audio_wav")
-    if not wav or not Path(wav).exists():
+    wav = next((p for p in (paths.get("audio_wav"), paths.get("audio_mp3")) if p and Path(p).exists()), None)
+    if not wav:
         return None
-    cache = Path(wav).with_name(f"peaks_{buckets}.json")
+    # A job adopted from files elsewhere (a session's saved version) names
+    # its own cache folder; a job's own audio caches beside itself.
+    cache = Path(result.get("_peaks_dir") or Path(wav).parent) / f"peaks_{buckets}.json"
     if cache.exists():
         try:
             return json.loads(cache.read_text())
@@ -1914,6 +1920,33 @@ def part_options() -> dict:
             "phrase_shape": {"options": _PO_PHRASE_SHAPES, "default": "arc"},
         },
     }
+
+
+def save_job_as_block(result: dict, name: str, *, overwrite: bool = False,
+                      tags: list[str] | None = None) -> str:
+    """Save a finished generation (a job's result) as a block, keeping the
+    job's real mix (sampled instruments, mix, loudness) as the block's audio
+    instead of a General MIDI re-render of the MIDI. Returns the name it was
+    saved under (stored filesystem-safe: ``blocks._safe_name``). Raises
+    ``FileNotFoundError`` when the job has no MIDI."""
+    import pretty_midi
+    from src.daw_integration.generic import blocks as block_store
+
+    paths = result.get("_paths", {})
+    midi = paths.get("midi")
+    if not midi or not Path(midi).exists():
+        raise FileNotFoundError("Job has no MIDI to save")
+    pm = pretty_midi.PrettyMIDI(str(midi))
+    ts = result.get("time_signature", [4, 4])
+    kw = dict(tempo=float(result.get("tempo", 120.0)), time_signature=(int(ts[0]), int(ts[1])),
+              bars=int(result.get("bars", 0)), spec=result.get("_spec"),
+              audio_source=paths.get("audio_wav") or paths.get("audio_mp3"))
+    if overwrite:
+        block_store.save_block(name, pm, overwrite=True, tags=tags, **kw)
+    else:
+        name = _unique_block_name(block_store, name)
+        block_store.save_block(name, pm, overwrite=False, tags=tags, **kw)
+    return name
 
 
 def _save_unique_block(block_store, base_name: str, pm, *,

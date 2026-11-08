@@ -8,17 +8,20 @@ const QUICK = ["Quieter", "Simpler bass", "Bigger chorus", "Slower"];
 
 /** Create → Session: describe the song, hear a version, say what to change. */
 export default function SessionView({
-  session, busy, active, onSend, onSave, onOpenTimeline, onAdvanced, onBlocks, onNew,
+  session, busy, active, onSend, onSave, onPractice, onRender, onOpenTimeline, onAdvanced, onBlocks, onNew, onHistory,
 }: {
   session: Session;
   busy: boolean;
   active: boolean;
   onSend: (text: string) => void;
   onSave: (v: SVersion) => Promise<string>;
+  onPractice: (v: SVersion) => void;
+  onRender: (v: SVersion) => Promise<void>;
   onOpenTimeline: () => void;
   onAdvanced: () => void;
   onBlocks: () => void;
   onNew: () => void;
+  onHistory: () => void;
 }) {
   const [menu, setMenu] = useState(false);
   const { msgs, versions } = session;
@@ -62,7 +65,9 @@ export default function SessionView({
                 <button role="menuitem" data-testid="menu-blocks" onClick={() => { setMenu(false); onBlocks(); }}>
                   Blocks<span>Build a song from saved blocks</span></button>
                 <button role="menuitem" data-testid="menu-new" disabled={busy} onClick={() => { setMenu(false); onNew(); }}>
-                  New song<span>Start a fresh thread</span></button>
+                  New song<span>This one stays in History</span></button>
+                <button role="menuitem" data-testid="menu-history" onClick={() => { setMenu(false); onHistory(); }}>
+                  History<span>Your past songs</span></button>
               </div>
             </>
           )}
@@ -88,7 +93,7 @@ export default function SessionView({
         {msgs.map((m) => (
           <Message key={m.id} m={m} v={byN(m.version)} latestN={latest?.n}
             prev={m.version != null ? [...versions].reverse().find((x) => x.n < m.version! && x.status === "done") : undefined}
-            showActions={m.id === lastWithVersion} onSave={onSave} />
+            showActions={m.id === lastWithVersion} onSave={onSave} onPractice={onPractice} onRender={onRender} />
         ))}
         <div ref={endRef} className="ws-end" />
       </div>
@@ -100,9 +105,11 @@ export default function SessionView({
   );
 }
 
-function Message({ m, v, prev, latestN, showActions, onSave }: {
+function Message({ m, v, prev, latestN, showActions, onSave, onPractice, onRender }: {
   m: SMsg; v?: SVersion; prev?: SVersion; latestN?: number; showActions: boolean;
   onSave: (v: SVersion) => Promise<string>;
+  onPractice: (v: SVersion) => void;
+  onRender: (v: SVersion) => Promise<void>;
 }) {
   if (m.role === "user") return <div className="ws-bubble" data-testid="msg-user">{m.text}</div>;
   if (m.kind === "pending") {
@@ -114,9 +121,9 @@ function Message({ m, v, prev, latestN, showActions, onSave }: {
   const changes = m.changes ?? [];
   return (
     <div className="ws-reply" data-testid={`msg-${m.kind}`}>
-      {m.kind === "describe" ? (
+      {m.kind === "describe" || m.kind === "opened" ? (
         <>
-          <div className="ws-reply-h">Here's what I understood</div>
+          <div className="ws-reply-h">{m.kind === "opened" ? m.text : "Here's what I understood"}</div>
           <div className="ws-chips" data-testid="plan-chips">
             {(m.chips ?? []).map((c, i) => <span key={i} className="ws-chip">{c.replace(/_/g, " ")}</span>)}
           </div>
@@ -136,13 +143,17 @@ function Message({ m, v, prev, latestN, showActions, onSave }: {
         </>
       )}
       {(m.notes ?? []).map((n, i) => <div key={i} className="dr-note">{n}</div>)}
-      {v && <VersionCard v={v} current={v.n === latestN} />}
+      {v && <VersionCard v={v} current={v.n === latestN} onPractice={onPractice} onRender={onRender} />}
       {showActions && v?.status === "done" && <VersionActions v={v} prev={prev} onSave={onSave} />}
     </div>
   );
 }
 
-export function VersionCard({ v, current }: { v: SVersion; current: boolean }) {
+export function VersionCard({ v, current, onPractice, onRender }: {
+  v: SVersion; current: boolean; onPractice: (v: SVersion) => void; onRender: (v: SVersion) => Promise<void>;
+}) {
+  const [rendering, setRendering] = useState(false);
+  const missing = v.status === "done" && v.audio === "missing";
   return (
     <div className={"ws-player" + (current ? " current" : "")} data-testid={`version-${v.n}`}
       data-status={v.status}>
@@ -153,8 +164,20 @@ export function VersionCard({ v, current }: { v: SVersion; current: boolean }) {
         </div>
       )}
       {v.status === "error" && <div className="error ws-player-prog">{v.error}</div>}
-      {v.status === "done" && v.result?.urls.audio && (
+      {v.status === "done" && !missing && v.result?.urls.audio && (
         <div className="ws-player-wave"><Waveform url={api.mediaUrl(v.result.urls.audio)} height={32} /></div>
+      )}
+      {missing && (
+        <div className="ws-player-prog">
+          <button type="button" className="ws-act" data-testid={`render-v${v.n}`} disabled={rendering}
+            onClick={async () => { setRendering(true); try { await onRender(v); } finally { setRendering(false); } }}>
+            {rendering ? "Rendering…" : "Render again"}</button>
+          <div className="ws-player-msg">Its audio is gone; same plan, same seed.</div>
+        </div>
+      )}
+      {v.status === "done" && v.block && !missing && (
+        <button type="button" className="ws-vbtn" data-testid={`practice-v${v.n}`}
+          title={`Practice v${v.n} (${v.block})`} onClick={() => onPractice(v)}>Practice</button>
       )}
       <span className="ws-vlabel">v{v.n}</span>
     </div>

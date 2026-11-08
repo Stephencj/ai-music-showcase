@@ -160,6 +160,7 @@ export interface LibraryEntry {
   musicxml_url: string;
   score_data_url: string;
   folders?: { id: string; path: string }[];   // folders it's filed in
+  timeline?: import("./types").TimelineStatus;   // opens in Create's Timeline?
 }
 export const getLibrary = () =>
   jget<{ library: LibraryEntry[] }>("/api/library").then((r) => r.library);
@@ -533,3 +534,39 @@ export async function pollJob(
     await new Promise((r) => setTimeout(r, intervalMs));
   }
 }
+
+// --- Create sessions (song threads, kept on the server) ---
+export interface SessionSummary {
+  id: string;
+  title: string;
+  created: string;
+  updated: string;
+  genre: string | null;
+  style: string | null;
+  version_count: number;
+  latest: { n: number; status: string; block?: string | null; audio_url: string | null } | null;
+}
+type ServerSession = import("./session").Session;
+type ServerVersion = import("./session").SVersion;
+type SessionBody = Omit<Partial<ServerSession>, "versions"> & { versions?: Partial<ServerVersion>[] };
+const sessPath = (id: string) => `/api/sessions/${encodeURIComponent(id)}`;
+export const listSessions = () =>
+  jget<{ sessions: SessionSummary[] }>("/api/sessions").then((r) => r.sessions);
+export const getSession = (id: string) => jget<ServerSession>(sessPath(id));
+export const createSession = (body: SessionBody) =>
+  jpost<ServerSession>("/api/sessions", body);
+export const updateSession = (id: string, body: SessionBody) =>
+  jsend<ServerSession>("PUT", sessPath(id), body);
+export const renameSession = (id: string, title: string) =>
+  jpost<ServerSession>(`${sessPath(id)}/rename`, { title });
+export const deleteSession = (id: string) =>
+  jsend<{ deleted: string; blocks_removed: string[] }>("DELETE", sessPath(id));
+export const finalizeVersion = (id: string, n: number) =>
+  jpost<{ version: ServerVersion }>(`${sessPath(id)}/versions/${n}/finalize`).then((r) => r.version);
+export const renderVersion = (id: string, n: number) =>
+  jpost<{ version: ServerVersion }>(`${sessPath(id)}/versions/${n}/render`).then((r) => r.version);
+export const saveVersionToLibrary = (id: string, n: number) =>
+  jpost<{ version: ServerVersion; entry: LibraryEntry }>(`${sessPath(id)}/versions/${n}/library`);
+export const sessionFromBlock = (block: string) =>
+  jpost<{ session: ServerSession; version: number | null }>("/api/sessions/from-block", { block });
+

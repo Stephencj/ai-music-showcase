@@ -37,6 +37,10 @@ class GenerateRequest(BaseModel):
     # one ``sections`` builds, repeats included), e.g. [3] drops the bridge of
     # intro/verse/chorus/bridge/…; the rest close up (Create → Timeline).
     remove_sections: list[int] = Field(default_factory=list)
+    # An explicit form, [{role, bars, label?}] in playing order (repeats
+    # included), instead of the genre's template: a saved song re-made with
+    # its own form (Library → Open in Timeline). Not for Christmas styles.
+    section_layout: Optional[list[dict]] = None
     # Hit points, in seconds from the start of the song: the band lands an
     # accent there (snapped to the nearest 16th), e.g. a stab on each caption
     # of a video. Honoured by styles that support it (Funk Fusion).
@@ -339,3 +343,25 @@ class AiAnswerRequest(BaseModel):
     is the content (lyrics string, or a melody plan dict for later kinds)."""
     answer: Any = None
     error: Optional[str] = None
+
+
+class SessionBody(BaseModel):
+    """A Create session (or the parts of one to merge): its title, the
+    thread's messages and its versions, as the Create screen holds them."""
+    title: Optional[str] = None
+    interpreter: Optional[str] = None
+    msgs: Optional[list[dict]] = None
+    versions: Optional[list[dict]] = None
+
+
+class SessionRenameRequest(BaseModel):
+    title: str
+
+
+class SessionFromBlockRequest(BaseModel):
+    block: str
+
+
+class SessionReviseRequest(BaseModel):
+    feedback: str
+    wait: bool = False

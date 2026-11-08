@@ -35,7 +35,7 @@ _NOTE_RE = re.compile(r"^([A-Ga-g])([#b♯♭]?)$")
 PLAN_FIELDS = ("genre", "key", "scale", "tempo", "swing", "seed", "sections",
                "section_presets", "section_overrides", "instruments", "arrangement",
                "lead_patch", "hits", "hit_style", "target_lufs", "tune", "length_seconds",
-               "remove_sections")
+               "remove_sections", "section_layout")
 # Edits an answer may give instead of restating a list: add/remove
 # arrangement variants or band members. Small models revise far more reliably
 # this way (restating the arrangement, they drop variants nobody asked about).
@@ -333,6 +333,14 @@ def normalize_plan(raw: Any, previous: Optional[dict] = None,
                       if isinstance(x, (int, float)) and not isinstance(x, bool) and 0 <= x < 256})
         if idx:
             plan["remove_sections"] = idx
+    # A saved song's own form (plan_from_spec): kept while the sections are.
+    layout = merged.get("section_layout")
+    if isinstance(layout, list) and layout and merged.get("sections") == prev.get("sections", merged.get("sections")):
+        lay = [{"role": str(x["role"]), "bars": int(b), **({"label": str(x["label"])} if x.get("label") else {})}
+               for x in layout if isinstance(x, dict) and x.get("role")
+               and (b := _num(x.get("bars"), 1, 64)) is not None]
+        if lay:
+            plan["section_layout"] = lay[:64]
     if isinstance(merged.get("section_presets"), dict):
         sp = {r: _genre(p) for r, p in merged["section_presets"].items() if r in ROLES}
         sp = {r: p for r, p in sp.items() if p and p != plan["genre"]}
@@ -905,3 +913,86 @@ def parse_model_output(out: Any) -> tuple[dict, str]:
         if any(k in obj for k in PLAN_FIELDS + EDIT_FIELDS):
             return {k: v for k, v in obj.items() if k in PLAN_FIELDS + EDIT_FIELDS}, summary
     raise PlanError("no song plan in the model's answer")
+
+
+# --------------------------------------------------------------------------
+# A saved block's generation spec → a plan (Library → Open in Timeline)
+# --------------------------------------------------------------------------
+def _layout(sections) -> list[tuple]:
+    return [(s.get("role"), int(s["end_bar"]) - int(s["start_bar"]) + 1) for s in sections or []]
+
+
+def plan_from_spec(spec: Optional[dict]) -> dict:
+    """The plan that re-makes a saved block: the ``spec`` run_generation stores
+    on it (genre, seed, key, tempo, band, sections, overrides; Christmas songs
+    their tune and arrangement) as a /generate body, so the Timeline can edit
+    it and regenerate with the same seed. Raises ``PlanError`` when the spec
+    can't be re-made (none, guessed, or a style that's gone)."""
+    from src.api.arrangement import build_sections
+    from src.composition import christmas
+    from src.daw_integration.generic.styles import STYLES
+
+    if not isinstance(spec, dict) or not spec.get("genre"):
+        raise PlanError("No generation settings were saved with it")
+    if spec.get("inferred"):
+        raise PlanError("Its settings were guessed, not saved, so it can't be re-made")
+    genre = spec["genre"]
+    if genre not in STYLES:
+        raise PlanError(f"Its style ({genre}) is no longer available")
+    raw: dict = {"genre": genre}
+    if spec.get("seed"):
+        raw["seed"] = int(spec["seed"])
+    if spec.get("instruments"):
+        raw["instruments"] = list(spec["instruments"])
+    if spec.get("section_overrides"):
+        raw["section_overrides"] = dict(spec["section_overrides"])
+    for k in ("arrangement", "lead_patch", "hits", "hit_style", "target_lufs"):
+        if spec.get(k) not in (None, "", []):
+            raw[k] = spec[k]
+    roles = list(dict.fromkeys(s.get("role") for s in spec.get("sections") or [] if s.get("role")))
+    if genre in christmas.STYLE_IDS:
+        # The tune plans the form, key and tempo from the seed; pass key and
+        # tempo only when the saved song didn't take the tune's own (asking
+        # for them changes what the plan draws next).
+        raw["tune"] = spec.get("tune") or "original"
+        args = spec.get("plan_args")
+        if isinstance(args, dict):
+            # Newer blocks record exactly what the tune was planned with.
+            for k in ("key", "tempo", "length_seconds", "remove_sections"):
+                if args.get(k) not in (None, []):
+                    raw[k] = args[k]
+            plan, _notes = normalize_plan(raw)
+            if roles:
+                plan["sections"] = roles
+            if args.get("remove_sections"):
+                plan["remove_sections"] = list(args["remove_sections"])
+            return plan
+        try:
+            own = christmas.plan_song(genre, seed=int(spec.get("seed") or 0), tune=raw["tune"],
+                                      arrangement=spec.get("arrangement") or "",
+                                      instruments=spec.get("instruments") or None)
+        except Exception:  # noqa: BLE001 — a tune that's gone: keep what was saved
+            own = {}
+        if spec.get("key") and own.get("key") != spec["key"]:
+            raw["key"] = spec["key"]
+        if spec.get("tempo") and own.get("tempo") != spec["tempo"]:
+            raw["tempo"] = spec["tempo"]
+    else:
+        for k in ("key", "scale", "tempo", "swing"):
+            if spec.get(k) is not None:
+                raw[k] = spec[k]
+        if spec.get("section_presets"):
+            raw["section_presets"] = dict(spec["section_presets"])
+    plan, _notes = normalize_plan(raw)
+    if roles:
+        plan["sections"] = roles
+    if genre not in christmas.STYLE_IDS and spec.get("sections"):
+        # The saved form (repeats, order, bars) when the genre's template
+        # wouldn't lay the song out the same any more (templates change; a
+        # song fitted to a length has its own bar counts).
+        want = _layout(spec["sections"])
+        if _layout(build_sections(genre, roles, plan.get("section_presets"),
+                                  plan.get("section_overrides"))) != want:
+            plan["section_layout"] = [{"role": s["role"], "bars": n, "label": s.get("label") or s["role"].capitalize()}
+                                      for s, (_r, n) in zip(spec["sections"], want)]
+    return plan

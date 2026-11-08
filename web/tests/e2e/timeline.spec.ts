@@ -1,12 +1,13 @@
 import { test, expect, type Page, type Request } from "@playwright/test";
-import { tab } from "./nav";
+import { currentSessionId, deleteSessions, freshCreate } from "./nav";
 
 /**
  * Create → Timeline: the waveform transport (tap/drag to scrub, ▶ from a
  * section, a header jumps while playing) and the silencing edits — silence a
  * part in one section, remove a part from the song (and bring it back),
  * remove a section — each a new version with the same seed, Undo going back.
- * Makes no blocks or library entries. Screenshots land in
+ * Deletes its session at the end (with the versions' auto-saved blocks); makes
+ * no library entries. Screenshots land in
  * test-screenshots/<project>-timeline-*.png.
  */
 
@@ -39,155 +40,155 @@ async function versionDone(page: Page, n: number) {
 
 test("timeline: scrub the waveform, play from a section, silence a part / a cell / a section, undo", async ({ page, request }) => {
   test.setTimeout(1_500_000);
-  await page.goto("/app/");
-  await page.evaluate(() => localStorage.removeItem("aimusic.create.session"));
-  await page.reload();
-  await tab(page, /Create/);
+  await freshCreate(page);
+  try {
+    // v1.
+    let gen = nextGenerate(page);
+    await page.getByTestId("session-input").fill(
+      "A funk fusion background bed for a product video, horns and strings, sits quietly under narration, 120 bpm");
+    await page.getByTestId("session-input-send").click();
+    const r1 = await gen;
+    expect(bodyOf(r1).genre).toBe("funk_fusion_full");
+    await expect(page.getByTestId("version-1")).toHaveAttribute("data-status", "done", { timeout: GEN_TIMEOUT });
+    const job1 = await jobOf(r1);
+    const seed1 = ((await (await request.get(`/api/jobs/${job1}`)).json()) as { result: { seed: number } }).result.seed;
+    expect(seed1).toBeTruthy();
 
-  // v1.
-  let gen = nextGenerate(page);
-  await page.getByTestId("session-input").fill(
-    "A funk fusion background bed for a product video, horns and strings, sits quietly under narration, 120 bpm");
-  await page.getByTestId("session-input-send").click();
-  const r1 = await gen;
-  expect(bodyOf(r1).genre).toBe("funk_fusion_full");
-  await expect(page.getByTestId("version-1")).toHaveAttribute("data-status", "done", { timeout: GEN_TIMEOUT });
-  const job1 = await jobOf(r1);
-  const seed1 = ((await (await request.get(`/api/jobs/${job1}`)).json()) as { result: { seed: number } }).result.seed;
-  expect(seed1).toBeTruthy();
+    await page.getByTestId("open-timeline").click();
+    const tl = page.getByTestId("timeline");
+    await expect(tl).toBeVisible();
+    const secs = tl.locator(".ws-sec");
+    const names = await secs.allTextContents();
+    const nSecs = names.length;
+    const verse = names.findIndex((t) => /verse/i.test(t));
+    const chorus = names.findIndex((t) => /chorus/i.test(t));
+    const bridge = names.findIndex((t) => /brdg/i.test(t));
+    expect(verse).toBeGreaterThanOrEqual(0);
+    expect(chorus).toBeGreaterThan(verse);
+    expect(bridge).toBeGreaterThan(chorus);
 
-  await page.getByTestId("open-timeline").click();
-  const tl = page.getByTestId("timeline");
-  await expect(tl).toBeVisible();
-  const secs = tl.locator(".ws-sec");
-  const names = await secs.allTextContents();
-  const nSecs = names.length;
-  const verse = names.findIndex((t) => /verse/i.test(t));
-  const chorus = names.findIndex((t) => /chorus/i.test(t));
-  const bridge = names.findIndex((t) => /brdg/i.test(t));
-  expect(verse).toBeGreaterThanOrEqual(0);
-  expect(chorus).toBeGreaterThan(verse);
-  expect(bridge).toBeGreaterThan(chorus);
+    // ---- the waveform transport --------------------------------------------
+    const wave = page.getByTestId("timeline-wave");
+    await expect(wave).toBeVisible();
+    const peaks = (await (await request.get(`/api/jobs/${job1}/peaks`)).json()) as Peaks;
+    expect(peaks.peaks.length).toBeGreaterThan(100);
+    expect(peaks.section_starts).toHaveLength(nSecs);
+    // The waveform is drawn into each section's column.
+    await expect.poll(() => wave.locator("canvas").evaluateAll((cs) =>
+      cs.filter((c) => (c as HTMLCanvasElement).width > 1).length)).toBe(nSecs);
+    await expect(tl.locator(".ws-times span").last()).not.toHaveText("0:00", { timeout: 30_000 });
+    const end = (i: number) => (i + 1 < nSecs ? peaks.section_starts[i + 1] : peaks.duration);
 
-  // ---- the waveform transport --------------------------------------------
-  const wave = page.getByTestId("timeline-wave");
-  await expect(wave).toBeVisible();
-  const peaks = (await (await request.get(`/api/jobs/${job1}/peaks`)).json()) as Peaks;
-  expect(peaks.peaks.length).toBeGreaterThan(100);
-  expect(peaks.section_starts).toHaveLength(nSecs);
-  // The waveform is drawn into each section's column.
-  await expect.poll(() => wave.locator("canvas").evaluateAll((cs) =>
-    cs.filter((c) => (c as HTMLCanvasElement).width > 1).length)).toBe(nSecs);
-  await expect(tl.locator(".ws-times span").last()).not.toHaveText("0:00", { timeout: 30_000 });
-  const end = (i: number) => (i + 1 < nSecs ? peaks.section_starts[i + 1] : peaks.duration);
+    // Tap the middle of the chorus column → the chorus, about halfway through.
+    const col = wave.locator(".ws-wave-sec");
+    const cb = (await col.nth(chorus).boundingBox())!;
+    await page.mouse.click(cb.x + cb.width / 2, cb.y + cb.height / 2);
+    let at = await audioTime(page);
+    const mid = (peaks.section_starts[chorus] + end(chorus)) / 2;
+    expect(at).toBeGreaterThan(peaks.section_starts[chorus]);
+    expect(at).toBeLessThan(end(chorus));
+    expect(Math.abs(at - mid)).toBeLessThan((end(chorus) - peaks.section_starts[chorus]) * 0.15);
+    await expect(page.getByTestId("playhead")).toBeVisible();
+    const headAt = async () => Number((await page.getByTestId("playhead").getAttribute("style"))!.match(/left:\s*([\d.]+)/)![1]);
+    const head1 = await headAt();
 
-  // Tap the middle of the chorus column → the chorus, about halfway through.
-  const col = wave.locator(".ws-wave-sec");
-  const cb = (await col.nth(chorus).boundingBox())!;
-  await page.mouse.click(cb.x + cb.width / 2, cb.y + cb.height / 2);
-  let at = await audioTime(page);
-  const mid = (peaks.section_starts[chorus] + end(chorus)) / 2;
-  expect(at).toBeGreaterThan(peaks.section_starts[chorus]);
-  expect(at).toBeLessThan(end(chorus));
-  expect(Math.abs(at - mid)).toBeLessThan((end(chorus) - peaks.section_starts[chorus]) * 0.15);
-  await expect(page.getByTestId("playhead")).toBeVisible();
-  const headAt = async () => Number((await page.getByTestId("playhead").getAttribute("style"))!.match(/left:\s*([\d.]+)/)![1]);
-  const head1 = await headAt();
+    // Drag from the intro to the bridge: the playhead follows.
+    const ib = (await col.nth(0).boundingBox())!, bb = (await col.nth(bridge).boundingBox())!;
+    await page.mouse.move(ib.x + 4, ib.y + ib.height / 2);
+    await page.mouse.down();
+    expect(await audioTime(page)).toBeLessThan(end(0));
+    await page.mouse.move(bb.x + bb.width * 0.25, bb.y + bb.height / 2, { steps: 8 });
+    await page.mouse.up();
+    at = await audioTime(page);
+    expect(at).toBeGreaterThan(peaks.section_starts[bridge]);
+    expect(at).toBeLessThan(end(bridge));
+    expect(await headAt()).toBeGreaterThan(head1);
+    await shot(page, "scrub");
 
-  // Drag from the intro to the bridge: the playhead follows.
-  const ib = (await col.nth(0).boundingBox())!, bb = (await col.nth(bridge).boundingBox())!;
-  await page.mouse.move(ib.x + 4, ib.y + ib.height / 2);
-  await page.mouse.down();
-  expect(await audioTime(page)).toBeLessThan(end(0));
-  await page.mouse.move(bb.x + bb.width * 0.25, bb.y + bb.height / 2, { steps: 8 });
-  await page.mouse.up();
-  at = await audioTime(page);
-  expect(at).toBeGreaterThan(peaks.section_starts[bridge]);
-  expect(at).toBeLessThan(end(bridge));
-  expect(await headAt()).toBeGreaterThan(head1);
-  await shot(page, "scrub");
+    // ▶ From here: the chorus plays from its first beat.
+    await page.getByTestId(`sec-${chorus}`).click();
+    await page.getByTestId("play-from-section").click();
+    await expect(page.getByTestId("timeline-play")).toHaveAttribute("aria-label", "Pause", { timeout: 15_000 });
+    at = await audioTime(page);
+    expect(at).toBeGreaterThanOrEqual(peaks.section_starts[chorus] - 0.05);
+    expect(at).toBeLessThan(peaks.section_starts[chorus] + 2);
+    // While playing, a section header jumps there too.
+    await page.getByTestId("sec-0").click();
+    at = await audioTime(page);
+    expect(at).toBeLessThan(2);
+    expect(await audioPaused(page)).toBe(false);
+    await page.getByTestId("timeline-play").click();
+    await expect(page.getByTestId("timeline-play")).toHaveAttribute("aria-label", "Play");
 
-  // ▶ From here: the chorus plays from its first beat.
-  await page.getByTestId(`sec-${chorus}`).click();
-  await page.getByTestId("play-from-section").click();
-  await expect(page.getByTestId("timeline-play")).toHaveAttribute("aria-label", "Pause", { timeout: 15_000 });
-  at = await audioTime(page);
-  expect(at).toBeGreaterThanOrEqual(peaks.section_starts[chorus] - 0.05);
-  expect(at).toBeLessThan(peaks.section_starts[chorus] + 2);
-  // While playing, a section header jumps there too.
-  await page.getByTestId("sec-0").click();
-  at = await audioTime(page);
-  expect(at).toBeLessThan(2);
-  expect(await audioPaused(page)).toBe(false);
-  await page.getByTestId("timeline-play").click();
-  await expect(page.getByTestId("timeline-play")).toHaveAttribute("aria-label", "Play");
+    // ---- silence the bass in the verse (one cell) ---------------------------
+    await page.getByTestId(`cell-bass-${verse}`).click();
+    await expect(page.getByTestId("silence-here")).toHaveText("Silence bass here");
+    gen = nextGenerate(page);
+    await page.getByTestId("silence-here").click();
+    const b2 = bodyOf(await gen);
+    expect(b2.seed).toBe(seed1);
+    const mask = b2.section_overrides?.verse?.instruments ?? [];
+    expect(mask).not.toContain("electric_bass");
+    expect(mask).toContain("drum_kit");
+    await versionDone(page, 2);
+    await expect(page.getByTestId(`cell-bass-${verse}`)).toHaveText("rest");
+    await expect(page.getByTestId(`cell-bass-${chorus}`)).not.toHaveText("rest");
+    await expect(page.getByTestId(`cell-drums-${verse}`)).not.toHaveText(/^(rest)?$/);
+    // (The cell stays selected across the regeneration.)
+    await expect(page.getByTestId("silence-here")).toHaveText("Bring bass back here");
+    await shot(page, "silenced-cell");
 
-  // ---- silence the bass in the verse (one cell) ---------------------------
-  await page.getByTestId(`cell-bass-${verse}`).click();
-  await expect(page.getByTestId("silence-here")).toHaveText("Silence bass here");
-  gen = nextGenerate(page);
-  await page.getByTestId("silence-here").click();
-  const b2 = bodyOf(await gen);
-  expect(b2.seed).toBe(seed1);
-  const mask = b2.section_overrides?.verse?.instruments ?? [];
-  expect(mask).not.toContain("electric_bass");
-  expect(mask).toContain("drum_kit");
-  await versionDone(page, 2);
-  await expect(page.getByTestId(`cell-bass-${verse}`)).toHaveText("rest");
-  await expect(page.getByTestId(`cell-bass-${chorus}`)).not.toHaveText("rest");
-  await expect(page.getByTestId(`cell-drums-${verse}`)).not.toHaveText(/^(rest)?$/);
-  // (The cell stays selected across the regeneration.)
-  await expect(page.getByTestId("silence-here")).toHaveText("Bring bass back here");
-  await shot(page, "silenced-cell");
+    // ---- remove the keys from the whole song --------------------------------
+    await page.getByTestId("lane-name-keys").click();
+    const lp = page.getByTestId("lane-panel");
+    await expect(lp).toContainText("Keys · whole song");
+    gen = nextGenerate(page);
+    await page.getByTestId("lane-remove").click();
+    const b3 = bodyOf(await gen);
+    expect(b3.seed).toBe(seed1);
+    expect(b3.instruments).not.toContain("electric_piano");
+    expect(b3.instruments).toContain("drum_kit");
+    expect(b3.section_overrides?.verse?.instruments).not.toContain("electric_piano");
+    expect(b3.section_overrides?.verse?.instruments).not.toContain("electric_bass");  // the verse rest kept
+    await versionDone(page, 3);
+    await expect(page.getByTestId("lane-keys")).toHaveClass(/muted/);
+    await expect(page.getByTestId("lane-keys").locator(".ws-cell:not(.off)")).toHaveCount(0);
+    await page.getByTestId("lane-name-keys").click();
+    await expect(page.getByTestId("lane-restore")).toHaveText("Bring keys back");
+    await shot(page, "removed-lane");
+    await page.getByTestId("lane-name-keys").click();
+    await expect(lp).toHaveCount(0);
 
-  // ---- remove the keys from the whole song --------------------------------
-  await page.getByTestId("lane-name-keys").click();
-  const lp = page.getByTestId("lane-panel");
-  await expect(lp).toContainText("Keys · whole song");
-  gen = nextGenerate(page);
-  await page.getByTestId("lane-remove").click();
-  const b3 = bodyOf(await gen);
-  expect(b3.seed).toBe(seed1);
-  expect(b3.instruments).not.toContain("electric_piano");
-  expect(b3.instruments).toContain("drum_kit");
-  expect(b3.section_overrides?.verse?.instruments).not.toContain("electric_piano");
-  expect(b3.section_overrides?.verse?.instruments).not.toContain("electric_bass");  // the verse rest kept
-  await versionDone(page, 3);
-  await expect(page.getByTestId("lane-keys")).toHaveClass(/muted/);
-  await expect(page.getByTestId("lane-keys").locator(".ws-cell:not(.off)")).toHaveCount(0);
-  await page.getByTestId("lane-name-keys").click();
-  await expect(page.getByTestId("lane-restore")).toHaveText("Bring keys back");
-  await shot(page, "removed-lane");
-  await page.getByTestId("lane-name-keys").click();
-  await expect(lp).toHaveCount(0);
+    // ---- remove the bridge --------------------------------------------------
+    await page.getByTestId(`sec-${bridge}`).click();
+    gen = nextGenerate(page);
+    await page.getByTestId("remove-section").click();
+    const b4 = bodyOf(await gen);
+    expect(b4.seed).toBe(seed1);
+    expect(b4.remove_sections).toEqual([bridge]);
+    expect(b4.instruments).not.toContain("electric_piano");
+    await versionDone(page, 4);
+    await expect(secs).toHaveCount(nSecs - 1);
+    const after = await secs.allTextContents();
+    expect(after.filter((t) => /brdg/i.test(t))).toHaveLength(0);
+    expect(after.filter((t) => /chorus/i.test(t))).toHaveLength(names.filter((t) => /chorus/i.test(t)).length);
+    await expect(page.getByTestId(`cell-bass-${verse}`)).toHaveText("rest");
+    await expect(page.getByTestId("lane-keys")).toHaveClass(/muted/);
+    await shot(page, "removed-section");
 
-  // ---- remove the bridge --------------------------------------------------
-  await page.getByTestId(`sec-${bridge}`).click();
-  gen = nextGenerate(page);
-  await page.getByTestId("remove-section").click();
-  const b4 = bodyOf(await gen);
-  expect(b4.seed).toBe(seed1);
-  expect(b4.remove_sections).toEqual([bridge]);
-  expect(b4.instruments).not.toContain("electric_piano");
-  await versionDone(page, 4);
-  await expect(secs).toHaveCount(nSecs - 1);
-  const after = await secs.allTextContents();
-  expect(after.filter((t) => /brdg/i.test(t))).toHaveLength(0);
-  expect(after.filter((t) => /chorus/i.test(t))).toHaveLength(names.filter((t) => /chorus/i.test(t)).length);
-  await expect(page.getByTestId(`cell-bass-${verse}`)).toHaveText("rest");
-  await expect(page.getByTestId("lane-keys")).toHaveClass(/muted/);
-  await shot(page, "removed-section");
-
-  // Every edit was a version: Undo walks back through them.
-  await page.getByTestId("timeline-undo").click();
-  await expect(page.locator(".ws-vpick")).toContainText("v3");
-  await expect(secs).toHaveCount(nSecs);
-  await page.getByTestId("timeline-undo").click();
-  await expect(page.locator(".ws-vpick")).toContainText("v2");
-  await expect(page.getByTestId("lane-keys")).not.toHaveClass(/muted/);
-  await expect(page.getByTestId(`cell-bass-${verse}`)).toHaveText("rest");
-  // The thread has a message per edit.
-  await page.getByTestId("timeline-back").click();
-  await expect(page.getByTestId("msg-section")).toHaveCount(3);
-  await expect(page.getByTestId("version-4")).toHaveAttribute("data-status", "done");
+    // Every edit was a version: Undo walks back through them.
+    await page.getByTestId("timeline-undo").click();
+    await expect(page.locator(".ws-vpick")).toContainText("v3");
+    await expect(secs).toHaveCount(nSecs);
+    await page.getByTestId("timeline-undo").click();
+    await expect(page.locator(".ws-vpick")).toContainText("v2");
+    await expect(page.getByTestId("lane-keys")).not.toHaveClass(/muted/);
+    await expect(page.getByTestId(`cell-bass-${verse}`)).toHaveText("rest");
+    // The thread has a message per edit.
+    await page.getByTestId("timeline-back").click();
+    await expect(page.getByTestId("msg-section")).toHaveCount(3);
+    await expect(page.getByTestId("version-4")).toHaveAttribute("data-status", "done");
+  } finally {
+    await deleteSessions(request, [await currentSessionId(page)]);
+  }
 });

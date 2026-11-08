@@ -1,8 +1,8 @@
 // The Create session: a thread of messages (your description, feedback and
-// section edits) and the song versions they produced (v1, v2, …). Kept
-// client-side and persisted to localStorage — every version is a /generate
-// job, and its plan (a GenerateRequest body) is all that's needed to make
-// the next one.
+// section edits) and the song versions they produced (v1, v2, …). Kept on
+// the server (/api/sessions) so "New song" archives it into the history
+// instead of clearing it; every version is a /generate job, and its plan (a
+// GenerateRequest body) is all that's needed to make the next one.
 import type { ArrangementOptions } from "./api";
 import type { Family, JobResult, SectionOverride, SongPlan } from "./types";
 
@@ -17,12 +17,18 @@ export interface SVersion {
   error?: string;
   savedAs?: string;            // block name once saved to the library
   from?: number;               // the version it was made from (Undo goes back to it)
+  // Kept by the server:
+  block?: string;              // the version's block (auto-saved: it's in Practice)
+  audio?: "missing";           // its audio is gone: render it again from plan + seed
+  seed?: number;
+  changes?: string[];
+  interpreter?: string;
 }
 
 export interface SMsg {
   id: string;
   role: "user" | "app";
-  kind?: "pending" | "describe" | "revise" | "section" | "error";
+  kind?: "pending" | "describe" | "revise" | "section" | "opened" | "error";
   text?: string;
   chips?: string[];            // "Here's what I understood"
   changes?: string[];          // "Changed N things"
@@ -32,39 +38,89 @@ export interface SMsg {
 }
 
 export interface Session {
+  id?: string;                 // the server's id (none until the first message)
   title: string;
   interpreter?: string;
+  created?: string;
+  updated?: string;
   msgs: SMsg[];
   versions: SVersion[];
 }
 
 export const EMPTY_SESSION: Session = { title: "", msgs: [], versions: [] };
 
-const KEY = "aimusic.create.session";
+const LEGACY_KEY = "aimusic.create.session";    // the old browser-only thread
+const CURRENT_KEY = "aimusic.create.current";   // the open session's id
 
-export function loadSession(): Session {
+/** A thread saved in this browser before sessions moved to the server (to
+ *  bring over once), or null. */
+export function takeLegacySession(): Session | null {
   try {
-    const v = localStorage.getItem(KEY);
-    if (!v) return EMPTY_SESSION;
+    const v = localStorage.getItem(LEGACY_KEY);
+    if (!v) return null;
     const s = JSON.parse(v) as Session;
-    return Array.isArray(s.msgs) && Array.isArray(s.versions) ? s : EMPTY_SESSION;
+    return Array.isArray(s.msgs) && Array.isArray(s.versions) && s.msgs.length ? s : null;
   } catch {
-    return EMPTY_SESSION;
+    return null;
   }
 }
+export function forgetLegacySession() {
+  try { localStorage.removeItem(LEGACY_KEY); } catch { /* private mode */ }
+}
 
-export function saveSession(s: Session) {
-  try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* storage full / private mode */ }
+export function loadCurrentId(): string | null {
+  try { return localStorage.getItem(CURRENT_KEY); } catch { return null; }
+}
+export function saveCurrentId(id: string | null | undefined) {
+  try {
+    if (id) localStorage.setItem(CURRENT_KEY, id); else localStorage.removeItem(CURRENT_KEY);
+  } catch { /* private mode */ }
+}
+
+// Version fields the server owns (its job outcome, block and library links).
+const SERVER_OWNED = ["block", "savedAs", "audio", "seed", "changes", "interpreter"] as const;
+
+/** The server's copy of the open session folded into ours: messages and
+ *  versions it added (e.g. Claude continuing the thread), and what it knows
+ *  about each version — its block, audio, and a job it started (a render). */
+export function mergeServer(local: Session, server: Session): Session {
+  if (local.id && server.id !== local.id) return local;
+  const sv = new Map(server.versions.map((v) => [v.n, v]));
+  const versions = local.versions.map((v) => {
+    const o = sv.get(v.n);
+    if (!o) return v;
+    const next: SVersion = { ...v };
+    for (const k of SERVER_OWNED) (next as unknown as Record<string, unknown>)[k] = o[k];
+    if (o.jobId && o.jobId !== v.jobId) {
+      // The server moved it to another job (rendered again, or re-registered).
+      Object.assign(next, { jobId: o.jobId, status: o.status, progress: o.progress, message: o.message,
+        result: o.result, error: o.error });
+    } else if (o.status !== "running" && (o.status !== v.status || o.audio !== v.audio)) {
+      Object.assign(next, { status: o.status, result: o.result ?? v.result, error: o.error });
+    }
+    return next;
+  });
+  const have = new Set(local.versions.map((v) => v.n));
+  const mine = new Set(local.msgs.map((m) => m.id));
+  return {
+    ...local,
+    id: server.id, created: server.created, updated: server.updated,
+    msgs: [...local.msgs, ...server.msgs.filter((m) => !mine.has(m.id))],
+    versions: [...versions, ...server.versions.filter((v) => !have.has(v.n))].sort((a, b) => a.n - b.n),
+  };
 }
 
 export const INTERPRETER_NAME: Record<string, string> = {
   claude: "Claude", local: "local AI", rules: "rules",
 };
 
-/** A short song title from the first description. */
+/** A short song title from the first description: cut at a word, no "…"
+ *  (it names the version's blocks: "<title> v2"). */
 export function titleFrom(text: string): string {
-  const first = text.trim().split(/(?<=[.!?])\s/)[0].replace(/[.!?]+$/, "");
-  return first.length > 26 ? first.slice(0, 25).replace(/\s+\S*$/, "") + "…" : first;
+  const first = text.trim().split(/(?<=[.!?])\s/)[0].replace(/[.!?]+$/, "").replace(/…|\.{3,}/g, " ").trim();
+  if (first.length <= 32) return first;
+  const cut = first.slice(0, 33);
+  return (cut.includes(" ") ? cut.replace(/\s+\S*$/, "") : first.slice(0, 32)).replace(/[\s.,;:–—-]+$/, "");
 }
 
 /** describe_changes lines, a little friendlier to read. */

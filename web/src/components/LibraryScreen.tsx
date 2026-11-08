@@ -33,9 +33,10 @@ const UNFILED = "unfiled";
  * track order and drag the ≡ handle to reorder; "Move to folder…" on a card
  * files it. Unfiled is every song in no folder.
  */
-export default function LibraryScreen({ isActive, onOpen }: {
+export default function LibraryScreen({ isActive, onOpen, onOpenTimeline }: {
   isActive: boolean;
   onOpen: (block: string) => void;
+  onOpenTimeline: (block: string) => void;
 }) {
   const [entries, setEntries] = useState<LibraryEntry[] | null>(null);
   const [folders, setFolders] = useState<LibraryFolder[]>([]);
@@ -164,7 +165,7 @@ export default function LibraryScreen({ isActive, onOpen }: {
 
   const cards = shown.map((e) => (
     <LibraryCard key={e.id} entry={e} folders={folders} current={current} sortable={sortable}
-      onOpen={onOpen} onToggleFav={toggleFav} onRemove={remove} onMove={move} />
+      onOpen={onOpen} onOpenTimeline={onOpenTimeline} onToggleFav={toggleFav} onRemove={remove} onMove={move} />
   ));
 
   return (
@@ -264,12 +265,13 @@ function FolderRow({ id, label, count, on, sub, muted, onClick }: {
  * part drives the "View PDF" link, which the native iOS shell opens in its
  * PDFKit viewer (and where an in-viewer toggle will also live).
  */
-function LibraryCard({ entry, folders, current, sortable, onOpen, onToggleFav, onRemove, onMove }: {
+function LibraryCard({ entry, folders, current, sortable, onOpen, onOpenTimeline, onToggleFav, onRemove, onMove }: {
   entry: LibraryEntry;
   folders: LibraryFolder[];
   current: string;
   sortable: boolean;
   onOpen: (block: string) => void;
+  onOpenTimeline: (block: string) => void;
   onToggleFav: (e: LibraryEntry) => void;
   onRemove: (e: LibraryEntry) => void;
   onMove: (e: LibraryEntry, to: string) => void;
@@ -349,6 +351,10 @@ function LibraryCard({ entry, folders, current, sortable, onOpen, onToggleFav, o
         <button className="btn secondary sm" onClick={() => onOpen(entry.block_name)} data-testid="open-practice">
           🎹 Roll · Tab · Play
         </button>
+        <button className="btn secondary sm" onClick={() => onOpenTimeline(entry.block_name)}
+          disabled={entry.timeline?.ok === false} title={entry.timeline?.reason} data-testid="open-timeline">
+          Open in Timeline
+        </button>
         <a className="btn ghost sm" href={api.mediaUrl(entry.pdf_zip_url)} download>↓ All parts</a>
         <select
           className="part-select move-select"
@@ -375,6 +381,9 @@ function LibraryCard({ entry, folders, current, sortable, onOpen, onToggleFav, o
           </button>
         )}
       </div>
+      {entry.timeline?.ok === false && (
+        <div className="te-note" data-testid="timeline-reason">Timeline: {entry.timeline.reason}</div>
+      )}
     </div>
   );
 }

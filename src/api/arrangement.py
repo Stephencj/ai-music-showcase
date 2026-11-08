@@ -99,10 +99,15 @@ def fit_length(genre: str, roles: list[str], overrides: dict[str, dict] | None,
 def build_sections(genre: str, roles: list[str],
                    section_presets: dict[str, str] | None = None,
                    section_overrides: dict[str, dict] | None = None,
-                   remove: list[int] | None = None) -> list[dict]:
+                   remove: list[int] | None = None,
+                   layout: list[dict] | None = None) -> list[dict]:
     """Contiguous ``{start_bar, end_bar, label, role}`` for the chosen roles
     in canonical order. Empty ``roles`` → the genre's full default
     arrangement. Bar-lengths/labels come from the template when present.
+
+    ``layout`` (optional) is an explicit form, ``[{role, bars, label?}]`` in
+    playing order, repeats included: a saved song's own form, re-made as it
+    was even when the genre's template has changed since.
 
     ``remove`` (optional) lists indices of the arranged sections to leave out
     (one verse of two, say); the rest close up. It never empties the song.
@@ -122,7 +127,15 @@ def build_sections(genre: str, roles: list[str],
     # silently halved a "full song" (pop_full_song 80 → 48 bars) and starved
     # the vocal line/lyric of phrases. A strict subset still builds a reduced
     # custom arrangement below.
-    if template and (not wanted or set(wanted) == template_roles):
+    if layout:
+        secs, cursor = [], 0
+        for s in layout:
+            bars = max(1, min(64, int(s.get("bars") or 1)))
+            role = str(s.get("role") or "verse")
+            secs.append({"start_bar": cursor, "end_bar": cursor + bars - 1, "role": role,
+                         "label": s.get("label") or _ROLE_LABELS.get(role, role.capitalize())})
+            cursor += bars
+    elif template and (not wanted or set(wanted) == template_roles):
         secs = [dict(s) for s in template]
     elif not wanted:
         # No template (unknown genre) and nothing chosen → generic sketch.
