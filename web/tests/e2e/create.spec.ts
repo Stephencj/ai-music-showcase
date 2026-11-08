@@ -64,10 +64,14 @@ test("describe → v1 → quick change → v2 → compare → timeline → regen
     await page.getByTestId("quick-simpler-bass").click();
     const revised = page.getByTestId("msg-revise");
     await expect(revised.getByTestId("changed-heading")).toHaveText(/Changed \d+ thing/, { timeout: GEN_TIMEOUT });
-    await expect(revised.getByTestId("change-list")).toContainText(/simple bass/);
+    // "Simpler" steps the bass down one level: pocket → simple, or simple →
+    // calm when the plan (e.g. a background bed) already has simple_bass.
+    await expect(revised.getByTestId("change-list")).toContainText(/(simple|calm) bass/);
     const b2 = JSON.parse((await gen).postData() || "{}") as Body;
     expect(b2.seed).toBe(seed1);
-    expect(b2.arrangement).toContain("simple_bass");
+    const before = (b1.arrangement || "") as string;
+    const v2Bass = before.includes("simple_bass") ? "calm_bass" : "simple_bass";
+    expect(b2.arrangement).toContain(v2Bass);
     await expect(page.getByTestId("version-2")).toHaveAttribute("data-status", "done", { timeout: GEN_TIMEOUT });
     await expect(page.getByTestId("version-2")).toHaveClass(/current/);
 
@@ -100,8 +104,8 @@ test("describe → v1 → quick change → v2 → compare → timeline → regen
     await expect(page.getByTestId("lane-drums")).toBeVisible();
     await expect(page.getByTestId("lane-bass")).toBeVisible();
     await expect(page.getByTestId("lane-strings")).toBeVisible();
-    // v2 has the simple bass everywhere.
-    await expect(page.getByTestId("cell-bass-1")).toHaveText(/simple/);
+    // v2's bass style shows in every cell (one step simpler than v1).
+    await expect(page.getByTestId("cell-bass-1")).toHaveText(before.includes("simple_bass") ? /calm/ : /simple/);
 
     // Pick the chorus, toggle an option, regenerate just that section.
     const chorusIdx = (await secs.allTextContents()).findIndex((t) => /chorus/i.test(t));
@@ -119,7 +123,7 @@ test("describe → v1 → quick change → v2 → compare → timeline → regen
     const b3 = JSON.parse((await gen).postData() || "{}") as Body;
     expect(b3.seed).toBe(seed1);
     expect(b3.section_overrides?.chorus?.arrangement).toContain("pocket_drums");
-    expect(b3.section_overrides?.chorus?.arrangement).toContain("simple_bass");   // the rest of the section kept
+    expect(b3.section_overrides?.chorus?.arrangement).toContain(v2Bass);   // the rest of the section kept
     expect(b3.arrangement).toBe(b2.arrangement);                                   // the song's arrangement untouched
     await expect(page.getByTestId("timeline-info")).toContainText("BPM", { timeout: GEN_TIMEOUT });
     await expect(page.locator(".ws-vpick")).toContainText("v3");
