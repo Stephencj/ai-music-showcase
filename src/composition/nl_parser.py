@@ -24,6 +24,10 @@ from typing import Optional
 # real STYLES keys (validated at parse time; unknowns are skipped). Full-song
 # variants are preferred for richer default arrangements.
 _GENRE_LEXICON: list[tuple[str, str]] = [
+    # Funk Fusion is the high-quality engine (song_plan_guide.md): fusion and
+    # the corporate/sizzle-video asks it was built for land there.
+    (r"\b(?:funk|jazz)[\s-]?fusion\b|\bfusion\b", "funk_fusion_full"),
+    (r"\bsizzle\b|\bcorporate\b|\bproduct\s+video\b|70s\s+(?:funk\s+)?horns", "funk_fusion_full"),
     (r"boom[\s-]?bap", "hip_hop_90s"),
     (r"90s\s+hip[\s-]?hop", "hip_hop_90s"),
     (r"hip[\s-]?hop", "hip_hop_full"),
@@ -175,6 +179,9 @@ _KEY_M_RE = re.compile(r"\b([A-G](?:#|b)?)m\b")  # "Gm", "Bbm" shorthand
 _KEY_OF_RE = re.compile(
     r"\b(?:in\s+(?:the\s+)?)?key\s+of\s+(" + _NOTE + r")"
     r"\s*(major|minor|maj|min|m|dorian|phrygian|lydian|mixolydian|locrian)?\b", re.I)
+# Bare "in Bb" / "in G": only a capitalised note name (case-sensitive), so
+# "in a minute" or "in funk" never reads as a key.
+_KEY_BARE_RE = re.compile(r"\bin\s+([A-G](?:#|b|♯|♭)?)(?![\w#♯♭'’])")
 _BPM_RE = re.compile(r"\b(\d{2,3})\s*(?:bpm|beats\s*per\s*minute)\b", re.I)
 _AT_BPM_RE = re.compile(r"\bat\s+(\d{2,3})\b", re.I)
 _HALF_DOUBLE_RE = re.compile(r"\b(half|double)[\s-]?time\b", re.I)
@@ -205,6 +212,8 @@ def _find_key_matches(raw: str) -> list[tuple[int, int, str, str]]:
         add(m.start(1), m.end(), m.group(1), m.group(2) or "")
     for m in _KEY_M_RE.finditer(raw):
         add(m.start(), m.end(), m.group(1), "minor")
+    for m in _KEY_BARE_RE.finditer(raw):
+        add(m.start(1), m.end(), m.group(1), "")
     out.sort()
     return out
 
@@ -240,6 +249,13 @@ def _all_matches(text: str, lexicon: list[tuple[str, str]]):
             spans.append((s, e, val))
     spans.sort()
     return spans
+
+
+def mentions_genre(text: str) -> bool:
+    """Does ``text`` name a genre the lexicon knows (vs. falling back to the
+    default)? Lets a revision ("make it jazz") change genre only when asked."""
+    from src.daw_integration.generic.styles import STYLES
+    return any(v in STYLES for (_, _, v) in _all_matches(text or "", _GENRE_LEXICON))
 
 
 def parse_prompt(text: str) -> dict:
@@ -379,9 +395,16 @@ def parse_prompt(text: str) -> dict:
 
     # ── instruments ──────────────────────────────────────────────────────────
     instruments: list[str] = []
-    for (_, _, iid) in _all_matches(raw, _INSTRUMENT_LEXICON):
-        if iid in INSTRUMENT_REGISTRY and iid not in instruments:
+    removed: list[str] = []           # "no trumpet", "without the piano"
+    for (st, _, iid) in _all_matches(raw, _INSTRUMENT_LEXICON):
+        if iid not in INSTRUMENT_REGISTRY:
+            continue
+        if re.search(r"\b(no|without|remove|drop|lose|minus)\s+(the\s+|any\s+)?$", low[max(0, st - 20):st]):
+            if iid not in removed:
+                removed.append(iid)
+        elif iid not in instruments:
             instruments.append(iid)
+    instruments = [i for i in instruments if i not in removed]
     if instruments:
         regn = INSTRUMENT_REGISTRY
         understood.append("Add: " + ", ".join(
@@ -429,6 +452,7 @@ def parse_prompt(text: str) -> dict:
         "section_presets": section_presets,
         "section_overrides": section_overrides,
         "instruments": instruments,
+        "removed_instruments": removed,
         "understood": understood,
         "notes": notes,
     }

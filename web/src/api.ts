@@ -5,6 +5,7 @@ import type {
   Job,
   JobUrls,
   Preset,
+  DescribeResult,
   SongPlan,
   SongRenderResult,
   TimelineEntry,
@@ -41,8 +42,18 @@ export const getGenres = () =>
 export const getInstruments = () => jget<Family[]>("/api/instruments");
 export const getMasterPresets = () => jget<string[]>("/api/master-presets");
 
-export const parsePrompt = (prompt: string) =>
-  jpost<SongPlan>("/api/parse-prompt", { prompt });
+// Describe / revise a song in plain English → a song plan. Run as a job: the
+// interpreter (Claude, the local AI, or the rules) can take a while.
+async function interpretJob(path: string, body: object, onMessage?: (m: string) => void) {
+  const { job_id } = await jpost<{ job_id: string }>(path, { ...body, wait: false });
+  const job = await pollJob(job_id, (j) => { if (j.message) onMessage?.(j.message); }, 600);
+  if (job.status === "error") throw new Error(job.error || "Couldn't read that");
+  return job.result as unknown as DescribeResult;
+}
+export const describeSong = (text: string, onMessage?: (m: string) => void) =>
+  interpretJob("/api/describe", { text }, onMessage);
+export const reviseSong = (plan: SongPlan, feedback: string, onMessage?: (m: string) => void) =>
+  interpretJob("/api/revise", { plan, feedback }, onMessage);
 
 export const generate = (body: GenerateBody) =>
   jpost<{ job_id: string }>("/api/generate", body);

@@ -53,6 +53,9 @@ class GenerateRequest(BaseModel):
     # Arrangement variant: "" (normal) or "hits_only" (Funk Fusion: no lead or
     # riffs; the band lands the hits together, 70s-section horn punches).
     arrangement: Optional[str] = None
+    # Loudness of the delivered mix (integrated LUFS). None = as mastered
+    # (about −12); background beds under a video sit around −23 to −28.
+    target_lufs: Optional[float] = None
     # Post-generation conveniences:
     save_as_block: bool = False
     block_name: Optional[str] = None
@@ -100,6 +103,21 @@ class ParsePromptRequest(BaseModel):
     """Natural-language song description → a SongPlan that pre-fills the
     Generate form (rule-based, deterministic)."""
     prompt: str = ""
+
+
+class DescribeRequest(BaseModel):
+    """Plain-English song description → a song plan (src/api/describe.py).
+    ``wait=False`` runs it as a job (poll ``/jobs/{id}``) for clients that
+    can't hold a request open while the interpreter thinks."""
+    text: str = ""
+    wait: bool = True
+
+
+class ReviseRequest(BaseModel):
+    """The current song plan + plain-English feedback → a revised plan."""
+    plan: dict = Field(default_factory=dict)
+    feedback: str = ""
+    wait: bool = True
 
 
 class GeneratePartRequest(BaseModel):

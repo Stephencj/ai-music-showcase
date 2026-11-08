@@ -30,6 +30,7 @@ from .jobs import registry
 from .schemas import (
     AiAnswerRequest,
     BlockVersionRequest,
+    DescribeRequest,
     EditBlockRequest,
     MixPreviewRequest,
     ProduceBlockRequest,
@@ -41,6 +42,7 @@ from .schemas import (
     ParsePromptRequest,
     PhoneticRequest,
     PreviewTakeRequest,
+    ReviseRequest,
     RenameRequest,
     SaveBlockFromJobRequest,
     SetLyricsRequest,
@@ -148,6 +150,38 @@ def parse_prompt_route(req: ParsePromptRequest) -> dict:
     form. Deterministic + rule-based — no model call."""
     from src.composition.nl_parser import parse_prompt
     return parse_prompt(req.prompt or "")
+
+
+def _describe_job(fn, *args, wait: bool) -> dict:
+    """Run an interpreter call inline (``wait``) or as a job the client polls
+    at ``/jobs/{id}`` (it can take a while: Claude or a waking local model)."""
+    if wait:
+        return fn(*args)
+    job = registry.create()
+    registry.run(job, lambda progress: fn(*args, progress))
+    return {"job_id": job.id}
+
+
+@router.post("/describe")
+def describe_route(req: DescribeRequest) -> dict:
+    """Plain-English description → a song plan (a /generate body) plus a short
+    "here's what I understood". Interpreted by Claude (AI request queue) when
+    an answerer is listening, else the local model, else the rules; the
+    response's ``interpreter`` says which (src/api/describe.py)."""
+    from . import describe
+    if not req.text.strip():
+        raise HTTPException(400, "Describe the song first")
+    return _describe_job(describe.describe, req.text, wait=req.wait)
+
+
+@router.post("/revise")
+def revise_route(req: ReviseRequest) -> dict:
+    """The current song plan + plain-English feedback → a revised plan, a
+    summary and the list of ``changes``."""
+    from . import describe
+    if not req.feedback.strip():
+        raise HTTPException(400, "Say what should change")
+    return _describe_job(describe.revise, req.plan, req.feedback, wait=req.wait)
 
 
 @router.post("/generate")
@@ -785,10 +819,26 @@ def compose_block_melody(name: str, req: SetLyricsRequest) -> dict:
 
 # --- AI request queue (answered by a Claude Code watch-loop) --------------
 @router.get("/ai/requests")
-def list_ai_requests(status: str | None = None) -> dict:
+def list_ai_requests(status: str | None = None, kind: str | None = None,
+                     answerer: str | None = None) -> dict:
     """Pending/answered AI requests. A Claude Code session polls
-    ``?status=pending``, composes each answer, and POSTs it back."""
-    return {"requests": ai_requests.list_requests(status)}
+    ``?status=pending`` (optionally ``&kind=describe,revise&answerer=<name>``),
+    composes each answer, and POSTs it back. Polling for pending work is the
+    answerer's heartbeat (see ``ai_requests.answerer_alive``)."""
+    kinds = {k.strip() for k in (kind or "").split(",") if k.strip()} or None
+    if status == "pending":
+        ai_requests.beat(answerer or "anon", kinds)
+    return {"requests": ai_requests.list_requests(status, kinds)}
+
+
+@router.post("/ai/requests/{rid}/claim")
+def claim_ai_request(rid: str, answerer: str | None = None) -> dict:
+    """An answerer takes a pending request before working on it. 409 when it
+    is gone or already taken (the app may have fallen back and withdrawn it)."""
+    rec = ai_requests.claim(rid, answerer or "")
+    if rec is None:
+        raise HTTPException(409, "Request is not pending")
+    return rec
 
 
 @router.get("/ai/requests/{rid}")

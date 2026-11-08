@@ -167,18 +167,36 @@ export interface SongRenderResult {
 
 // Result of POST /api/parse-prompt — a natural-language description parsed
 // into Generate-form fields, plus a transparency report.
+// A song plan: a /generate body as the Describe interpreters produce it
+// (src/composition/song_plan.py). The Funk Fusion options (arrangement, lead
+// voice, hits, loudness) have no form controls; they ride along with the plan.
 export interface SongPlan {
   genre: string;
-  key: string | null;
-  scale: string | null;
-  tempo: number | null;
-  swing: number | null;
-  sections: string[];
-  section_presets: Record<string, string>;
-  section_overrides: Record<string, SectionOverride>;
-  instruments: string[];
+  key?: string;
+  scale?: string;
+  tempo?: number;
+  swing?: number;
+  seed?: number;
+  sections?: string[];
+  section_presets?: Record<string, string>;
+  section_overrides?: Record<string, SectionOverride>;
+  instruments?: string[];
+  arrangement?: string;
+  lead_patch?: string;
+  hits?: number[];
+  hit_style?: string;
+  target_lufs?: number;
+}
+
+// POST /api/describe and /api/revise.
+export interface DescribeResult {
+  plan: SongPlan;
+  summary: string;
   understood: string[];
   notes: string[];
+  interpreter: "claude" | "local" | "rules";
+  engine: string;
+  changes?: string[];
 }
 
 export interface SectionOverride {
@@ -191,6 +209,7 @@ export interface SectionOverride {
   bars?: number;
   progression?: string[];    // per-section chord progression (roman numerals)
   instruments?: string[];    // per-section instrument subset (ids); empty = all
+  arrangement?: string;      // per-section arrangement variant (Funk Fusion)
 }
 
 // Progression choices for the section builder (from GET /presets).
@@ -218,4 +237,10 @@ export interface GenerateBody {
   master_preset: string;
   save_as_block?: boolean;
   block_name?: string | null;
+  // Engine options a described plan carries (no form controls).
+  arrangement?: string;
+  lead_patch?: string;
+  hits?: number[];
+  hit_style?: string;
+  target_lufs?: number;
 }

@@ -726,7 +726,8 @@ def compose_song(
                 lead_voice=lead_voice,
                 hit_style=hit_style,
                 stops=tuple((float(a), float(b)) for a, b in (stops or ()) if float(b) > 0),
-                arrangement=arrangement or "",
+                arrangement=(section["arrangement"] if section.get("arrangement") is not None
+                             else arrangement) or "",
             )
             try:
                 apply_technique(midi, technique, ctx)

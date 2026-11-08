@@ -19,6 +19,18 @@ API_OUT = PROJECT_ROOT / "data" / "outputs" / "api"
 _KEEP_RECENT_JOBS = 30
 
 
+def _normalize_wav(wav_path: Path, target_lufs: float) -> float:
+    """Set a rendered mix to ``target_lufs`` (integrated, −1 dBFS ceiling) in
+    place; returns the measured loudness. Same leveller as video scores."""
+    import soundfile as sf
+    from src.audio_processing.render.loudness import integrated_lufs, normalize
+    audio, sr = sf.read(str(wav_path), always_2d=True)
+    info = sf.info(str(wav_path))
+    out, _ = normalize(audio.T.astype("float32"), sr, target_lufs)
+    sf.write(str(wav_path), out.T, sr, subtype=info.subtype)
+    return round(integrated_lufs(out, sr), 1)
+
+
 def _prune_old_job_dirs(keep: int = _KEEP_RECENT_JOBS) -> None:
     try:
         dirs = [p for p in API_OUT.iterdir() if p.is_dir()]
@@ -122,6 +134,9 @@ def run_generation(req, progress, job_id: str) -> dict:
         lead_patch=getattr(req, "lead_patch", None),
     )
     wav_path = Path(render.mix_path)
+    loudness = None
+    if getattr(req, "target_lufs", None) is not None:
+        loudness = _normalize_wav(wav_path, float(req.target_lufs))
     mp3_path: Path | None = job_dir / "mix.mp3"
     if not block_store.write_preview_mp3(wav_path, mp3_path):
         mp3_path = None
@@ -147,6 +162,7 @@ def run_generation(req, progress, job_id: str) -> dict:
              **({"knobs": s["knobs"]} if s.get("knobs") else {}),
              **({"energy": s["energy"]} if s.get("energy") is not None else {}),
              **({"feature_lead": True} if s.get("feature_lead") else {}),
+             **({"arrangement": s["arrangement"]} if s.get("arrangement") is not None else {}),
              **({"key": s["key"]} if s.get("key") else {}),
              **({"scale": s["scale"]} if s.get("scale") else {}),
              **({"tempo": s["tempo"]} if s.get("tempo") is not None else {})}
@@ -204,6 +220,7 @@ def run_generation(req, progress, job_id: str) -> dict:
         ],
         "saved_block": saved_block,
         "section_blocks": section_blocks,
+        "loudness_lufs": loudness,
         "_paths": {
             "midi": str(midi_path),
             "audio_mp3": str(mp3_path) if mp3_path else None,

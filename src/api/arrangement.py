@@ -145,8 +145,8 @@ def _attach_presets(secs: list[dict], genre: str,
 def _attach_overrides(secs: list[dict],
                       section_overrides: dict[str, dict] | None) -> list[dict]:
     """Apply per-role playing-style overrides onto each section: ``knobs``
-    (merged into the section's knobs), ``energy`` (the section's level), and
-    ``feature_lead`` (force the solo/lead into it)."""
+    (merged into the section's knobs), ``energy`` (the section's level),
+    ``feature_lead`` (force the solo/lead into it) and ``arrangement``."""
     ov = section_overrides or {}
     for s in secs:
         o = ov.get(s.get("role"))
@@ -161,6 +161,10 @@ def _attach_overrides(secs: list[dict],
                 pass
         if o.get("feature_lead"):
             s["feature_lead"] = True
+        # Per-section arrangement variant (e.g. a calm first verse), overriding
+        # the song's ``arrangement`` for this section only.
+        if isinstance(o.get("arrangement"), str):
+            s["arrangement"] = o["arrangement"]
         # Per-section key / mode / tempo (full flexibility).
         if o.get("key"):
             s["key"] = str(o["key"])
