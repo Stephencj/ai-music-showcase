@@ -30,13 +30,14 @@ from src.daw_integration.generic.styles import STYLES  # noqa: E402
 GENRES = tuple(christmas.STYLE_IDS)
 
 
-def compose(genre: str, tune: str, seed: int = 3, length: float = 150, arrangement: str = ""):
+def compose(genre: str, tune: str, seed: int = 3, length: float = 150, arrangement: str = "",
+            overrides: dict | None = None):
     band = christmas.band_for(list(STYLES[genre].default_instruments), arrangement)
     plan = christmas.plan_song(genre, seed=seed, tune=tune, length_seconds=length, arrangement=arrangement,
                                instruments=band)
     out_dir = tempfile.mkdtemp(prefix="xmas_")
     try:
-        out = compose_song(genre=genre, sections=plan["sections"], seed=seed, key=plan["key"], scale=plan["scale"],
+        out = compose_song(genre=genre, sections=christmas.apply_overrides(plan["sections"], overrides), seed=seed, key=plan["key"], scale=plan["scale"],
                            tempo=plan["tempo"], time_signature=plan["time_signature"], arrangement=arrangement,
                            enabled_instruments=tuple(band), output_dir=Path(out_dir), skip_audio=True)
         pm = pretty_midi.PrettyMIDI(out["midi_path"])
@@ -284,6 +285,27 @@ class ArrangementTests(unittest.TestCase):
         used |= set(christmas.ARRANGEMENT_INSTRUMENTS)               # variants that bring a player
         self.assertEqual(set(christmas.ARRANGEMENT_VARIANTS) - used, set(), "catalogued variant no code reads")
         self.assertEqual(used - set(christmas.ARRANGEMENT_VARIANTS), set(), "variant read but not catalogued")
+
+    def test_timeline_silences_the_choir_in_a_section(self):
+        # The Timeline's Choir lane rests a section with an instrument mask
+        # that leaves out "choir": its pad and the tune it sings go quiet there.
+        g = "christmas_choir_full"
+        mask = [i for i in STYLES[g].default_instruments if i != "choir"]
+        plan, full = compose(g, "silent_night")
+        _p, rest = compose(g, "silent_night", overrides={"chorus": {"instruments": mask}})
+        beat = 60 / plan["tempo"]
+        def choir_in(pm, sec):
+            # (a beat in from each end: pickups and early attacks of its neighbours)
+            a = (sec["start_bar"] * plan["time_signature"][0] + 1) * beat
+            b = ((sec["end_bar"] + 1) * plan["time_signature"][0] - 1) * beat
+            return sum(1 for i in pm.instruments if i.name.startswith("Choir") for n in i.notes if a <= n.start < b)
+        for sec in plan["sections"]:
+            if sec["role"] == "chorus":
+                self.assertGreater(choir_in(full, sec), 0)
+                self.assertEqual(choir_in(rest, sec), 0)
+            elif sec["role"] == "outro":                                       # still sings the Amen
+                self.assertEqual(choir_in(rest, sec), choir_in(full, sec))
+                self.assertGreater(choir_in(rest, sec), 0)
 
 
 class SongPlanTests(unittest.TestCase):

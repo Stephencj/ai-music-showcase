@@ -192,3 +192,69 @@ test("timeline: scrub the waveform, play from a section, silence a part / a cell
     await deleteSessions(request, [await currentSessionId(page)]);
   }
 });
+
+test("timeline: a choir carol has a Choir lane that can be silenced in a section and removed", async ({ page }) => {
+  test.setTimeout(1_200_000);
+  await freshCreate(page);
+  try {
+    let gen = nextGenerate(page);
+    await page.getByTestId("session-input").fill("Church choir Silent Night, background, about a minute");
+    await page.getByTestId("session-input-send").click();
+    const r1 = await gen;
+    const b1 = bodyOf(r1);
+    expect(b1.genre).toBe("christmas_choir_full");
+    await expect(page.getByTestId("version-1")).toHaveAttribute("data-status", "done", { timeout: GEN_TIMEOUT });
+
+    await page.getByTestId("open-timeline").click();
+    const tl = page.getByTestId("timeline");
+    await expect(tl).toBeVisible();
+    const names = await tl.locator(".ws-sec").allTextContents();
+    const chorus = names.findIndex((t) => /chorus/i.test(t));
+    expect(chorus).toBeGreaterThanOrEqual(0);
+
+    // The choir is its own lane (not folded into Keys with the organ).
+    const choir = page.getByTestId("lane-choir");
+    await expect(choir).toBeVisible();
+    await expect(choir).not.toHaveClass(/muted/);
+    await expect(page.getByTestId("lane-name-choir")).toHaveText("Choir");
+    await expect(page.getByTestId(`cell-choir-${chorus}`)).toHaveText("on");
+    await expect(page.getByTestId("lane-keys")).toBeVisible();
+    await shot(page, "choir-lane");
+
+    // ---- silence the choir in the chorus ----------------------------------
+    await page.getByTestId(`cell-choir-${chorus}`).click();
+    await expect(page.getByTestId("silence-here")).toHaveText("Silence choir here");
+    gen = nextGenerate(page);
+    await page.getByTestId("silence-here").click();
+    const b2 = bodyOf(await gen);
+    const mask = b2.section_overrides?.chorus?.instruments ?? [];
+    expect(mask).not.toContain("choir");
+    expect(mask).toContain("organ_church");
+    await versionDone(page, 2);
+    await expect(page.getByTestId(`cell-choir-${chorus}`)).toHaveText("rest");
+    await expect(page.getByTestId(`cell-keys-${chorus}`)).not.toHaveText(/^(rest)?$/);
+    await expect(page.getByTestId("silence-here")).toHaveText("Bring choir back here");
+    await shot(page, "choir-silenced");
+
+    // ---- remove the choir from the whole song, then bring it back ---------
+    await page.getByTestId("lane-name-choir").click();
+    await expect(page.getByTestId("lane-panel")).toContainText("Choir · whole song");
+    gen = nextGenerate(page);
+    await page.getByTestId("lane-remove").click();
+    const b3 = bodyOf(await gen);
+    expect(b3.instruments).not.toContain("choir");
+    expect(b3.instruments).toContain("organ_church");
+    await versionDone(page, 3);
+    await expect(choir).toHaveClass(/muted/);
+    await expect(choir.locator(".ws-cell:not(.off)")).toHaveCount(0);
+    await page.getByTestId("lane-name-choir").click();
+    await expect(page.getByTestId("lane-restore")).toHaveText("Bring choir back");
+    gen = nextGenerate(page);
+    await page.getByTestId("lane-restore").click();
+    expect(bodyOf(await gen).instruments).toContain("choir");
+    await versionDone(page, 4);
+    await expect(choir).not.toHaveClass(/muted/);
+  } finally {
+    await deleteSessions(page.request, [await currentSessionId(page)]);
+  }
+});
