@@ -153,9 +153,21 @@ _COUNTER = {
     "pop": ("string_section",),
 }
 
+# What each instrument can actually play (concert pitch, MIDI lo, hi): every
+# part is kept inside it (the melody by its octave, any other note folded by
+# octaves). The sampled libraries stop near these too (the alto sax at Ab5).
+PLAYABLE: dict[str, tuple[int, int]] = {
+    "piano": (21, 108), "upright_bass": (28, 67), "electric_bass": (28, 67), "contrabass": (28, 67),
+    "bassoon": (34, 75), "cello": (36, 76), "violin": (55, 100), "string_section": (28, 100), "harp": (24, 103),
+    "nylon_guitar": (40, 83), "acoustic_guitar": (40, 83), "choir": (40, 81), "organ_church": (24, 96),
+    "sax_alto": (49, 80), "sax_tenor": (44, 75), "sax_baritone": (36, 69), "muted_trumpet": (52, 82),
+    "trumpet": (52, 82), "trombone": (40, 72), "french_horn": (34, 77), "flute": (60, 96), "clarinet": (50, 91),
+    "oboe": (58, 91), "glockenspiel": (79, 108), "celesta": (60, 108), "synth_lead": (36, 96),
+}
+
 # Instrument registers (MIDI lo, hi) for the melody.
 _RANGE = {
-    "flute": (67, 93), "clarinet": (55, 84), "oboe": (62, 86), "sax_tenor": (52, 76), "sax_alto": (61, 84),
+    "flute": (67, 93), "clarinet": (55, 84), "oboe": (62, 86), "sax_tenor": (52, 75), "sax_alto": (58, 80),
     "muted_trumpet": (58, 82), "string_section": (67, 91), "cello": (48, 72), "piano": (62, 86),
     "glockenspiel": (79, 103), "celesta": (72, 96), "choir": (62, 79), "organ_church": (62, 84),
     "synth_lead": (60, 84), "nylon_guitar": (55, 79), "acoustic_guitar": (55, 79), "french_horn": (53, 77),
@@ -877,7 +889,15 @@ class _Sec:
         lo, hi = lo_hi or _RANGE.get(inst, (60, 84))
         mid = (lo + hi) / 2
         cur = (self.range[0] + self.range[1]) / 2
-        return int(12 * round((mid - cur) / 12))
+        shift = int(12 * round((mid - cur) / 12))
+        # Never past what the instrument can play: an octave down (or up)
+        # when the tune in this key would leave its range and still fits.
+        pl, ph = PLAYABLE.get(inst, (0, 127))
+        while self.range[1] + shift > ph and self.range[0] + shift - 12 >= pl:
+            shift -= 12
+        while self.range[0] + shift < pl and self.range[1] + shift + 12 <= ph:
+            shift += 12
+        return shift
 
     @property
     def strings_end(self) -> bool:
@@ -1557,6 +1577,23 @@ def _declash(sec: _Sec, notes: list[NoteEvent], *, keep_roots: bool = False) -> 
 # Dispatch: one technique per instrument
 # ---------------------------------------------------------------------------
 
+def in_range(notes: list[NoteEvent], inst: str) -> list[NoteEvent]:
+    """Fold any note outside what ``inst`` can play by octaves into its range
+    (a passing note an embellishment or a voicing pushed over the top)."""
+    if inst not in PLAYABLE:
+        return notes
+    lo, hi = PLAYABLE[inst]
+    out = []
+    for n in notes:
+        p = n.pitch
+        while p > hi and p - 12 >= lo:
+            p -= 12
+        while p < lo and p + 12 <= hi:
+            p += 12
+        out.append(n if p == n.pitch else NoteEvent(pitch=p, start=n.start, end=n.end, velocity=n.velocity))
+    return out
+
+
 def _emit_named(midi, notes: list[NoteEvent], name: str, program: int, is_drum: bool = False) -> None:
     if not notes:
         return
@@ -1595,6 +1632,7 @@ def _emit_melody(midi, ctx: TechniqueContext, sec: _Sec, inst: str, guide: bool 
     if sec.strings_end and sec.kind == "outro" and inst != "string_section" and sec.hold_from:
         cut = sec.t(sec.hold_from)
         notes = [NoteEvent(n.pitch, n.start, min(n.end, cut + 0.3), n.velocity) for n in notes if n.start < cut - 0.05]
+    notes = in_range(notes, inst)
     _emit_named(midi, notes, f"Guide Melody ({label})" if guide else f"{label} Melody", program)
 
 
@@ -1694,8 +1732,8 @@ def play(midi, ctx: TechniqueContext, inst: str) -> None:
         notes = _choir(sec, lead)
     elif inst == "organ_church":
         manual, pedal = _organ(sec, lead)
-        _emit(midi, ctx, _declash(sec, manual), name="Organ", program=19)
-        _emit_named(midi, _declash(sec, pedal, keep_roots=True), "Organ Pedal Bass", 19)
+        _emit(midi, ctx, in_range(_declash(sec, manual), inst), name="Organ", program=19)
+        _emit_named(midi, in_range(_declash(sec, pedal, keep_roots=True), inst), "Organ Pedal Bass", 19)
         return
     elif inst == "string_section":
         notes = _strings(sec, lead)
@@ -1746,6 +1784,7 @@ def play(midi, ctx: TechniqueContext, inst: str) -> None:
         notes = [NoteEvent(n.pitch, n.start, min(n.end, cut + 0.3), n.velocity) for n in notes]
     if notes and inst not in ("sleigh_bells", "shaker"):
         notes = _declash(sec, notes, keep_roots=inst in _BASSES or inst == "cello")
+    notes = in_range(notes, inst)
     if notes:
         prog = {"sleigh_bells": 112, "shaker": 113}.get(inst, 0)
         _emit(midi, ctx, notes, name=inst.replace("_", " ").title(), program=prog)
