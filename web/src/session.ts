@@ -16,6 +16,7 @@ export interface SVersion {
   result?: JobResult;
   error?: string;
   savedAs?: string;            // block name once saved to the library
+  from?: number;               // the version it was made from (Undo goes back to it)
 }
 
 export interface SMsg {
@@ -182,6 +183,85 @@ export function withSectionEdit(plan: SongPlan, role: string, edit: SectionEdit,
     if (add.length) next.instruments = [...band, ...add];
   }
   return next;
+}
+
+// ---------------------------------------------------------------------------
+// Timeline edits that silence things: a part everywhere, a part in one
+// section (a per-section instrument mask) or a whole section.
+// ---------------------------------------------------------------------------
+export const bandOf = (plan: SongPlan, defaultBand: string[]) =>
+  plan.instruments?.length ? plan.instruments : defaultBand;
+
+/** The plan without a part's instruments. Variants that need them go too
+ *  (else they'd bring them back), and section masks drop them. */
+export function withoutInstruments(plan: SongPlan, ids: string[], opts: ArrangementOptions | null,
+  defaultBand: string[]): { plan: SongPlan; dropped: string[] } {
+  const gone = new Set(ids);
+  const needy = new Set((opts?.variants ?? []).filter((v) => v.needs_instruments.some((i) => gone.has(i))).map((v) => v.name));
+  const dropped = new Set<string>();
+  const keep = (a: string | undefined) => {
+    const vs = splitVariants(a);
+    vs.filter((v) => needy.has(v)).forEach((v) => dropped.add(v));
+    return vs.filter((v) => !needy.has(v)).join(",");
+  };
+  const next: SongPlan = { ...plan, instruments: bandOf(plan, defaultBand).filter((i) => !gone.has(i)) };
+  if (plan.arrangement != null) next.arrangement = keep(plan.arrangement);
+  const so: Record<string, SectionOverride> = {};
+  for (const [role, o] of Object.entries(plan.section_overrides || {})) {
+    const c: SectionOverride = { ...o };
+    if (c.arrangement != null) c.arrangement = keep(c.arrangement);
+    if (c.instruments?.length) {
+      c.instruments = c.instruments.filter((i) => !gone.has(i));
+      if (!c.instruments.length) delete c.instruments;
+    }
+    if (Object.keys(c).length) so[role] = c;
+  }
+  next.section_overrides = so;
+  return { plan: next, dropped: [...dropped] };
+}
+
+/** The plan with instruments (back) in the band. */
+export function withInstruments(plan: SongPlan, ids: string[], defaultBand: string[]): SongPlan {
+  const band = bandOf(plan, defaultBand);
+  return { ...plan, instruments: [...band, ...ids.filter((i) => !band.includes(i))] };
+}
+
+/** Silence (or bring back) some instruments in every section of a role: the
+ *  section's instrument mask (empty = the whole band plays). */
+export function withSectionSilence(plan: SongPlan, role: string, ids: string[], silent: boolean,
+  defaultBand: string[]): SongPlan {
+  const band = bandOf(plan, defaultBand);
+  const cur = plan.section_overrides?.[role]?.instruments;
+  const mask = cur?.length ? cur.filter((i) => band.includes(i)) : band;
+  const nextMask = silent ? mask.filter((i) => !ids.includes(i))
+    : [...mask, ...ids.filter((i) => band.includes(i) && !mask.includes(i))];
+  const o: SectionOverride = { ...(plan.section_overrides?.[role] || {}) };
+  if (band.every((i) => nextMask.includes(i))) delete o.instruments; else o.instruments = nextMask;
+  const so = { ...(plan.section_overrides || {}) };
+  if (Object.keys(o).length) so[role] = o; else delete so[role];
+  return { ...plan, section_overrides: so };
+}
+
+/** The plan with one more section removed. ``shown`` is its index in the
+ *  version's section list, which already leaves out earlier removals. */
+export function withoutSection(plan: SongPlan, shown: number): SongPlan {
+  const gone = [...(plan.remove_sections ?? [])].sort((a, b) => a - b);
+  let k = 0;
+  for (let seen = -1; ; k++) {
+    if (gone.includes(k)) continue;
+    if (++seen === shown) break;
+  }
+  return { ...plan, remove_sections: [...gone, k].sort((a, b) => a - b) };
+}
+
+/** Where each section starts, in seconds: from the rendered MIDI when the
+ *  server has it, else from the tempo and bar lengths. */
+export function sectionStarts(bars: number[], tempo: number, timeSig: number[] | undefined,
+  fromServer?: number[]): number[] {
+  if (fromServer && fromServer.length === bars.length) return fromServer;
+  const [n, d] = timeSig?.length === 2 ? timeSig : [4, 4];
+  const barSec = (n * (4 / d) * 60) / (tempo || 120);
+  return bars.reduce<number[]>((acc, _b, i) => [...acc, i ? acc[i - 1] + bars[i - 1] * barSec : 0], []);
 }
 
 /** What a part plays in a section, as a short cell label ("" = sits out). */

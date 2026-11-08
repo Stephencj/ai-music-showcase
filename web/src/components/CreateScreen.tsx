@@ -104,9 +104,9 @@ export default function CreateScreen({
   }
 
   // Start a new version from a plan; resolves when it's done (or failed).
-  async function makeVersion(plan: SongPlan, n: number) {
+  async function makeVersion(plan: SongPlan, n: number, from?: number) {
     setSession((s) => ({
-      ...s, versions: [...s.versions, { n, plan, jobId: null, status: "running", progress: 0, message: "Starting…" }],
+      ...s, versions: [...s.versions, { n, plan, from, jobId: null, status: "running", progress: 0, message: "Starting…" }],
     }));
     setSelected(null);
     const body: GenerateBody = {
@@ -155,7 +155,7 @@ export default function CreateScreen({
         } else {
           const n = allocN();
           patchMsg(pid, { kind: "revise", text: r.summary, changes, notes: r.notes, interpreter: r.interpreter, version: n });
-          await makeVersion(base.seed != null ? { ...r.plan, seed: base.seed } : r.plan, n);
+          await makeVersion(base.seed != null ? { ...r.plan, seed: base.seed } : r.plan, n, (shown ?? latest)?.n);
         }
       }
     } catch (e) {
@@ -165,17 +165,21 @@ export default function CreateScreen({
     }
   }
 
-  // Timeline: regenerate one section with its new options, same seed.
-  async function regenerateSection(role: string, label: string, edit: SectionEdit, changes: string[]) {
+  // Timeline edits: a new version from the plan on screen, same seed.
+  async function editPlan(edit: (plan: SongPlan) => SongPlan, said: string, changes: string[]) {
     const base = basePlan();
     if (!base || busy) return;
     setBusy(true);
-    const plan = withSectionEdit(base, role, edit, arrOpts, defaultBand(base.genre));
+    const plan = edit(base);
     const n = allocN();
-    addMsg({ role: "user", text: `Regenerate the ${label.toLowerCase()}` });
+    addMsg({ role: "user", text: said });
     addMsg({ role: "app", kind: "section", changes, version: n });
-    try { await makeVersion(plan, n); } finally { setBusy(false); }
+    try { await makeVersion(plan, n, (shown ?? latest)?.n); } finally { setBusy(false); }
   }
+  // Timeline: regenerate one section with its new options.
+  const regenerateSection = (role: string, label: string, edit: SectionEdit, changes: string[]) =>
+    editPlan((base) => withSectionEdit(base, role, edit, arrOpts, defaultBand(base.genre)),
+      `Regenerate the ${label.toLowerCase()}`, changes);
 
   async function saveVersion(v: SVersion): Promise<string> {
     if (!v.jobId) throw new Error("This version has no audio");
@@ -228,7 +232,7 @@ export default function CreateScreen({
           lanes={lanes} arrOpts={arrOpts} defaultBand={defaultBand}
           genreName={(g) => presets.find((p) => p.id === g)?.name ?? g}
           onPickVersion={setSelected} onBack={() => setMode("session")} onSend={send}
-          onRegenerate={regenerateSection} onAddBlock={addBlock} />
+          onRegenerate={regenerateSection} onEdit={editPlan} onAddBlock={addBlock} />
       </div>
       <div className={"tab-pane" + (mode === "advanced" ? "" : " hidden")}>
         <SubHeader title="Advanced form" onBack={() => setMode("session")} />

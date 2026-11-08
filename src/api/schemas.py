@@ -33,6 +33,10 @@ class GenerateRequest(BaseModel):
     # drum_fill); `energy` sets that section's level directly (sparse/big);
     # `feature_lead` forces the lead/solo into that section.
     section_overrides: dict[str, dict] = Field(default_factory=dict)
+    # Sections to leave out, as indices into the arranged section list (the
+    # one ``sections`` builds, repeats included), e.g. [3] drops the bridge of
+    # intro/verse/chorus/bridge/…; the rest close up (Create → Timeline).
+    remove_sections: list[int] = Field(default_factory=list)
     # Hit points, in seconds from the start of the song: the band lands an
     # accent there (snapped to the nearest 16th), e.g. a stab on each caption
     # of a video. Honoured by styles that support it (Funk Fusion).

@@ -98,10 +98,14 @@ def fit_length(genre: str, roles: list[str], overrides: dict[str, dict] | None,
 
 def build_sections(genre: str, roles: list[str],
                    section_presets: dict[str, str] | None = None,
-                   section_overrides: dict[str, dict] | None = None) -> list[dict]:
+                   section_overrides: dict[str, dict] | None = None,
+                   remove: list[int] | None = None) -> list[dict]:
     """Contiguous ``{start_bar, end_bar, label, role}`` for the chosen roles
     in canonical order. Empty ``roles`` → the genre's full default
     arrangement. Bar-lengths/labels come from the template when present.
+
+    ``remove`` (optional) lists indices of the arranged sections to leave out
+    (one verse of two, say); the rest close up. It never empties the song.
 
     ``section_presets`` (optional) maps a role → preset id, attaching a
     ``preset_id`` to every section of that role so ``compose_song`` renders it
@@ -135,13 +139,23 @@ def build_sections(genre: str, roles: list[str],
     _attach_presets(secs, genre, section_presets)
     _attach_overrides(secs, section_overrides)
     _relayout_bars(secs)
-    return secs
+    return drop_sections(secs, remove)
 
 
-def _relayout_bars(secs: list[dict]) -> list[dict]:
+def drop_sections(secs: list[dict], remove: list[int] | None) -> list[dict]:
+    """The sections without the ones at the ``remove`` indices, the rest
+    closed up (bars re-flowed). Never empties the song."""
+    drop = {int(i) for i in (remove or ())} & set(range(len(secs)))
+    if not drop or len(drop) == len(secs):
+        return secs
+    return _relayout_bars([s for i, s in enumerate(secs) if i not in drop], force=True)
+
+
+def _relayout_bars(secs: list[dict], force: bool = False) -> list[dict]:
     """Apply per-section bar-length overrides and re-flow the bar boundaries so
-    the song stays contiguous (resizing one section shifts everything after)."""
-    if not any(s.get("bars_override") for s in secs):
+    the song stays contiguous (resizing or removing one section shifts
+    everything after)."""
+    if not force and not any(s.get("bars_override") for s in secs):
         return secs
     cursor = 0
     for s in secs:

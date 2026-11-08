@@ -299,6 +299,18 @@ def job_audio_hifi(job_id: str) -> FileResponse:
     return _serve(_job_path(job_id, "audio_wav"), "audio/wav")
 
 
+@router.get("/jobs/{job_id}/peaks")
+def job_peaks(job_id: str, buckets: int = 400) -> dict:
+    """The version's waveform peaks + section start times (Create timeline)."""
+    job = registry.get(job_id)
+    if job is None or job.status != "done":
+        raise HTTPException(404, "Job not found or not finished")
+    data = service.job_peaks(job.result, max(16, min(2000, buckets)))
+    if data is None:
+        raise HTTPException(404, "No audio to derive peaks from")
+    return data
+
+
 @router.get("/jobs/{job_id}/pdf")
 def job_pdf(job_id: str) -> FileResponse:
     return _serve(_job_path(job_id, "pdf"), "application/zip", download=True)

@@ -80,7 +80,7 @@ def run_generation(req, progress, job_id: str) -> dict:
     from src.scoring.pdf_export import export_zip
     from src.daw_integration.generic import blocks as block_store
     from src.daw_integration.generic import block_concat
-    from .arrangement import build_sections, fit_length
+    from .arrangement import build_sections, drop_sections, fit_length
 
     genre = req.genre
     preset = STYLES.get(genre)
@@ -111,6 +111,7 @@ def run_generation(req, progress, job_id: str) -> dict:
             length_seconds=getattr(req, "length_seconds", None), arrangement=getattr(req, "arrangement", None) or "",
             instruments=band)
         secs = christmas.apply_overrides(plan["sections"], getattr(req, "section_overrides", None))
+        secs = drop_sections(secs, getattr(req, "remove_sections", None))
         eff_key, eff_scale, eff_tempo = plan["key"], plan["scale"], float(plan["tempo"])
         ts = tuple(plan["time_signature"])
         lead_patch = lead_patch or christmas.DEFAULT_LEAD_PATCH
@@ -121,7 +122,8 @@ def run_generation(req, progress, job_id: str) -> dict:
         overrides = getattr(req, "section_overrides", None)
         if getattr(req, "length_seconds", None):
             overrides = fit_length(genre, req.sections, overrides, eff_tempo, float(req.length_seconds))
-        secs = build_sections(genre, req.sections, getattr(req, "section_presets", None), overrides)
+        secs = build_sections(genre, req.sections, getattr(req, "section_presets", None), overrides,
+                              getattr(req, "remove_sections", None))
 
     job_dir = API_OUT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -550,6 +552,47 @@ def mix_preview(name: str, track_mix=None, master_preset: str = "default") -> st
 
 def mix_preview_path(key: str) -> Path:
     return _MIX_PREVIEW_DIR / f"{Path(key).name}.mp3"
+
+
+def job_peaks(result: dict, buckets: int = 400) -> dict | None:
+    """A finished song's waveform for the Create timeline: ``buckets`` evenly
+    spaced peaks of the mix, its length, and where each section starts (in
+    seconds, from the MIDI's downbeats) so the waveform lines up with the
+    section columns. Cached beside the job's audio."""
+    import json
+    import pretty_midi
+    from src.daw_integration.generic import blocks as block_store
+
+    paths = result.get("_paths") or {}
+    wav = paths.get("audio_wav")
+    if not wav or not Path(wav).exists():
+        return None
+    cache = Path(wav).with_name(f"peaks_{buckets}.json")
+    if cache.exists():
+        try:
+            return json.loads(cache.read_text())
+        except ValueError:
+            pass
+    peaks = block_store.wav_peaks(Path(wav), buckets)
+    if peaks is None:
+        return None
+    import soundfile as sf
+    duration = float(sf.info(str(wav)).duration)
+    secs = (result.get("_split") or {}).get("sections") or []
+    starts: list[float] = []
+    try:
+        downbeats = pretty_midi.PrettyMIDI(paths["midi"]).get_downbeats()
+        starts = [round(float(downbeats[s["start_bar"]]), 3) for s in secs
+                  if s["start_bar"] < len(downbeats)]
+    except Exception:  # noqa: BLE001 — the timeline falls back to tempo math
+        starts = []
+    data = {"peaks": peaks, "duration": round(duration, 3),
+            "section_starts": starts if len(starts) == len(secs) else []}
+    try:
+        cache.write_text(json.dumps(data))
+    except OSError:
+        pass
+    return data
 
 
 _LIVE_STEMS_DIR = API_OUT / "_live_stems"

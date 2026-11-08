@@ -186,6 +186,7 @@ export interface SongPlan {
   hits?: number[];
   hit_style?: string;
   target_lufs?: number;
+  remove_sections?: number[];   // arranged-section indices left out (Timeline → Remove section)
 }
 
 // POST /api/describe and /api/revise.
@@ -243,4 +244,5 @@ export interface GenerateBody {
   hits?: number[];
   hit_style?: string;
   target_lufs?: number;
+  remove_sections?: number[];
 }

@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as api from "../api";
-import type { Block } from "../types";
+import type { Block, SongPlan } from "../types";
 import {
   LANES, type LaneId, SECTION_NAME, SECTION_SHORT, type SVersion, type SectionEdit, type Session, VARIANT_UI,
-  cellLabel, fmtTime, sectionVariants, splitVariants, toggleVariant, variantLabel,
+  bandOf, cellLabel, fmtTime, sectionStarts, sectionVariants, splitVariants, toggleVariant, variantLabel,
+  withInstruments, withSectionSilence, withoutInstruments, withoutSection,
 } from "../session";
 import Composer from "./Composer";
 import PickerField from "./PickerField";
+import { drawPeaks } from "./Sparkline";
 
 // Section options for engines without arrangement variants (energy / solo).
 const PLAIN_OPTS: { id: string; label: string; edit: SectionEdit }[] = [
@@ -21,7 +23,7 @@ const chipRank = (v: string) => (CHIP_ORDER.includes(v) ? CHIP_ORDER.indexOf(v) 
 /** Create → Timeline: the song's sections across, its parts down. */
 export default function TimelineView({
   session, version, busy, active, lanes, arrOpts, defaultBand, genreName,
-  onPickVersion, onBack, onSend, onRegenerate, onAddBlock,
+  onPickVersion, onBack, onSend, onRegenerate, onEdit, onAddBlock,
 }: {
   session: Session;
   version?: SVersion;
@@ -35,9 +37,12 @@ export default function TimelineView({
   onBack: () => void;
   onSend: (text: string) => void;
   onRegenerate: (role: string, label: string, edit: SectionEdit, changes: string[]) => Promise<void>;
+  /** A new version from the plan on screen, changed by ``edit``, same seed. */
+  onEdit: (edit: (plan: SongPlan) => SongPlan, said: string, changes: string[]) => Promise<void>;
   onAddBlock: (v: SVersion, afterIndex: number, block: string) => Promise<void>;
 }) {
   const [sel, setSel] = useState<number | null>(null);         // selected section index
+  const [laneSel, setLaneSel] = useState<LaneId | null>(null); // lane whose name was tapped (whole-song options)
   const [lane, setLane] = useState<LaneId | null>(null);       // lane filter for the option chips
   const [draft, setDraft] = useState<SectionEdit | null>(null);
   const [more, setMore] = useState(false);
@@ -52,9 +57,15 @@ export default function TimelineView({
   const totalBars = sections.reduce((s, x) => s + x.bars, 0) || 1;
   const starts = sections.reduce<number[]>((acc, _s, i) => [...acc, i ? acc[i - 1] + sections[i - 1].bars : 0], []);
   const funk = !!plan && !!arrOpts?.applies_to.includes(plan.genre);
-  const band = plan ? (plan.instruments?.length ? plan.instruments : defaultBand(plan.genre)) : [];
+  const band = plan ? bandOf(plan, defaultBand(plan.genre)) : [];
   const laneHas = (l: LaneId) => band.some((i) => lanes[i] === l);
-  const shownLanes = LANES.filter((l) => laneHas(l.id));
+  const laneIds = (l: LaneId) => band.filter((i) => lanes[i] === l);
+  // Parts removed from the song (in an earlier version) stay as muted lanes,
+  // so they can come back.
+  const removedIds = (l: LaneId) => [...new Set(session.versions.flatMap((v) => bandOf(v.plan, defaultBand(v.plan.genre))))]
+    .filter((i) => lanes[i] === l && !band.includes(i));
+  const shownLanes = LANES.filter((l) => laneHas(l.id) || removedIds(l.id).length);
+  const done = version?.status === "done";
 
   const secRole = sel != null ? sections[sel]?.role : undefined;
   const secName = secRole ? SECTION_NAME[secRole] ?? secRole : "";
@@ -64,10 +75,11 @@ export default function TimelineView({
   const curOv = (plan && secRole && plan.section_overrides?.[secRole]) || {};
 
   useEffect(() => { setDraft(null); setMore(false); }, [sel, version?.n]);
+  useEffect(() => { if (sel != null) setLaneSel(null); }, [sel]);
   const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (sel != null) panelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [sel]);
+    if (sel != null || laneSel) panelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [sel, laneSel]);
   // (While a version composes it has no sections yet; keep the selection.)
   useEffect(() => { if (result && sel != null && sel >= sections.length) setSel(null); }, [result, sections.length, sel]);
   useEffect(() => { if (active) api.getBlocks().then(setBlocks).catch(() => {}); }, [active]);
@@ -78,9 +90,23 @@ export default function TimelineView({
   const [t, setT] = useState(0);
   const [dur, setDur] = useState(0);
   const [loop, setLoop] = useState(false);
+  const [wave, setWave] = useState<{ peaks: number[]; duration: number; section_starts: number[] } | null>(null);
   const audioUrl = result?.urls.audio ? api.mediaUrl(result.urls.audio) : undefined;
-  const secTime = (i: number) => (dur * starts[i]) / totalBars;
+  const length = dur || wave?.duration || 0;
+  // Where each section starts and ends, in seconds (the last runs to the end).
+  const secStarts = useMemo(() => (result
+    ? sectionStarts(sections.map((s) => s.bars), result.tempo, result.time_signature, wave?.section_starts)
+    : starts.map((b) => (length * b) / totalBars)), [result, sections, wave, length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const secTime = (i: number) => secStarts[i] ?? 0;
+  const secEnd = (i: number) => (i + 1 < sections.length ? secTime(i + 1) : Math.max(length, secTime(i)));
   useEffect(() => { setT(0); setPlaying(false); }, [audioUrl]);
+  useEffect(() => {
+    setWave(null);
+    if (!done || !version?.jobId) return;
+    let live = true;
+    api.jobPeaks(version.jobId).then((w) => { if (live) setWave(w); }).catch(() => {});
+    return () => { live = false; };
+  }, [done, version?.jobId]);
   useEffect(() => { if (!active) audio.current?.pause(); }, [active]);
   useEffect(() => {
     if (!playing) return;
@@ -89,7 +115,7 @@ export default function TimelineView({
       const el = audio.current;
       if (el) {
         if (loop && sel != null && dur) {
-          const a = secTime(sel), b = sel + 1 < sections.length ? secTime(sel + 1) : dur;
+          const a = secTime(sel), b = secEnd(sel);
           if (el.currentTime >= b - 0.02 || el.currentTime < a - 0.25) el.currentTime = a;
         }
         setT(el.currentTime);
@@ -107,19 +133,67 @@ export default function TimelineView({
       el.play().catch(() => {});
     } else el.pause();
   }
-  function seek(e: React.MouseEvent<HTMLDivElement>) {
-    const el = audio.current, r = e.currentTarget.getBoundingClientRect();
-    if (!el || !dur) return;
-    el.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * dur;
+  function seekTo(time: number, play = false) {
+    const el = audio.current;
+    if (!el || !length) return;
+    el.currentTime = Math.max(0, Math.min(length, time));
     setT(el.currentTime);
+    if (play && el.paused) el.play().catch(() => {});
   }
-  const frac = dur ? t / dur : 0;
+  function seek(e: React.MouseEvent<HTMLDivElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    seekTo(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * length);
+  }
+  const frac = length ? t / length : 0;
   // Playhead: inside the section it's in (columns aren't exactly to scale).
   const secBtns = useRef<(HTMLButtonElement | null)[]>([]);
-  const atBar = frac * totalBars;
-  const atSec = starts.reduce((k, b, i) => (b <= atBar ? i : k), 0);
+  const secFrac = (i: number, time: number) => {
+    const a = secTime(i), b = secEnd(i);
+    return b > a ? Math.max(0, Math.min(1, (time - a) / (b - a))) : 0;
+  };
+  const atSec = secStarts.reduce((k, s, i) => (s <= t ? i : k), 0);
   const btn = secBtns.current[atSec];
-  const headLeft = btn ? btn.offsetLeft + btn.offsetWidth * Math.min(1, (atBar - starts[atSec]) / (sections[atSec]?.bars || 1)) : 0;
+  const headLeft = btn ? btn.offsetLeft + btn.offsetWidth * secFrac(atSec, t) : 0;
+  // The waveform under the section headers: tap or drag to scrub. A point
+  // in a column is that far through that section.
+  const scrubbing = useRef(false);
+  function timeAtX(x: number) {
+    const rects = secBtns.current.slice(0, sections.length).map((b) => b?.getBoundingClientRect());
+    let i = rects.findIndex((r, k) => r && (k === rects.length - 1 || x < (r.right + (rects[k + 1]?.left ?? r.right)) / 2));
+    if (i < 0) i = 0;
+    const r = rects[i];
+    if (!r) return 0;
+    const f = Math.max(0, Math.min(1, (x - r.left) / r.width));
+    return secTime(i) + f * (secEnd(i) - secTime(i));
+  }
+  function scrub(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.type === "pointerdown") {
+      scrubbing.current = true;
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
+    } else if (!scrubbing.current) return;
+    seekTo(timeAtX(e.clientX));
+  }
+  const endScrub = () => { scrubbing.current = false; };
+  const waveRow = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const row = waveRow.current;
+    if (!row || !wave || !length) return;
+    const draw = () => {
+      const n = wave.peaks.length;
+      row.querySelectorAll<HTMLCanvasElement>("canvas[data-sec]").forEach((cv) => {
+        const i = Number(cv.dataset.sec);
+        const a = Math.floor((secTime(i) / length) * n), b = Math.max(a + 1, Math.floor((secEnd(i) / length) * n));
+        const dpr = window.devicePixelRatio || 1;
+        cv.width = Math.max(1, Math.round(cv.clientWidth * dpr));
+        cv.height = Math.max(1, Math.round(cv.clientHeight * dpr));
+        drawPeaks(cv, wave.peaks.slice(a, b), "#5b6080");
+      });
+    };
+    draw();
+    const ro = new ResizeObserver(draw);
+    ro.observe(row);
+    return () => ro.disconnect();
+  }, [wave, length, secStarts, sections.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- section options ----------------------------------------------------
   const variantChips = funk
@@ -158,6 +232,51 @@ export default function TimelineView({
     if (draft.arrangement != null) edit.arrangement = draftVs.join(",");
     await onRegenerate(secRole, secName, edit, changes);
   }
+  // ---- silencing: a part everywhere, a part in this section, a section ----
+  const laneName = (l: LaneId) => LANES.find((x) => x.id === l)?.name ?? l;
+  const maskOf = (role: string) => plan?.section_overrides?.[role]?.instruments;
+  const restsIn = (l: LaneId, role: string) => {
+    const m = maskOf(role);
+    return !!m?.length && laneHas(l) && !m.some((id) => lanes[id] === l);
+  };
+  const editable = !busy && done;
+  const soundingLanes = shownLanes.filter((l) => laneHas(l.id)).length;
+  async function removeLane(l: LaneId) {
+    if (!plan) return;
+    const ids = laneIds(l), name = laneName(l);
+    const dropped = withoutInstruments(plan, ids, arrOpts, defaultBand(plan.genre)).dropped;
+    setLaneSel(null);
+    await onEdit((p) => withoutInstruments(p, ids, arrOpts, defaultBand(p.genre)).plan,
+      `Remove the ${name.toLowerCase()} from the song`,
+      [`${name}: removed from the song`, ...dropped.map((v) => `Arrangement: −${variantLabel(v)} (needs ${name.toLowerCase()})`)]);
+  }
+  async function restoreLane(l: LaneId) {
+    const ids = removedIds(l), name = laneName(l);
+    setLaneSel(null);
+    await onEdit((p) => withInstruments(p, ids, defaultBand(p.genre)),
+      `Bring the ${name.toLowerCase()} back`, [`${name}: back in the song`]);
+  }
+  async function silenceHere(l: LaneId, silent: boolean) {
+    if (!secRole) return;
+    const ids = laneIds(l), name = laneName(l).toLowerCase();
+    await onEdit((p) => withSectionSilence(p, secRole, ids, silent, defaultBand(p.genre)),
+      silent ? `Silence the ${name} in the ${secName.toLowerCase()}` : `Bring the ${name} back in the ${secName.toLowerCase()}`,
+      [`${secName}: ${name} ${silent ? "rests" : "plays again"}`]);
+  }
+  async function removeSection(i: number) {
+    const s = sections[i];
+    if (!s) return;
+    setSel(null);
+    await onEdit((p) => withoutSection(p, i), `Remove the ${s.label.toLowerCase()}`,
+      [`Removed the ${s.label.toLowerCase()} (bars ${starts[i] + 1}–${starts[i] + s.bars})`]);
+  }
+  function tapSection(i: number) {
+    setSel(sel === i && !lane ? null : i);
+    setLane(null);
+    // While it plays, a section header also jumps there.
+    if (playing) seekTo(secTime(i));
+  }
+
   async function addBlock(name: string) {
     if (!version || sel == null || !name) return;
     setAddMsg("Splitting the song into section blocks…");
@@ -182,6 +301,10 @@ export default function TimelineView({
           <div className="ws-name">{session.title || "New song"}</div>
           <div className="ws-sub" data-testid="timeline-info">{info}</div>
         </div>
+        {version?.from != null && session.versions.some((v) => v.n === version.from) && (
+          <button type="button" className="ws-pill" data-testid="timeline-undo"
+            title={`Back to v${version.from}`} onClick={() => onPickVersion(version.from!)}>Undo</button>
+        )}
         {session.versions.length > 0 && (
           <PickerField value={String(version?.n ?? "")} label="Version" fullWidth={false} className="ws-pill ws-vpick"
             options={[...session.versions].reverse().map((v) => ({
@@ -229,33 +352,50 @@ export default function TimelineView({
                   <button key={i} type="button" className={"ws-sec" + (sel === i ? " on" : "")}
                     ref={(el) => { secBtns.current[i] = el; }}
                     data-testid={`sec-${i}`} aria-pressed={sel === i} title={s.label}
-                    onClick={() => { setSel(sel === i && !lane ? null : i); setLane(null); }}>
+                    onClick={() => tapSection(i)}>
                     {SECTION_SHORT[s.role] ?? s.label}
                   </button>
                 ))}
               </div>
+              {result && (
+                <div className="ws-row ws-wave" ref={waveRow} data-testid="timeline-wave"
+                  aria-label="Waveform: tap or drag to move the playhead"
+                  onPointerDown={scrub} onPointerMove={scrub} onPointerUp={endScrub} onPointerCancel={endScrub}>
+                  <span />
+                  {sections.map((_s, i) => (
+                    <div key={i} className="ws-wave-sec">
+                      <canvas data-sec={i} />
+                      {atSec >= i && t > 0 && <div className="ws-wave-played" style={{ width: `${atSec > i ? 100 : secFrac(i, t) * 100}%` }} />}
+                    </div>
+                  ))}
+                </div>
+              )}
               {shownLanes.map((l) => (
-                <div key={l.id} className="ws-row" data-testid={`lane-${l.id}`}>
-                  <span className="ws-lane">{l.name}</span>
+                <div key={l.id} className={"ws-row" + (laneHas(l.id) ? "" : " muted")} data-testid={`lane-${l.id}`}>
+                  <button type="button" className={"ws-lane" + (laneSel === l.id ? " on" : "")}
+                    data-testid={`lane-name-${l.id}`} aria-pressed={laneSel === l.id}
+                    aria-label={`${l.name}${laneHas(l.id) ? "" : " (removed)"}: options for the whole song`}
+                    onClick={() => { setLaneSel(laneSel === l.id ? null : l.id); setSel(null); setLane(null); }}>
+                    {l.name}
+                  </button>
                   {sections.map((s, i) => {
                     const vs = plan ? sectionVariants(plan, s.role, arrOpts) : [];
-                    const mask = plan?.section_overrides?.[s.role]?.instruments;
-                    const inMask = !mask?.length || mask.some((id) => lanes[id] === l.id);
-                    const label = plan && inMask ? cellLabel(l.id, s.role, vs, plan, laneHas, funk) : "";
+                    const rests = restsIn(l.id, s.role);
+                    const label = plan && !rests ? cellLabel(l.id, s.role, vs, plan, laneHas, funk) : "";
                     const on = sel === i;
                     return (
                       <button key={i} type="button" data-testid={`cell-${l.id}-${i}`}
-                        className={"ws-cell" + (label ? "" : " off") + (on ? " sel" : "") + (on && lane === l.id ? " lane" : "")}
+                        className={"ws-cell" + (label ? "" : " off") + (rests ? " rest" : "") + (on ? " sel" : "") + (on && lane === l.id ? " lane" : "")}
                         style={label ? { background: on ? l.hueOn : l.hue } : undefined}
-                        aria-label={`${l.name}, ${s.label}: ${label || "sits out"}`}
+                        aria-label={`${l.name}, ${s.label}: ${label || (rests ? "rests" : "sits out")}`}
                         onClick={() => { setSel(i); setLane(lane === l.id && sel === i ? null : l.id); }}>
-                        {label}
+                        {rests ? "rest" : label}
                       </button>
                     );
                   })}
                 </div>
               ))}
-              {dur > 0 && btn && (
+              {length > 0 && btn && (
                 <div className="ws-playhead" aria-hidden="true" data-testid="playhead" style={{ left: headLeft }} />
               )}
             </div>
@@ -304,7 +444,41 @@ export default function TimelineView({
                     sub: [b.bars ? `${b.bars} bars` : "", b.tempo ? `${Math.round(b.tempo)} BPM` : ""].filter(Boolean).join(" · ") }))}
                   onChange={addBlock} />
               </div>
+              <div className="ws-actions">
+                <button type="button" className="ws-act" data-testid="play-from-section" disabled={!audioUrl || !length}
+                  onClick={() => seekTo(secTime(sel), true)}>▶ From here</button>
+                {lane && laneHas(lane) && (
+                  <button type="button" className="ws-act" data-testid="silence-here" disabled={!editable}
+                    onClick={() => silenceHere(lane, !restsIn(lane, secRole))}>
+                    {restsIn(lane, secRole) ? `Bring ${laneName(lane).toLowerCase()} back here` : `Silence ${laneName(lane).toLowerCase()} here`}
+                  </button>
+                )}
+                <button type="button" className="ws-act" data-testid="remove-section"
+                  disabled={!editable || sections.length < 2} onClick={() => removeSection(sel)}>Remove section</button>
+              </div>
               {addMsg && <div className={addMsg.startsWith("Error") ? "error" : "meta"}>{addMsg}</div>}
+            </div>
+          )}
+
+          {laneSel && sel == null && (
+            <div className="ws-panel" data-testid="lane-panel" ref={panelRef}>
+              <div className="ws-panel-h">
+                <div className="ws-panel-t">{laneName(laneSel)} · whole song</div>
+                <div className="ws-panel-hint">{laneHas(laneSel) ? "tap a cell to silence one section" : "removed from this version"}</div>
+              </div>
+              <div className="ws-panel-btns">
+                {laneHas(laneSel) ? (
+                  <button type="button" className="ws-primary" data-testid="lane-remove"
+                    disabled={!editable || soundingLanes < 2} onClick={() => removeLane(laneSel)}>
+                    Remove {laneName(laneSel).toLowerCase()} from the song
+                  </button>
+                ) : (
+                  <button type="button" className="ws-primary" data-testid="lane-restore"
+                    disabled={!editable} onClick={() => restoreLane(laneSel)}>
+                    Bring {laneName(laneSel).toLowerCase()} back
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </>

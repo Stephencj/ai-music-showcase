@@ -465,6 +465,10 @@ export async function pollVocal(
   }
 }
 
+/** A finished version's waveform + where its sections start (seconds). */
+export const jobPeaks = (jobId: string, buckets = 400) =>
+  jget<{ peaks: number[]; duration: number; section_starts: number[] }>(
+    `/api/jobs/${encodeURIComponent(jobId)}/peaks?buckets=${buckets}`);
 export const getPeaks = (name: string) =>
   jget<{ peaks: number[] }>(`/api/blocks/${encodeURIComponent(name)}/peaks`).then((r) => r.peaks);
 export const renameBlock = (name: string, new_name: string) =>

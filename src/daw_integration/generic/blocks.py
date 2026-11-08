@@ -546,8 +546,20 @@ def block_peaks(name: str, buckets: int = 64) -> Optional[list[float]]:
             return json.loads(pp.read_text())
         except Exception:
             pass
-    wav = _wav_path(name)
-    if not wav.exists():
+    peaks = wav_peaks(_wav_path(name), buckets)
+    if peaks is None:
+        return None
+    try:
+        pp.write_text(json.dumps(peaks))
+    except OSError:
+        pass
+    return peaks
+
+
+def wav_peaks(wav: Path, buckets: int = 64) -> Optional[list[float]]:
+    """``buckets`` normalized (0..1) absolute peaks of an audio file, evenly
+    spaced in time; None when it can't be read."""
+    if not Path(wav).exists():
         return None
     try:
         data, _ = sf.read(str(wav), dtype="float32")
@@ -564,12 +576,7 @@ def block_peaks(name: str, buckets: int = 64) -> Optional[list[float]]:
         for i in range(buckets)
     ]
     peak_max = max(peaks) or 1.0
-    peaks = [round(p / peak_max, 3) for p in peaks]
-    try:
-        pp.write_text(json.dumps(peaks))
-    except OSError:
-        pass
-    return peaks
+    return [round(p / peak_max, 3) for p in peaks]
 
 
 def set_tags(name: str, tags: list[str]) -> list[str]:

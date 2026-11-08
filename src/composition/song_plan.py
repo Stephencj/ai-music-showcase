@@ -34,7 +34,8 @@ _NOTE_RE = re.compile(r"^([A-Ga-g])([#b♯♭]?)$")
 # conveniences — stems, PDF, save-as-block — stay the form's business).
 PLAN_FIELDS = ("genre", "key", "scale", "tempo", "swing", "seed", "sections",
                "section_presets", "section_overrides", "instruments", "arrangement",
-               "lead_patch", "hits", "hit_style", "target_lufs", "tune", "length_seconds")
+               "lead_patch", "hits", "hit_style", "target_lufs", "tune", "length_seconds",
+               "remove_sections")
 # Edits an answer may give instead of restating a list: add/remove
 # arrangement variants or band members. Small models revise far more reliably
 # this way (restating the arrangement, they drop variants nobody asked about).
@@ -325,6 +326,13 @@ def normalize_plan(raw: Any, previous: Optional[dict] = None,
         roles = [r for r in (str(x).lower() for x in merged["sections"]) if r in ROLES]
         if roles:
             plan["sections"] = list(dict.fromkeys(roles))
+    # Sections removed on the timeline (indices into the arranged list) only
+    # mean anything for the section list they were picked from.
+    if isinstance(merged.get("remove_sections"), list) and merged.get("sections") == prev.get("sections"):
+        idx = sorted({int(x) for x in merged["remove_sections"]
+                      if isinstance(x, (int, float)) and not isinstance(x, bool) and 0 <= x < 256})
+        if idx:
+            plan["remove_sections"] = idx
     if isinstance(merged.get("section_presets"), dict):
         sp = {r: _genre(p) for r, p in merged["section_presets"].items() if r in ROLES}
         sp = {r: p for r, p in sp.items() if p and p != plan["genre"]}
@@ -455,6 +463,8 @@ def describe_changes(old: dict, new: dict) -> list[str]:
             out.append("No stabs" if b == [] else f"Hits: {len(b or [])}")
         elif k == "section_overrides":
             out += _section_changes(a or {}, b or {})
+        elif k == "remove_sections":
+            out.append("Removed sections: " + (", ".join(str(i + 1) for i in b) if b else "none"))
         elif b is None:
             out.append(f"{k}: back to default")
         elif isinstance(b, (dict, list)):

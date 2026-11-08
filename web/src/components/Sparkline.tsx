@@ -33,18 +33,7 @@ export default function Sparkline({ name }: { name: string }) {
   }, [name]);
 
   useEffect(() => {
-    const cv = canvas.current;
-    if (!cv || !peaks) return;
-    const ctx = cv.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, W, H);
-    const n = peaks.length;
-    const bw = W / n;
-    ctx.fillStyle = "#6b70a0";
-    for (let i = 0; i < n; i++) {
-      const h = Math.max(1, peaks[i] * (H - 2));
-      ctx.fillRect(i * bw, (H - h) / 2, Math.max(1, bw - 1), h);
-    }
+    if (canvas.current && peaks) drawPeaks(canvas.current, peaks);
   }, [peaks]);
 
   return (
@@ -52,4 +41,20 @@ export default function Sparkline({ name }: { name: string }) {
       <canvas ref={canvas} width={W} height={H} />
     </div>
   );
+}
+
+/** Draw peaks (0..1) as centred bars filling the canvas. */
+export function drawPeaks(cv: HTMLCanvasElement, peaks: number[], color = "#6b70a0") {
+  const ctx = cv.getContext("2d");
+  if (!ctx) return;
+  const { width: w, height: h } = cv;
+  ctx.clearRect(0, 0, w, h);
+  const n = peaks.length;
+  if (!n) return;
+  const bw = w / n;
+  ctx.fillStyle = color;
+  for (let i = 0; i < n; i++) {
+    const ph = Math.max(1, peaks[i] * (h - 2));
+    ctx.fillRect(i * bw, (h - ph) / 2, Math.max(1, bw - 1), ph);
+  }
 }
