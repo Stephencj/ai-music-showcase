@@ -40,6 +40,11 @@ from src.api import routes, service
 from src.api.jobs import registry
 from src.api.schemas import (
     BlockVersionRequest,
+    FolderCreateRequest,
+    FolderItemsRequest,
+    FolderMoveRequest,
+    FolderReorderRequest,
+    FolderUpdateRequest,
     GenerateRequest,
     LibrarySaveRequest,
     RenameRequest,
@@ -1079,15 +1084,148 @@ def render_stems(
 
 
 def list_library() -> list[dict]:
-    """The sheet-music library: saved pieces with their block names."""
-    return [{k: e.get(k) for k in ("id", "title", "block_name", "collection", "note", "favorite", "added")}
+    """The sheet-music library (what Stephen reviews in the app's Library tab):
+    saved pieces with their block names and the folders each is filed in."""
+    return [{**_entry_brief(e), "note": e.get("note"), "added": e.get("added")}
             for e in routes.list_library()["library"]]
 
 
-def add_to_library(block_name: str, title: str = "", collection: str = "", note: str = "") -> dict:
-    """Add a block to the sheet-music library."""
-    return _call(routes.add_to_library, LibrarySaveRequest(block_name=block_name, title=title or None,
-                                                           collection=collection, note=note))
+def add_to_library(
+    block_name: Annotated[str, Field(description="The saved block to add (see list_blocks).")],
+    title: Annotated[str, Field(description="Display title (default: the block name).")] = "",
+    collection: str = "",
+    note: Annotated[str, Field(description="A note shown with the piece.")] = "",
+    folder: Annotated[str, Field(description="Folder to file it in: id, path ('Videos / Christmas Mix 1') "
+                                             "or unique name. It goes at the end of the folder's order. "
+                                             "Create the folder first with create_folder.")] = "",
+) -> dict:
+    """Add a block to the sheet-music library so it shows up in the app's
+    Library tab for review, optionally straight into a folder. Re-adding a
+    block keeps its favorite flag and folders. (``collection`` is the legacy
+    grouping; prefer ``folder``.)"""
+    res = _call(routes.add_to_library, LibrarySaveRequest(block_name=block_name, title=title or None,
+                                                          collection=collection, note=note, folder=folder))
+    return {"saved": res["saved"], "entry": _entry_brief(res["entry"])}
+
+
+# --- Library folders -------------------------------------------------------
+
+_FOLDER_REF = ("A folder id, its path ('Videos / Christmas Mix 1'), or its name when unique. "
+               "'Unfiled' means songs in no folder.")
+_ITEM_REF = "A library entry id or a block name."
+
+
+def _entry_brief(e: dict) -> dict:
+    return {"id": e.get("id"), "title": e.get("title"), "block_name": e.get("block_name"),
+            "favorite": e.get("favorite"), "folders": [f["path"] for f in e.get("folders") or []]}
+
+
+def _entry_id(item: str) -> str:
+    from src.daw_integration.generic import library as library_store
+    return library_store._safe_id(item)
+
+
+def list_folders() -> dict:
+    """Library folders (one per video, e.g. 'Videos / Christmas Mix 1'), with
+    item counts. Top-level folders come first, each followed by its
+    subfolders; ``unfiled`` counts library songs that are in no folder."""
+    return _call(routes.list_library_folders)
+
+
+def create_folder(
+    name: Annotated[str, Field(description="Folder name (no '/'). Unique among its siblings.")],
+    parent: Annotated[str, Field(description="Make it a subfolder of this top-level folder "
+                                             "(one level deep). Empty = top level.")] = "",
+    description: Annotated[str, Field(description="What the folder is for, e.g. the video it "
+                                                  "becomes ('1-hour cozy Christmas mix, upload Dec 1').")] = "",
+) -> dict:
+    """Create a library folder, e.g. one per YouTube video. Use parent to nest
+    it (e.g. name='Christmas Mix 1', parent='Videos'). Returns the folder with
+    its id."""
+    return _call(routes.create_library_folder,
+                 FolderCreateRequest(name=name, parent=parent, description=description))["folder"]
+
+
+def rename_folder(
+    folder: Annotated[str, Field(description=_FOLDER_REF)],
+    new_name: Annotated[str, Field(description="New name (empty = keep the name).")] = "",
+    description: Annotated[Optional[str], Field(description="New description (omit to keep it).")] = None,
+    parent: Annotated[Optional[str], Field(description="Move it under this top-level folder; '' = to "
+                                                       "the top level; omit to keep it where it is.")] = None,
+) -> dict:
+    """Rename a library folder, and/or change its description or parent.
+    Its songs and their order don't change."""
+    return _call(routes.update_library_folder, folder,
+                 FolderUpdateRequest(name=new_name or None, description=description, parent=parent))["folder"]
+
+
+def delete_folder(folder: Annotated[str, Field(description=_FOLDER_REF)]) -> dict:
+    """Delete a library folder. Never deletes songs: they stay in the library
+    (in Unfiled if they're in no other folder), and its subfolders move to
+    the top level. Returns which songs became unfiled."""
+    return _call(routes.delete_library_folder, folder)
+
+
+def get_folder(folder: Annotated[str, Field(description=_FOLDER_REF)]) -> dict:
+    """A folder's details and its songs in track order (the order the video
+    plays them), each with id, title, block name and all folders it's in."""
+    f = _call(routes.get_library_folder, folder)["folder"]
+    return {**f, "items": [_entry_brief(e) for e in f["items"]]}
+
+
+def add_to_folder(
+    folder: Annotated[str, Field(description=_FOLDER_REF)],
+    items: Annotated[list[str], Field(description="Songs to add, each a library entry id or a block "
+                                                  "name. A block that isn't in the library yet is added "
+                                                  "to it first.")],
+    position: Annotated[Optional[int], Field(description="0-based place to insert them (default: the end).")] = None,
+) -> dict:
+    """Put songs into a folder (a copy: they stay in any other folders too).
+    Songs already in the folder keep their place. Use move_to_folder to move
+    instead of copy."""
+    from src.daw_integration.generic import library as library_store
+
+    entry_ids, block_names = [], []
+    for item in items:
+        try:
+            entry_ids.append(library_store.get_entry(item)["id"])
+        except FileNotFoundError:
+            block_names.append(item)
+    res = _call(routes.add_library_folder_items, folder,
+                FolderItemsRequest(entry_ids=entry_ids, block_names=block_names, position=position))
+    return get_folder(res["folder"]["id"])
+
+
+def move_to_folder(
+    item: Annotated[str, Field(description=_ITEM_REF)],
+    to_folder: Annotated[str, Field(description=_FOLDER_REF + " Moving to 'Unfiled' takes it out of folders.")],
+    from_folder: Annotated[str, Field(description="Only take it out of this folder (empty = out of every "
+                                                  "other folder).")] = "",
+    position: Annotated[Optional[int], Field(description="0-based place in the destination (default: end).")] = None,
+) -> dict:
+    """Move a library song into another folder. Returns the folders it's in now."""
+    return _call(routes.move_library_entry, FolderMoveRequest(
+        entry_id=_entry_id(item), to_folder=to_folder, from_folder=from_folder, position=position))
+
+
+def remove_from_folder(
+    folder: Annotated[str, Field(description=_FOLDER_REF)],
+    item: Annotated[str, Field(description=_ITEM_REF)],
+) -> dict:
+    """Take a song out of one folder. The song stays in the library."""
+    return _call(routes.remove_library_folder_item, folder, _entry_id(item))["folder"]
+
+
+def reorder_folder(
+    folder: Annotated[str, Field(description=_FOLDER_REF)],
+    order: Annotated[list[str], Field(description="Songs (entry ids or block names) in the new order. "
+                                                  "Any you leave out keep their order after these.")],
+) -> dict:
+    """Set the track order of a folder (the order the video plays them).
+    Returns the folder with its songs in the new order."""
+    res = _call(routes.reorder_library_folder, folder,
+                FolderReorderRequest(entry_ids=[_entry_id(i) for i in order]))
+    return get_folder(res["folder"]["id"])
 
 
 def list_songs() -> dict:
@@ -1206,6 +1344,9 @@ TOOLS = [
     list_blocks, save_block, rename_block, set_block_tags,
     list_block_versions, snapshot_block_version, restore_block_version,
     list_library, add_to_library, list_songs, save_song,
+    # library folders (one per video)
+    list_folders, create_folder, rename_folder, delete_folder, get_folder,
+    add_to_folder, move_to_folder, remove_from_folder, reorder_folder,
     # export
     export_audio,
     # low level

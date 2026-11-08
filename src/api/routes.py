@@ -22,6 +22,7 @@ from src.daw_integration.generic import block_concat
 from src.daw_integration.generic import block_versions
 from src.daw_integration.generic import blocks as block_store
 from src.daw_integration.generic import library as library_store
+from src.daw_integration.generic import library_folders as folder_store
 from src.daw_integration.generic import songs as song_store
 from src.daw_integration.generic.styles import STYLES
 
@@ -39,6 +40,11 @@ from .schemas import (
     VideoScoreRequest,
     GeneratePartRequest,
     LibrarySaveRequest,
+    FolderCreateRequest,
+    FolderItemsRequest,
+    FolderMoveRequest,
+    FolderReorderRequest,
+    FolderUpdateRequest,
     LyricsDraftRequest,
     ParsePromptRequest,
     PhoneticRequest,
@@ -1207,7 +1213,10 @@ def _library_entry_urls(entry: dict) -> dict:
 
 @router.get("/library")
 def list_library() -> dict:
-    return {"library": [_library_entry_urls(e) for e in library_store.list_entries()]}
+    """Every entry, each with ``folders`` ([{id, path}]) it's filed in."""
+    by_entry = folder_store.folders_by_entry()
+    return {"library": [{**_library_entry_urls(e), "folders": by_entry.get(e["id"], [])}
+                        for e in library_store.list_entries()]}
 
 
 @router.post("/library")
@@ -1215,12 +1224,101 @@ def add_to_library(req: LibrarySaveRequest) -> dict:
     if not block_store._midi_path(req.block_name).exists():
         raise HTTPException(404, f"No such block: {req.block_name}")
     try:
+        # Check the folder before adding anything; "unfiled" just means none.
+        folder = folder_store.get_folder(req.folder)["id"] if req.folder else folder_store.UNFILED
         entry = library_store.add_entry(
             req.block_name, title=req.title,
             collection=req.collection, note=req.note)
+        if folder != folder_store.UNFILED:
+            folder_store.add_items(folder, [entry["id"]])
     except ValueError as exc:
         raise HTTPException(400, str(exc))
-    return {"saved": entry["id"], "entry": _library_entry_urls(entry)}
+    folders = folder_store.folders_by_entry().get(entry["id"], [])
+    return {"saved": entry["id"], "entry": {**_library_entry_urls(entry), "folders": folders}}
+
+
+# --- Library folders (one per video; membership links, ordered) -----------
+def _folder_call(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except folder_store.FolderError as exc:
+        raise HTTPException(404 if str(exc).startswith(("No folder", "No library entry", "No parent"))
+                            else 400, str(exc))
+
+
+@router.get("/library/folders")
+def list_library_folders() -> dict:
+    """All folders with item counts (subfolders follow their parent), plus
+    the virtual ``unfiled`` folder."""
+    return _folder_call(folder_store.list_folders)
+
+
+@router.post("/library/folders")
+def create_library_folder(req: FolderCreateRequest) -> dict:
+    return {"folder": _folder_call(folder_store.create_folder, req.name, req.parent, req.description)}
+
+
+@router.get("/library/folders/{folder_id}")
+def get_library_folder(folder_id: str) -> dict:
+    """A folder with its entries in track order (``unfiled`` works too)."""
+    f = _folder_call(folder_store.get_folder, folder_id)
+    by_entry = folder_store.folders_by_entry()
+    return {"folder": {**f, "items": [{**_library_entry_urls(e), "folders": by_entry.get(e["id"], [])}
+                                      for e in f["items"]]}}
+
+
+@router.patch("/library/folders/{folder_id}")
+def update_library_folder(folder_id: str, req: FolderUpdateRequest) -> dict:
+    return {"folder": _folder_call(folder_store.update_folder, folder_id, name=req.name,
+                                   description=req.description, parent=req.parent)}
+
+
+@router.delete("/library/folders/{folder_id}")
+def delete_library_folder(folder_id: str) -> dict:
+    """Delete a folder; its songs stay in the library (→ Unfiled if in no
+    other folder) and its subfolders move to the top level."""
+    return _folder_call(folder_store.delete_folder, folder_id)
+
+
+@router.post("/library/folders/{folder_id}/items")
+def add_library_folder_items(folder_id: str, req: FolderItemsRequest) -> dict:
+    if not req.entry_ids and not req.block_names:
+        raise HTTPException(400, "Give entry_ids and/or block_names.")
+    _folder_call(folder_store.get_folder, folder_id)
+    ids = list(req.entry_ids)
+    for name in req.block_names:
+        ids.append(_library_entry_for_block(name))
+    return {"folder": _folder_call(folder_store.add_items, folder_id, ids, req.position)}
+
+
+def _library_entry_for_block(name: str) -> str:
+    """The library entry id for a block, adding the block to the library if
+    it isn't there yet."""
+    try:
+        return library_store.get_entry(name)["id"]
+    except FileNotFoundError:
+        pass
+    if not block_store._midi_path(name).exists():
+        raise HTTPException(404, f"No such block or library entry: {name}")
+    return library_store.add_entry(name)["id"]
+
+
+@router.delete("/library/folders/{folder_id}/items/{entry_id}")
+def remove_library_folder_item(folder_id: str, entry_id: str) -> dict:
+    return {"folder": _folder_call(folder_store.remove_item, folder_id, entry_id)}
+
+
+@router.put("/library/folders/{folder_id}/order")
+def reorder_library_folder(folder_id: str, req: FolderReorderRequest) -> dict:
+    return {"folder": _folder_call(folder_store.reorder, folder_id, req.entry_ids)}
+
+
+@router.post("/library/move")
+def move_library_entry(req: FolderMoveRequest) -> dict:
+    """Move an entry into a folder (out of ``from_folder``, or out of every
+    other folder when it's empty); ``to_folder: "unfiled"`` takes it out."""
+    return _folder_call(folder_store.move_item, req.entry_id, req.to_folder,
+                        req.from_folder, req.position)
 
 
 @router.post("/library/{entry_id}/favorite")

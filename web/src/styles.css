@@ -1836,3 +1836,22 @@ input.ws-input:focus { outline: none; border-color: var(--accent); }
 .ws-end { scroll-margin-bottom: calc(200px + var(--safe-bottom)); }
 .ws-tr-mid .ws-track { flex: 0 0 auto; }   /* a column: don't grow it tall */
 .ws-panel { scroll-margin-bottom: calc(150px + var(--safe-bottom)); scroll-margin-top: 90px; }
+
+/* --- Library folders ------------------------------------------------------ */
+.library-head-actions { display: flex; align-items: center; gap: 4px; }
+.folder-tree { padding: 6px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 2px; }
+.folder-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: none; border: none; border-radius: 10px; cursor: pointer;
+  padding: 9px 10px; color: var(--text); font-size: 14px; font-weight: 600; text-align: left;
+}
+.folder-row.sub { padding-left: 24px; font-weight: 500; }
+.folder-row.muted { color: var(--muted); }
+.folder-row.on { background: var(--card-2); }
+.folder-row .folder-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-row .count { font-size: 12px; color: var(--muted); font-weight: 400; flex: 0 0 auto; }
+.folder-head { margin: 0 2px 12px; }
+.folder-head .lib-title { white-space: normal; }
+.lib-drag { align-self: center; }
+.library-card .te-note .pill { margin-right: 6px; }
+.move-select { flex: 0 1 auto; min-width: 0; width: auto; }

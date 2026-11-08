@@ -15,11 +15,14 @@ and adds library-only metadata. Saved at ``data/library/<id>.yaml``:
 
 The directory is the index (globbed on read), matching the songs/blocks
 sidecar convention — no database, one file per entry, easy to sync with
-the iOS on-device cache.
+the iOS on-device cache. ``folders.yaml`` in the same directory holds the
+folders (see :mod:`library_folders`) and is not an entry.
 """
 
 from __future__ import annotations
 
+import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -27,6 +30,7 @@ import yaml
 
 
 LIBRARY_DIR = Path("data/library")
+FOLDERS_FILE = "folders.yaml"      # not an entry — see library_folders
 
 
 def _safe_id(name: str) -> str:
@@ -35,7 +39,10 @@ def _safe_id(name: str) -> str:
 
 
 def _path(entry_id: str) -> Path:
-    return LIBRARY_DIR / f"{_safe_id(entry_id)}.yaml"
+    stem = _safe_id(entry_id)
+    if f"{stem}.yaml" == FOLDERS_FILE:      # a block literally named "folders"
+        stem += "_"
+    return LIBRARY_DIR / f"{stem}.yaml"
 
 
 def _read(p: Path) -> dict:
@@ -44,9 +51,20 @@ def _read(p: Path) -> dict:
 
 
 def _write(p: Path, entry: dict) -> None:
+    """Write YAML atomically: a temp file in the same directory, then rename,
+    so a reader (or a crash) never sees a half-written file."""
     p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w") as f:
-        yaml.safe_dump(entry, f, sort_keys=False, default_flow_style=False)
+    fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=f".{p.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            yaml.safe_dump(entry, f, sort_keys=False, default_flow_style=False, allow_unicode=True)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, 0o644)                 # mkstemp makes it 0600
+        os.replace(tmp, p)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def list_entries() -> list[dict]:
@@ -55,10 +73,14 @@ def list_entries() -> list[dict]:
         return []
     entries: list[dict] = []
     for p in LIBRARY_DIR.glob("*.yaml"):
+        if p.name == FOLDERS_FILE:
+            continue
         try:
-            entries.append(_read(p))
+            entry = _read(p)
         except Exception:  # noqa: BLE001 — skip a corrupt sidecar, don't fail the list
             continue
+        if entry.get("block_name"):
+            entries.append(entry)
     entries.sort(key=lambda e: e.get("added") or "", reverse=True)
     return entries
 
@@ -104,9 +126,13 @@ def set_favorite(entry_id: str, value: bool) -> dict:
 
 
 def delete_entry(entry_id: str) -> bool:
-    """Remove an entry. Returns True if it existed, False otherwise."""
+    """Remove an entry (and its folder memberships). Returns True if it
+    existed, False otherwise."""
+    from . import library_folders
+
     p = _path(entry_id)
     if p.exists():
         p.unlink()
+        library_folders.forget_entry(_safe_id(entry_id))
         return True
     return False

@@ -213,6 +213,39 @@ class LibrarySaveRequest(BaseModel):
     title: Optional[str] = None
     collection: str = ""
     note: str = ""
+    folder: str = ""                 # folder id/path to file it into ('' = none)
+
+
+class FolderCreateRequest(BaseModel):
+    name: str
+    parent: str = ""                 # a top-level folder's id/path → subfolder
+    description: str = ""
+
+
+class FolderUpdateRequest(BaseModel):
+    """Only the fields given change; ``parent: ""`` moves it to the top level."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    parent: Optional[str] = None
+
+
+class FolderItemsRequest(BaseModel):
+    """Add library entries (by id) and/or blocks (by name; added to the
+    library first if needed) to a folder, at ``position`` (default: end)."""
+    entry_ids: list[str] = Field(default_factory=list)
+    block_names: list[str] = Field(default_factory=list)
+    position: Optional[int] = None
+
+
+class FolderReorderRequest(BaseModel):
+    entry_ids: list[str]
+
+
+class FolderMoveRequest(BaseModel):
+    entry_id: str
+    to_folder: str                   # id/path, or "unfiled"
+    from_folder: str = ""            # '' = out of every other folder
+    position: Optional[int] = None
 
 
 class SplitRequest(BaseModel):

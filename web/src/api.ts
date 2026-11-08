@@ -159,12 +159,13 @@ export interface LibraryEntry {
   notes_url: string;
   musicxml_url: string;
   score_data_url: string;
+  folders?: { id: string; path: string }[];   // folders it's filed in
 }
 export const getLibrary = () =>
   jget<{ library: LibraryEntry[] }>("/api/library").then((r) => r.library);
 export const addToLibrary = (
   block_name: string,
-  opts: { title?: string; collection?: string; note?: string } = {}
+  opts: { title?: string; collection?: string; note?: string; folder?: string } = {}
 ) => jpost<{ saved: string; entry: LibraryEntry }>("/api/library", { block_name, ...opts });
 export const setLibraryFavorite = (id: string, favorite: boolean) =>
   jpost<{ entry: LibraryEntry }>(
@@ -173,6 +174,43 @@ export async function removeFromLibrary(id: string): Promise<void> {
   const r = await fetch(url(`/api/library/${encodeURIComponent(id)}`), { method: "DELETE" });
   if (!r.ok) throw new Error((await r.text()) || r.statusText);
 }
+
+// Library folders (one per video). Membership links: a song can sit in
+// several folders; "unfiled" is the virtual folder of songs in none.
+export interface LibraryFolder {
+  id: string;
+  name: string;
+  path: string;           // "Videos / Christmas Mix 1"
+  parent: string;         // "" = top level
+  description: string;
+  item_count: number;
+  subfolders: string[];
+  virtual?: boolean;      // the Unfiled folder
+}
+async function jsend<T>(method: string, p: string, body?: unknown): Promise<T> {
+  const r = await fetch(url(p), {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) throw new Error((await r.text()) || r.statusText);
+  return r.json() as Promise<T>;
+}
+const folderPath = (id: string) => `/api/library/folders/${encodeURIComponent(id)}`;
+export const getFolders = () =>
+  jget<{ folders: LibraryFolder[]; unfiled: LibraryFolder }>("/api/library/folders");
+export const getFolder = (id: string) =>
+  jget<{ folder: LibraryFolder & { items: LibraryEntry[] } }>(folderPath(id)).then((r) => r.folder);
+export const createFolder = (name: string, parent = "", description = "") =>
+  jpost<{ folder: LibraryFolder }>("/api/library/folders", { name, parent, description }).then((r) => r.folder);
+export const updateFolder = (id: string, patch: { name?: string; description?: string; parent?: string }) =>
+  jsend<{ folder: LibraryFolder }>("PATCH", folderPath(id), patch).then((r) => r.folder);
+export const deleteFolder = (id: string) =>
+  jsend<{ deleted: string; now_unfiled: string[] }>("DELETE", folderPath(id));
+export const reorderFolder = (id: string, entry_ids: string[]) =>
+  jsend<{ folder: LibraryFolder }>("PUT", `${folderPath(id)}/order`, { entry_ids });
+export const moveLibraryEntry = (entry_id: string, to_folder: string, from_folder = "") =>
+  jpost<{ folders: { id: string; path: string }[] }>("/api/library/move", { entry_id, to_folder, from_folder });
 
 // --- Block version control (catalog generations/edits, restore any one) ---
 export interface BlockVersion {
