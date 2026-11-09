@@ -20,6 +20,8 @@ API_OUT = PROJECT_ROOT / "data" / "outputs" / "api"
 # a batch session's unsaved renders survive until they're saved
 # ($AI_MUSIC_KEEP_JOBS to change it).
 _KEEP_RECENT_JOBS = int(os.environ.get("AI_MUSIC_KEEP_JOBS", "100"))
+# Unsaved job dirs untouched this long are removed too ($AI_MUSIC_UNSAVED_TTL_DAYS).
+_UNSAVED_TTL_DAYS = float(os.environ.get("AI_MUSIC_UNSAVED_TTL_DAYS", "7"))
 
 
 def _normalize_wav(wav_path: Path, target_lufs: float, limit: bool = False) -> float:
@@ -54,10 +56,31 @@ def mark_job_saved(path) -> None:
         (API_OUT / rel.parts[0] / _SAVED_MARK).touch()
 
 
+def _last_touched(d: Path) -> float:
+    """Newest modification time of a dir or anything in it."""
+    return max([d.stat().st_mtime] + [p.stat().st_mtime for p in d.rglob("*")])
+
+
+def expired_unsaved_jobs(ttl_days: float = _UNSAVED_TTL_DAYS, now: float | None = None) -> list[Path]:
+    """Unsaved job dirs nothing has touched for ``ttl_days`` (never a saved
+    job, never a ``_*`` cache)."""
+    import time
+    cutoff = (time.time() if now is None else now) - ttl_days * 86400
+    try:
+        dirs = [p for p in API_OUT.iterdir()
+                if p.is_dir() and not p.name.startswith("_") and not (p / _SAVED_MARK).exists()]
+    except FileNotFoundError:
+        return []
+    return sorted(p for p in dirs if _last_touched(p) < cutoff)
+
+
 def _prune_old_job_dirs(keep: int = _KEEP_RECENT_JOBS) -> None:
-    """Remove all but the ``keep`` newest saved job dirs. A job that hasn't
-    been saved yet is never removed (a batch's renders wait to be saved),
-    and neither are the caches (``_guides``, ``_regen``, any ``_*`` dir)."""
+    """Remove all but the ``keep`` newest saved job dirs, and unsaved ones
+    nothing has touched for $AI_MUSIC_UNSAVED_TTL_DAYS (7). The caches
+    (``_guides``, ``_regen``, any ``_*`` dir) are never removed."""
+    import shutil
+    for old in expired_unsaved_jobs():
+        shutil.rmtree(old, ignore_errors=True)
     try:
         dirs = [p for p in API_OUT.iterdir()
                 if p.is_dir() and not p.name.startswith("_") and (p / _SAVED_MARK).exists()]
@@ -65,7 +88,6 @@ def _prune_old_job_dirs(keep: int = _KEEP_RECENT_JOBS) -> None:
         return
     if len(dirs) <= keep:
         return
-    import shutil
     for old in sorted(dirs, key=lambda p: p.stat().st_mtime)[:len(dirs) - keep]:
         shutil.rmtree(old, ignore_errors=True)
 

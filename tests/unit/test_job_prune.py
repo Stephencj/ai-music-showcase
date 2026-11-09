@@ -1,13 +1,15 @@
-"""Pruning old job dirs never loses work: only jobs saved to a block (or
+"""Pruning old job dirs never loses recent work: jobs saved to a block (or
 split into blocks) count against the limit and get pruned, oldest first;
-unsaved jobs and the caches (``_guides``, ``_regen``, any ``_*`` dir) stay.
-A batch session lost renders that pruning removed before they were saved."""
+unsaved jobs stay until nothing has touched them for a week; the caches
+(``_guides``, ``_regen``, any ``_*`` dir) always stay. A batch session lost
+renders that pruning removed before they were saved."""
 
 from __future__ import annotations
 
 import os
 import shutil
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -29,13 +31,15 @@ class JobPruneTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.root, True)
 
     def _job(self, name: str, age: int, saved: bool = False) -> Path:
+        """A job dir last touched ``age`` seconds ago (everything in it too)."""
         d = self.api / name
         (d / "render").mkdir(parents=True)
         (d / "song.mid").write_bytes(b"")
         if saved:
             service.mark_job_saved(d / "song.mid")
-        t = 1_700_000_000 - age
-        os.utime(d, (t, t))
+        t = time.time() - age
+        for p in [*d.rglob("*"), d]:
+            os.utime(p, (t, t))
         return d
 
     def test_only_saved_jobs_are_pruned_oldest_first(self):
@@ -45,12 +49,30 @@ class JobPruneTests(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in self.api.iterdir()),
                          sorted([p.name for p in unsaved] + ["saved3", "saved4"]))
 
+    def test_unsaved_jobs_go_after_a_week_untouched(self):
+        day = 86400
+        old = self._job("old_unsaved", age=8 * day)
+        fresh = self._job("fresh_unsaved", age=6 * day)
+        stale_saved = self._job("old_saved", age=30 * day, saved=True)
+        touched = self._job("old_but_rerendered", age=9 * day)
+        (touched / "render" / "mix.wav").write_bytes(b"")          # touched just now
+        self.assertEqual(service.expired_unsaved_jobs(), [old])
+        service._prune_old_job_dirs(keep=10)
+        self.assertFalse(old.exists())
+        self.assertTrue(fresh.exists() and stale_saved.exists() and touched.exists())
+        self.assertEqual(service.expired_unsaved_jobs(ttl_days=5), [fresh])
+
     def test_caches_are_never_pruned(self):
         caches = [self.api / n for n in ("_guides", "_regen", "_mix_previews", "_live_stems", "_other")]
         for d in caches:
             d.mkdir()
             (d / service._SAVED_MARK).touch()          # even a marked cache stays
+            os.utime(d / service._SAVED_MARK, (1, 1))
             os.utime(d, (1, 1))
+        stale = self.api / "_stale_cache"                  # an unmarked, years-old cache stays too
+        stale.mkdir()
+        os.utime(stale, (1, 1))
+        caches.append(stale)
         self._job("saved", age=0, saved=True)
         service._prune_old_job_dirs(keep=0)
         self.assertTrue(all(d.is_dir() for d in caches))
