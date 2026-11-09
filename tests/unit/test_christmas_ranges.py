@@ -82,6 +82,19 @@ class PartRangeTests(unittest.TestCase):
                 self.assertLessEqual(max(alto), 80)
                 self.assertGreaterEqual(min(alto), 49)
 
+    def test_orchestral_lead_stays_singable(self):
+        """The calm styles' flute and violins keep the tune at or under E6
+        (88): originals in C, D or Eb used to put it an octave up, to C7."""
+        for i, key in enumerate(("C", "D", "Eb", "F", "G", "Bb")):
+            for seed in (1, 2, 4, 6):
+                arr = "key_change" if (i + seed) % 2 else ""
+                with self.subTest(key=key, seed=seed, arrangement=arr):
+                    pm = compose("christmas_orchestral_full", "original", key=key, seed=seed, arrangement=arr)
+                    lead = [n.pitch for t in pm.instruments if t.name.endswith("Melody")
+                            and t.name.split()[0] in ("Flute", "Violin", "String") for n in t.notes]
+                    self.assertTrue(lead)
+                    self.assertLessEqual(max(lead), christmas._COMFORT_TOP["flute"])
+
     def test_fold(self):
         from src.daw_integration.generic.midi_export import NoteEvent
         notes = christmas.in_range([NoteEvent(85, 0, 1, 80), NoteEvent(70, 1, 2, 80), NoteEvent(40, 2, 3, 80)],

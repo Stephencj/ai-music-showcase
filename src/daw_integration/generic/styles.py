@@ -1167,7 +1167,7 @@ STYLES: dict[str, StylePreset] = {
                 {"start_bar": 56, "end_bar": 62, "label": "Outro"},
             ],
         },
-        default_instruments=['nylon_guitar', 'piano', 'cello', 'shaker'],
+        default_instruments=['nylon_guitar', 'piano', 'cello', 'upright_bass', 'shaker'],
         sound="sampled",
         pacing_options=('uniform_1',),
         bridge_pacing_options=('uniform_1',),

@@ -6,6 +6,7 @@ shared global. Returns a result dict with server-side artifact paths under
 from __future__ import annotations
 
 import logging
+import os
 import random
 from pathlib import Path
 
@@ -15,8 +16,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 API_OUT = PROJECT_ROOT / "data" / "outputs" / "api"
 
 # Keep only the most-recent N job output dirs so renders don't grow
-# unbounded and fill the disk (each HQ mix is several MB).
-_KEEP_RECENT_JOBS = 30
+# unbounded and fill the disk (each HQ mix is several MB). Large enough that
+# a batch session's unsaved renders survive until they're saved
+# ($AI_MUSIC_KEEP_JOBS to change it).
+_KEEP_RECENT_JOBS = int(os.environ.get("AI_MUSIC_KEEP_JOBS", "100"))
 
 
 def _normalize_wav(wav_path: Path, target_lufs: float, limit: bool = False) -> float:

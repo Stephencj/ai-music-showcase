@@ -3,10 +3,11 @@ through the real instruments, mix and master, measured as octave-band levels
 against a gentle-tilt reference (63-125 Hz within about 6 dB of 250-500 Hz,
 no sub rumble). Guards the per-instrument fixes: the cello and contrabass
 through the strings chain, the piano's left hand through the chords chain,
-the organ pedal's weak fundamental, the brush kit's and shaker's rumble.
+the organ pedal's weak fundamental, the brush kit's and shaker's rumble,
+and the fireside's soft upright where the cello leaves the roots.
 
 Needs the sampled libraries (data/instruments/, see its README); skipped
-without them. About 30 s for all eight styles."""
+without them. About a minute for all eight styles, several seeds each."""
 
 from __future__ import annotations
 
@@ -28,20 +29,23 @@ from src.composition import christmas
 
 BANDS = (31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000)
 
-# style: (seed, lowest 63 Hz band, lowest 63-125 Hz power), both in dB against
-# 250-500 Hz. Full bands with a bass player keep 63-125 Hz within 6 dB; the
-# choir (a quiet organ pedal under voices) is lighter, but not thin.
+# style: (seeds, lowest 63 Hz band, lowest 63-125 Hz power), both in dB
+# against 250-500 Hz. Several seeds each: one seed's excerpt can land in a
+# pass where the bass happens to hold (the fireside's cello leaves the roots
+# when it takes the tune or a countermelody; one seed hid that). Full bands
+# with a bass player keep 63-125 Hz within 6 dB; the choir (a quiet organ
+# pedal under voices) is lighter, but not thin.
 STYLE_CASES = {
-    "christmas_swing_full": (282299, -6.0, -6.0),
-    "christmas_jazz_trio_full": (926507, -6.0, -6.0),
-    "christmas_pop_full": (446200, -6.0, -6.0),
-    "christmas_orchestral_full": (581490, -8.5, -6.0),
-    "christmas_fireside_full": (105702, -8.5, -6.0),
-    "christmas_choir_full": (834182, -17.0, -9.5),
-    "funk_fusion_full": (1, -6.0, -6.0),
-    "neo_soul_full": (1, -6.0, -6.0),
+    "christmas_swing_full": ((282299, 2, 6), -6.0, -6.0),
+    "christmas_jazz_trio_full": ((926507, 2, 6), -6.0, -6.0),
+    "christmas_pop_full": ((446200, 2, 6), -6.0, -6.0),
+    "christmas_orchestral_full": ((581490, 3, 6), -8.5, -6.0),
+    "christmas_fireside_full": ((105702, 1, 2, 3, 6, 9), -6.0, -6.0),
+    "christmas_choir_full": ((834182, 2, 6), -17.0, -9.5),
+    "funk_fusion_full": ((1, 2), -6.0, -6.0),
+    "neo_soul_full": ((1, 2), -6.0, -6.0),
 }
-EXCERPT_S = 16.0
+EXCERPT_S = 10.0
 
 
 def octave_bands(audio: np.ndarray, sample_rate: int) -> dict[float, float]:
@@ -70,7 +74,8 @@ class StyleLowEndTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = Path(tempfile.mkdtemp(prefix="lowend_"))
-        cls.bands = {style: cls._render_excerpt(style, case[0]) for style, case in STYLE_CASES.items()}
+        cls.bands = {(style, seed): cls._render_excerpt(style, seed)
+                     for style, (seeds, _, _) in STYLE_CASES.items() for seed in seeds}
 
     @classmethod
     def tearDownClass(cls):
@@ -79,7 +84,8 @@ class StyleLowEndTest(unittest.TestCase):
     @classmethod
     def _render_excerpt(cls, style: str, seed: int) -> dict[float, float]:
         """Compose the song the way a generation does (its plan, band, lead
-        voice and mix), then render a full-band excerpt from its middle."""
+        voice and mix), then render a full-band excerpt from its middle
+        (with the notes already sounding when it starts)."""
         calls = []
 
         def capture(midi, output_dir, **kw):
@@ -96,27 +102,28 @@ class StyleLowEndTest(unittest.TestCase):
             service.run_generation(
                 GenerateRequest(genre=style, seed=seed, with_pdf=False,
                                 tune="original" if style in christmas.STYLE_IDS else None),
-                lambda *_: None, f"lowend-{style}")
+                lambda *_: None, f"lowend-{style}-{seed}")
         midi_path, kw = calls[0]
 
         pm = pretty_midi.PrettyMIDI(str(midi_path))
         start = 0.45 * pm.get_end_time()
         for inst in pm.instruments:
-            inst.notes = [pretty_midi.Note(n.velocity, n.pitch, n.start - start, n.end - start)
-                          for n in inst.notes if start <= n.start < start + EXCERPT_S]
+            inst.notes = [pretty_midi.Note(n.velocity, n.pitch, max(0.0, n.start - start), n.end - start)
+                          for n in inst.notes if n.end > start + 0.1 and n.start < start + EXCERPT_S]
             inst.control_changes, inst.pitch_bends = [], []
         pm.instruments = [i for i in pm.instruments if i.notes]
-        excerpt = cls.tmp / f"{style}.mid"
+        excerpt = cls.tmp / f"{style}-{seed}.mid"
         pm.write(str(excerpt))
-        res = pipeline.render_to_audio(midi=excerpt, output_dir=cls.tmp / style, **{**kw, "with_stems": False})
+        res = pipeline.render_to_audio(midi=excerpt, output_dir=cls.tmp / f"{style}-{seed}",
+                                       **{**kw, "with_stems": False})
         audio, sr = sf.read(str(res.mix_path), always_2d=True)
-        shutil.rmtree(cls.tmp / style, ignore_errors=True)
+        shutil.rmtree(cls.tmp / f"{style}-{seed}", ignore_errors=True)
         return octave_bands(audio.T, sr)
 
     def test_low_end_within_the_reference_tilt(self):
-        for style, (_, floor_63, floor_low) in STYLE_CASES.items():
-            b = self.bands[style]
-            with self.subTest(style=style):
+        for (style, seed), b in self.bands.items():
+            _, floor_63, floor_low = STYLE_CASES[style]
+            with self.subTest(style=style, seed=seed):
                 mids = (b[250] + b[500]) / 2
                 low_vs_mid = _power_db(b[63], b[125]) - _power_db(b[250], b[500])
                 self.assertGreaterEqual(low_vs_mid, floor_low, f"63-125 Hz thin against 250-500 Hz: {b}")

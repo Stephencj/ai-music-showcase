@@ -174,6 +174,12 @@ _RANGE = {
     "harp": (60, 91), "violin": (67, 91), "trumpet": (58, 82),
 }
 
+# The calm styles keep a high lead singable: its top note stays at or under
+# this, an octave lower when the tune in this key would go over (the flute
+# and violins otherwise climb to Bb6-C7 in C, D or Eb).
+_CALM_STYLES = ("orchestral", "fireside", "choir")
+_COMFORT_TOP = {"flute": 88, "violin": 88, "string_section": 88}
+
 
 # One line per style for menus, tools and the plan guide.
 STYLE_INFO: dict[str, str] = {
@@ -941,6 +947,9 @@ class _Sec:
             shift -= 12
         while self.range[0] + shift < pl and self.range[1] + shift + 12 <= ph:
             shift += 12
+        top = _COMFORT_TOP.get(inst) if self.style in _CALM_STYLES else None
+        while top is not None and self.range[1] + shift > top and self.range[0] + shift - 12 >= pl:
+            shift -= 12
         return shift
 
     @property
@@ -1229,6 +1238,20 @@ def _piano_trio(sec: _Sec, lead: bool) -> list[NoteEvent]:
             for i, p in enumerate(v):
                 sec.note(out, p, st, d, vel, ms=8.0, jitter=3.0, legato=0.9, delay=0.008 * i)
     return out
+
+
+def _cello_counter(sec: _Sec) -> bool:
+    """The cello plays a countermelody here (fuller passes of a style that
+    gives it one) instead of the bass roots."""
+    return "cello" in _COUNTER.get(sec.style, ()) and not sec.calm and sec.kind in ("final", "var")
+
+
+def _cello_on_roots(sec: _Sec) -> bool:
+    """The cello holds the bass roots here: it's in the band and playing,
+    without the tune or a countermelody."""
+    leads = sec.info.get("lead") == "cello" and not sec.info.get("backing")
+    return "cello" in (sec.info.get("band") or ()) and _plays(sec, "cello") and not leads \
+        and not _cello_counter(sec)
 
 
 def _piano_ballad(sec: _Sec, lead: bool) -> list[NoteEvent]:
@@ -1565,9 +1588,15 @@ def _melody_spans(sec: _Sec) -> list[tuple[float, float, int]]:
 
 
 def _chord_end_s(sec: _Sec, start_s: float) -> float:
-    beat_s = 60.0 / sec.ctx.tempo
-    c = sec.chord_at(max(0.0, (start_s - sec.t(0)) / beat_s))
-    return sec.t(c.end)
+    """End (s) of the chord a note starting at ``start_s`` belongs to. Read
+    on the section's own clock (it may slow down), and a little after the
+    start: a humanised note a few ms early still belongs to its chord, not
+    the one before (which would clip it to a blip)."""
+    at = start_s + 0.05
+    for c in sec.chords:
+        if at < sec.t(c.end):
+            return sec.t(c.end)
+    return sec.t(sec.chords[-1].end)
 
 
 def _declash(sec: _Sec, notes: list[NoteEvent], *, keep_roots: bool = False) -> list[NoteEvent]:
@@ -1750,7 +1779,13 @@ def play(midi, ctx: TechniqueContext, inst: str) -> None:
             mode = "root" if (k in ("pass1", "interlude") or sec.calm) else "pop"
         else:
             mode = "root"
-        notes = _bass_line(sec, mode, vel=74 if style in JAZZ else 66)
+        if style == "fireside":
+            # A soft plucked upright, only where the cello leaves the roots
+            # (it has the tune or a countermelody): root and fifth.
+            notes = [] if _cello_on_roots(sec) else \
+                _bass_line(sec, "root" if sec.calm or sec.hold_from is not None else "two", vel=58)
+        else:
+            notes = _bass_line(sec, mode, vel=74 if style in JAZZ else 66)
     elif inst == "drum_kit":
         brushes = "brushes" in sec.var or style == "trio"
         notes = _swing_kit(sec, brushes) if style in JAZZ else _pop_kit(sec, brushes)
@@ -1800,7 +1835,7 @@ def play(midi, ctx: TechniqueContext, inst: str) -> None:
     elif inst in ("cello",):
         if lead:
             notes = []
-        elif inst in _COUNTER.get(style, ()) and not sec.calm and k in ("final", "var"):
+        elif _cello_counter(sec):
             notes = _counter(sec, inst, vel=56)
         else:
             notes = _bass_line(sec, "root", vel=54, lo=36, hi=55)
