@@ -36,15 +36,37 @@ def _normalize_wav(wav_path: Path, target_lufs: float, limit: bool = False) -> f
     return round(integrated_lufs(out, sr), 1)
 
 
-def _prune_old_job_dirs(keep: int = _KEEP_RECENT_JOBS) -> None:
+# A job dir holding this file has been saved (as a block, or its sections
+# split into blocks): the saved copy lives in the block store, so the job's
+# own files may go.
+_SAVED_MARK = ".saved"
+
+
+def mark_job_saved(path) -> None:
+    """Mark the job dir holding ``path`` (one of a job's files, or the dir
+    itself) as saved, so pruning may remove it. Paths outside the job
+    outputs are ignored."""
     try:
-        dirs = [p for p in API_OUT.iterdir() if p.is_dir()]
+        rel = Path(path).resolve().relative_to(API_OUT.resolve())
+    except (ValueError, OSError):
+        return
+    if rel.parts and (API_OUT / rel.parts[0]).is_dir():
+        (API_OUT / rel.parts[0] / _SAVED_MARK).touch()
+
+
+def _prune_old_job_dirs(keep: int = _KEEP_RECENT_JOBS) -> None:
+    """Remove all but the ``keep`` newest saved job dirs. A job that hasn't
+    been saved yet is never removed (a batch's renders wait to be saved),
+    and neither are the caches (``_guides``, ``_regen``, any ``_*`` dir)."""
+    try:
+        dirs = [p for p in API_OUT.iterdir()
+                if p.is_dir() and not p.name.startswith("_") and (p / _SAVED_MARK).exists()]
     except FileNotFoundError:
         return
     if len(dirs) <= keep:
         return
     import shutil
-    for old in sorted(dirs, key=lambda p: p.stat().st_mtime)[:-keep]:
+    for old in sorted(dirs, key=lambda p: p.stat().st_mtime)[:len(dirs) - keep]:
         shutil.rmtree(old, ignore_errors=True)
 
 
@@ -265,6 +287,7 @@ def run_generation(req, progress, job_id: str) -> dict:
             section_blocks = block_concat.split_into_section_blocks(
                 pm, secs, tempo=eff_tempo, time_signature=ts,
             )
+        mark_job_saved(job_dir)
 
     progress("Done.", 1.0)
     return {
@@ -1955,6 +1978,7 @@ def save_job_as_block(result: dict, name: str, *, overwrite: bool = False,
     else:
         name = _unique_block_name(block_store, name)
         block_store.save_block(name, pm, overwrite=False, tags=tags, **kw)
+    mark_job_saved(midi)
     return name
 
 

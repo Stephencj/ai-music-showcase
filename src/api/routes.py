@@ -1132,6 +1132,7 @@ def split_job_into_blocks(job_id: str, req: SplitRequest | None = None) -> dict:
         time_signature=(int(ts[0]), int(ts[1])), tag=tag,
         spec_base=res.get("_spec"),
     )
+    service.mark_job_saved(midi)
     return {"section_blocks": names, "tag": tag}
 
 
