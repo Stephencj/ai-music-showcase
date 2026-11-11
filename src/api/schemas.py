@@ -107,6 +107,7 @@ class ChristmasMixRequest(BaseModel):
     seed: int = 1
     name: str = "christmas-mix"
     formats: list[str] = Field(default_factory=lambda: ["mp3"])   # "mp3" and/or "wav"
+    season: str = "christmas"                   # or "thanksgiving" (harvest hymns + autumn originals)
 
 
 class VideoChapter(BaseModel):

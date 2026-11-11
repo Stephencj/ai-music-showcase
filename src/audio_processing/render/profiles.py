@@ -298,6 +298,10 @@ _PRESET_TO_PROFILE: dict[str, str] = {
     "christmas_fireside_full":   "christmas",
     "christmas_choir_full":      "christmas",
     "christmas_pop_full":        "christmas",
+    "thanksgiving_fireside_full": "christmas",       # the same seasonal mix
+    "thanksgiving_piano_full":    "christmas",
+    "thanksgiving_strings_full":  "christmas",
+    "thanksgiving_hymn_full":     "christmas",
     "jazz_aaba_full":       "jazz",
     "jazz_hard_bop_full":   "jazz",
     "jazz_modal_full":      "jazz",

@@ -27,7 +27,7 @@ from src.composition.song_composer import _GENRE_TAG_MAP, _STRICT_GENRES, compos
 from src.daw_integration.generic.midi_export import CHORD_FORMULAS, roman_to_semitone_offset  # noqa: E402
 from src.daw_integration.generic.styles import STYLES  # noqa: E402
 
-GENRES = tuple(christmas.STYLE_IDS)
+GENRES = christmas.season_styles("christmas")
 
 
 def compose(genre: str, tune: str, seed: int = 3, length: float = 150, arrangement: str = "",

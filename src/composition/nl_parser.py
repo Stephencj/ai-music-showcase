@@ -255,9 +255,9 @@ def mentions_genre(text: str) -> bool:
     """Does ``text`` name a genre the lexicon knows (vs. falling back to the
     default)? Lets a revision ("make it jazz") change genre only when asked."""
     from src.daw_integration.generic.styles import STYLES
-    from src.composition.christmas import christmas_genre
+    from src.composition.christmas import seasonal_genre
     return any(v in STYLES for (_, _, v) in _all_matches(text or "", _GENRE_LEXICON)) \
-        or christmas_genre(text) is not None
+        or seasonal_genre(text) is not None
 
 
 def parse_prompt(text: str) -> dict:
@@ -318,8 +318,8 @@ def parse_prompt(text: str) -> dict:
     # Christmas styles whatever other genre words they use; a named carol
     # becomes the tune.
     from src.composition import christmas
-    xmas = christmas.christmas_genre(raw)
-    tune = christmas.tune_from_text(raw) if xmas else None
+    xmas = christmas.seasonal_genre(raw)
+    tune = christmas.tune_from_text(raw, christmas.season_of(xmas)) if xmas else None
     if xmas:
         genre, section_presets = xmas, {}
         denied = christmas.denied_song(raw)

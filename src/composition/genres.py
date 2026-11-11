@@ -102,6 +102,12 @@ GENRE_FAMILIES: list[tuple[str, str, list[tuple[str, str, str]]]] = [
         ("Christmas Choir",      "christmas_choir_full",      "christmas_choir_full"),
         ("Christmas Pop",        "christmas_pop_full",        "christmas_pop_full"),
     ]),
+    ("Thanksgiving", "#b45309", [
+        ("Autumn Fireside",  "thanksgiving_fireside_full", "thanksgiving_fireside_full"),
+        ("Cozy Piano",       "thanksgiving_piano_full",    "thanksgiving_piano_full"),
+        ("Harvest Strings",  "thanksgiving_strings_full",  "thanksgiving_strings_full"),
+        ("Harvest Hymn",     "thanksgiving_hymn_full",     "thanksgiving_hymn_full"),
+    ]),
 ]
 
 # Presets intentionally NOT surfaced on the wheel (feature demos + a

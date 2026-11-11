@@ -369,7 +369,7 @@ def run_christmas_mix(req, progress, job_id: str) -> dict:
     tracks = playlist.plan_mix(
         total_minutes=req.total_minutes, count=req.count, styles=list(req.styles), tunes=list(req.tunes),
         originals=req.originals, track_seconds=(req.min_track_seconds, req.max_track_seconds), seed=req.seed,
-        arrangement=req.arrangement)
+        arrangement=req.arrangement, season=getattr(req, "season", "christmas"))
     res = playlist.render_mix(tracks, name=req.name, crossfade=req.crossfade, target_lufs=req.target_lufs,
                               formats=tuple(req.formats or ("mp3",)), progress=progress)
     return {

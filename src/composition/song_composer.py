@@ -66,6 +66,8 @@ _STRICT_GENRES: frozenset[str] = frozenset({
     "fusion_full", "funk_fusion_full", "neo_soul_full",
     "christmas_swing_full", "christmas_jazz_trio_full", "christmas_orchestral_full",
     "christmas_fireside_full", "christmas_choir_full", "christmas_pop_full",
+    "thanksgiving_fireside_full", "thanksgiving_piano_full", "thanksgiving_strings_full",
+    "thanksgiving_hymn_full",
 })
 
 _GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
@@ -91,6 +93,11 @@ _GENRE_TAG_MAP: dict[str, tuple[str, ...]] = {
     "christmas_fireside_full":   ("christmas",),
     "christmas_choir_full":      ("christmas",),
     "christmas_pop_full":        ("christmas",),
+    # Thanksgiving runs on the same seasonal engine (its parts carry the tag).
+    "thanksgiving_fireside_full": ("christmas",),
+    "thanksgiving_piano_full":    ("christmas",),
+    "thanksgiving_strings_full":  ("christmas",),
+    "thanksgiving_hymn_full":     ("christmas",),
     "jazz_aaba_full":    ("jazz",),
     "jazz_trade_fours":  ("jazz",),
     "blues_12bar_full":  ("blues",),

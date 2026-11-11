@@ -25,7 +25,7 @@ from src.composition.carols import CAROLS, carol  # noqa: E402
 from src.composition.song_composer import compose_song  # noqa: E402
 from src.daw_integration.generic.styles import STYLES  # noqa: E402
 
-GENRES = tuple(christmas.STYLE_IDS)
+GENRES = christmas.season_styles("christmas")
 SUNG = ("silent_night", "jingle_bells", "deck_the_halls", "good_king_wenceslas", "joy_to_the_world",
         "what_child_is_this", "the_first_noel")
 NOT_SUNG = ("carol_of_the_bells", "angels_we_have_heard")

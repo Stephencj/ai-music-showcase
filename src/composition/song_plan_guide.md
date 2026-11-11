@@ -149,6 +149,23 @@ Example. "cozy jazz trio Christmas, Silent Night, background" →
 Example. "big band christmas, something original, about 3 minutes" →
 `{"plan": {"genre": "christmas_swing_full", "tune": "original", "length_seconds": 180}, "summary": "Big-band Christmas swing on an original tune, about 3 minutes."}`
 
+### Thanksgiving (`genre: "thanksgiving_*_full"`)
+
+The same seasonal engine for Thanksgiving / autumn / harvest requests:
+`thanksgiving_fireside_full` (acoustic guitar folk, piano, cello),
+`thanksgiving_piano_full` (cozy solo piano with a cello),
+`thanksgiving_strings_full` (harvest strings, horn, flute, clarinet, harp),
+`thanksgiving_hymn_full` (choir, quiet organ, strings). `tune` is one of the
+public-domain hymns under "Thanksgiving tunes" in the catalog
+(`we_gather_together`, `come_ye_thankful_people`, `for_the_beauty_of_the_earth`,
+`now_thank_we_all_our_god`, `all_creatures_of_our_god`, `simple_gifts`) or
+`"original"`. No sleigh bells, celesta or other Christmas colours; no
+backing tracks. "make it orchestral / piano / folk / a hymn" picks the
+matching Thanksgiving style and keeps the tune. Delivered at −16 LUFS.
+
+Example. "cozy autumn piano, We Gather Together, about 3 minutes" →
+`{"plan": {"genre": "thanksgiving_piano_full", "tune": "we_gather_together", "length_seconds": 180}, "summary": "Cozy autumn solo piano on We Gather Together, about 3 minutes."}`
+
 ### Every other genre (`compose_song`)
 
 Other genre ids use the general composer. They honor genre, key, scale,

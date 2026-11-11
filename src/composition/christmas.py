@@ -1,4 +1,6 @@
-"""Christmas styles (tag ``christmas``): background-friendly holiday music.
+"""Seasonal styles (tag ``christmas``): background-friendly holiday music
+(Christmas, and Thanksgiving / autumn on the same engine: see
+``SEASON_OF``; the Thanksgiving tunes are in hymns.py).
 
 Six sub-styles, each a full-song preset (``christmas_*_full`` in styles.py):
 
@@ -69,8 +71,36 @@ STYLE_IDS: dict[str, str] = {
     "christmas_fireside_full": "fireside",
     "christmas_choir_full": "choir",
     "christmas_pop_full": "pop",
+    # Thanksgiving / autumn: the same engine on harvest hymns and cozy autumn
+    # originals, with no sleigh bells or other Christmas-signature colours.
+    "thanksgiving_fireside_full": "fireside",
+    "thanksgiving_piano_full": "piano",
+    "thanksgiving_strings_full": "orchestral",
+    "thanksgiving_hymn_full": "choir",
 }
-SUBSTYLES = tuple(STYLE_IDS.values())
+SUBSTYLES = tuple(dict.fromkeys(STYLE_IDS.values()))
+# The season each style belongs to: its tunes, its original titles, its
+# words in Describe, its playlist.
+SEASONS = ("christmas", "thanksgiving")
+SEASON_OF: dict[str, str] = {g: g.split("_", 1)[0] for g in STYLE_IDS}
+
+
+def season_of(genre: str) -> str:
+    return SEASON_OF.get(genre, "christmas")
+
+
+def season_styles(season: str) -> tuple[str, ...]:
+    return tuple(g for g, s in SEASON_OF.items() if s == season)
+
+
+# Variants that are Christmas colours (or need carol lyrics): left out of
+# the other seasons' catalogs.
+_CHRISTMAS_ONLY_VARIANTS = ("sleigh_bells", "celesta_ending", "backing_track", "guide_melody")
+
+
+def season_variants(season: str) -> dict[str, str]:
+    return {k: v for k, v in ARRANGEMENT_VARIANTS.items()
+            if season == "christmas" or k not in _CHRISTMAS_ONLY_VARIANTS}
 JAZZ = ("swing", "trio")
 
 # Every arrangement variant, in plain English (tools, describe/revise and the
@@ -117,6 +147,7 @@ STYLE_DEFAULTS: dict[str, dict] = {
     "fireside":   {"tempo": (76, 100), "keys": ("D", "G", "C", "A", "E"), "swing": False, "lift": 0.0},
     "choir":      {"tempo": (64, 84), "keys": ("D", "Eb", "F", "G"), "swing": False, "lift": 0.3},
     "pop":        {"tempo": (84, 112), "keys": ("C", "D", "E", "F", "G", "A"), "swing": False, "lift": 0.7},
+    "piano":      {"tempo": (66, 90), "keys": ("C", "D", "Eb", "F", "G", "Ab"), "swing": False, "lift": 0.2},
 }
 # Slow ballad tempos for hymn-like carols in the jazz styles (a jazz waltz).
 _BALLAD_TEMPO = {"swing": (88, 104), "trio": (66, 84)}
@@ -141,6 +172,9 @@ LEADS: dict[str, dict[str, tuple[str, ...]]] = {
               "final": ("choir", "string_section")},
     "pop": {"intro": ("piano",), "pass1": ("piano", "glockenspiel"), "pass2": ("synth_lead", "piano"),
             "var": ("synth_lead", "piano"), "final": ("synth_lead", "piano")},
+    # Cozy solo piano; the cello sings the tune once in longer songs.
+    "piano": {"intro": ("piano",), "pass1": ("piano",), "pass2": ("piano",), "var": ("cello", "piano"),
+              "final": ("piano",)},
 }
 
 # Instruments that, when not leading, play a countermelody in fuller passes.
@@ -151,6 +185,7 @@ _COUNTER = {
     "fireside": ("cello",),
     "choir": (),
     "pop": ("string_section",),
+    "piano": ("cello",),
 }
 
 # What each instrument can actually play (concert pitch, MIDI lo, hi): every
@@ -177,8 +212,36 @@ _RANGE = {
 # The calm styles keep a high lead singable: its top note stays at or under
 # this, an octave lower when the tune in this key would go over (the flute
 # and violins otherwise climb to Bb6-C7 in C, D or Eb).
-_CALM_STYLES = ("orchestral", "fireside", "choir")
-_COMFORT_TOP = {"flute": 88, "violin": 88, "string_section": 88}
+_CALM_STYLES = ("orchestral", "fireside", "choir", "piano")
+_COMFORT_TOP = {"flute": 88, "violin": 88, "string_section": 88, "piano": 88, "clarinet": 88, "oboe": 88,
+                "organ_church": 88}
+
+
+def lead_shift(inst: str, lo: int, hi: int, style: str, lo_hi: Optional[tuple[int, int]] = None) -> int:
+    """Semitones (a multiple of 12) that put a tune spanning ``lo``..``hi``
+    (already in the song's key) in the instrument's register: centred in its
+    melody range, never past what it can play, and in the calm styles under
+    its comfortable top (MIDI 88) when an octave down still fits."""
+    rlo, rhi = lo_hi or _RANGE.get(inst, (60, 84))
+    shift = int(12 * round(((rlo + rhi) / 2 - (lo + hi) / 2) / 12))
+    pl, ph = PLAYABLE.get(inst, (0, 127))
+    while hi + shift > ph and lo + shift - 12 >= pl:
+        shift -= 12
+    while lo + shift < pl and hi + shift + 12 <= ph:
+        shift += 12
+    top = _COMFORT_TOP.get(inst) if style in _CALM_STYLES else None
+    while top is not None and hi + shift > top and lo + shift - 12 >= pl:
+        shift -= 12
+    return shift
+
+
+def carries(inst: str, lo: int, hi: int, style: str) -> bool:
+    """The instrument can state a tune spanning ``lo``..``hi`` comfortably:
+    within what it plays and, in the calm styles, under MIDI 88."""
+    shift = lead_shift(inst, lo, hi, style)
+    pl, ph = PLAYABLE.get(inst, (0, 127))
+    top = _COMFORT_TOP.get(inst, ph) if style in _CALM_STYLES else ph
+    return lo + shift >= pl and hi + shift <= min(ph, top)
 
 
 # One line per style for menus, tools and the plan guide.
@@ -193,6 +256,13 @@ STYLE_INFO: dict[str, str] = {
     "christmas_choir_full": "Reverent carol: choir 'aah' chorale, quiet pipe organ, strings, an 'Amen' ending.",
     "christmas_pop_full": "Light pop anthem: soft kit, bass, piano, acoustic guitar, strings, sleigh bells, "
                           "glockenspiel, a clean guitar lead.",
+    "thanksgiving_fireside_full": "Autumn fireside folk: steel-string acoustic guitar fingerpicking, soft piano, "
+                                  "cello and upright bass.",
+    "thanksgiving_piano_full": "Cozy autumn piano: solo piano, flowing in the fuller passes, with a cello "
+                               "countermelody and roots.",
+    "thanksgiving_strings_full": "Harvest strings: string section with contrabass, French horn, flute, clarinet "
+                                 "and harp; warm, ends on the strings.",
+    "thanksgiving_hymn_full": "Gentle harvest hymn: choir chorale, quiet pipe organ, strings, an 'Amen' ending.",
 }
 
 # Words that pick a sub-style once a request is about Christmas.
@@ -205,6 +275,14 @@ _STYLE_WORDS: tuple[tuple[str, str], ...] = (
     (r"\bpop\b|rock|anthem|band", "christmas_pop_full"),
 )
 _CHRISTMAS_WORDS = r"christmas|xmas|x-mas|holiday|carol|noel|yule|festive|santa|sleigh|jingle|nativity|advent"
+_THANKSGIVING_WORDS = r"thanksgiving|autumn|harvest|grateful|gratitude|pumpkin|cornucopia|fall leaves|falling leaves"
+# Words that pick a Thanksgiving style.
+_THANKSGIVING_STYLE_WORDS: tuple[tuple[str, str], ...] = (
+    (r"choir|chorale|hymn|church|organ|reverent", "thanksgiving_hymn_full"),
+    (r"orchestra|orchestral|film|cinematic|strings|string trio|harp", "thanksgiving_strings_full"),
+    (r"acoustic|fireside|fire\s*place|guitar|folk|cabin", "thanksgiving_fireside_full"),
+    (r"piano|keys", "thanksgiving_piano_full"),
+)
 
 
 def style_word(text: str) -> Optional[str]:
@@ -218,22 +296,70 @@ def style_word(text: str) -> Optional[str]:
     return None
 
 
+def thanksgiving_genre(text: str) -> Optional[str]:
+    """The Thanksgiving style a request asks for, or None when it isn't about
+    Thanksgiving / autumn. Naming one of the hymns counts."""
+    import re
+    low = (text or "").lower()
+    if not (re.search(_THANKSGIVING_WORDS, low) or _hymn_in(low)):
+        return None
+    for pattern, genre in _THANKSGIVING_STYLE_WORDS:
+        if re.search(pattern, low):
+            return genre
+    return "thanksgiving_piano_full"
+
+
+def seasonal_genre(text: str) -> Optional[str]:
+    """The Christmas or Thanksgiving style a request asks for, or None."""
+    return thanksgiving_genre(text) or christmas_genre(text)
+
+
+def season_style_word(text: str, season: str) -> Optional[str]:
+    """A style word in ``text`` mapped to that season's style ("make it
+    orchestral" keeps a Thanksgiving song Thanksgiving)."""
+    import re
+    low = (text or "").lower()
+    if season == "thanksgiving":
+        return next((g for p, g in _THANKSGIVING_STYLE_WORDS if re.search(p, low)), None)
+    return style_word(low)
+
+
+def _hymn_in(low: str) -> Optional[str]:
+    from .hymns import hymn_catalog
+    aliases = {"we gather": "we_gather_together", "kremser": "we_gather_together",
+               "come ye thankful": "come_ye_thankful_people", "come, ye thankful": "come_ye_thankful_people",
+               "beauty of the earth": "for_the_beauty_of_the_earth", "now thank we": "now_thank_we_all_our_god",
+               "nun danket": "now_thank_we_all_our_god", "all creatures": "all_creatures_of_our_god",
+               "lasst uns": "all_creatures_of_our_god", "simple gifts": "simple_gifts"}
+    for words, tid in aliases.items():
+        if words in low:
+            return tid
+    for tid, info in hymn_catalog().items():
+        if info["title"].lower() in low:
+            return tid
+    return None
+
+
 def christmas_genre(text: str) -> Optional[str]:
     """The Christmas style a request asks for, or None when it isn't about
     Christmas. Mentioning a carol by name counts."""
     import re
     low = (text or "").lower()
-    if not (re.search(_CHRISTMAS_WORDS, low) or tune_from_text(low)):
+    if not (re.search(_CHRISTMAS_WORDS, low) or tune_from_text(low, "christmas")):
         return None
     return style_word(low) or "christmas_orchestral_full"
 
 
-def tune_from_text(text: str) -> Optional[str]:
-    """A carol named in ``text`` ("Silent Night", "greensleeves"), or
-    "original" when an original tune is asked for."""
+def tune_from_text(text: str, season: str = "christmas") -> Optional[str]:
+    """A carol (or, for Thanksgiving, a hymn) named in ``text`` ("Silent
+    Night", "greensleeves", "We Gather Together"), or "original" when an
+    original tune is asked for."""
     import re
-    from .carols import CAROLS, carol_catalog
+    from .carols import carol_catalog
     low = (text or "").lower()
+    if season == "thanksgiving":
+        return _hymn_in(low) or ("original" if re.search(r"\boriginal\b|\bnew (tune|melody|song)\b", low)
+                                 else None)
     aliases = {"greensleeves": "what_child_is_this", "shchedryk": "carol_of_the_bells",
                "first nowell": "the_first_noel", "first noel": "the_first_noel",
                "deck the hall": "deck_the_halls",
@@ -250,8 +376,16 @@ def tune_from_text(text: str) -> Optional[str]:
     return None
 
 
+def find_tune(tune_id: Optional[str]) -> Optional[Tune]:
+    """A carol or a Thanksgiving hymn by id or title, or None."""
+    if not tune_id or tune_id in ("original", ""):
+        return None
+    from .hymns import hymn
+    return carol(tune_id) or hymn(tune_id)
+
+
 def carol_title(tune_id: str) -> str:
-    t = carol(tune_id)
+    t = find_tune(tune_id)
     return t.title if t else tune_id
 
 
@@ -401,17 +535,26 @@ _TITLE_WORDS = (
 )
 
 
-def original_title(seed: int, beats: int = 4) -> str:
+_AUTUMN_TITLE_WORDS = (
+    ("Harvest", "Amber", "Maple", "Hearthside", "Golden", "Orchard", "Lantern", "Russet", "Woodsmoke",
+     "Cider", "Hayfield", "Acorn", "Twilight", "Copper", "Grateful", "Homestead"),
+    ("Evening", "Table", "Blessing", "Reverie", "Hymn", "Lullaby", "Morning", "Glow", "Stroll", "Homeward",
+     "Embers", "Hush", "Fields", "Prayer", "Song", "Light"),
+)
+
+
+def original_title(seed: int, beats: int = 4, season: str = "christmas") -> str:
     """A cozy name for an original tune (stable per seed): "Starlit Reverie",
-    and a waltz when it's in 3/4."""
+    "Maple Evening", and a waltz when it's in 3/4."""
+    words = _AUTUMN_TITLE_WORDS if season == "thanksgiving" else _TITLE_WORDS
     rng = np.random.default_rng(zlib.crc32(f"{seed}|title".encode()))
-    a = _TITLE_WORDS[0][int(rng.integers(0, len(_TITLE_WORDS[0])))]
-    b = "Waltz" if beats == 3 else _TITLE_WORDS[1][int(rng.integers(0, len(_TITLE_WORDS[1])))]
+    a = words[0][int(rng.integers(0, len(words[0])))]
+    b = "Waltz" if beats == 3 else words[1][int(rng.integers(0, len(words[1])))]
     return f"{a} {b}"
 
 
 @lru_cache(maxsize=64)
-def original_tune(seed: int, beats: int = 4, plain: bool = False) -> Tune:
+def original_tune(seed: int, beats: int = 4, plain: bool = False, season: str = "christmas") -> Tune:
     """An original 32-bar AABA tune with Christmas harmony, from the seed."""
     rng = np.random.default_rng(zlib.crc32(f"{seed}|christmas original|{beats}".encode()))
     a = _A_TEMPLATES[int(rng.integers(0, len(_A_TEMPLATES)))]
@@ -493,7 +636,7 @@ def original_tune(seed: int, beats: int = 4, plain: bool = False) -> Tune:
     last = [TuneNote(n.start + 24 * beats, n.dur, n.pitch) for n in a_notes if n.start < 4 * beats]
     last += phrase(28, 4, last[-1].pitch if last else 64, 60, pick[1:])
     melody += last
-    return Tune(id="original", title=original_title(seed, beats), source="Original (generated).",
+    return Tune(id="original", title=original_title(seed, beats, season), source="Original (generated).",
                 beats=beats, pickup=0.0, scale="major", melody=tuple(melody), chords=tuple(chords),
                 tempo=(72.0, 140.0))
 
@@ -578,16 +721,23 @@ def _suspend_cadences(chords: list[TuneChord], tune: Tune) -> list[TuneChord]:
 # Planning the form
 # ---------------------------------------------------------------------------
 
-def resolve_tune(tune_id: Optional[str], seed: int, style: str) -> Tune:
-    t = carol(tune_id) if tune_id and tune_id not in ("original", "") else None
+def resolve_tune(tune_id: Optional[str], seed: int, style: str, season: str = "christmas") -> Tune:
+    t = find_tune(tune_id)
     if t is not None:
         return t
     beats = 3 if (np.random.default_rng(zlib.crc32(f"{seed}|meter".encode())).random() < 0.3
-                  and style in ("trio", "fireside", "choir", "orchestral")) else 4
-    return original_tune(int(seed), beats, plain=style not in JAZZ)
+                  and style in ("trio", "fireside", "choir", "orchestral", "piano")) else 4
+    return original_tune(int(seed), beats, plain=style not in JAZZ, season=season)
 
 
-def _first_available(names: tuple[str, ...], band: list[str]) -> str:
+def _first_available(names: tuple[str, ...], band: list[str], fit: Optional[tuple[int, int, str]] = None) -> str:
+    """The first of ``names`` in the band; with ``fit`` = (tune low, high in
+    the key, style), the first that also carries the tune comfortably (a
+    flute isn't handed a tune that would sit over MIDI 88)."""
+    if fit is not None:
+        for n in names:
+            if n in band and carries(n, *fit):
+                return n
     for n in names:
         if n in band:
             return n
@@ -638,7 +788,7 @@ def plan_song(genre: str, *, seed: int, tune: Optional[str] = None, key: Optiona
     rng = np.random.default_rng(zlib.crc32(f"{seed}|christmas plan|{genre}".encode()))
     var = variants(arrangement)
     band = list(instruments or preset.default_instruments)
-    t = resolve_tune(tune, seed, style)
+    t = resolve_tune(tune, seed, style, season_of(genre))
     backing = "backing_track" in var or "guide_melody" in var
     # A backing track sings one verse per pass: as many passes as the carol
     # has verses (up to four) unless a length is asked for.
@@ -723,7 +873,11 @@ def plan_song(genre: str, *, seed: int, tune: Optional[str] = None, key: Optiona
                                      "next_pickup": 0.0}, 0.5)
     # Intro: the tune's last phrase.
     mel, ch = _slice(notes, chords, tail - 4 * beats, tail, pickup_into=t.pickup)
-    lead = _first_available(LEADS[style]["intro"], band)
+    key_shift = (_tonic_pc(song_key) - t.tonic_pc) % 12
+    key_shift -= 12 if key_shift > 6 else 0
+    fit = (common["tune_range"][0] + key_shift, common["tune_range"][1] + key_shift, style) \
+        if style in _CALM_STYLES else None
+    lead = _first_available(LEADS[style]["intro"], band, fit)
     add("Intro", "intro", 4, {**common, "kind": "intro", "lead": lead, "melody": mel, "chords": ch,
                               "next_pickup": t.pickup}, 0.62)
     kinds = ["pass1", "pass2"] + ["var"] * max(0, n_pass - 3) + (["final"] if n_pass >= 3 else [])
@@ -744,7 +898,7 @@ def plan_song(genre: str, *, seed: int, tune: Optional[str] = None, key: Optiona
                       ["V7", 3 * beats, beats] if not lift else ["VI7", 3 * beats, beats]]
             add("Interlude", "bridge", 4, {**common, "kind": "interlude", "lead": "", "melody": [], "chords": il,
                                           "next_pickup": t.pickup}, 0.72)
-        lead = _first_available(LEADS[style][kind], band)
+        lead = _first_available(LEADS[style][kind], band, fit)
         mel, ch = _slice(notes, chords, 0, total_beats, pickup_into=0.0 if last else t.pickup)
         # The pickup of this pass sounds at the end of the previous section.
         pick = [[round(n.start, 4), n.dur, n.pitch] for n in notes if n.start < 0]
@@ -775,7 +929,7 @@ def plan_song(genre: str, *, seed: int, tune: Optional[str] = None, key: Optiona
         final_note = [[3 * beats, 4 * beats, home]]
     outro_mel = tag_mel + final_note
     tp = [(3 + 2, bpm * 0.9), (3 + 2.5, bpm * 0.8), (3 + 3, bpm * 0.68)]
-    add("Outro", "outro", 7, {**common, "kind": "outro", "lead": _first_available(LEADS[style]["final"], band),
+    add("Outro", "outro", 7, {**common, "kind": "outro", "lead": _first_available(LEADS[style]["final"], band, fit),
                               "melody": outro_mel, "chords": outro_chords, "hold_from": 5 * beats,
                               "final": True, "next_pickup": 0.0}, 0.8, end_key if lift else None, tp)
     # Each section knows the next one's pickup (it sounds over this one's end).
@@ -936,21 +1090,7 @@ class _Sec:
 
     def octave_for(self, inst: str, lo_hi: Optional[tuple[int, int]] = None) -> int:
         """Semitones (multiple of 12) that put the tune in the instrument's range."""
-        lo, hi = lo_hi or _RANGE.get(inst, (60, 84))
-        mid = (lo + hi) / 2
-        cur = (self.range[0] + self.range[1]) / 2
-        shift = int(12 * round((mid - cur) / 12))
-        # Never past what the instrument can play: an octave down (or up)
-        # when the tune in this key would leave its range and still fits.
-        pl, ph = PLAYABLE.get(inst, (0, 127))
-        while self.range[1] + shift > ph and self.range[0] + shift - 12 >= pl:
-            shift -= 12
-        while self.range[0] + shift < pl and self.range[1] + shift + 12 <= ph:
-            shift += 12
-        top = _COMFORT_TOP.get(inst) if self.style in _CALM_STYLES else None
-        while top is not None and self.range[1] + shift > top and self.range[0] + shift - 12 >= pl:
-            shift -= 12
-        return shift
+        return lead_shift(inst, self.range[0], self.range[1], self.style, lo_hi)
 
     @property
     def strings_end(self) -> bool:
@@ -1261,6 +1401,8 @@ def _piano_ballad(sec: _Sec, lead: bool) -> list[NoteEvent]:
     prev = None
     b = sec.beats
     flowing = sec.kind in ("pass2", "final", "var") and not sec.calm
+    # The solo-piano style keeps its left hand flowing under the tune too.
+    flow_under = sec.style == "piano"
     for c in sec.chords:
         held = sec.hold_from is not None and c.start >= sec.hold_from - 1e-6
         dur = (sec.total - c.start) if held else c.dur
@@ -1271,7 +1413,7 @@ def _piano_ballad(sec: _Sec, lead: bool) -> list[NoteEvent]:
         v = _voice_near(chord_pcs(c.root, c.quality), 55, max(64, top), 62, prev, 3)
         prev = v
         sec.note(out, root, c.start, dur, 56, ms=6.0, legato=1.0)
-        if flowing and not held and not lead:
+        if flowing and not held and (not lead or flow_under):
             pattern = [0, 1, 2, 1, 2, 1, 2, 1] if b == 4 else [0, 1, 2, 1, 2, 1]
             for bt in np.arange(c.start, c.end - 1e-6, b):
                 for i, idx in enumerate(pattern):
@@ -1735,11 +1877,13 @@ def _plays(sec: _Sec, inst: str) -> bool:
     if k == "intro":
         intro = {"swing": ("piano",), "trio": ("piano",), "orchestral": ("string_section", "harp", sec.info["lead"]),
                  "fireside": ("nylon_guitar", "acoustic_guitar"), "choir": ("organ_church", sec.info["lead"]),
-                 "pop": ("piano",)}[sec.style]
+                 "pop": ("piano",), "piano": ("piano",)}[sec.style]
         return inst in intro
     if k == "interlude":
         return inst not in ("glockenspiel", "celesta", "sleigh_bells", "shaker") or sec.style == "pop"
     if k == "pass1":
+        if sec.style == "piano":
+            return inst == "piano"                        # solo piano first; the cello joins after
         return inst not in ("french_horn", "glockenspiel", "celesta", "choir") or inst == sec.info.get("lead")
     if inst == "choir" and sec.style != "choir":
         return "choir_pad" in sec.var and k in ("final", "outro")
@@ -1747,6 +1891,20 @@ def _plays(sec: _Sec, inst: str) -> bool:
 
 
 _BASSES = ("upright_bass", "electric_bass", "contrabass", "bassoon")
+
+
+def _no_blips(notes: list[NoteEvent]) -> list[NoteEvent]:
+    """No doubled pitch (a voice moved onto a pitch another voice already
+    holds would be cut to a click when the MIDI is written) and nothing
+    shorter than 50 ms."""
+    out: list[NoteEvent] = []
+    for n in sorted(notes, key=lambda n: (n.pitch, n.start, -(n.end - n.start))):
+        if n.end - n.start < 0.05:
+            continue
+        if out and out[-1].pitch == n.pitch and n.start < out[-1].end - 0.05 and n.start - out[-1].start < 0.06:
+            continue                                      # the same note again: keep the first (longest)
+        out.append(n)
+    return sorted(out, key=lambda n: (n.start, n.pitch))
 
 
 def play(midi, ctx: TechniqueContext, inst: str) -> None:
@@ -1813,8 +1971,8 @@ def play(midi, ctx: TechniqueContext, inst: str) -> None:
         notes = _choir(sec, lead)
     elif inst == "organ_church":
         manual, pedal = _organ(sec, lead)
-        _emit(midi, ctx, in_range(_declash(sec, manual), inst), name="Organ", program=19)
-        _emit_named(midi, in_range(_declash(sec, pedal, keep_roots=True), inst), "Organ Pedal Bass", 19)
+        _emit(midi, ctx, _no_blips(in_range(_declash(sec, manual), inst)), name="Organ", program=19)
+        _emit_named(midi, _no_blips(in_range(_declash(sec, pedal, keep_roots=True), inst)), "Organ Pedal Bass", 19)
         return
     elif inst == "string_section":
         notes = _strings(sec, lead)
@@ -1865,7 +2023,7 @@ def play(midi, ctx: TechniqueContext, inst: str) -> None:
         notes = [NoteEvent(n.pitch, n.start, min(n.end, cut + 0.3), n.velocity) for n in notes]
     if notes and inst not in ("sleigh_bells", "shaker"):
         notes = _declash(sec, notes, keep_roots=inst in _BASSES or inst == "cello")
-    notes = in_range(notes, inst)
+    notes = _no_blips(in_range(notes, inst))
     if notes:
         prog = {"sleigh_bells": 112, "shaker": 113}.get(inst, 0)
         _emit(midi, ctx, notes, name=inst.replace("_", " ").title(), program=prog)

@@ -62,20 +62,24 @@ class MixResult:
 
 def plan_mix(*, total_minutes: float = 0.0, count: int = 0, styles: Optional[list[str]] = None,
              tunes: Optional[list[str]] = None, originals: float = 0.4, track_seconds: tuple = (150, 240),
-             seed: int = 1, arrangement: str = "") -> list[MixTrack]:
+             seed: int = 1, arrangement: str = "", season: str = "christmas") -> list[MixTrack]:
     """A varied running order. Give ``count`` songs or ``total_minutes``.
 
-    ``styles``: Christmas style ids to rotate (default all six). ``tunes``:
-    carol ids to draw from (default every carol); ``originals`` is the share
-    of original tunes. ``track_seconds``: (shortest, longest) song length.
+    ``season``: "christmas" (carols) or "thanksgiving" (harvest hymns).
+    ``styles``: that season's style ids to rotate (default all of them).
+    ``tunes``: tune ids to draw from (default every carol / hymn);
+    ``originals`` is the share of original tunes. ``track_seconds``:
+    (shortest, longest) song length.
     """
     from src.composition import christmas
     from src.composition.carols import CAROLS
+    from src.composition.hymns import HYMNS
 
-    rng = np.random.default_rng(zlib.crc32(f"{seed}|christmas mix".encode()))
-    styles = [s for s in (styles or list(christmas.STYLE_IDS)) if s in christmas.STYLE_IDS] \
-        or list(christmas.STYLE_IDS)
-    pool = [t for t in (tunes or list(CAROLS)) if t in CAROLS]
+    rng = np.random.default_rng(zlib.crc32(f"{seed}|{season} mix".encode()))
+    own = list(christmas.season_styles(season))
+    styles = [s for s in (styles or own) if s in own] or own
+    book = HYMNS if season == "thanksgiving" else CAROLS
+    pool = [t for t in (tunes or list(book)) if t in book]
     lo, hi = float(min(track_seconds)), float(max(track_seconds))
     if count <= 0:
         minutes = total_minutes if total_minutes > 0 else 30.0

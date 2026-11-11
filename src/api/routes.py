@@ -221,9 +221,12 @@ def christmas_mix(req: ChristmasMixRequest) -> dict:
     """Render a seamless mix of generated Christmas songs (one WAV/MP3 at a
     target loudness, with gentle crossfades and a tracklist)."""
     from src.composition import christmas
-    bad = [s for s in req.styles if s not in christmas.STYLE_IDS]
+    if req.season not in christmas.SEASONS:
+        raise HTTPException(422, f"Unknown season {req.season!r}; use {list(christmas.SEASONS)}")
+    own = christmas.season_styles(req.season)
+    bad = [s for s in req.styles if s not in own]
     if bad:
-        raise HTTPException(422, f"Unknown Christmas style(s) {bad}; use {list(christmas.STYLE_IDS)}")
+        raise HTTPException(422, f"Unknown {req.season} style(s) {bad}; use {list(own)}")
     if req.count <= 0 and req.total_minutes <= 0:
         raise HTTPException(422, "Give count or total_minutes")
     job = registry.create()

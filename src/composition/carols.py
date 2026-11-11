@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Optional
 
 # Modern, copyrighted Christmas songs (title words, lowercase). Never add a
@@ -286,43 +285,72 @@ _RAW: dict[str, dict] = {
 }
 
 
-@lru_cache(maxsize=None)
+class TuneBook:
+    """A collection of tunes written in the text format above (the carols
+    here, the Thanksgiving hymns in hymns.py): build, look up by id or title,
+    list for menus."""
+
+    def __init__(self, raw: dict[str, dict]):
+        self._raw = raw
+        self.ids: tuple[str, ...] = tuple(raw)
+        self._cache: dict[str, Tune] = {}
+
+    def build(self, tune_id: str) -> Tune:
+        if tune_id not in self._cache:
+            raw = self._raw[tune_id]
+            self._cache[tune_id] = Tune(
+                id=tune_id, title=raw["title"], source=raw["source"], beats=raw["beats"],
+                pickup=float(raw["pickup"]), scale=raw["scale"],
+                melody=parse_melody(raw["melody"], float(raw["pickup"])),
+                chords=parse_chords(raw["chords"]),
+                tempo=tuple(float(x) for x in raw.get("tempo", (72, 120))),
+                lively=bool(raw.get("lively", False)),
+            )
+        return self._cache[tune_id]
+
+    def get(self, tune_id: str) -> Optional[Tune]:
+        """The tune ``tune_id`` (also accepts its title, any case), or None."""
+        key = (tune_id or "").strip().lower().replace("-", "_").replace(" ", "_")
+        if key in self._raw:
+            return self.build(key)
+        text = (tune_id or "").strip().lower()
+        for tid, raw in self._raw.items():
+            if text and raw["title"].lower().startswith(text):
+                return self.build(tid)
+        return None
+
+    def catalog(self) -> dict[str, dict]:
+        """Id → title, meter and source, for menus and tools."""
+        out = {}
+        for tid in self.ids:
+            t = self.build(tid)
+            out[tid] = {"title": t.title, "meter": f"{t.beats}/4", "bars": t.bars, "source": t.source,
+                        "lively": t.lively}
+        return out
+
+    def raw_text(self, tune_id: str) -> dict:
+        """The encoded strings (tests check bar lengths)."""
+        return dict(self._raw[tune_id])
+
+
+BOOK = TuneBook(_RAW)
+CAROLS: tuple[str, ...] = BOOK.ids
+
+
 def _build(tune_id: str) -> Tune:
-    raw = _RAW[tune_id]
-    return Tune(
-        id=tune_id, title=raw["title"], source=raw["source"], beats=raw["beats"],
-        pickup=float(raw["pickup"]), scale=raw["scale"],
-        melody=parse_melody(raw["melody"], float(raw["pickup"])),
-        chords=parse_chords(raw["chords"]),
-        tempo=tuple(float(x) for x in raw.get("tempo", (72, 120))),
-        lively=bool(raw.get("lively", False)),
-    )
-
-
-CAROLS: tuple[str, ...] = tuple(_RAW)
+    return BOOK.build(tune_id)
 
 
 def carol(tune_id: str) -> Optional[Tune]:
     """The carol ``tune_id`` (also accepts its title, any case), or None."""
-    key = (tune_id or "").strip().lower().replace("-", "_").replace(" ", "_")
-    if key in _RAW:
-        return _build(key)
-    for tid, raw in _RAW.items():
-        if raw["title"].lower().startswith((tune_id or "").strip().lower()) and tune_id.strip():
-            return _build(tid)
-    return None
+    return BOOK.get(tune_id)
 
 
 def carol_catalog() -> dict[str, dict]:
     """Id → title, meter and source, for menus and tools."""
-    out = {}
-    for tid in CAROLS:
-        t = _build(tid)
-        out[tid] = {"title": t.title, "meter": f"{t.beats}/4", "bars": t.bars, "source": t.source,
-                    "lively": t.lively}
-    return out
+    return BOOK.catalog()
 
 
 def raw_text(tune_id: str) -> dict:
     """The encoded strings (tests check bar lengths)."""
-    return dict(_RAW[tune_id])
+    return BOOK.raw_text(tune_id)

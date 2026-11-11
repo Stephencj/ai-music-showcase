@@ -148,6 +148,31 @@ class StylePreset:
             )
 
 
+
+def _seasonal_preset(name: str, tempo: float, key: str, *, chord_program: int, bass_program: int,
+                     instruments: list[str]) -> "StylePreset":
+    """A full-song preset for a style the seasonal engine
+    (src/composition/christmas.py) plans itself: the progression and form
+    here are only the fallback when it's composed without the planner."""
+    return StylePreset(
+        name=name, tempo=tempo, key=key, scale="major",
+        progression=[("Imaj7", 1.0), ("vi7", 1.0), ("ii7", 1.0), ("V7", 1.0)] * 8,
+        voicing="seventh", bass_pattern="root", drum_pattern=None,
+        chord_rhythm="pad", melody_style="motif",
+        chord_octave=3, bass_octave=2, swing=0.0, default_bars=63,
+        chord_program=chord_program, bass_program=bass_program, melody_program=0,
+        rhythm_variants={"Full song": [
+            {"start_bar": 0, "end_bar": 3, "label": "Intro"},
+            {"start_bar": 4, "end_bar": 19, "label": "Verse"},
+            {"start_bar": 20, "end_bar": 35, "label": "Chorus 1"},
+            {"start_bar": 36, "end_bar": 39, "label": "Bridge"},
+            {"start_bar": 40, "end_bar": 55, "label": "Chorus 2"},
+            {"start_bar": 56, "end_bar": 62, "label": "Outro"},
+        ]},
+        default_instruments=list(instruments), sound="sampled",
+        pacing_options=('uniform_1',), bridge_pacing_options=('uniform_1',),
+    )
+
 STYLES: dict[str, StylePreset] = {
     "funk": StylePreset(
         name="Funk", tempo=100, key="C", scale="dorian",
@@ -1216,6 +1241,19 @@ STYLES: dict[str, StylePreset] = {
         pacing_options=('uniform_1',),
         bridge_pacing_options=('uniform_1',),
     ),
+    # ---------- Thanksgiving / autumn (same engine, christmas.py: hymns + originals) ----------
+    "thanksgiving_fireside_full": _seasonal_preset(
+        "Thanksgiving Autumn Fireside (Full song)", 86, "G", chord_program=25, bass_program=32,
+        instruments=['acoustic_guitar', 'piano', 'cello', 'upright_bass']),
+    "thanksgiving_piano_full": _seasonal_preset(
+        "Thanksgiving Cozy Piano (Full song)", 76, "Eb", chord_program=0, bass_program=42,
+        instruments=['piano', 'cello']),
+    "thanksgiving_strings_full": _seasonal_preset(
+        "Thanksgiving Harvest Strings (Full song)", 84, "D", chord_program=48, bass_program=43,
+        instruments=['string_section', 'contrabass', 'french_horn', 'flute', 'clarinet', 'harp']),
+    "thanksgiving_hymn_full": _seasonal_preset(
+        "Thanksgiving Harvest Hymn (Full song)", 72, "F", chord_program=19, bass_program=19,
+        instruments=['choir', 'organ_church', 'string_section']),
 
     "jazz_aaba_full": StylePreset(
         name="Jazz AABA (Full song)", tempo=140, key="F", scale="major",

@@ -61,6 +61,7 @@ class EngineSpec:
     tunes: bool = False                   # honors tune (a public-domain carol or "original")
     # Loudness a "background" request means for this engine's music.
     background_lufs: float = -25.0
+    season: str = ""                      # seasonal engines: which season's tunes it plays
 
 
 def _funk_fusion() -> EngineSpec:
@@ -77,12 +78,13 @@ def _funk_fusion() -> EngineSpec:
     )
 
 
-def _christmas() -> EngineSpec:
-    from src.composition.christmas import ARRANGEMENT_INSTRUMENTS, ARRANGEMENT_VARIANTS, STYLE_IDS
+def _seasonal(season: str) -> EngineSpec:
+    from src.composition.christmas import ARRANGEMENT_INSTRUMENTS, season_styles, season_variants
+    variants = season_variants(season)
     return EngineSpec(
-        id="christmas", label="Christmas", genres=frozenset(STYLE_IDS),
-        arrangement_variants=tuple(ARRANGEMENT_VARIANTS),
-        variant_instruments=dict(ARRANGEMENT_INSTRUMENTS),
+        id=season, label=season.capitalize(), genres=frozenset(season_styles(season)), season=season,
+        arrangement_variants=tuple(variants),
+        variant_instruments={k: v for k, v in ARRANGEMENT_INSTRUMENTS.items() if k in variants},
         exclusive=(("key_change", "no_key_change"), ("plain_harmony", "rich_harmony"),
                    ("strings_ending", "celesta_ending"), ("backing_track", "guide_melody")),
         tunes=True,
@@ -99,7 +101,7 @@ _ENGINES: Optional[list[EngineSpec]] = None
 def engines() -> list[EngineSpec]:
     global _ENGINES
     if _ENGINES is None:
-        _ENGINES = [_funk_fusion(), _christmas(), COMPOSE_SONG]
+        _ENGINES = [_funk_fusion(), _seasonal("christmas"), _seasonal("thanksgiving"), COMPOSE_SONG]
     return _ENGINES
 
 
@@ -158,14 +160,13 @@ def _genre(v) -> Optional[str]:
             return k
     if "fusion" in low:
         return "funk_fusion_full"
-    from src.composition.christmas import christmas_genre
-    return christmas_genre(low)
+    from src.composition.christmas import seasonal_genre
+    return seasonal_genre(low)
 
 
 def _tune(v, eng: EngineSpec, notes: list[str]) -> Optional[str]:
-    """A carol id (or "original") for engines that play tunes."""
-    from src.composition.carols import carol
-    from src.composition.christmas import denied_song, tune_from_text
+    """A carol / hymn id (or "original") for engines that play tunes."""
+    from src.composition.christmas import denied_song, find_tune, tune_from_text
     text = str(v or "").strip()
     if not eng.tunes:
         notes.append(f"{eng.label} doesn't play carols; ignored tune {text!r}.")
@@ -175,12 +176,23 @@ def _tune(v, eng: EngineSpec, notes: list[str]) -> Optional[str]:
     if denied_song(text):
         notes.append(f"{text!r} is a copyrighted song, so it can't be arranged; using an original tune.")
         return "original"
-    t = carol(text)
-    tid = t.id if t else tune_from_text(text)
+    t = find_tune(text)
+    if t is not None and eng.season == "thanksgiving" and t.id not in _season_tunes("thanksgiving"):
+        t = None
+    if t is not None and eng.season == "christmas" and t.id not in _season_tunes("christmas"):
+        t = None
+    tid = t.id if t else tune_from_text(text, eng.season or "christmas")
     if not tid:
-        notes.append(f"Unknown carol {text!r}; using an original tune.")
+        notes.append(f"Unknown {'hymn' if eng.season == 'thanksgiving' else 'carol'} {text!r}; "
+                     "using an original tune.")
         return "original"
     return tid
+
+
+def _season_tunes(season: str) -> tuple:
+    from src.composition.carols import CAROLS
+    from src.composition.hymns import HYMNS
+    return HYMNS if season == "thanksgiving" else CAROLS
 
 
 def split_variants(arr) -> list[str]:
@@ -771,9 +783,11 @@ def rule_revise(plan: dict, feedback: str) -> tuple[dict, list[str]]:
     new = json.loads(json.dumps(plan))
     parsed = parse_prompt(feedback)
     if plan.get("genre") in christmas.STYLE_IDS:
-        # A Christmas song stays Christmas: "make it orchestral" picks the
-        # Christmas orchestral style; "add sleigh bells" changes no style.
-        to = christmas.style_word(feedback)
+        # A Christmas (or Thanksgiving) song stays in its season: "make it
+        # orchestral" picks that season's orchestral style; "add sleigh
+        # bells" changes no style.
+        season = christmas.season_of(plan.get("genre", ""))
+        to = christmas.season_style_word(feedback, season)
         if to and to != plan.get("genre"):
             new["genre"] = to
         elif mentions_genre(feedback) and parsed["genre"] not in christmas.STYLE_IDS:
@@ -783,7 +797,11 @@ def rule_revise(plan: dict, feedback: str) -> tuple[dict, list[str]]:
     for k in ("key", "scale"):
         if parsed.get(k) is not None:
             new[k] = parsed[k]
-    if parsed.get("tune") and parsed["tune"] != plan.get("tune"):
+    if plan.get("genre") in christmas.STYLE_IDS and christmas.season_of(new.get("genre", "")) == "thanksgiving":
+        hymn_named = christmas.tune_from_text(feedback, "thanksgiving")
+        if hymn_named and hymn_named != plan.get("tune"):
+            new["tune"] = hymn_named
+    elif parsed.get("tune") and parsed["tune"] != plan.get("tune"):
         new["tune"] = parsed["tune"]
     # Only an explicit BPM; tempo words ("fast") are relative in feedback and
     # handled by the rules ("too fast" → slower).
@@ -822,14 +840,19 @@ def _variant_catalog() -> str:
     from src.composition import christmas
     from src.composition.carols import carol_catalog
     from src.composition.funk_fusion import ARRANGEMENT_VARIANTS
+    from src.composition.hymns import hymn_catalog
     return ("\nFunk Fusion arrangement variants:\n"
             + "\n".join(f"- `{k}`: {v}" for k, v in ARRANGEMENT_VARIANTS.items())
-            + "\n\nChristmas styles:\n"
+            + "\n\nChristmas and Thanksgiving styles:\n"
             + "\n".join(f"- `{k}`: {v}" for k, v in christmas.STYLE_INFO.items())
             + "\n\nChristmas arrangement variants:\n"
             + "\n".join(f"- `{k}`: {v}" for k, v in christmas.ARRANGEMENT_VARIANTS.items())
             + "\n\nChristmas tunes (`tune`; public-domain carols, or \"original\"):\n"
-            + "\n".join(f"- `{k}`: {v['title']} ({v['meter']})" for k, v in carol_catalog().items()) + "\n")
+            + "\n".join(f"- `{k}`: {v['title']} ({v['meter']})" for k, v in carol_catalog().items())
+            + "\n\nThanksgiving tunes (`tune` for thanksgiving_* styles; public-domain hymns, or \"original\"):\n"
+            + "\n".join(f"- `{k}`: {v['title']} ({v['meter']})" for k, v in hymn_catalog().items())
+            + "\n\nThanksgiving arrangement variants: the Christmas ones except "
+            + ", ".join(christmas._CHRISTMAS_ONLY_VARIANTS) + ".\n")
 
 
 def system_prompt() -> str:

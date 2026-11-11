@@ -142,7 +142,8 @@ def _check_genre(genre: str) -> None:
 def _catalog(genre: str) -> tuple[dict, dict]:
     """(variant descriptions, variant -> instruments) for a style."""
     if genre in CHRISTMAS_STYLES:
-        return christmas.ARRANGEMENT_VARIANTS, christmas.ARRANGEMENT_INSTRUMENTS
+        variants = christmas.season_variants(christmas.season_of(genre))
+        return variants, {k: v for k, v in christmas.ARRANGEMENT_INSTRUMENTS.items() if k in variants}
     return ARRANGEMENT_VARIANTS, ARRANGEMENT_INSTRUMENTS
 
 
@@ -183,12 +184,28 @@ def _needed_instruments(variants: list[str], genre: str = "funk_fusion_full") ->
     return out
 
 
+def _hymn_catalog() -> dict:
+    from src.composition.hymns import hymn_catalog
+    return hymn_catalog()
+
+
 def _check_tune(genre: str, tune: str) -> str:
-    """A valid tune id for Christmas styles ("" for other styles)."""
+    """A valid tune id for the Christmas / Thanksgiving styles ("" for
+    other styles)."""
     if not tune:
         return ""
     if genre not in CHRISTMAS_STYLES:
-        raise ToolError(f"tune only works with the Christmas styles ({', '.join(CHRISTMAS_STYLES)}), not {genre!r}.")
+        raise ToolError(f"tune only works with the Christmas / Thanksgiving styles ({', '.join(CHRISTMAS_STYLES)}), "
+                        f"not {genre!r}.")
+    if christmas.season_of(genre) == "thanksgiving":
+        from src.composition.hymns import hymn, hymn_catalog
+        if tune == "original":
+            return tune
+        h = hymn(tune)
+        if h is None:
+            raise ToolError(f"Unknown hymn {tune!r}.{_suggest(tune, hymn_catalog())} "
+                            f"Thanksgiving hymns: {', '.join(hymn_catalog())}, or 'original'.")
+        return h.id
     if christmas.denied_song(tune):
         raise ToolError(f"{tune!r} is a copyrighted song and can't be arranged. Use a public-domain carol "
                         f"({', '.join(carol_catalog())}) or 'original'.")
@@ -490,6 +507,21 @@ def describe_options() -> dict:
                  "args": {"tune": "silent_night", "genre": "christmas_orchestral_full", "both": True}},
             ],
         },
+        "thanksgiving": {
+            "styles": {g: christmas.STYLE_INFO[g] for g in christmas.season_styles("thanksgiving")},
+            "tunes": {"hymns": _hymn_catalog(),
+                      "original": "An original autumn tune written from the seed (same harmony idioms as the "
+                                  "Christmas originals), with a cozy autumn title."},
+            "arrangement_variants": sorted(christmas.season_variants("thanksgiving")),
+            "playlist": "christmas_mix with season='thanksgiving' (harvest hymns + autumn originals).",
+            "recipes": [
+                {"name": "Fireside folk, We Gather Together", "tool": "generate_song",
+                 "args": {"genre": "thanksgiving_fireside_full", "tune": "we_gather_together",
+                          "length_seconds": 180}},
+                {"name": "An hour of Thanksgiving ambience", "tool": "christmas_mix",
+                 "args": {"season": "thanksgiving", "total_minutes": 60}},
+            ],
+        },
         "recipes": RECIPES,
     }
 
@@ -498,10 +530,10 @@ def christmas_mix(
     total_minutes: Annotated[float, Field(description="Length of the mix in minutes (e.g. 60 for an hour of "
                                                       "ambience). Or give count.")] = 0,
     count: Annotated[int, Field(description="Number of songs (0 = from total_minutes).")] = 0,
-    styles: Annotated[list[str], Field(description="Christmas style ids to rotate (empty = all six): "
+    styles: Annotated[list[str], Field(description="Style ids of the season to rotate (empty = all of them): "
                                                    + ", ".join(christmas.STYLE_IDS))] = [],  # noqa: B006
-    tunes: Annotated[list[str], Field(description="Carol ids to draw from (empty = every carol); each plays once "
-                                                  "before any repeats.")] = [],  # noqa: B006
+    tunes: Annotated[list[str], Field(description="Carol (or, for Thanksgiving, hymn) ids to draw from (empty = "
+                                                  "all); each plays once before any repeats.")] = [],  # noqa: B006
     originals: Annotated[float, Field(description="Share of original tunes (0-1).")] = 0.4,
     min_track_seconds: Annotated[float, Field(description="Shortest song.")] = 150,
     max_track_seconds: Annotated[float, Field(description="Longest song.")] = 240,
@@ -513,10 +545,12 @@ def christmas_mix(
     name: Annotated[str, Field(description="File name for the mix (in data/outputs/playlists).")] = "christmas-mix",
     formats: Annotated[list[str], Field(description="'mp3' (320 kbps) and/or 'wav' (24-bit; about 150 MB per "
                                                     "15 minutes).")] = ["mp3"],  # noqa: B006
+    season: Annotated[str, Field(description="'christmas' (carols) or 'thanksgiving' (harvest hymns + autumn "
+                                             "originals).")] = "christmas",
     wait: Annotated[bool, Field(description="Wait for the whole mix (about 10-20 s of rendering per song).")] = True,
     timeout_s: int = 3600,
 ) -> dict:
-    """Render one seamless Christmas playlist: songs generated in varied
+    """Render one seamless Christmas (or Thanksgiving) playlist: songs generated in varied
     styles, keys, tempos and tunes (carols and originals), each levelled to
     the same loudness and joined with gentle crossfades into one file.
     Returns the files, the tracklist (with start times) and YouTube-style
@@ -528,10 +562,13 @@ def christmas_mix(
         raise ToolError("formats must be a list of 'mp3' and/or 'wav'.")
     if count <= 0 and total_minutes <= 0:
         raise ToolError("Give total_minutes (e.g. 60) or count.")
+    if season not in christmas.SEASONS:
+        raise ToolError(f"season must be one of {list(christmas.SEASONS)}.")
+    first = styles[0] if styles else christmas.season_styles(season)[0]
     for t in tunes:
-        _check_tune(styles[0] if styles else CHRISTMAS_STYLES[0], t)
-    _variants(arrangement, CHRISTMAS_STYLES[0])
-    req = ChristmasMixRequest(total_minutes=total_minutes, count=count, styles=list(styles), tunes=list(tunes),
+        _check_tune(first, t)
+    _variants(arrangement, first)
+    req = ChristmasMixRequest(season=season, total_minutes=total_minutes, count=count, styles=list(styles), tunes=list(tunes),
                               originals=originals, min_track_seconds=min_track_seconds,
                               max_track_seconds=max_track_seconds, crossfade=crossfade, target_lufs=target_lufs,
                               arrangement=arrangement, seed=seed, name=name, formats=list(formats))
@@ -738,9 +775,10 @@ def generate_song(
     arrangement: Annotated[str, Field(description="Arrangement variants for the style, comma-separated: Funk "
                                                   "Fusion e.g. 'hits_only,calm_keys,simple_bass'; Christmas e.g. "
                                                   "'sleigh_bells,warmer'. See describe_options.")] = "",
-    tune: Annotated[str, Field(description="Christmas styles only: a public-domain carol id (silent_night, "
-                                           "jingle_bells, deck_the_halls, ...; see describe_options) or "
-                                           "'original' / empty for an original Christmas-feel tune.")] = "",
+    tune: Annotated[str, Field(description="Christmas / Thanksgiving styles only: a public-domain carol id "
+                                           "(silent_night, jingle_bells, ...) or, for thanksgiving_* styles, a "
+                                           "hymn id (we_gather_together, simple_gifts, ...; see describe_options), "
+                                           "or 'original' / empty for an original tune.")] = "",
     target_lufs: Annotated[Optional[float], Field(description="Delivered loudness (integrated LUFS). None = as "
                                                               "mastered (Christmas styles: -16, background-"
                                                               "ready; YouTube plays at about -14).")] = None,
